@@ -1,0 +1,133 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="/static/studio.css" />
+<div class="split">
+  <div class="pane">
+    <div class="pane-header editor-header">
+      <div class="ribbon" id="ribbon">
+        <div class="ribbon-tabs" role="tablist" aria-label="编辑功能">
+          <button type="button" class="tab active" data-tab="home" role="tab" aria-selected="true">常用</button>
+          <button type="button" class="tab" data-tab="font" role="tab" aria-selected="false">字体</button>
+          <button type="button" class="tab" data-tab="para" role="tab" aria-selected="false">段落</button>
+          <button type="button" class="tab" data-tab="insert" role="tab" aria-selected="false">插入</button>
+        </div>
+
+        <div class="ribbon-panels">
+          <div class="panel active" data-panel="home" role="tabpanel">
+            <div class="group">
+              <button type="button" id="btnUndo" title="撤销">撤销</button>
+              <button type="button" id="btnRedo" title="重做">重做</button>
+              <span class="sep"></span>
+              <button type="button" id="btnBold" title="加粗"><b>B</b></button>
+              <button type="button" id="btnItalic" title="斜体"><i>I</i></button>
+              <button type="button" id="btnUnderline" title="下划线"><u>U</u></button>
+              <button type="button" id="btnClear" title="清除格式">清除</button>
+            </div>
+            <div class="group">
+              <button type="button" id="btnH1" title="标题 1">H1</button>
+              <button type="button" id="btnH2" title="标题 2">H2</button>
+              <button type="button" id="btnH3" title="标题 3">H3</button>
+              <button type="button" id="btnP" title="正文">正文</button>
+              <span class="sep"></span>
+              <button type="button" id="btnUL" title="项目符号列表">无序列表</button>
+              <button type="button" id="btnOL" title="编号列表">1. 列表</button>
+            </div>
+          </div>
+
+          <div class="panel" data-panel="font" role="tabpanel">
+            <div class="group">
+              <select id="fontFamilySelect" title="字体">
+                <option value="">字体…</option>
+                <option value="宋体">宋体</option>
+                <option value="黑体">黑体</option>
+                <option value="楷体">楷体</option>
+                <option value="微软雅黑">微软雅黑</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Arial">Arial</option>
+                <option value="Consolas">Consolas</option>
+              </select>
+
+              <select id="fontSizeSelect" title="字号">
+                <option value="">字号…</option>
+                <option value="15">小三（15pt）</option>
+                <option value="14">四号（14pt）</option>
+                <option value="12">小四（12pt）</option>
+                <option value="10.5">五号（10.5pt）</option>
+                <option value="9">小五（9pt）</option>
+                <option value="16">16pt</option>
+                <option value="18">18pt</option>
+              </select>
+            </div>
+            <div class="group">
+              <label class="chip" title="字色">
+                <span>字色</span> <input type="color" id="colorPicker" value="#111827" />
+              </label>
+              <label class="chip" title="高亮">
+                <span>高亮</span> <input type="color" id="hlPicker" value="#ffe08a" />
+              </label>
+            </div>
+          </div>
+
+          <div class="panel" data-panel="para" role="tabpanel">
+            <div class="group">
+              <button type="button" id="btnAlignLeft" title="左对齐">左</button>
+              <button type="button" id="btnAlignCenter" title="居中">中</button>
+              <button type="button" id="btnAlignRight" title="右对齐">右</button>
+              <button type="button" id="btnAlignJustify" title="两端对齐">两端</button>
+            </div>
+            <div class="group">
+              <select id="lineHeightSelect" title="行距">
+                <option value="">行距…</option>
+                <option value="1">1.0</option>
+                <option value="1.15">1.15</option>
+                <option value="1.5">1.5</option>
+                <option value="2">2.0</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="panel" data-panel="insert" role="tabpanel">
+            <div class="group">
+              <button type="button" id="btnTable" title="插入表格">表格</button>
+              <button type="button" id="btnImage" title="插入图片">图片</button>
+              <button type="button" id="btnLink" title="插入链接">链接</button>
+              <button type="button" id="btnUnlink" title="取消链接">取消链接</button>
+              <span class="sep"></span>
+              <button type="button" id="btnFlow" title="插入流程图">流程图</button>
+              <button type="button" id="btnER" title="插入 ER 图">ER</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="status" id="status"></div>
+      </div>
+    </div>
+    <div class="editor-wrap">
+      <div id="editor" class="editor" data-doc-id="{{ doc_id }}" contenteditable="true">{{ html | safe }}</div>
+    </div>
+  </div>
+
+  <div class="pane chat">
+    <div class="pane-header">
+      <div><strong>对话指令</strong> <span class="muted">像说话一样描述你想怎么改</span></div>
+      <div class="muted">
+        {% if template_name %}模板：{{ template_name }} · {% endif %}
+        <a href="/new">更换模板</a> · <a href="/download/{{ doc_id }}.docx">导出 .docx</a>
+      </div>
+    </div>
+    <div id="chatLog" class="chat-log">
+      {% for m in messages %}
+        <div class="msg {{ m.role }}">{{ m.content }}</div>
+      {% endfor %}
+    </div>
+    <div class="chat-input">
+      <div class="muted">提示：选中左侧文本后再提要求；插图也支持指令：`/flow ...` 或 `/er ...`。</div>
+      <textarea id="chatInput" placeholder="例如：帮我把方法部分写得更具体；或：/flow 画一个从需求到导出docx的流程图；或：/er 画一个用户-订单一对多的ER图"></textarea>
+      <div class="chat-actions">
+        <button id="sendBtn" class="primary" type="button">发送并应用</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/static/studio.js"></script>
+{% endblock %}

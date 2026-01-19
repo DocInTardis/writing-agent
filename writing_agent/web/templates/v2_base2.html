@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "写作 Agent 工作台" }}</title>
+    <link rel="stylesheet" href="/static/v2.css" />
+  </head>
+  <body>
+    <div class="bg">
+      <div class="bg-grid"></div>
+      <div class="bg-glow a"></div>
+      <div class="bg-glow b"></div>
+      <div class="bg-noise"></div>
+    </div>
+    {% block content %}{% endblock %}
+    <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+    <div id="modalRoot" class="modal-root hidden" role="dialog" aria-modal="true">
+      <div class="modal-backdrop" data-close="1"></div>
+      <div class="modal-card">
+        <div class="modal-head">
+          <div id="modalTitle" class="modal-title"></div>
+          <button class="icon-btn" type="button" data-close="1" aria-label="关闭">×</button>
+        </div>
+        <div id="modalBody" class="modal-body"></div>
+        <div id="modalFoot" class="modal-foot"></div>
+      </div>
+    </div>
+  </body>
+</html>
+

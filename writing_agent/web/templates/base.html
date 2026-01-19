@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "写作 Agent" }}</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <div><strong>写作 Agent 工作台</strong> <span class="muted">左侧像 Word 编辑，右侧用自然语言下指令（本地 Ollama）</span></div>
+        <div class="muted">
+          <a href="/">新建</a> · <a href="/new">初始化</a>
+          {% if doc_id %} · <a href="/studio/{{ doc_id }}">工作台</a> · <a href="/download/{{ doc_id }}.docx">导出 docx</a>{% endif %}
+        </div>
+      </div>
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>
