@@ -101,8 +101,29 @@
   let blockCandidates: Array<any> = []
   let activeCandidateIndex = 0
   let activeCandidate: any = null
-  let blockDialogOpen = false
   let blockDialogInput = ''
+  type InlinePanelTab = 'rewrite' | 'style' | 'assistant'
+  type BlockSession = {
+    tab: InlinePanelTab
+    cmd: string
+    styleFontSize: string
+    styleLineHeight: string
+    styleFontFamily: string
+    candidates: Array<any>
+    activeIndex: number
+    originalText: string
+    error: string
+    dialogInput: string
+  }
+  const blockSessionStore = new Map<string, BlockSession>()
+  let activeBlockSessionKey = ''
+  let inlineBarVisible = false
+  let inlineBarLeft = 0
+  let inlineBarTop = 0
+  let inlinePopoverOpen = false
+  let inlinePopoverPlacement: 'up' | 'down' = 'down'
+  let inlinePopoverLeft = 0
+  let inlinePopoverTop = 0
   let rustEngineReadyLocal = false
   let wasmInitPromise: Promise<boolean> | null = null
   if (typeof window !== 'undefined') {
@@ -354,6 +375,126 @@
     return value.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
   }
 
+  function cloneCandidates(candidates: Array<any>) {
+    return (candidates || []).map((c) => ({ ...c }))
+  }
+
+  function buildBlockSessionKey(ids: string[]) {
+    return (ids || [])
+      .map((id) => String(id || '').trim())
+      .filter(Boolean)
+      .sort()
+      .join('|')
+  }
+
+  function saveCurrentBlockSession() {
+    if (!activeBlockSessionKey) return
+    blockSessionStore.set(activeBlockSessionKey, {
+      tab: inlinePanelTab,
+      cmd: blockEditCmd,
+      styleFontSize: blockStyleFontSize,
+      styleLineHeight: blockStyleLineHeight,
+      styleFontFamily: blockStyleFontFamily,
+      candidates: cloneCandidates(blockCandidates),
+      activeIndex: activeCandidateIndex,
+      originalText: blockOriginalText,
+      error: blockEditError,
+      dialogInput: blockDialogInput
+    })
+  }
+
+  function restoreBlockSession(session: BlockSession) {
+    inlinePanelTab = session.tab || 'rewrite'
+    blockEditCmd = String(session.cmd || '')
+    blockStyleFontSize = String(session.styleFontSize || '')
+    blockStyleLineHeight = String(session.styleLineHeight || '')
+    blockStyleFontFamily = String(session.styleFontFamily || '')
+    blockCandidates = cloneCandidates(session.candidates || [])
+    activeCandidateIndex = Number.isFinite(session.activeIndex) ? Math.max(0, session.activeIndex) : 0
+    blockOriginalText = String(session.originalText || selectedBlockText || '')
+    blockEditError = String(session.error || '')
+    blockDialogInput = String(session.dialogInput || '')
+  }
+
+  function initBlockSession(style: Record<string, unknown>) {
+    inlinePanelTab = 'rewrite'
+    blockStyleFontSize = String(style.fontSize || '')
+    blockStyleLineHeight = String(style.lineHeight || '')
+    blockStyleFontFamily = String(style.fontFamily || '')
+    blockEditCmd = ''
+    blockPreviewBusy = false
+    blockEditError = ''
+    blockOriginalText = selectedBlockText
+    blockCandidates = []
+    activeCandidateIndex = 0
+    blockDialogInput = ''
+  }
+
+  function clamp(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value))
+  }
+
+  function selectedBlocksRect(ids: string[]) {
+    const cleanIds = (ids || []).map((id) => String(id || '').trim()).filter(Boolean)
+    if (!cleanIds.length) return null
+    const editable = document.querySelector('.editable') as HTMLElement | null
+    if (!editable) return null
+    let left = Number.POSITIVE_INFINITY
+    let top = Number.POSITIVE_INFINITY
+    let right = 0
+    let bottom = 0
+    let hit = 0
+    for (const id of cleanIds) {
+      const sel = `[data-block-id="${CSS.escape(id)}"]`
+      const el = editable.querySelector(sel) as HTMLElement | null
+      if (!el) continue
+      const rect = el.getBoundingClientRect()
+      left = Math.min(left, rect.left)
+      top = Math.min(top, rect.top)
+      right = Math.max(right, rect.right)
+      bottom = Math.max(bottom, rect.bottom)
+      hit += 1
+    }
+    if (!hit) return null
+    return { left, top, right, bottom, width: Math.max(0, right - left), height: Math.max(0, bottom - top) }
+  }
+
+  function updateInlineOverlayPosition() {
+    if (!selectedBlockIds.length) {
+      inlineBarVisible = false
+      inlinePopoverOpen = false
+      return
+    }
+    const rect = selectedBlocksRect(selectedBlockIds)
+    if (!rect) {
+      inlineBarVisible = false
+      inlinePopoverOpen = false
+      return
+    }
+    const barWidth = Math.min(560, window.innerWidth - 24)
+    inlineBarLeft = clamp(rect.left, 12, Math.max(12, window.innerWidth - barWidth - 12))
+    inlineBarTop = clamp(rect.bottom + 10, 72, Math.max(72, window.innerHeight - 56))
+    inlineBarVisible = true
+
+    const popWidth = Math.min(720, window.innerWidth - 24)
+    inlinePopoverLeft = clamp(rect.left, 12, Math.max(12, window.innerWidth - popWidth - 12))
+    inlinePopoverTop = inlinePopoverPlacement === 'up'
+      ? clamp(inlineBarTop - 10, 92, Math.max(92, window.innerHeight - 80))
+      : clamp(inlineBarTop + 50, 92, Math.max(92, window.innerHeight - 80))
+  }
+
+  function openInlinePopover(tab: InlinePanelTab, placement: 'up' | 'down' = 'down') {
+    if (!selectedBlockIds.length) return
+    inlinePanelTab = tab
+    inlinePopoverPlacement = placement
+    inlinePopoverOpen = true
+    updateInlineOverlayPosition()
+  }
+
+  function closeInlinePopover() {
+    inlinePopoverOpen = false
+  }
+
   function handleBlockEdit(event: CustomEvent) {
     const payload = event.detail || {}
     if (payload.docIr && typeof payload.docIr === 'object') {
@@ -378,11 +519,19 @@
       : []
     const nextBlockId = String(detail.blockId || '')
     const nextIds = incomingIds.length ? incomingIds : nextBlockId ? [nextBlockId] : []
+    const nextSessionKey = buildBlockSessionKey(nextIds)
+    const prevSessionKey = activeBlockSessionKey
     if (!nextIds.length && selectedBlockIds.length) {
       const activeEl = document.activeElement as HTMLElement | null
-      if (activeEl && (activeEl.closest('.selection-panel') || activeEl.closest('.block-dialog'))) {
+      if (
+        activeEl &&
+        (activeEl.closest('.inline-edit-popover') || activeEl.closest('.inline-selection-bar') || activeEl.closest('.block-dialog'))
+      ) {
         return
       }
+    }
+    if (prevSessionKey && prevSessionKey !== nextSessionKey) {
+      saveCurrentBlockSession()
     }
     const incomingBlocks = Array.isArray(detail.blocks)
       ? detail.blocks
@@ -402,28 +551,39 @@
       selectedBlocks.length > 1
         ? selectedBlocks.map((b, idx) => `[块${idx + 1}] ${b.text}`.trim()).join('\n\n')
         : String(detail.text || '')
-    blockOriginalText = selectedBlockText
-    blockCandidates = []
-    activeCandidateIndex = 0
-    inlinePanelTab = 'rewrite'
-    blockDialogOpen = false
-    blockDialogInput = ''
     const style = detail.style && typeof detail.style === 'object' ? detail.style : {}
-    blockStyleFontSize = String(style.fontSize || '')
-    blockStyleLineHeight = String(style.lineHeight || '')
-    blockStyleFontFamily = String(style.fontFamily || '')
-    blockEditError = ''
+    if (!nextIds.length) {
+      activeBlockSessionKey = ''
+      inlineBarVisible = false
+      inlinePopoverOpen = false
+      blockOriginalText = ''
+      blockCandidates = []
+      activeCandidateIndex = 0
+      blockEditError = ''
+      return
+    }
+    if (nextSessionKey !== prevSessionKey) {
+      const session = blockSessionStore.get(nextSessionKey)
+      if (session) restoreBlockSession(session)
+      else initBlockSession(style as Record<string, unknown>)
+      activeBlockSessionKey = nextSessionKey
+    }
+    blockOriginalText = blockOriginalText || selectedBlockText
+    requestAnimationFrame(() => updateInlineOverlayPosition())
   }
 
   function closeInlineTools() {
+    saveCurrentBlockSession()
     selectedBlockId = ''
     selectedBlockIds = []
     selectedBlocks = []
     selectedBlockText = ''
+    activeBlockSessionKey = ''
+    inlineBarVisible = false
+    inlinePopoverOpen = false
     blockCandidates = []
     activeCandidateIndex = 0
     blockEditError = ''
-    blockDialogOpen = false
     blockDialogInput = ''
   }
 
@@ -475,6 +635,7 @@
     const nextDoc = updateDocIrBlockStyle($docIr as Record<string, unknown>, targets, patch)
     if (!nextDoc) return
     applyDocIrSnapshot(nextDoc)
+    requestAnimationFrame(() => updateInlineOverlayPosition())
     saveDoc().catch(() => {})
   }
 
@@ -605,17 +766,17 @@
     inlinePanelTab = 'rewrite'
   }
 
-  function openBlockDialog() {
-    blockDialogInput = blockEditCmd.trim()
-    blockDialogOpen = true
-  }
-
-  function submitBlockDialogToAssistant() {
-    const req = blockDialogInput.trim()
-    if (!req) return
-    blockEditCmd = req
-    blockDialogOpen = false
-    openAssistantForBlock(req)
+  function handleInlineShortcut(event: KeyboardEvent) {
+    if (!selectedBlockIds.length) return
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault()
+      const placement: 'up' | 'down' = event.shiftKey ? 'up' : 'down'
+      openInlinePopover(inlinePanelTab as InlinePanelTab, placement)
+      return
+    }
+    if (event.key === 'Escape') {
+      if (inlinePopoverOpen) inlinePopoverOpen = false
+    }
   }
 
   function sanitizeCandidateText(after: string, before: string) {
@@ -683,6 +844,7 @@
       blockCandidates = []
       activeCandidateIndex = 0
       blockEditCmd = ''
+      requestAnimationFrame(() => updateInlineOverlayPosition())
       await loadVersionLog()
     } catch (err) {
       blockEditError = err instanceof Error ? err.message : '应用候选失败'
@@ -1559,8 +1721,14 @@
       resizing = false
       document.body.style.cursor = ''
     }
+    const onViewportChange = () => {
+      updateInlineOverlayPosition()
+    }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
+    window.addEventListener('resize', onViewportChange)
+    window.addEventListener('scroll', onViewportChange, true)
+    window.addEventListener('keydown', handleInlineShortcut)
     if (!$docId) {
       const id = readDocId()
       if (id) {
@@ -1569,8 +1737,12 @@
       }
     }
     return () => {
+      saveCurrentBlockSession()
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('resize', onViewportChange)
+      window.removeEventListener('scroll', onViewportChange, true)
+      window.removeEventListener('keydown', handleInlineShortcut)
       if (autoSaveTimer) clearTimeout(autoSaveTimer)
     }
   })
@@ -1763,161 +1935,200 @@
         </div>
       </div>
 
-      <div class="panel-card block-panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">选中内容轻量修改</div>
-            <div class="panel-sub">
-              {selectedBlockIds.length > 0 ? `已选中 ${selectedBlockIds.length} 个段落块` : '未选择段落'}
-            </div>
-          </div>
-        </div>
-        {#if selectedBlockIds.length > 0}
-          <div class="inline-tabs">
-            <button class={`inline-tab ${inlinePanelTab === 'rewrite' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'rewrite')}>
-              改写建议
-            </button>
-            <button class={`inline-tab ${inlinePanelTab === 'style' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'style')}>
-              样式设置
-            </button>
-            <button class={`inline-tab ${inlinePanelTab === 'assistant' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'assistant')}>
-              改动对话
-            </button>
-          </div>
-
-          <div class="selected-targets">
-            {#each selectedBlocks as b, idx}
-              <span class="selected-chip" title={b.text}>块{idx + 1}</span>
-            {/each}
-          </div>
-
-          {#if inlinePanelTab === 'style'}
-            <div class="inline-style-row compact">
-              <span>字体</span>
-              <select
-                bind:value={blockStyleFontFamily}
-                on:change={() => applyInlineBlockStyle({ fontFamily: blockStyleFontFamily })}
-              >
-                <option value="">默认</option>
-                <option value="宋体">宋体</option>
-                <option value="黑体">黑体</option>
-                <option value="微软雅黑">微软雅黑</option>
-                <option value="楷体">楷体</option>
-                <option value="仿宋">仿宋</option>
-              </select>
-              <span>字号</span>
-              <select
-                bind:value={blockStyleFontSize}
-                on:change={() => applyInlineBlockStyle({ fontSize: blockStyleFontSize })}
-              >
-                <option value="">默认</option>
-                <option value="12pt">12pt</option>
-                <option value="14pt">14pt</option>
-                <option value="16pt">16pt</option>
-                <option value="18pt">18pt</option>
-                <option value="20pt">20pt</option>
-              </select>
-              <span>行距</span>
-              <select
-                bind:value={blockStyleLineHeight}
-                on:change={() => applyInlineBlockStyle({ lineHeight: blockStyleLineHeight })}
-              >
-                <option value="">默认</option>
-                <option value="1.2">1.2</option>
-                <option value="1.5">1.5</option>
-                <option value="1.75">1.75</option>
-                <option value="2">2.0</option>
-              </select>
-            </div>
-            <div class="panel-empty">这些样式只作用于当前选中的段落块，不会影响全篇。</div>
-          {/if}
-
-          {#if inlinePanelTab === 'assistant'}
-            <div class="assistant-inline-tip">
-              <div>用于处理这批选中段落的复杂修改需求。</div>
-              <div class="assistant-inline-actions">
-                <button class="btn ghost" on:click={openBlockDialog}>呼出改动对话窗口</button>
-                <button class="btn ghost" on:click={() => openAssistantForBlock(blockEditCmd)}>发到右下角全局助手</button>
-              </div>
-            </div>
-          {/if}
-
-          {#if inlinePanelTab === 'rewrite'}
-            <div class="inline-preset-row">
-              <button class="preset-chip" on:click={() => useRewritePreset('语气更正式，保留原意')}>更正式</button>
-              <button class="preset-chip" on:click={() => useRewritePreset('压缩到更简洁，控制在80字左右')}>更简洁</button>
-              <button class="preset-chip" on:click={() => useRewritePreset('增加解释细节，但不要扩展事实')}>更详细</button>
-              <button class="preset-chip" on:click={() => useRewritePreset('保持术语不变，仅调整表达')}>保留术语</button>
-            </div>
-
-            <div class="inline-ai-row">
-              <textarea
-                class="inline-instruction"
-                placeholder="例如：仅重写选中段落，语气更正式，减少20%字数。"
-                bind:value={blockEditCmd}
-              ></textarea>
-            </div>
-
-            <div class="inline-action-row">
-              <button class="btn ghost" on:click={openBlockDialog}>改动对话窗口</button>
-              <button
-                class="btn primary"
-                on:click={previewSelectedBlockEdit}
-                disabled={blockPreviewBusy || !blockEditCmd.trim()}
-              >
-                {blockPreviewBusy ? '正在生成建议...' : '生成建议（不改原文）'}
-              </button>
-            </div>
-          {/if}
-
-          {#if blockEditError}
-            <div class="block-error">{blockEditError}</div>
-          {/if}
-
-          {#if blockCandidates.length > 0}
-            <div class="candidate-compare compact">
-              <div class="candidate-before">
-                <div class="candidate-label">原文</div>
-                <div class="candidate-text">{blockOriginalText || selectedBlockText}</div>
-              </div>
-              <div class="candidate-panel">
-                <div class="candidate-switches">
-                  {#each blockCandidates as c, idx}
-                    <button
-                      class={`candidate-switch ${activeCandidateIndex === idx ? 'active' : ''}`}
-                      on:click={() => (activeCandidateIndex = idx)}
-                    >
-                      <span>{c.label}</span>
-                      <span>{candidateLengthDelta(c)}</span>
-                    </button>
-                  {/each}
-                </div>
-                {#if activeCandidate}
-                  <div class="candidate-card">
-                    <div class="candidate-head">
-                      <span>{activeCandidate.label}</span>
-                      <span class="candidate-meta">{candidateLengthDelta(activeCandidate)}</span>
-                    </div>
-                    <div class="candidate-actions">
-                      <button class="btn primary" on:click={() => applyCandidateVersion(activeCandidateIndex)}>采纳到正文</button>
-                      <button class="btn ghost" on:click={previewSelectedBlockEdit}>重新生成</button>
-                      <button class="btn ghost danger" on:click={ignoreCandidateSuggestions}>忽略建议</button>
-                    </div>
-                    <div class="candidate-label">建议文本</div>
-                    <div class="candidate-text">{activeCandidate.selectedAfter}</div>
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/if}
-        {:else}
-          <div class="panel-empty">
-            选中段落后可做轻量修改。支持多选：鼠标拖动框选、`Ctrl/Cmd + 点击` 逐个添加、`Shift + 点击` 连续选择。
-          </div>
-        {/if}
-      </div>
     </aside>
   </div>
+
+  {#if selectedBlockIds.length > 0 && inlineBarVisible}
+    <div
+      class="inline-selection-bar"
+      style={`left:${inlineBarLeft}px;top:${inlineBarTop}px;`}
+      role="toolbar"
+      aria-label="选中块快捷操作"
+    >
+      <div class="inline-selection-meta">
+        已选中 {selectedBlockIds.length} 个块
+        <span>Ctrl/Cmd+Enter 下弹窗 · Ctrl/Cmd+Shift+Enter 上弹窗</span>
+      </div>
+      <div class="inline-selection-actions">
+        <button class="mini-btn" on:click={() => openInlinePopover('rewrite', 'down')}>改写</button>
+        <button class="mini-btn" on:click={() => openInlinePopover('style', 'down')}>样式</button>
+        <button class="mini-btn" on:click={() => openInlinePopover('assistant', 'down')}>对话</button>
+        <button class="mini-btn" on:click={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>上方</button>
+        <button class="mini-btn" on:click={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>下方</button>
+      </div>
+    </div>
+  {/if}
+
+  {#if inlinePopoverOpen && selectedBlockIds.length > 0}
+    <section
+      class={`inline-edit-popover ${inlinePopoverPlacement}`}
+      style={`left:${inlinePopoverLeft}px;top:${inlinePopoverTop}px;`}
+      aria-label="选中内容修改窗口"
+    >
+      <div class="inline-popover-head">
+        <div>
+          <div class="panel-title">选中内容轻量修改</div>
+          <div class="panel-sub">当前上下文独立于其他段落块，同一块会继承修改上下文。</div>
+        </div>
+        <div class="inline-popover-head-actions">
+          <button class="btn ghost btn-sm" on:click={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>上方</button>
+          <button class="btn ghost btn-sm" on:click={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>下方</button>
+          <button class="btn ghost btn-sm" on:click={closeInlinePopover}>关闭</button>
+        </div>
+      </div>
+
+      <div class="inline-tabs">
+        <button class={`inline-tab ${inlinePanelTab === 'rewrite' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'rewrite')}>
+          改写建议
+        </button>
+        <button class={`inline-tab ${inlinePanelTab === 'style' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'style')}>
+          样式设置
+        </button>
+        <button class={`inline-tab ${inlinePanelTab === 'assistant' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'assistant')}>
+          改动对话
+        </button>
+      </div>
+
+      <div class="selected-targets">
+        {#each selectedBlocks as b, idx}
+          <span class="selected-chip" title={b.text}>块{idx + 1}</span>
+        {/each}
+      </div>
+
+      {#if inlinePanelTab === 'style'}
+        <div class="inline-style-row compact">
+          <span>字体</span>
+          <select
+            bind:value={blockStyleFontFamily}
+            on:change={() => applyInlineBlockStyle({ fontFamily: blockStyleFontFamily })}
+          >
+            <option value="">默认</option>
+            <option value="宋体">宋体</option>
+            <option value="黑体">黑体</option>
+            <option value="微软雅黑">微软雅黑</option>
+            <option value="楷体">楷体</option>
+            <option value="仿宋">仿宋</option>
+          </select>
+          <span>字号</span>
+          <select
+            bind:value={blockStyleFontSize}
+            on:change={() => applyInlineBlockStyle({ fontSize: blockStyleFontSize })}
+          >
+            <option value="">默认</option>
+            <option value="12pt">12pt</option>
+            <option value="14pt">14pt</option>
+            <option value="16pt">16pt</option>
+            <option value="18pt">18pt</option>
+            <option value="20pt">20pt</option>
+          </select>
+          <span>行距</span>
+          <select
+            bind:value={blockStyleLineHeight}
+            on:change={() => applyInlineBlockStyle({ lineHeight: blockStyleLineHeight })}
+          >
+            <option value="">默认</option>
+            <option value="1.2">1.2</option>
+            <option value="1.5">1.5</option>
+            <option value="1.75">1.75</option>
+            <option value="2">2.0</option>
+          </select>
+        </div>
+        <div class="panel-empty">这些样式只作用于当前选中的段落块，不会影响全篇。</div>
+      {/if}
+
+      {#if inlinePanelTab === 'assistant'}
+        <div class="assistant-inline-tip">
+          <div>用于处理当前选中块的复杂语义修改。</div>
+          <textarea
+            class="inline-instruction"
+            placeholder="例如：将选中内容改成课程设计报告语气，并补全术语解释。"
+            bind:value={blockDialogInput}
+          ></textarea>
+          <div class="assistant-inline-actions">
+            <button
+              class="btn ghost"
+              on:click={() => {
+                blockEditCmd = blockDialogInput.trim()
+                inlinePanelTab = 'rewrite'
+              }}
+            >
+              同步到改写指令
+            </button>
+            <button class="btn ghost" on:click={() => openAssistantForBlock(blockDialogInput)}>发到右下角全局助手</button>
+          </div>
+        </div>
+      {/if}
+
+      {#if inlinePanelTab === 'rewrite'}
+        <div class="inline-preset-row">
+          <button class="preset-chip" on:click={() => useRewritePreset('语气更正式，保留原意')}>更正式</button>
+          <button class="preset-chip" on:click={() => useRewritePreset('压缩到更简洁，控制在80字左右')}>更简洁</button>
+          <button class="preset-chip" on:click={() => useRewritePreset('增加解释细节，但不要扩展事实')}>更详细</button>
+          <button class="preset-chip" on:click={() => useRewritePreset('保持术语不变，仅调整表达')}>保留术语</button>
+        </div>
+
+        <div class="inline-ai-row">
+          <textarea
+            class="inline-instruction"
+            placeholder="例如：仅重写选中段落，语气更正式，减少20%字数。"
+            bind:value={blockEditCmd}
+          ></textarea>
+        </div>
+
+        <div class="inline-action-row">
+          <button class="btn ghost" on:click={() => openInlinePopover('assistant', inlinePopoverPlacement)}>切到改动对话</button>
+          <button
+            class="btn primary"
+            on:click={previewSelectedBlockEdit}
+            disabled={blockPreviewBusy || !blockEditCmd.trim()}
+          >
+            {blockPreviewBusy ? '正在生成建议...' : '生成建议（不改原文）'}
+          </button>
+        </div>
+      {/if}
+
+      {#if blockEditError}
+        <div class="block-error">{blockEditError}</div>
+      {/if}
+
+      {#if blockCandidates.length > 0}
+        <div class="candidate-compare compact">
+          <div class="candidate-before">
+            <div class="candidate-label">原文</div>
+            <div class="candidate-text">{blockOriginalText || selectedBlockText}</div>
+          </div>
+          <div class="candidate-panel">
+            <div class="candidate-switches">
+              {#each blockCandidates as c, idx}
+                <button
+                  class={`candidate-switch ${activeCandidateIndex === idx ? 'active' : ''}`}
+                  on:click={() => (activeCandidateIndex = idx)}
+                >
+                  <span>{c.label}</span>
+                  <span>{candidateLengthDelta(c)}</span>
+                </button>
+              {/each}
+            </div>
+            {#if activeCandidate}
+              <div class="candidate-card">
+                <div class="candidate-head">
+                  <span>{activeCandidate.label}</span>
+                  <span class="candidate-meta">{candidateLengthDelta(activeCandidate)}</span>
+                </div>
+                <div class="candidate-actions">
+                  <button class="btn primary" on:click={() => applyCandidateVersion(activeCandidateIndex)}>采纳到正文</button>
+                  <button class="btn ghost" on:click={previewSelectedBlockEdit}>重新生成</button>
+                  <button class="btn ghost danger" on:click={ignoreCandidateSuggestions}>忽略建议</button>
+                </div>
+                <div class="candidate-label">建议文本</div>
+                <div class="candidate-text">{activeCandidate.selectedAfter}</div>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <div class={`assistant-dock ${assistantOpen ? 'open' : ''}`}>
     <button class="assistant-toggle" on:click={() => (assistantOpen = !assistantOpen)}>
@@ -1928,42 +2139,10 @@
     {/if}
   </div>
 
-  {#if $generating}
-    <ProgressBar indeterminate={true} />
-  {/if}
-</main>
-
-{#if blockDialogOpen}
-  <div
-    class="block-dialog-backdrop"
-    role="button"
-    tabindex="0"
-    aria-label="关闭改动对话窗口"
-    on:click|self={() => (blockDialogOpen = false)}
-    on:keydown={(event) => {
-      if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') blockDialogOpen = false
-    }}
-  >
-    <div class="block-dialog">
-      <div class="block-dialog-head">
-        <div>
-          <div class="panel-title">改动对话窗口</div>
-          <div class="panel-sub">仅针对当前选中的段落块</div>
-        </div>
-        <button class="btn ghost btn-sm" on:click={() => (blockDialogOpen = false)}>关闭</button>
-      </div>
-      <textarea
-        class="inline-instruction"
-        placeholder="例如：将选中段落统一改为更正式的学术语气，并保持原结论。"
-        bind:value={blockDialogInput}
-      ></textarea>
-      <div class="inline-action-row">
-        <button class="btn ghost" on:click={() => (blockDialogOpen = false)}>取消</button>
-        <button class="btn primary" disabled={!blockDialogInput.trim()} on:click={submitBlockDialogToAssistant}>发送到助手</button>
-      </div>
-    </div>
-  </div>
+{#if $generating}
+  <ProgressBar indeterminate={true} />
 {/if}
+</main>
 
 <DiagramCanvas
   open={canvasOpen}
@@ -2461,12 +2640,8 @@
     box-shadow: var(--panel-shadow);
   }
 
-  .block-panel {
-    order: 1;
-  }
-
   .version-panel {
-    order: 2;
+    order: 1;
   }
 
   .panel-header {
@@ -2648,53 +2823,109 @@
     text-overflow: ellipsis;
   }
 
-  .block-panel .inline-style-row.compact {
+  .inline-style-row.compact {
     grid-template-columns: auto 1fr;
     gap: 6px 8px;
   }
 
-  .block-panel .inline-preset-row {
+  .inline-preset-row {
     grid-template-columns: 1fr 1fr;
   }
 
-  .block-panel .inline-instruction {
+  .inline-instruction {
     min-height: 88px;
   }
 
-  .block-panel .candidate-compare.compact {
+  .candidate-compare.compact {
     grid-template-columns: 1fr;
   }
 
-  .block-panel .candidate-before {
+  .candidate-before {
     position: static;
   }
 
-  .block-dialog-backdrop {
+  .inline-selection-bar {
     position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.36);
-    z-index: 30;
-    display: grid;
-    place-items: center;
-    padding: 16px;
-  }
-
-  .block-dialog {
-    width: min(720px, calc(100vw - 32px));
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.98);
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    box-shadow: 0 24px 56px rgba(15, 23, 42, 0.28);
-    padding: 14px;
-    display: grid;
-    gap: 10px;
-  }
-
-  .block-dialog-head {
+    z-index: 16;
+    width: min(560px, calc(100vw - 24px));
+    border-radius: 12px;
+    border: 1px solid rgba(37, 99, 235, 0.28);
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.22);
+    padding: 8px 10px;
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .inline-selection-meta {
+    font-size: 12px;
+    color: #0f172a;
+    display: grid;
+    gap: 2px;
+  }
+
+  .inline-selection-meta > span {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .inline-selection-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .mini-btn {
+    border: 1px solid rgba(148, 163, 184, 0.38);
+    background: rgba(248, 250, 252, 0.95);
+    color: #0f172a;
+    border-radius: 9px;
+    padding: 6px 9px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border 0.2s ease, background 0.2s ease;
+  }
+
+  .mini-btn:hover {
+    border-color: rgba(37, 99, 235, 0.52);
+    background: rgba(239, 246, 255, 0.95);
+  }
+
+  .inline-edit-popover {
+    position: fixed;
+    z-index: 17;
+    width: min(720px, calc(100vw - 24px));
+    max-height: min(80vh, 860px);
+    overflow: auto;
+    border-radius: 16px;
+    border: 1px solid rgba(37, 99, 235, 0.32);
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+    padding: 12px;
+    display: grid;
     gap: 10px;
+  }
+
+  .inline-edit-popover.up {
+    transform: translateY(calc(-100% - 8px));
+  }
+
+  .inline-popover-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .inline-popover-head-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .assistant-dock {
@@ -2786,6 +3017,24 @@
     .assistant-dock {
       right: 12px;
       bottom: 12px;
+    }
+    .inline-selection-bar {
+      left: 12px !important;
+      right: 12px;
+      width: auto;
+      top: auto;
+      bottom: 86px;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .inline-edit-popover {
+      left: 12px !important;
+      right: 12px;
+      width: auto;
+      top: auto !important;
+      bottom: 146px;
+      max-height: 52vh;
+      transform: none !important;
     }
     .inline-style-row {
       grid-template-columns: auto 1fr;
