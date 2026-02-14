@@ -87,10 +87,22 @@
   let assistantOpen = true
   let canvasOpen = false
   let selectedBlockId = ''
+  let selectedBlockIds: string[] = []
+  let selectedBlocks: Array<{ id: string; text: string; style: Record<string, string> }> = []
   let selectedBlockText = ''
+  let blockStyleFontSize = ''
+  let blockStyleLineHeight = ''
+  let blockStyleFontFamily = ''
   let blockEditCmd = ''
-  let blockEditBusy = false
+  let inlinePanelTab: 'rewrite' | 'style' | 'assistant' = 'rewrite'
+  let blockPreviewBusy = false
   let blockEditError = ''
+  let blockOriginalText = ''
+  let blockCandidates: Array<any> = []
+  let activeCandidateIndex = 0
+  let activeCandidate: any = null
+  let blockDialogOpen = false
+  let blockDialogInput = ''
   let rustEngineReadyLocal = false
   let wasmInitPromise: Promise<boolean> | null = null
   if (typeof window !== 'undefined') {
@@ -361,9 +373,320 @@
 
   function handleBlockSelect(event: CustomEvent) {
     const detail = event.detail || {}
-    selectedBlockId = String(detail.blockId || '')
-    selectedBlockText = String(detail.text || '')
+    const incomingIds = Array.isArray(detail.blockIds)
+      ? detail.blockIds.map((v: unknown) => String(v || '').trim()).filter(Boolean)
+      : []
+    const nextBlockId = String(detail.blockId || '')
+    const nextIds = incomingIds.length ? incomingIds : nextBlockId ? [nextBlockId] : []
+    if (!nextIds.length && selectedBlockIds.length) {
+      const activeEl = document.activeElement as HTMLElement | null
+      if (activeEl && (activeEl.closest('.selection-panel') || activeEl.closest('.block-dialog'))) {
+        return
+      }
+    }
+    const incomingBlocks = Array.isArray(detail.blocks)
+      ? detail.blocks
+          .map((b: any) => ({
+            id: String(b?.id || '').trim(),
+            text: String(b?.text || ''),
+            style: b?.style && typeof b.style === 'object' ? (b.style as Record<string, string>) : {}
+          }))
+          .filter((b: any) => b.id)
+      : []
+    selectedBlockIds = nextIds
+    selectedBlocks = incomingBlocks.length
+      ? incomingBlocks
+      : nextIds.map((id) => ({ id, text: String(detail.text || ''), style: {} }))
+    selectedBlockId = nextIds[0] || ''
+    selectedBlockText =
+      selectedBlocks.length > 1
+        ? selectedBlocks.map((b, idx) => `[块${idx + 1}] ${b.text}`.trim()).join('\n\n')
+        : String(detail.text || '')
+    blockOriginalText = selectedBlockText
+    blockCandidates = []
+    activeCandidateIndex = 0
+    inlinePanelTab = 'rewrite'
+    blockDialogOpen = false
+    blockDialogInput = ''
+    const style = detail.style && typeof detail.style === 'object' ? detail.style : {}
+    blockStyleFontSize = String(style.fontSize || '')
+    blockStyleLineHeight = String(style.lineHeight || '')
+    blockStyleFontFamily = String(style.fontFamily || '')
     blockEditError = ''
+  }
+
+  function closeInlineTools() {
+    selectedBlockId = ''
+    selectedBlockIds = []
+    selectedBlocks = []
+    selectedBlockText = ''
+    blockCandidates = []
+    activeCandidateIndex = 0
+    blockEditError = ''
+    blockDialogOpen = false
+    blockDialogInput = ''
+  }
+
+  function updateDocIrBlockStyle(
+    docObj: Record<string, unknown>,
+    blockIds: string[],
+    patch: Record<string, string>
+  ): Record<string, unknown> | null {
+    const targetIds = new Set((blockIds || []).map((v) => String(v || '').trim()).filter(Boolean))
+    if (!targetIds.size) return null
+    const sections = Array.isArray((docObj as any).sections) ? (docObj as any).sections : []
+    let changed = false
+    const applyPatch = (styleObj: Record<string, unknown>): Record<string, unknown> => {
+      const nextStyle: Record<string, unknown> = { ...styleObj }
+      for (const [k, v] of Object.entries(patch)) {
+        const val = String(v || '').trim()
+        if (!val) delete nextStyle[k]
+        else nextStyle[k] = val
+      }
+      return nextStyle
+    }
+    const walk = (sec: any): any => {
+      let localChanged = false
+      const blocks = Array.isArray(sec?.blocks) ? sec.blocks : []
+      const nextBlocks = blocks.map((b: any) => {
+        if (!targetIds.has(String(b?.id || ''))) return b
+        localChanged = true
+        changed = true
+        const baseStyle = b?.style && typeof b.style === 'object' ? b.style : {}
+        return { ...b, style: applyPatch(baseStyle as Record<string, unknown>) }
+      })
+      const children = Array.isArray(sec?.children) ? sec.children : []
+      const nextChildren = children.map((ch: any) => walk(ch))
+      const childrenChanged = nextChildren.some((ch: any, idx: number) => ch !== children[idx])
+      if (!localChanged && !childrenChanged) return sec
+      const nextSec: any = { ...sec }
+      if (localChanged) nextSec.blocks = nextBlocks
+      if (childrenChanged) nextSec.children = nextChildren
+      return nextSec
+    }
+    const nextSections = sections.map((sec: any) => walk(sec))
+    if (!changed) return null
+    return { ...docObj, sections: nextSections }
+  }
+
+  function applyInlineBlockStyle(patch: Record<string, string>) {
+    const targets = selectedBlockIds.length ? selectedBlockIds : selectedBlockId ? [selectedBlockId] : []
+    if (!targets.length || !$docIr) return
+    const nextDoc = updateDocIrBlockStyle($docIr as Record<string, unknown>, targets, patch)
+    if (!nextDoc) return
+    applyDocIrSnapshot(nextDoc)
+    saveDoc().catch(() => {})
+  }
+
+  function selectedTargetIds() {
+    return selectedBlockIds.length ? selectedBlockIds.slice() : selectedBlockId ? [selectedBlockId] : []
+  }
+
+  function selectedTargetText() {
+    if (selectedBlocks.length > 1) {
+      return selectedBlocks.map((b, idx) => `[块${idx + 1}] ${b.text}`.trim()).join('\n\n')
+    }
+    if (selectedBlocks.length === 1) return String(selectedBlocks[0].text || '')
+    return selectedBlockText.trim()
+  }
+
+  function openAssistantForBlock(customInstruction?: string) {
+    inlinePanelTab = 'assistant'
+    assistantOpen = true
+    const ids = selectedTargetIds()
+    const base = selectedTargetText()
+    const req = String(customInstruction || '').trim()
+    if (base && ids.length > 0) {
+      const title = ids.length > 1
+        ? `请只修改我选中的 ${ids.length} 个段落块，不要改其他段落。`
+        : '请只修改我选中的这段内容，不要改其他段落。'
+      instruction.set(`${title}\n${base}\n\n修改要求：${req}`)
+    }
+    queueMicrotask(() => {
+      const input = document.querySelector('.assistant-dock .composer textarea') as HTMLTextAreaElement | null
+      if (input) input.focus()
+    })
+  }
+
+  async function previewSelectedBlockEdit() {
+    const targetIds = selectedTargetIds()
+    if (!$docId || !targetIds.length) return
+    const input = blockEditCmd.trim()
+    if (!input) return
+    blockPreviewBusy = true
+    blockEditError = ''
+    blockCandidates = []
+    try {
+      if (!$docIr || typeof $docIr !== 'object') throw new Error('文档尚未就绪')
+      const baseDoc = $docIr as Record<string, unknown>
+      blockOriginalText = selectedTargetText()
+      if (targetIds.length === 1) {
+        const payload: Record<string, unknown> = {
+          block_id: targetIds[0],
+          instruction: input
+        }
+        if ($docIr) payload.doc_ir = $docIr
+        const resp = await fetch(`/api/doc/${$docId}/block-edit/preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (!resp.ok) throw new Error(await resp.text())
+        const data = await resp.json()
+        blockOriginalText = String(data.before || selectedBlockText || '')
+        const rawCandidates = Array.isArray(data.candidates) ? data.candidates : []
+        blockCandidates = rawCandidates
+          .filter((c: any) => c && typeof c === 'object' && c.doc_ir && !c.error)
+          .map((c: any, idx: number) => ({
+            label: String(c.label || `方案${idx + 1}`),
+            selectedAfter: sanitizeCandidateText(String(c.selected_after || ''), blockOriginalText),
+            selectedBefore: String(c.selected_before || blockOriginalText || ''),
+            docIr: c.doc_ir,
+            diff: c.diff
+          }))
+      } else {
+        const variants = [
+          { label: '方案A', instruction: input },
+          { label: '方案B', instruction: `${input}。请采用另一种表达方式，保持原意但在句式和组织上有明显差异。` }
+        ]
+        const collected: Array<any> = []
+        for (const variant of variants) {
+          let workingDoc = JSON.parse(JSON.stringify(baseDoc)) as Record<string, unknown>
+          const beforeParts: string[] = []
+          const afterParts: string[] = []
+          for (const blockId of targetIds) {
+            const payload: Record<string, unknown> = {
+              block_id: blockId,
+              instruction: variant.instruction,
+              doc_ir: workingDoc,
+              variants: [{ label: variant.label, instruction: variant.instruction }]
+            }
+            const resp = await fetch(`/api/doc/${$docId}/block-edit/preview`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+            if (!resp.ok) throw new Error(await resp.text())
+            const data = await resp.json()
+            const candidate = Array.isArray(data.candidates) ? data.candidates[0] : null
+            if (!candidate || !candidate.doc_ir) {
+              throw new Error(`未生成可用候选：${variant.label}`)
+            }
+            const before = String(data.before || '')
+            const after = sanitizeCandidateText(String(candidate.selected_after || ''), before)
+            if (before) beforeParts.push(before)
+            if (after) afterParts.push(after)
+            workingDoc = candidate.doc_ir as Record<string, unknown>
+          }
+          collected.push({
+            label: variant.label,
+            selectedAfter: afterParts.join('\n\n'),
+            selectedBefore: beforeParts.join('\n\n') || blockOriginalText,
+            docIr: workingDoc,
+            diff: ''
+          })
+        }
+        blockCandidates = collected
+      }
+      if (!blockCandidates.length) {
+        throw new Error('没有生成可用候选版本')
+      }
+      activeCandidateIndex = 0
+    } catch (err) {
+      blockEditError = err instanceof Error ? err.message : '候选生成失败'
+    } finally {
+      blockPreviewBusy = false
+    }
+  }
+
+  function useRewritePreset(preset: string) {
+    const cur = blockEditCmd.trim()
+    blockEditCmd = cur ? `${cur}；${preset}` : preset
+    inlinePanelTab = 'rewrite'
+  }
+
+  function openBlockDialog() {
+    blockDialogInput = blockEditCmd.trim()
+    blockDialogOpen = true
+  }
+
+  function submitBlockDialogToAssistant() {
+    const req = blockDialogInput.trim()
+    if (!req) return
+    blockEditCmd = req
+    blockDialogOpen = false
+    openAssistantForBlock(req)
+  }
+
+  function sanitizeCandidateText(after: string, before: string) {
+    const src = String(after || '').trim()
+    if (!src) return ''
+    const original = String(before || '').trim()
+    let out = src
+      .replace(/^\s*```[a-zA-Z0-9_-]*\s*/g, '')
+      .replace(/\s*```\s*$/g, '')
+      .trim()
+    const rewriteLabel = /(?:改写后(?:的)?(?:文本|版本)?|优化后(?:的)?(?:文本|版本)?|重写后(?:的)?(?:文本|版本)?|润色后(?:的)?(?:文本|版本)?|rewritten\s*text|revised\s*version|final\s*version)\s*[:：]\s*/gi
+    let last: RegExpExecArray | null = null
+    while (true) {
+      const m = rewriteLabel.exec(out)
+      if (!m) break
+      last = m
+    }
+    if (last && last.index >= 0) {
+      out = out.slice(last.index + last[0].length).trim()
+    }
+    if (original && out.startsWith(original)) {
+      const tail = out.slice(original.length).replace(/^[\s:：\-—]+/, '')
+      if (tail.length >= 4) out = tail
+    }
+    const parts = out.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
+    if (original && parts.length >= 2) {
+      const kept = parts.filter((p) => p !== original)
+      if (kept.length && kept.length < parts.length) out = kept.join('\n\n')
+    }
+    return out.trim()
+  }
+
+  function candidateLengthDelta(candidate: any) {
+    const after = String(candidate?.selectedAfter || '')
+    const before = String(candidate?.selectedBefore || blockOriginalText || '')
+    const delta = after.length - before.length
+    if (delta === 0) return '长度不变'
+    return delta > 0 ? `增加 ${delta} 字` : `减少 ${Math.abs(delta)} 字`
+  }
+
+  function ignoreCandidateSuggestions() {
+    blockCandidates = []
+    activeCandidateIndex = 0
+    blockEditError = ''
+    pushToast('已忽略本轮建议', 'info')
+  }
+
+  async function applyCandidateVersion(index: number) {
+    const candidate = blockCandidates[index]
+    if (!candidate || !$docId || !candidate.docIr) return
+    const nextDoc = candidate.docIr as Record<string, unknown>
+    applyDocIrSnapshot(nextDoc)
+    try {
+      await fetch(`/api/doc/${$docId}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_ir: nextDoc })
+      })
+      await fetch(`/api/doc/${$docId}/version/commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: `块修改:${candidate.label}`, author: 'user', kind: 'minor' })
+      })
+      pushToast(`已应用${candidate.label}`, 'ok')
+      blockCandidates = []
+      activeCandidateIndex = 0
+      blockEditCmd = ''
+      await loadVersionLog()
+    } catch (err) {
+      blockEditError = err instanceof Error ? err.message : '应用候选失败'
+    }
   }
 
   function applyDocIrSnapshot(nextDoc: Record<string, unknown>) {
@@ -375,37 +698,11 @@
     lastSavedText = nextText
   }
 
-  async function applySelectedBlockEdit() {
-    if (!$docId || !selectedBlockId) return
-    const instruction = blockEditCmd.trim()
-    if (!instruction) return
-    blockEditBusy = true
-    blockEditError = ''
-    try {
-      const payload: Record<string, unknown> = { block_id: selectedBlockId, instruction }
-      if ($docIr) payload.doc_ir = $docIr
-      const resp = await fetch(`/api/doc/${$docId}/block-edit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      if (!resp.ok) throw new Error(await resp.text())
-      const data = await resp.json()
-      if (data.doc_ir && typeof data.doc_ir === 'object') {
-        applyDocIrSnapshot(data.doc_ir as Record<string, unknown>)
-      } else if (data.text) {
-        const txt = String(data.text || '')
-        sourceText.set(txt)
-        lastSavedText = txt
-      }
-      blockEditCmd = ''
-      pushToast('已应用修改', 'ok')
-    } catch (err) {
-      blockEditError = err instanceof Error ? err.message : '修改失败'
-    } finally {
-      blockEditBusy = false
-    }
+  $: if (activeCandidateIndex >= blockCandidates.length) {
+    activeCandidateIndex = 0
   }
+
+  $: activeCandidate = blockCandidates[activeCandidateIndex] || null
 
   function insertDiagramIntoDoc(spec: Record<string, unknown>) {
     if (!spec || typeof spec !== 'object') return
@@ -1284,78 +1581,98 @@
     <div class="brand">
       <div class="logo">IR</div>
       <div class="brand-text">
-        <div class="brand-title">??????</div>
-        <div class="brand-sub">Doc IR ? ?????</div>
+        <div class="brand-title">写作引擎</div>
+        <div class="brand-sub">Doc IR · 语义写作</div>
       </div>
     </div>
     <nav class="menu">
-      <button class="menu-item">??</button>
-      <button class="menu-item">??</button>
-      <button class="menu-item">??</button>
-      <button class="menu-item">??</button>
-      <button class="menu-item">??</button>
+      <button class="menu-item">概览</button>
+      <button class="menu-item">模板</button>
+      <button class="menu-item">协作</button>
+      <button class="menu-item">历史</button>
+      <button class="menu-item">帮助</button>
     </nav>
     <div class="top-actions">
       <div class="status-chip">
         <span class="dot"></span>
-        <span>{$docStatus || '???'}</span>
+        <span>{$docStatus || '未加载'}</span>
       </div>
-      <div class="status-chip light">?? {$wordCount}</div>
-      <button class="btn ghost" on:click={saveDoc}>??</button>
-      <button class="btn ghost" on:click={exportDocx}>?? Word</button>
-      <button class="btn ghost" on:click={exportPdf}>?? PDF</button>
+      <div class="status-chip light">字数 {$wordCount}</div>
+      <button class="btn ghost" on:click={saveDoc}>保存</button>
+      <button class="btn ghost" on:click={exportDocx}>导出 Word</button>
+      <button class="btn ghost" on:click={exportPdf}>导出 PDF</button>
       <Settings />
     </div>
   </header>
 
   <div class="workspace">
     <aside class="nav-rail">
-      <button class="nav-btn active" title="??">
-        <span>??</span>
+      <button class="nav-btn active" title="文档">
+        <span>文档</span>
       </button>
-      <button class="nav-btn" title="??" on:click={() => (canvasOpen = true)}>
-        <span>??</span>
+      <button class="nav-btn" title="画布" on:click={() => (canvasOpen = true)}>
+        <span>画布</span>
       </button>
-      <button class="nav-btn" title="??" on:click={() => (showCitations = true)}>
-        <span>??</span>
+      <button class="nav-btn" title="引用" on:click={() => (showCitations = true)}>
+        <span>引用</span>
       </button>
-      <button class="nav-btn" title="???" on:click={() => (showDocList = true)}>
-        <span>???</span>
+      <button class="nav-btn" title="文档库" on:click={() => (showDocList = true)}>
+        <span>文档库</span>
       </button>
     </aside>
 
     <section class="doc-area">
       <div class="doc-toolbar">
-        <div class="tool-group">
-          <button class="tool-btn" on:click={() => runEditorCommand('bold')}>B</button>
-          <button class="tool-btn" on:click={() => runEditorCommand('italic')}>I</button>
-          <button class="tool-btn" on:click={() => runEditorCommand('underline')}>U</button>
-          <button class="tool-btn" on:click={() => runEditorCommand('heading1')}>H1</button>
-          <button class="tool-btn" on:click={() => runEditorCommand('heading2')}>H2</button>
-          <button class="tool-btn" on:click={() => runEditorCommand('list-bullet')}>?</button>
-          <button class="tool-btn" on:click={() => runEditorCommand('list-number')}>1.</button>
-          <button class="tool-btn" on:click={() => runEditorCommand('table')}>??</button>
-          <button class="tool-btn" on:click={() => runEditorCommand('image')}>??</button>
+        <div class="toolbar-line">
+          <div class="toolbar-cluster">
+            <span class="cluster-label">文本</span>
+            <button class="tool-btn" title="撤销" on:click={() => runEditorCommand('undo')}>↶</button>
+            <button class="tool-btn" title="重做" on:click={() => runEditorCommand('redo')}>↷</button>
+            <button class="tool-btn" title="清除格式" on:click={() => runEditorCommand('clear-format')}>Tx</button>
+            <span class="tool-sep"></span>
+            <button class="tool-btn" title="加粗" on:click={() => runEditorCommand('bold')}>B</button>
+            <button class="tool-btn" title="斜体" on:click={() => runEditorCommand('italic')}>I</button>
+            <button class="tool-btn" title="下划线" on:click={() => runEditorCommand('underline')}>U</button>
+          </div>
+          <div class="toolbar-cluster">
+            <span class="cluster-label">结构</span>
+            <button class="tool-btn" on:click={() => runEditorCommand('heading1')}>H1</button>
+            <button class="tool-btn" on:click={() => runEditorCommand('heading2')}>H2</button>
+            <button class="tool-btn" on:click={() => runEditorCommand('quote')}>引用</button>
+            <button class="tool-btn" on:click={() => runEditorCommand('code')}>代码</button>
+            <button class="tool-btn" on:click={() => runEditorCommand('list-bullet')}>列表</button>
+            <button class="tool-btn" on:click={() => runEditorCommand('list-number')}>1.</button>
+          </div>
+          <div class="toolbar-cluster">
+            <span class="cluster-label">插入</span>
+            <button class="tool-btn" on:click={() => runEditorCommand('table')}>表格</button>
+            <button class="tool-btn" on:click={() => runEditorCommand('image')}>图片</button>
+            <button class="tool-btn" on:click={() => (canvasOpen = true)}>画布</button>
+            <button class="tool-btn" on:click={() => (showCitations = true)}>引用</button>
+          </div>
         </div>
-        <div class="tool-group right">
-          <button class="btn ghost" on:click={() => handleGenerate($instruction)} disabled={$generating}>??</button>
-          <button class="btn ghost" on:click={handleStop} disabled={!$generating}>??</button>
+        <div class="toolbar-line right">
+          <div class="toolbar-cluster compact">
+            <span class="cluster-label">智能写作</span>
+            <button class="btn ghost" on:click={() => handleGenerate($instruction)} disabled={$generating}>生成</button>
+            <button class="btn ghost" on:click={handleStop} disabled={!$generating}>停止</button>
+          </div>
         </div>
       </div>
 
       {#if $generating && progress.total > 0}
         <div class="generation-banner">
-          ????? {progress.current}/{progress.total} ??{progress.percent}%????? {Math.ceil(progress.etaS / 60)} ? {progress.etaS % 60} ?
+          生成中 {progress.current}/{progress.total} · {progress.percent}% · 预计剩余 {Math.ceil(progress.etaS / 60)} 分 {progress.etaS % 60} 秒
         </div>
       {/if}
 
       {#if sectionFailures.length > 0}
         <section class="section-failures">
-          <div class="panel-title">????</div>
+          <div class="panel-title">失败章节</div>
           {#each sectionFailures as f}
             <div class="failure-row">
               <span>{f.section}</span>
-              <button class="btn ghost" on:click={() => retrySection(f.section)}>??</button>
+              <button class="btn ghost" on:click={() => retrySection(f.section)}>重试</button>
             </div>
           {/each}
         </section>
@@ -1368,40 +1685,41 @@
           <Editor showToolbar={false} paper={true} on:blockedit={handleBlockEdit} on:blockselect={handleBlockSelect} />
         {/if}
       </div>
+
     </section>
 
     <aside class="side-panel">
       <div class="panel-card version-panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">???</div>
-            <div class="panel-sub">???? ? ????</div>
+            <div class="panel-title">版本树</div>
+            <div class="panel-sub">自动小版本 · 手动大版本</div>
           </div>
-          <button class="icon-btn" on:click={loadVersionLog} title="??">?</button>
+          <button class="icon-btn" on:click={loadVersionLog} title="刷新">刷新</button>
         </div>
         <div class="major-commit">
           <input
             class="version-input"
-            placeholder="????????"
+            placeholder="输入版本说明"
             bind:value={versionMessage}
           />
-          <button class="btn primary" on:click={commitVersion}>??</button>
+          <button class="btn primary" on:click={commitVersion}>保存版本</button>
         </div>
         {#if versionLoading}
-          <div class="panel-empty">???...</div>
+          <div class="panel-empty">加载中...</div>
         {:else if versionError}
           <div class="panel-empty">{versionError}</div>
         {:else if versionGroups.length === 0}
-          <div class="panel-empty">????</div>
+          <div class="panel-empty">暂无版本</div>
         {:else}
           <div class="version-groups">
             {#each versionGroups as group}
               <div class="version-group">
                 <div class={`version-major ${group.major?.is_current ? 'current' : ''}`}>
                   <div class="version-title">
-                    <span>{group.major?.message || '????'}</span>
+                    <span>{group.major?.message || '未命名'}</span>
                     <span class={`badge ${group.major?.kind === 'major' ? 'major' : 'minor'}`}>
-                      {group.major?.kind === 'major' ? '??' : '??'}
+                      {group.major?.kind === 'major' ? '大版本' : '小版本'}
                     </span>
                   </div>
                   <div class="version-meta">
@@ -1412,8 +1730,8 @@
                     <div class="version-summary">{formatVersionSummary(group.major?.summary)}</div>
                   {/if}
                   <div class="version-actions">
-                    <button class="btn ghost" on:click={() => checkoutVersion(group.major?.version_id)} disabled={group.major?.is_current}>??</button>
-                    <button class="btn ghost" on:click={() => compareWithCurrent(group.major?.version_id)} disabled={group.major?.is_current}>??</button>
+                    <button class="btn ghost" on:click={() => checkoutVersion(group.major?.version_id)} disabled={group.major?.is_current}>切换</button>
+                    <button class="btn ghost" on:click={() => compareWithCurrent(group.major?.version_id)} disabled={group.major?.is_current}>对比</button>
                   </div>
                 </div>
                 {#if group.minors && group.minors.length}
@@ -1421,15 +1739,15 @@
                     {#each group.minors as v}
                       <div class={`version-minor ${v.is_current ? 'current' : ''}`}>
                         <div>
-                          <div class="minor-title">{v.message || '????'}</div>
+                          <div class="minor-title">{v.message || '未命名'}</div>
                           {#if formatVersionSummary(v.summary)}
                             <div class="version-summary">{formatVersionSummary(v.summary)}</div>
                           {/if}
                           <div class="minor-meta">{formatVersionTime(v.timestamp)}</div>
                         </div>
                         <div class="minor-actions">
-                          <button class="btn ghost" on:click={() => checkoutVersion(v.version_id)} disabled={v.is_current}>??</button>
-                          <button class="btn ghost" on:click={() => compareWithCurrent(v.version_id)} disabled={v.is_current}>??</button>
+                          <button class="btn ghost" on:click={() => checkoutVersion(v.version_id)} disabled={v.is_current}>切换</button>
+                          <button class="btn ghost" on:click={() => compareWithCurrent(v.version_id)} disabled={v.is_current}>对比</button>
                         </div>
                       </div>
                     {/each}
@@ -1440,36 +1758,162 @@
           </div>
         {/if}
         <div class="version-diff">
-          <div class="panel-sub">????</div>
-          <pre>{versionDiff || '?????????'}</pre>
+          <div class="panel-sub">对比结果</div>
+          <pre>{versionDiff || '请选择版本进行对比'}</pre>
         </div>
       </div>
 
       <div class="panel-card block-panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">??????</div>
-            <div class="panel-sub">????????</div>
+            <div class="panel-title">选中内容轻量修改</div>
+            <div class="panel-sub">
+              {selectedBlockIds.length > 0 ? `已选中 ${selectedBlockIds.length} 个段落块` : '未选择段落'}
+            </div>
           </div>
         </div>
-        {#if selectedBlockId}
-          <div class="block-preview">{selectedBlockText || '?????'}</div>
-          <input
-            class="block-input"
-            placeholder="??????????????"
-            bind:value={blockEditCmd}
-          />
-          <div class="block-actions">
-            <button class="btn primary" on:click={applySelectedBlockEdit} disabled={blockEditBusy || !blockEditCmd.trim()}>
-              {blockEditBusy ? '????' : '????'}
+        {#if selectedBlockIds.length > 0}
+          <div class="inline-tabs">
+            <button class={`inline-tab ${inlinePanelTab === 'rewrite' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'rewrite')}>
+              改写建议
             </button>
-            <button class="btn ghost" on:click={() => { blockEditCmd = ''; }}>??</button>
+            <button class={`inline-tab ${inlinePanelTab === 'style' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'style')}>
+              样式设置
+            </button>
+            <button class={`inline-tab ${inlinePanelTab === 'assistant' ? 'active' : ''}`} on:click={() => (inlinePanelTab = 'assistant')}>
+              改动对话
+            </button>
           </div>
+
+          <div class="selected-targets">
+            {#each selectedBlocks as b, idx}
+              <span class="selected-chip" title={b.text}>块{idx + 1}</span>
+            {/each}
+          </div>
+
+          {#if inlinePanelTab === 'style'}
+            <div class="inline-style-row compact">
+              <span>字体</span>
+              <select
+                bind:value={blockStyleFontFamily}
+                on:change={() => applyInlineBlockStyle({ fontFamily: blockStyleFontFamily })}
+              >
+                <option value="">默认</option>
+                <option value="宋体">宋体</option>
+                <option value="黑体">黑体</option>
+                <option value="微软雅黑">微软雅黑</option>
+                <option value="楷体">楷体</option>
+                <option value="仿宋">仿宋</option>
+              </select>
+              <span>字号</span>
+              <select
+                bind:value={blockStyleFontSize}
+                on:change={() => applyInlineBlockStyle({ fontSize: blockStyleFontSize })}
+              >
+                <option value="">默认</option>
+                <option value="12pt">12pt</option>
+                <option value="14pt">14pt</option>
+                <option value="16pt">16pt</option>
+                <option value="18pt">18pt</option>
+                <option value="20pt">20pt</option>
+              </select>
+              <span>行距</span>
+              <select
+                bind:value={blockStyleLineHeight}
+                on:change={() => applyInlineBlockStyle({ lineHeight: blockStyleLineHeight })}
+              >
+                <option value="">默认</option>
+                <option value="1.2">1.2</option>
+                <option value="1.5">1.5</option>
+                <option value="1.75">1.75</option>
+                <option value="2">2.0</option>
+              </select>
+            </div>
+            <div class="panel-empty">这些样式只作用于当前选中的段落块，不会影响全篇。</div>
+          {/if}
+
+          {#if inlinePanelTab === 'assistant'}
+            <div class="assistant-inline-tip">
+              <div>用于处理这批选中段落的复杂修改需求。</div>
+              <div class="assistant-inline-actions">
+                <button class="btn ghost" on:click={openBlockDialog}>呼出改动对话窗口</button>
+                <button class="btn ghost" on:click={() => openAssistantForBlock(blockEditCmd)}>发到右下角全局助手</button>
+              </div>
+            </div>
+          {/if}
+
+          {#if inlinePanelTab === 'rewrite'}
+            <div class="inline-preset-row">
+              <button class="preset-chip" on:click={() => useRewritePreset('语气更正式，保留原意')}>更正式</button>
+              <button class="preset-chip" on:click={() => useRewritePreset('压缩到更简洁，控制在80字左右')}>更简洁</button>
+              <button class="preset-chip" on:click={() => useRewritePreset('增加解释细节，但不要扩展事实')}>更详细</button>
+              <button class="preset-chip" on:click={() => useRewritePreset('保持术语不变，仅调整表达')}>保留术语</button>
+            </div>
+
+            <div class="inline-ai-row">
+              <textarea
+                class="inline-instruction"
+                placeholder="例如：仅重写选中段落，语气更正式，减少20%字数。"
+                bind:value={blockEditCmd}
+              ></textarea>
+            </div>
+
+            <div class="inline-action-row">
+              <button class="btn ghost" on:click={openBlockDialog}>改动对话窗口</button>
+              <button
+                class="btn primary"
+                on:click={previewSelectedBlockEdit}
+                disabled={blockPreviewBusy || !blockEditCmd.trim()}
+              >
+                {blockPreviewBusy ? '正在生成建议...' : '生成建议（不改原文）'}
+              </button>
+            </div>
+          {/if}
+
           {#if blockEditError}
             <div class="block-error">{blockEditError}</div>
           {/if}
+
+          {#if blockCandidates.length > 0}
+            <div class="candidate-compare compact">
+              <div class="candidate-before">
+                <div class="candidate-label">原文</div>
+                <div class="candidate-text">{blockOriginalText || selectedBlockText}</div>
+              </div>
+              <div class="candidate-panel">
+                <div class="candidate-switches">
+                  {#each blockCandidates as c, idx}
+                    <button
+                      class={`candidate-switch ${activeCandidateIndex === idx ? 'active' : ''}`}
+                      on:click={() => (activeCandidateIndex = idx)}
+                    >
+                      <span>{c.label}</span>
+                      <span>{candidateLengthDelta(c)}</span>
+                    </button>
+                  {/each}
+                </div>
+                {#if activeCandidate}
+                  <div class="candidate-card">
+                    <div class="candidate-head">
+                      <span>{activeCandidate.label}</span>
+                      <span class="candidate-meta">{candidateLengthDelta(activeCandidate)}</span>
+                    </div>
+                    <div class="candidate-actions">
+                      <button class="btn primary" on:click={() => applyCandidateVersion(activeCandidateIndex)}>采纳到正文</button>
+                      <button class="btn ghost" on:click={previewSelectedBlockEdit}>重新生成</button>
+                      <button class="btn ghost danger" on:click={ignoreCandidateSuggestions}>忽略建议</button>
+                    </div>
+                    <div class="candidate-label">建议文本</div>
+                    <div class="candidate-text">{activeCandidate.selectedAfter}</div>
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
         {:else}
-          <div class="panel-empty">???????????????????? AI ????</div>
+          <div class="panel-empty">
+            选中段落后可做轻量修改。支持多选：鼠标拖动框选、`Ctrl/Cmd + 点击` 逐个添加、`Shift + 点击` 连续选择。
+          </div>
         {/if}
       </div>
     </aside>
@@ -1477,7 +1921,7 @@
 
   <div class={`assistant-dock ${assistantOpen ? 'open' : ''}`}>
     <button class="assistant-toggle" on:click={() => (assistantOpen = !assistantOpen)}>
-      {assistantOpen ? '????' : '????'}
+      {assistantOpen ? '收起助手' : '打开助手'}
     </button>
     {#if assistantOpen}
       <Chat variant="assistant" on:send={(e) => handleGenerate(e.detail)} />
@@ -1488,6 +1932,38 @@
     <ProgressBar indeterminate={true} />
   {/if}
 </main>
+
+{#if blockDialogOpen}
+  <div
+    class="block-dialog-backdrop"
+    role="button"
+    tabindex="0"
+    aria-label="关闭改动对话窗口"
+    on:click|self={() => (blockDialogOpen = false)}
+    on:keydown={(event) => {
+      if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') blockDialogOpen = false
+    }}
+  >
+    <div class="block-dialog">
+      <div class="block-dialog-head">
+        <div>
+          <div class="panel-title">改动对话窗口</div>
+          <div class="panel-sub">仅针对当前选中的段落块</div>
+        </div>
+        <button class="btn ghost btn-sm" on:click={() => (blockDialogOpen = false)}>关闭</button>
+      </div>
+      <textarea
+        class="inline-instruction"
+        placeholder="例如：将选中段落统一改为更正式的学术语气，并保持原结论。"
+        bind:value={blockDialogInput}
+      ></textarea>
+      <div class="inline-action-row">
+        <button class="btn ghost" on:click={() => (blockDialogOpen = false)}>取消</button>
+        <button class="btn primary" disabled={!blockDialogInput.trim()} on:click={submitBlockDialogToAssistant}>发送到助手</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <DiagramCanvas
   open={canvasOpen}
@@ -1633,7 +2109,7 @@
   .workspace {
     flex: 1;
     display: grid;
-    grid-template-columns: 74px minmax(0, 1fr) 340px;
+    grid-template-columns: 74px minmax(0, 1fr) 430px;
     gap: 20px;
     padding: 20px 28px 100px;
   }
@@ -1674,9 +2150,8 @@
   }
 
   .doc-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    display: grid;
+    gap: 10px;
     padding: 12px 16px;
     background: var(--panel-bg);
     border: 1px solid var(--panel-border);
@@ -1684,24 +2159,55 @@
     box-shadow: var(--panel-shadow);
   }
 
-  .tool-group {
+  .toolbar-line {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
     flex-wrap: wrap;
   }
 
-  .tool-group.right {
+  .toolbar-line.right {
     justify-content: flex-end;
   }
 
+  .toolbar-cluster {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.78);
+    flex-wrap: wrap;
+  }
+
+  .toolbar-cluster.compact {
+    margin-left: auto;
+  }
+
+  .cluster-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    margin-right: 2px;
+    white-space: nowrap;
+  }
+
+  .tool-sep {
+    width: 1px;
+    height: 18px;
+    background: rgba(148, 163, 184, 0.36);
+    margin: 0 2px;
+  }
+
   .tool-btn {
-    width: 34px;
+    min-width: 34px;
     height: 32px;
     border-radius: 10px;
     border: 1px solid rgba(148, 163, 184, 0.3);
     background: #fff;
     font-weight: 600;
+    padding: 0 10px;
     cursor: pointer;
     transition: border 0.2s ease, box-shadow 0.2s ease;
   }
@@ -1745,6 +2251,202 @@
     min-height: 420px;
   }
 
+  .inline-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .inline-tab {
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 13px;
+    background: rgba(248, 250, 252, 0.94);
+    color: #0f172a;
+    cursor: pointer;
+  }
+
+  .inline-tab.active {
+    border-color: rgba(37, 99, 235, 0.45);
+    background: rgba(37, 99, 235, 0.14);
+    color: #1e3a8a;
+    font-weight: 600;
+  }
+
+  .inline-style-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto 1fr auto 1fr;
+    gap: 8px;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .inline-style-row select {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 8px;
+    padding: 7px 10px;
+    background: #fff;
+    font-size: 14px;
+  }
+
+  .inline-preset-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .preset-chip {
+    border: 1px solid rgba(37, 99, 235, 0.28);
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.06);
+    color: #1e3a8a;
+    padding: 7px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .inline-ai-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .inline-instruction {
+    width: 100%;
+    min-height: 96px;
+    resize: vertical;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: #fff;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .inline-action-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .assistant-inline-tip {
+    border: 1px dashed rgba(37, 99, 235, 0.35);
+    border-radius: 12px;
+    background: rgba(239, 246, 255, 0.9);
+    padding: 12px;
+    font-size: 14px;
+    color: #1e293b;
+    display: grid;
+    gap: 10px;
+  }
+
+  .assistant-inline-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .candidate-compare {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .candidate-before,
+  .candidate-card {
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 12px;
+    background: rgba(248, 250, 252, 0.95);
+    padding: 12px;
+  }
+
+  .candidate-before {
+    position: sticky;
+    top: 0;
+    align-self: start;
+  }
+
+  .candidate-panel {
+    display: grid;
+    gap: 10px;
+  }
+
+  .candidate-switches {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .candidate-switch {
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 10px;
+    background: rgba(241, 245, 249, 0.9);
+    color: #0f172a;
+    padding: 7px 10px;
+    font-size: 12px;
+    display: grid;
+    justify-items: start;
+    gap: 2px;
+    cursor: pointer;
+    min-width: 120px;
+  }
+
+  .candidate-switch.active {
+    border-color: rgba(37, 99, 235, 0.45);
+    background: rgba(37, 99, 235, 0.14);
+    color: #1e3a8a;
+    font-weight: 600;
+  }
+
+  .candidate-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .candidate-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .candidate-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .candidate-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .candidate-text {
+    max-height: 300px;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-size: 16px;
+    line-height: 1.55;
+    color: #0f172a;
+  }
+
+  .btn.ghost.danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: #991b1b;
+  }
+
+  .btn-sm {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
   .side-panel {
     display: flex;
     flex-direction: column;
@@ -1757,6 +2459,14 @@
     border-radius: 18px;
     padding: 14px;
     box-shadow: var(--panel-shadow);
+  }
+
+  .block-panel {
+    order: 1;
+  }
+
+  .version-panel {
+    order: 2;
   }
 
   .panel-header {
@@ -1918,6 +2628,75 @@
     margin-top: 6px;
   }
 
+  .selected-targets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .selected-chip {
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    background: rgba(37, 99, 235, 0.1);
+    color: #1e3a8a;
+    font-size: 12px;
+    border-radius: 999px;
+    padding: 4px 10px;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .block-panel .inline-style-row.compact {
+    grid-template-columns: auto 1fr;
+    gap: 6px 8px;
+  }
+
+  .block-panel .inline-preset-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .block-panel .inline-instruction {
+    min-height: 88px;
+  }
+
+  .block-panel .candidate-compare.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .block-panel .candidate-before {
+    position: static;
+  }
+
+  .block-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.36);
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+
+  .block-dialog {
+    width: min(720px, calc(100vw - 32px));
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    box-shadow: 0 24px 56px rgba(15, 23, 42, 0.28);
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .block-dialog-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
   .assistant-dock {
     position: fixed;
     right: 28px;
@@ -2007,6 +2786,26 @@
     .assistant-dock {
       right: 12px;
       bottom: 12px;
+    }
+    .inline-style-row {
+      grid-template-columns: auto 1fr;
+    }
+    .inline-preset-row {
+      grid-template-columns: 1fr 1fr;
+    }
+    .candidate-compare {
+      grid-template-columns: 1fr;
+    }
+    .candidate-before {
+      position: static;
+    }
+    .candidate-switches {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .candidate-text {
+      font-size: 16px;
+      max-height: 180px;
     }
   }
 </style>

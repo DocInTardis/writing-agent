@@ -21,8 +21,13 @@
   let pendingRenderSig: string | null = null
   let pendingFocusBlockId = ''
   let editCommitTimer: ReturnType<typeof setTimeout> | null = null
-  let selectedBlockId = ''
-  let selectedBlockEl: HTMLElement | null = null
+  let selectedBlockIds: string[] = []
+  let selectedBlockEls: HTMLElement[] = []
+  let selectedAnchorId = ''
+  let dragSelectSeed: { x: number; y: number } | null = null
+  let dragSelecting = false
+  let dragRect = { left: 0, top: 0, width: 0, height: 0 }
+  let suppressClickOnce = false
 
   function setEmptyFlag(text: string) {
     if (!editor) return
@@ -719,36 +724,201 @@
     applyDocIrUpdate(nextDoc)
   }
 
-  function setSelectedBlock(el: HTMLElement | null) {
-    if (selectedBlockEl && selectedBlockEl !== el) {
-      selectedBlockEl.classList.remove('wa-block-selected')
+  function allBlockElements(): HTMLElement[] {
+    if (!editor) return []
+    return Array.from(editor.querySelectorAll('[data-block-id]')) as HTMLElement[]
+  }
+
+  function blockIdOf(el: HTMLElement | null): string {
+    return String(el?.dataset.blockId || '').trim()
+  }
+
+  function blockById(id: string): HTMLElement | null {
+    if (!editor || !id) return null
+    return editor.querySelector(`[data-block-id="${CSS.escape(id)}"]`) as HTMLElement | null
+  }
+
+  function normalizeBlockIds(ids: string[]): string[] {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const raw of ids) {
+      const id = String(raw || '').trim()
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      out.push(id)
     }
-    selectedBlockEl = el
-    if (selectedBlockEl) {
-      selectedBlockEl.classList.add('wa-block-selected')
-      selectedBlockId = selectedBlockEl.dataset.blockId || ''
-      dispatch('blockselect', { blockId: selectedBlockId, text: plainTextFromElement(selectedBlockEl) })
-    } else {
-      selectedBlockId = ''
-      dispatch('blockselect', { blockId: '', text: '' })
+    return out
+  }
+
+  function sortIdsByDocumentOrder(ids: string[]): string[] {
+    const wanted = new Set(normalizeBlockIds(ids))
+    const out: string[] = []
+    for (const el of allBlockElements()) {
+      const id = blockIdOf(el)
+      if (id && wanted.has(id)) out.push(id)
     }
+    return out
+  }
+
+  function dispatchBlockSelection() {
+    const blocks = selectedBlockEls.map((el) => {
+      const id = blockIdOf(el)
+      const text = plainTextFromElement(el)
+      return {
+        id,
+        text,
+        style: extractBlockStyle(el) || {}
+      }
+    })
+    if (!blocks.length) {
+      dispatch('blockselect', { blockId: '', blockIds: [], blocks: [], text: '', rect: null, style: {} })
+      return
+    }
+    const primaryEl = selectedBlockEls[0]
+    const primaryId = blockIdOf(primaryEl)
+    const primaryText = plainTextFromElement(primaryEl)
+    const rect = primaryEl.getBoundingClientRect()
+    dispatch('blockselect', {
+      blockId: primaryId,
+      blockIds: selectedBlockIds.slice(),
+      blocks,
+      text: primaryText,
+      rect: {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height
+      },
+      style: extractBlockStyle(primaryEl) || {}
+    })
+  }
+
+  function setSelectedBlocksByIds(ids: string[], anchorId?: string) {
+    for (const el of selectedBlockEls) el.classList.remove('wa-block-selected')
+    selectedBlockIds = sortIdsByDocumentOrder(ids)
+    selectedBlockEls = selectedBlockIds
+      .map((id) => blockById(id))
+      .filter((el): el is HTMLElement => Boolean(el))
+    for (const el of selectedBlockEls) el.classList.add('wa-block-selected')
+    if (anchorId && selectedBlockIds.includes(anchorId)) {
+      selectedAnchorId = anchorId
+    } else if (selectedBlockIds.length === 1) {
+      selectedAnchorId = selectedBlockIds[0]
+    } else if (!selectedBlockIds.length) {
+      selectedAnchorId = ''
+    }
+    dispatchBlockSelection()
   }
 
   function clearSelectedBlock() {
-    if (selectedBlockEl) selectedBlockEl.classList.remove('wa-block-selected')
-    selectedBlockEl = null
-    selectedBlockId = ''
-    dispatch('blockselect', { blockId: '', text: '' })
+    setSelectedBlocksByIds([])
   }
 
   function refreshSelectedBlock() {
-    if (!editor || !selectedBlockId) return
-    const selector = `[data-block-id="${CSS.escape(selectedBlockId)}"]`
-    const el = editor.querySelector(selector) as HTMLElement | null
-    setSelectedBlock(el)
+    if (!editor || !selectedBlockIds.length) return
+    setSelectedBlocksByIds(selectedBlockIds, selectedAnchorId)
+  }
+
+  function selectRangeTo(targetId: string) {
+    const all = allBlockElements()
+    const ids = all.map((el) => blockIdOf(el)).filter(Boolean)
+    const anchor = selectedAnchorId && ids.includes(selectedAnchorId) ? selectedAnchorId : ids[0] || ''
+    const from = ids.indexOf(anchor)
+    const to = ids.indexOf(targetId)
+    if (from < 0 || to < 0) {
+      setSelectedBlocksByIds([targetId], targetId)
+      return
+    }
+    const [start, end] = from <= to ? [from, to] : [to, from]
+    setSelectedBlocksByIds(ids.slice(start, end + 1), anchor)
+  }
+
+  function toggleSelectedBlock(targetId: string) {
+    const has = selectedBlockIds.includes(targetId)
+    const next = has
+      ? selectedBlockIds.filter((id) => id !== targetId)
+      : [...selectedBlockIds, targetId]
+    setSelectedBlocksByIds(next, has ? selectedAnchorId : targetId)
+  }
+
+  function rectFromPoints(a: { x: number; y: number }, b: { x: number; y: number }) {
+    const left = Math.min(a.x, b.x)
+    const top = Math.min(a.y, b.y)
+    const width = Math.abs(a.x - b.x)
+    const height = Math.abs(a.y - b.y)
+    return { left, top, width, height }
+  }
+
+  function intersectsViewportRect(a: { left: number; top: number; width: number; height: number }, b: DOMRect) {
+    const aRight = a.left + a.width
+    const aBottom = a.top + a.height
+    const bRight = b.left + b.width
+    const bBottom = b.top + b.height
+    return !(aRight < b.left || bRight < a.left || aBottom < b.top || bBottom < a.top)
+  }
+
+  function blockIdsInMarquee(rect: { left: number; top: number; width: number; height: number }) {
+    const ids: string[] = []
+    for (const el of allBlockElements()) {
+      const id = blockIdOf(el)
+      if (!id) continue
+      if (intersectsViewportRect(rect, el.getBoundingClientRect())) {
+        ids.push(id)
+      }
+    }
+    return ids
+  }
+
+  function handleMarqueeMouseMove(event: MouseEvent) {
+    if (!dragSelectSeed) return
+    const current = { x: event.clientX, y: event.clientY }
+    const rect = rectFromPoints(dragSelectSeed, current)
+    if (!dragSelecting) {
+      if (rect.width < 10 && rect.height < 10) return
+      dragSelecting = true
+      suppressClickOnce = true
+      window.getSelection()?.removeAllRanges()
+    }
+    event.preventDefault()
+    dragRect = rect
+    const ids = blockIdsInMarquee(rect)
+    if (ids.length) {
+      setSelectedBlocksByIds(ids, ids[0])
+    } else {
+      setSelectedBlocksByIds([])
+    }
+  }
+
+  function finishMarqueeSelection() {
+    dragSelectSeed = null
+    dragSelecting = false
+    dragRect = { left: 0, top: 0, width: 0, height: 0 }
+    window.removeEventListener('mousemove', handleMarqueeMouseMove)
+    window.removeEventListener('mouseup', handleMarqueeMouseUp)
+  }
+
+  function handleMarqueeMouseUp() {
+    finishMarqueeSelection()
+  }
+
+  function handleEditorMouseDown(event: MouseEvent) {
+    if (!editor) return
+    if (event.button !== 0) return
+    const target = event.target as HTMLElement | null
+    if (!target || !editor.contains(target)) return
+    if (target.closest('a,button,input,textarea,select,[data-wa-no-marquee="1"]')) return
+    dragSelectSeed = { x: event.clientX, y: event.clientY }
+    dragSelecting = false
+    dragRect = { left: event.clientX, top: event.clientY, width: 0, height: 0 }
+    window.addEventListener('mousemove', handleMarqueeMouseMove)
+    window.addEventListener('mouseup', handleMarqueeMouseUp)
   }
 
   function handleEditorClick(event: MouseEvent) {
+    if (suppressClickOnce) {
+      suppressClickOnce = false
+      return
+    }
     const target = event.target as HTMLElement | null
     if (!target || !editor) return
     const block = target.closest('[data-block-id]') as HTMLElement | null
@@ -756,7 +926,21 @@
       clearSelectedBlock()
       return
     }
-    if (block !== selectedBlockEl) setSelectedBlock(block)
+    const id = blockIdOf(block)
+    if (!id) {
+      clearSelectedBlock()
+      return
+    }
+    const appendMode = event.ctrlKey || event.metaKey
+    if (event.shiftKey) {
+      selectRangeTo(id)
+      return
+    }
+    if (appendMode) {
+      toggleSelectedBlock(id)
+      return
+    }
+    setSelectedBlocksByIds([id], id)
   }
 
   function handleEditableFocus(event: FocusEvent) {
@@ -1253,9 +1437,10 @@
     if (!editor) return null
     const active = document.activeElement as HTMLElement | null
     if (active && editor.contains(active) && active.isContentEditable) return active
-    if (selectedBlockEl && selectedBlockEl.isContentEditable) {
-      selectedBlockEl.focus()
-      return selectedBlockEl
+    const selected = selectedBlockEls[0] || null
+    if (selected && selected.isContentEditable) {
+      selected.focus()
+      return selected
     }
     const first = editor.querySelector('[data-wa-edit="1"]') as HTMLElement | null
     if (first) {
@@ -2005,6 +2190,7 @@
     if (editor) observer.observe(editor, { childList: true, subtree: true })
     
     return () => {
+      finishMarqueeSelection()
       unsubscribe()
       if (sourceUnsub) sourceUnsub()
       imgObserver.disconnect()
@@ -2064,6 +2250,7 @@
             <button 
               class="color-item" 
               style="background: {color};" 
+              aria-label={`文字颜色 ${color}`}
               on:click={() => { applyCommand('color:' + color); showColorPanel = false }}
             ></button>
           {/each}
@@ -2081,6 +2268,7 @@
             <button 
               class="color-item" 
               style="background: {color};" 
+              aria-label={`背景颜色 ${color}`}
               on:click={() => { applyCommand('bgcolor:' + color); showBgColorPanel = false }}
             ></button>
           {/each}
@@ -2156,6 +2344,9 @@
     data-render-mode={renderMode}
     bind:this={editor}
     contenteditable="false"
+    role="region"
+    aria-label="文档编辑区"
+    on:mousedown={handleEditorMouseDown}
     on:input={handleEditableInput}
     on:focusin={handleEditableFocus}
     on:focusout={handleEditableBlur}
@@ -2164,6 +2355,14 @@
     on:click={handleEditorClick}
     on:keydown={handleKeydown}
   ></div>
+
+  {#if dragSelecting}
+    <div
+      class="block-marquee"
+      style={`left:${dragRect.left}px;top:${dragRect.top}px;width:${dragRect.width}px;height:${dragRect.height}px;`}
+      aria-hidden="true"
+    ></div>
+  {/if}
 
   {#if showFindReplace}
     <div class="find-replace-panel">
@@ -2185,6 +2384,16 @@
   .editor {
     display: grid;
     gap: 12px;
+  }
+
+  .block-marquee {
+    position: fixed;
+    z-index: 22;
+    border: 1.5px solid rgba(37, 99, 235, 0.78);
+    background: rgba(37, 99, 235, 0.14);
+    border-radius: 8px;
+    pointer-events: none;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.16);
   }
 
   :global(.editable .wa-block-selected) {

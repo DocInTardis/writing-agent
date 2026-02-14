@@ -20,6 +20,7 @@ export interface ToastItem {
 export type EditorCommand =
   | 'bold'
   | 'italic'
+  | 'underline'
   | 'heading1'
   | 'heading2'
   | 'list-bullet'

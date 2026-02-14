@@ -52,6 +52,8 @@ from writing_agent.v2.doc_ir import (
     apply_ops as doc_ir_apply_ops,
     Operation as DocIROperation,
     diff_blocks as doc_ir_diff,
+    build_index as doc_ir_build_index,
+    render_block_text as doc_ir_render_block_text,
 )
 from writing_agent.v2.figure_render import render_figure_svg
 from writing_agent.v2.graph_runner import (
@@ -2168,11 +2170,11 @@ async def api_generate(doc_id: str, request: Request) -> dict:
 async def api_generate_section(doc_id: str, request: Request) -> dict:
     session = store.get(doc_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="???????")
+        raise HTTPException(status_code=404, detail="文档不存在")
     data = await request.json()
     section = str(data.get("section") or "").strip()
     if not section:
-        raise HTTPException(status_code=400, detail="section ????")
+        raise HTTPException(status_code=400, detail="section 不能为空")
     instruction = str(data.get("instruction") or "").strip() or (session.last_instruction or "")
     current_text = session.text or ""
     cfg = GenerateConfig(workers=1, min_total_chars=0, max_total_chars=0)
@@ -2369,10 +2371,14 @@ def _diagram_spec_from_llm(prompt: str, kind: str) -> dict | None:
     user = (
         "Convert the user request to JSON.\n"
         "Output format: {\"type\":...,\"caption\":...,\"data\":...}.\n"
-        "type must be flow/er/sequence.\n"
+        "type must be one of flow/er/sequence/timeline/bar/line/pie.\n"
         "flow.data: nodes[{id,text}], edges[{src,dst,label}]\n"
         "er.data: entities[{name,attributes}], relations[{left,right,label,cardinality}]\n"
         "sequence.data: participants[], messages[{from,to,text}]\n"
+        "timeline.data: events[{time,label}]\n"
+        "bar.data: labels[], values[]\n"
+        "line.data: labels[], series[{name,values[]}]\n"
+        "pie.data: segments[{label,value}]\n"
         f"User type: {kind}\n"
         f"User request: {prompt}\n"
     )
@@ -2384,12 +2390,41 @@ def _diagram_spec_from_llm(prompt: str, kind: str) -> dict | None:
     if not data:
         return None
     return data
+
+
 def _diagram_spec_fallback(prompt: str, kind: str) -> dict:
     kind = (kind or "flow").strip().lower()
-    caption = (prompt or "").strip()[:20] or "diagram"
+    raw_prompt = str(prompt or "")
+    norm_prompt = raw_prompt.translate(
+        str.maketrans({"：": ":", "，": ",", "；": ";", "。": ".", "、": ","})
+    )
+    caption = raw_prompt.strip()[:20] or "diagram"
     sep_pattern = r"[,.;\n]+"
+
+    def _parts(text: str) -> list[str]:
+        toks = [
+            p.strip()
+            for p in re.split(r"\s*(?:->|=>|>|:|/|\\|\||,|;|\n)+\s*", text or "")
+            if p.strip()
+        ]
+        if toks:
+            return toks
+        return [p.strip() for p in re.split(sep_pattern, text or "") if p.strip()]
+
+    def _num_pairs(text: str) -> list[tuple[str, float]]:
+        out: list[tuple[str, float]] = []
+        for name, value in re.findall(r"([A-Za-z0-9_\u4e00-\u9fff]{1,16})\s*[:=]\s*(-?\d+(?:\.\d+)?)", text or ""):
+            try:
+                out.append((name, float(value)))
+            except Exception:
+                continue
+        return out
+
     if kind in {"flow", "flowchart"}:
-        pairs = re.findall(r"([A-Za-z0-9一-鿿]{1,12})\s*(?:->|=>|?|?)\s*([A-Za-z0-9一-鿿]{1,12})", prompt or "")
+        pairs = re.findall(
+            r"([A-Za-z0-9_\u4e00-\u9fff]{1,16})\s*(?:->|=>|>)\s*([A-Za-z0-9_\u4e00-\u9fff]{1,16})",
+            norm_prompt,
+        )
         nodes = []
         edges = []
         seen = set()
@@ -2402,43 +2437,98 @@ def _diagram_spec_fallback(prompt: str, kind: str) -> dict:
                 seen.add(dst)
             edges.append({"src": src, "dst": dst, "label": ""})
         if not nodes:
-            parts = [p.strip() for p in re.split(sep_pattern, prompt or "") if p.strip()]
+            parts = _parts(norm_prompt)
             if len(parts) < 2:
                 parts = ["Start", "Process", "End"]
-            nodes = [{"id": f"n{i+1}", "text": p[:12]} for i, p in enumerate(parts[:8])]
+            nodes = [{"id": f"n{i+1}", "text": p[:16]} for i, p in enumerate(parts[:8])]
             edges = [{"src": f"n{i+1}", "dst": f"n{i+2}", "label": ""} for i in range(len(nodes) - 1)]
         return {"type": "flow", "caption": caption or "flow", "data": {"nodes": nodes, "edges": edges}}
+
     if kind == "er":
         entities = []
         relations = []
-        for line in (prompt or "").splitlines():
-            if ":" in line or "?" in line:
-                left, right = re.split(r"[:?]", line, maxsplit=1)
+        for line in norm_prompt.splitlines():
+            if ":" in line:
+                left, right = line.split(":", 1)
                 name = left.strip()
-                attrs = [a.strip() for a in re.split(r"[,??]", right) if a.strip()]
+                attrs = [a.strip() for a in re.split(r"[,;/]", right) if a.strip()]
                 if name:
                     entities.append({"name": name[:16], "attributes": attrs[:8] or ["attr"]})
         if len(entities) < 2:
             entities = [
                 {"name": "EntityA", "attributes": ["field1", "field2"]},
-                {"name": "EntityB", "attributes": ["field1", "field2"]}
+                {"name": "EntityB", "attributes": ["field1", "field2"]},
             ]
         relations.append({"left": entities[0]["name"], "right": entities[1]["name"], "label": "rel", "cardinality": ""})
         return {"type": "er", "caption": caption or "er", "data": {"entities": entities, "relations": relations}}
+
     if kind == "sequence":
-        parts = [p.strip() for p in re.split(sep_pattern, prompt or "") if p.strip()]
+        parts = _parts(norm_prompt)
         actors = parts[:4] or ["Client", "Server", "DB"]
         messages = []
         for i in range(len(actors) - 1):
-            messages.append({"from": actors[i], "to": actors[i+1], "text": "message"})
+            messages.append({"from": actors[i], "to": actors[i + 1], "text": "message"})
         if not messages:
             messages = [
                 {"from": "Client", "to": "Server", "text": "request"},
                 {"from": "Server", "to": "DB", "text": "query"},
-                {"from": "DB", "to": "Server", "text": "result"}
+                {"from": "DB", "to": "Server", "text": "result"},
             ]
         return {"type": "sequence", "caption": caption or "sequence", "data": {"participants": actors, "messages": messages}}
+
+    if kind == "timeline":
+        parts = _parts(norm_prompt)
+        events = [{"time": f"T{i+1}", "label": p[:24]} for i, p in enumerate(parts[:10])]
+        if len(events) < 2:
+            events = [
+                {"time": "T1", "label": "phase 1"},
+                {"time": "T2", "label": "phase 2"},
+                {"time": "T3", "label": "phase 3"},
+            ]
+        return {"type": "timeline", "caption": caption or "timeline", "data": {"events": events}}
+
+    if kind == "bar":
+        pairs = _num_pairs(norm_prompt)
+        if pairs:
+            labels = [p[0] for p in pairs[:12]]
+            values = [p[1] for p in pairs[:12]]
+        else:
+            nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", norm_prompt)[:12]]
+            values = nums or [12, 18, 9, 22]
+            labels = [f"C{i+1}" for i in range(len(values))]
+        return {"type": "bar", "caption": caption or "bar", "data": {"labels": labels, "values": values}}
+
+    if kind == "line":
+        pairs = _num_pairs(norm_prompt)
+        if pairs:
+            labels = [p[0] for p in pairs[:20]]
+            values = [p[1] for p in pairs[:20]]
+        else:
+            nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", norm_prompt)[:20]]
+            values = nums or [5, 9, 12, 10, 16]
+            labels = [f"T{i+1}" for i in range(len(values))]
+        series = [{"name": "S1", "values": values}]
+        return {"type": "line", "caption": caption or "line", "data": {"labels": labels, "series": series}}
+
+    if kind == "pie":
+        pairs = _num_pairs(norm_prompt)
+        if pairs:
+            segments = [{"label": p[0][:12], "value": p[1]} for p in pairs[:12]]
+        else:
+            nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", norm_prompt)[:8]]
+            if nums:
+                segments = [{"label": f"S{i+1}", "value": v} for i, v in enumerate(nums)]
+            else:
+                segments = [
+                    {"label": "A", "value": 40},
+                    {"label": "B", "value": 35},
+                    {"label": "C", "value": 25},
+                ]
+        return {"type": "pie", "caption": caption or "pie", "data": {"segments": segments}}
+
     return {"type": "flow", "caption": caption or "flow", "data": {"nodes": [], "edges": []}}
+
+
 def _diagram_spec_from_prompt(prompt: str, kind: str) -> dict:
     prompt = str(prompt or "").strip()
     kind = str(kind or "flow").strip().lower()
@@ -2448,7 +2538,7 @@ def _diagram_spec_from_prompt(prompt: str, kind: str) -> dict:
     if "type" not in spec:
         spec["type"] = kind
     if "caption" not in spec:
-        spec["caption"] = (prompt[:20] if prompt else "???")
+        spec["caption"] = (prompt[:20] if prompt else "图")
     if "data" not in spec:
         spec["data"] = {}
     return spec
@@ -2456,12 +2546,12 @@ def _diagram_spec_from_prompt(prompt: str, kind: str) -> dict:
 async def api_diagram_generate(doc_id: str, request: Request) -> dict:
     session = store.get(doc_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="?????")
+        raise HTTPException(status_code=404, detail="文档不存在")
     data = await request.json()
     prompt = str(data.get("prompt") or "").strip()
     kind = str(data.get("kind") or "flow").strip().lower()
     if not prompt:
-        raise HTTPException(status_code=400, detail="??????")
+        raise HTTPException(status_code=400, detail="prompt 不能为空")
     spec = _diagram_spec_from_prompt(prompt, kind)
     return {"ok": 1, "spec": spec}
 @app.post("/api/doc/{doc_id}/inline-ai")
@@ -2648,6 +2738,93 @@ async def api_block_edit(doc_id: str, request: Request) -> dict:
     _auto_commit_version(session, "auto: after update")
     store.put(session)
     return {"ok": 1, "doc_ir": session.doc_ir, "text": session.doc_text, "meta": meta}
+
+
+def _extract_block_text_from_ir(doc_ir_obj, block_id: str) -> str:
+    try:
+        idx = doc_ir_build_index(doc_ir_obj)
+        block = idx.block_by_id.get(block_id)
+        if block is None:
+            return ""
+        return str(doc_ir_render_block_text(block) or "").strip()
+    except Exception:
+        return ""
+
+
+@app.post("/api/doc/{doc_id}/block-edit/preview")
+async def api_block_edit_preview(doc_id: str, request: Request) -> dict:
+    session = store.get(doc_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="body must be object")
+    block_id = str(data.get("block_id") or "").strip()
+    instruction = str(data.get("instruction") or "").strip()
+    if not block_id or not instruction:
+        raise HTTPException(status_code=400, detail="block_id and instruction required")
+
+    incoming_ir = data.get("doc_ir")
+    if isinstance(incoming_ir, dict) and incoming_ir.get("sections") is not None:
+        base_ir = doc_ir_from_dict(incoming_ir)
+    else:
+        base_ir = doc_ir_from_dict(session.doc_ir or {})
+
+    before_text = _extract_block_text_from_ir(base_ir, block_id)
+    if not before_text:
+        raise HTTPException(status_code=404, detail="block not found")
+
+    variants_raw = data.get("variants")
+    variants: list[dict] = []
+    if isinstance(variants_raw, list):
+        for item in variants_raw:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("label") or item.get("name") or "").strip()
+            ins = str(item.get("instruction") or "").strip()
+            if ins:
+                variants.append({"label": label or f"方案{len(variants) + 1}", "instruction": ins})
+            if len(variants) >= 2:
+                break
+
+    if not variants:
+        variants = [
+            {"label": "方案A", "instruction": instruction},
+            {"label": "方案B", "instruction": instruction + "。请采用另一种表达方式，保持原意但在句式和组织上有明显差异。"},
+        ]
+
+    candidates: list[dict] = []
+    for item in variants:
+        cand_label = str(item.get("label") or "方案").strip() or "方案"
+        cand_ins = str(item.get("instruction") or "").strip()
+        if not cand_ins:
+            continue
+        try:
+            working_ir = doc_ir_from_dict(doc_ir_to_dict(base_ir))
+            updated_ir, meta = await apply_block_edit(working_ir, block_id, cand_ins)
+            cand_after = _extract_block_text_from_ir(updated_ir, block_id)
+            candidates.append(
+                {
+                    "label": cand_label,
+                    "instruction": cand_ins,
+                    "doc_ir": doc_ir_to_dict(updated_ir),
+                    "text": doc_ir_to_text(updated_ir),
+                    "selected_before": before_text,
+                    "selected_after": cand_after,
+                    "diff": doc_ir_diff(base_ir, updated_ir),
+                    "meta": meta,
+                }
+            )
+        except Exception as exc:
+            candidates.append(
+                {
+                    "label": cand_label,
+                    "instruction": cand_ins,
+                    "error": str(exc),
+                    "selected_before": before_text,
+                }
+            )
+    return {"ok": 1, "before": before_text, "candidates": candidates}
 @app.post("/api/rag/arxiv/ingest")
 async def api_rag_arxiv_ingest(request: Request) -> dict:
     data = await request.json()
@@ -3128,7 +3305,7 @@ def api_doc_delete(doc_id: str) -> dict:
 def download_docx(doc_id: str) -> StreamingResponse:
     session = store.get(doc_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="?????")
+        raise HTTPException(status_code=404, detail="文档不存在")
     base_text = _safe_doc_text(session)
     doc_ir = None
     if session.doc_ir:
@@ -3138,7 +3315,7 @@ def download_docx(doc_id: str) -> StreamingResponse:
             doc_ir = None
     if doc_ir is None:
         if not (base_text or "").strip():
-            raise HTTPException(status_code=400, detail="????")
+            raise HTTPException(status_code=400, detail="文档为空")
         text = _clean_export_text(base_text)
         text = _fix_section_heading_glue(text, _collect_heading_candidates(session))
         doc_ir = doc_ir_from_text(text)
@@ -3169,7 +3346,7 @@ def download_docx(doc_id: str) -> StreamingResponse:
                             break
                 if not template_path:
                     for name in os.listdir(TEMPLATE_DIR):
-                        if name.lower().endswith(".docx") and "??????" in name:
+                        if name.lower().endswith(".docx") and "专业项目设计" in name:
                             template_path = str(TEMPLATE_DIR / name)
                             break
             except Exception:
@@ -3238,9 +3415,9 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> None:
             errors.append(f"docx2pdf: {e}")
     soffice = _resolve_soffice_path()
     if not soffice:
-        detail = "PDF????????LibreOffice"
+        detail = "PDF 导出失败：未找到 LibreOffice"
         if errors:
-            detail += "?" + "; ".join(errors)[:200]
+            detail += "；" + "; ".join(errors)[:200]
         raise HTTPException(status_code=500, detail=detail)
     result = subprocess.run(
         [soffice, "--headless", "--convert-to", "pdf", "--outdir", str(pdf_path.parent), str(docx_path)],
@@ -3250,14 +3427,14 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> None:
     if result.returncode != 0 or not pdf_path.exists():
         stderr = result.stderr.decode("utf-8", errors="ignore").strip()
         stdout = result.stdout.decode("utf-8", errors="ignore").strip()
-        msg = stderr or stdout or "LibreOffice ????"
-        raise HTTPException(status_code=500, detail=f"PDF?????{msg}")
+        msg = stderr or stdout or "LibreOffice 转换失败"
+        raise HTTPException(status_code=500, detail=f"PDF 导出失败：{msg}")
 @app.get("/download/{doc_id}.pdf")
 def download_pdf(doc_id: str) -> StreamingResponse:
-    """??PDF???docx???"""
+    """导出 PDF（先生成 docx 再转换）"""
     session = store.get(doc_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="?????")
+        raise HTTPException(status_code=404, detail="文档不存在")
     base_text = _safe_doc_text(session)
     doc_ir = None
     if session.doc_ir:
@@ -3267,7 +3444,7 @@ def download_pdf(doc_id: str) -> StreamingResponse:
             doc_ir = None
     if doc_ir is None:
         if not (base_text or "").strip():
-            raise HTTPException(status_code=400, detail="????")
+            raise HTTPException(status_code=400, detail="文档为空")
         text = _clean_export_text(base_text)
         text = _fix_section_heading_glue(text, _collect_heading_candidates(session))
         doc_ir = doc_ir_from_text(text)
@@ -3295,7 +3472,7 @@ def download_pdf(doc_id: str) -> StreamingResponse:
             docx_bytes = rust_payload
         else:
             docx_bytes = docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
-    # ???docx
+    # 写入临时 docx
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp_docx:
         tmp_docx.write(docx_bytes)
         tmp_docx_path = Path(tmp_docx.name)
@@ -3315,7 +3492,7 @@ def download_pdf(doc_id: str) -> StreamingResponse:
             headers=headers,
         )
     finally:
-        # ??????
+        # 清理临时文件
         try:
             tmp_docx_path.unlink(missing_ok=True)
             tmp_pdf_path.unlink(missing_ok=True)
@@ -4811,9 +4988,9 @@ def _analysis_history_context(session, limit: int = 3) -> str:
         analysis = entry.get("analysis") if isinstance(entry, dict) else None
         summary = str((analysis or {}).get("rewritten_query") or "").strip() if isinstance(analysis, dict) else ""
         if raw:
-            items.append(f"??: {raw}")
+            items.append(f"输入: {raw}")
         if summary and summary != raw:
-            items.append(f"????: {summary}")
+            items.append(f"改写: {summary}")
     return "\n".join(items)
 def _generate_dynamic_questions_with_model(
     *,
@@ -6093,8 +6270,18 @@ def _postprocess_output_text(
         s = _fix_section_heading_glue(s, titles)
     return s
 def _fix_section_heading_glue(text: str, titles: list[str]) -> str:
-    if not text or not titles:
+    if not text:
         return text
+    num_prefix_re = re.compile(
+        r"^(?P<prefix>(?:\d+(?:\.\d+){0,3}|[一二三四五六七八九十百千万零〇两]+)[\.．、\)]?)\s*(?P<body>.+)$"
+    )
+
+    def _level_from_prefix(prefix: str) -> str:
+        p = str(prefix or "").strip()
+        if p and re.match(r"^\d", p):
+            return "#" * min(4, 2 + p.count("."))
+        return "##"
+
     lines = (text or "").splitlines()
     out: list[str] = []
     for raw in lines:
@@ -6117,18 +6304,43 @@ def _fix_section_heading_glue(text: str, titles: list[str]) -> str:
                 if split[1]:
                     out.append(split[1])
                 continue
-        matched = ""
-        for t in titles:
-            if content.startswith(t):
-                matched = t
-                break
-        if matched:
-            rest = content[len(matched):].lstrip("：:、-— \t")
-            level = heading_prefix or "##"
-            out.append(f"{level} {matched}")
-            if rest:
-                out.append(rest)
-            continue
+
+        num_prefix = ""
+        title_body = content
+        m_num = num_prefix_re.match(content)
+        if m_num:
+            num_prefix = str(m_num.group("prefix") or "").strip()
+            title_body = str(m_num.group("body") or "").strip()
+            split_num = _split_heading_glue_v2(title_body)
+            if split_num:
+                level = heading_prefix or _level_from_prefix(num_prefix)
+                heading_text = f"{num_prefix} {split_num[0]}".strip()
+                out.append(f"{level} {heading_text}")
+                if split_num[1]:
+                    out.append(split_num[1])
+                continue
+
+        if titles:
+            matched = ""
+            used_title_body = False
+            for t in titles:
+                if content.startswith(t):
+                    matched = t
+                    break
+                if title_body.startswith(t):
+                    matched = t
+                    used_title_body = True
+                    break
+            if matched:
+                source = title_body if used_title_body else content
+                rest = source[len(matched):].lstrip("：:、-— \t")
+                level = heading_prefix or (_level_from_prefix(num_prefix) if num_prefix else "##")
+                heading_text = f"{num_prefix} {matched}".strip() if used_title_body and num_prefix else matched
+                out.append(f"{level} {heading_text}")
+                if rest:
+                    out.append(rest)
+                continue
+
         out.append(raw)
     return "\n".join(out).strip()
 _CITATION_MARK_RE = re.compile(r"\[@([a-zA-Z0-9_-]+)\]")
@@ -6790,7 +7002,6 @@ async def api_version_commit(doc_id: str, request: Request) -> dict:
         "timestamp": version.timestamp,
         "kind": kind or ""
     }
-@app.get("/api/doc/{doc_id}/version/log")
 def _version_kind_from_tags(tags) -> str:
     if not isinstance(tags, list):
         return ""
@@ -6811,6 +7022,7 @@ def _version_diff_summary(prev_doc_ir: dict, next_doc_ir: dict) -> dict:
         if op in counts:
             counts[op] += 1
     return counts
+@app.get("/api/doc/{doc_id}/version/log")
 def api_version_log(doc_id: str, branch: str = "main", limit: int = 50) -> dict:
     """获取版本历史（类似git log）"""
     session = store.get(doc_id)
