@@ -1,0 +1,249 @@
+name: dependency-security
+
+permissions:
+  contents: read
+  issues: write
+
+on:
+  pull_request:
+    paths:
+      - "requirements.txt"
+      - "requirements-dev.txt"
+      - "security/dependency_baseline.json"
+      - "writing_agent/web/frontend_svelte/package.json"
+      - "writing_agent/web/frontend_svelte/package-lock.json"
+      - "scripts/dependency_audit.py"
+      - "scripts/security_alert_notify.py"
+      - "scripts/generate_sbom.py"
+      - ".github/workflows/dependency-security.yml"
+  push:
+    branches: ["main", "master"]
+    paths:
+      - "requirements.txt"
+      - "requirements-dev.txt"
+      - "security/dependency_baseline.json"
+      - "writing_agent/web/frontend_svelte/package.json"
+      - "writing_agent/web/frontend_svelte/package-lock.json"
+      - "scripts/dependency_audit.py"
+      - "scripts/security_alert_notify.py"
+      - "scripts/generate_sbom.py"
+      - ".github/workflows/dependency-security.yml"
+  schedule:
+    - cron: "35 2 * * 1"
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: "Force dependency audit failure to validate alert/issue pipeline"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Install Frontend Deps
+        run: npm --prefix writing_agent/web/frontend_svelte ci
+      - name: Run Dependency Audit
+        id: dep_audit
+        continue-on-error: true
+        run: |
+          extra_args=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.simulate_failure }}" = "true" ]; then
+            echo "Simulation mode enabled: forcing dependency audit to fail."
+            extra_args="--max-npm-dev-moderate -1"
+          fi
+          python scripts/dependency_audit.py \
+            --require-pip-audit \
+            --baseline security/dependency_baseline.json \
+            --fail-on-regression \
+            --write-baseline .data/out/dependency_baseline_current.json \
+            --max-npm-prod-critical 0 \
+            --max-npm-prod-high 0 \
+            --max-npm-prod-moderate 0 \
+            --max-npm-dev-critical 0 \
+            --max-npm-dev-high 0 \
+            --max-npm-dev-moderate 10 \
+            --max-pip-total 0 \
+            ${extra_args}
+      - name: Generate SBOM
+        id: sbom
+        if: always()
+        continue-on-error: true
+        run: |
+          python scripts/generate_sbom.py --out-dir .data/out/sbom --strict
+      - name: Prepare Failure Summary
+        if: always()
+        id: audit_summary
+        shell: bash
+        env:
+          SBOM_OUTCOME: ${{ steps.sbom.outcome }}
+          DEP_AUDIT_OUTCOME: ${{ steps.dep_audit.outcome }}
+          SIMULATE_FAILURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.simulate_failure == 'true' }}
+        run: |
+          python - <<'PY'
+          import glob
+          import json
+          import os
+          from pathlib import Path
+
+          out = Path(os.environ["GITHUB_OUTPUT"])
+          reports = sorted(glob.glob(".data/out/dependency_audit_*.json"))
+          dep_outcome = str(os.environ.get("DEP_AUDIT_OUTCOME", "")).strip().lower()
+          simulate_failure = str(os.environ.get("SIMULATE_FAILURE", "")).strip().lower() in {"1", "true", "yes", "on"}
+          summary = "dependency-security checks failed"
+          body = "Dependency security checks failed."
+          failed_ids = []
+          if reports:
+              path = reports[-1]
+              raw = json.loads(Path(path).read_text(encoding="utf-8"))
+              checks = raw.get("checks") if isinstance(raw.get("checks"), list) else []
+              bad = [row for row in checks if isinstance(row, dict) and str(row.get("mode") or "enforce") == "enforce" and not bool(row.get("ok"))]
+              if bad:
+                  summary = f"dependency_audit failed: {len(bad)} enforced checks"
+                  lines = []
+                  for row in bad[:12]:
+                      cid = str(row.get("id") or "")
+                      if cid:
+                          failed_ids.append(cid)
+                      lines.append(f"- {cid}: value={row.get('value')} expect={row.get('expect')}")
+                  body = "\n".join(lines) if lines else "No failed enforce checks parsed."
+              elif dep_outcome == "success":
+                  summary = "dependency_audit passed"
+                  body = "Dependency audit passed."
+              else:
+                  summary = "dependency_audit failed: details unavailable"
+                  body = "Dependency audit failed but no enforce-check details were parsed."
+              body += f"\n\nReport: `{path}`"
+          elif dep_outcome != "success":
+              summary = "dependency_audit failed: report not found"
+              body = "Dependency audit failed but no report file was found."
+          sbom_outcome = str(os.environ.get("SBOM_OUTCOME", "")).strip().lower()
+          if sbom_outcome and sbom_outcome != "success":
+              summary = f"{summary}; sbom generation failed"
+              body = f"{body}\n- sbom generation status: {sbom_outcome}"
+          if simulate_failure:
+              summary = f"[simulation] {summary}"
+              body = f"{body}\n- simulation_mode: true"
+          with out.open("a", encoding="utf-8") as f:
+              f.write(f"summary<<EOF\n{summary}\nEOF\n")
+              f.write(f"body<<EOF\n{body}\nEOF\n")
+              f.write(f"failed_check_ids<<EOF\n{','.join(failed_ids)}\nEOF\n")
+          PY
+      - name: Upload Audit Report
+        if: always()
+        id: upload_audit_artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-report
+          path: |
+            .data/out/dependency_audit_*.json
+            .data/out/dependency_baseline_current.json
+            .data/out/sbom/**
+          if-no-files-found: ignore
+      - name: Notify Security Webhook
+        if: ${{ (steps.dep_audit.outcome != 'success' || steps.sbom.outcome != 'success') && secrets.SECURITY_ALERT_WEBHOOK_URL != '' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          python scripts/security_alert_notify.py \
+            --url "$SECURITY_ALERT_WEBHOOK_URL" \
+            --repo "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-number "$GITHUB_RUN_NUMBER" \
+            --run-url "$RUN_URL" \
+            --artifact-url "$ARTIFACT_URL" \
+            --summary "$AUDIT_SUMMARY" \
+            --details "$AUDIT_BODY" \
+            --failed-check-ids "$FAILED_CHECK_IDS" \
+            --simulate-failure "$SIMULATE_FAILURE" \
+            --signing-key "$SECURITY_ALERT_WEBHOOK_SIGNING_KEY" \
+            --timeout-s 8 \
+            --retries 2 \
+            --retry-backoff-s 1.2
+        env:
+          SECURITY_ALERT_WEBHOOK_URL: ${{ secrets.SECURITY_ALERT_WEBHOOK_URL }}
+          SECURITY_ALERT_WEBHOOK_SIGNING_KEY: ${{ secrets.SECURITY_ALERT_WEBHOOK_SIGNING_KEY }}
+          AUDIT_SUMMARY: ${{ steps.audit_summary.outputs.summary }}
+          AUDIT_BODY: ${{ steps.audit_summary.outputs.body }}
+          FAILED_CHECK_IDS: ${{ steps.audit_summary.outputs.failed_check_ids }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_URL: ${{ steps.upload_audit_artifacts.outputs.artifact-url }}
+          SIMULATE_FAILURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.simulate_failure == 'true' }}
+      - name: Upload Webhook Notify Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-security-webhook-notify
+          path: .data/out/security_alert_notify_*.json
+          if-no-files-found: ignore
+      - name: Open GitHub Issue
+        if: ${{ (steps.dep_audit.outcome != 'success' || steps.sbom.outcome != 'success') && github.event_name != 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl = `${process.env.RUN_URL || `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`}`;
+            const artifactUrl = process.env.ARTIFACT_URL || '';
+            const isSimulation = String(process.env.SIMULATE_FAILURE || "").toLowerCase() === "true";
+            const title = `${isSimulation ? "[Security][Simulation]" : "[Security]"} Dependency audit failed (run ${context.runNumber})`;
+            const body = [
+              `Workflow run: ${runUrl}`,
+              artifactUrl ? `Artifacts: ${artifactUrl}` : '',
+              `Simulation mode: ${isSimulation ? "true" : "false"}`,
+              '',
+              `${process.env.AUDIT_SUMMARY || ''}`,
+              '',
+              `${process.env.AUDIT_BODY || ''}`,
+            ].join('\n');
+            const desiredLabels = [
+              { name: 'security', color: 'b60205', description: 'Security related reports' },
+              { name: 'dependencies', color: '1d76db', description: 'Dependency risk and supply chain' },
+            ];
+            const labels = [];
+            for (const item of desiredLabels) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: item.name });
+                labels.push(item.name);
+              } catch (err) {
+                if (err && Number(err.status) === 404) {
+                  try {
+                    await github.rest.issues.createLabel({ owner, repo, ...item });
+                    labels.push(item.name);
+                  } catch (createErr) {
+                    core.warning(`Cannot create label '${item.name}': ${createErr.message}`);
+                  }
+                } else {
+                  core.warning(`Cannot read label '${item.name}': ${err.message}`);
+                }
+              }
+            }
+            const issuePayload = { owner, repo, title, body };
+            if (labels.length > 0) {
+              issuePayload.labels = labels;
+            }
+            await github.rest.issues.create(issuePayload);
+        env:
+          AUDIT_SUMMARY: ${{ steps.audit_summary.outputs.summary }}
+          AUDIT_BODY: ${{ steps.audit_summary.outputs.body }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_URL: ${{ steps.upload_audit_artifacts.outputs.artifact-url }}
+          SIMULATE_FAILURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.simulate_failure == 'true' }}
+      - name: Enforce Audit Result
+        if: ${{ steps.dep_audit.outcome != 'success' || steps.sbom.outcome != 'success' }}
+        run: |
+          echo "Dependency security checks failed."
+          exit 1
