@@ -11,19 +11,22 @@
 
 ```text
 .
-├── writing_agent/                 # Application source code
-├── tests/                         # Unit / integration / e2e tests
-│   └── legacy/                    # Historical script-like tests (excluded by default)
-├── scripts/                       # Guardrails, release, and ops scripts
-│   └── dev/                       # Local developer utility scripts
-├── docs/                          # Architecture and operational docs
-│   └── archive/                   # Archived milestone documents
-├── security/                      # Policy-as-code and quality gate configs
-├── templates/                     # Prompt and few-shot assets
-├── infra/                         # Terraform and infra resources
-├── pyproject.toml                 # Packaging and project metadata
-├── requirements.txt               # Runtime dependencies
-└── requirements-dev.txt           # Development dependencies
+|- writing_agent/                       # Python application and web backend
+|  |- web/                              # FastAPI app + templates + frontend assets
+|  |- v2/                               # Graph pipeline and generation runtime
+|  |- llm/                              # LLM provider abstraction layer
+|  |- state_engine/                     # State/route/replay runtime modules
+|- engine/                              # Rust editor/render core workspace
+|- gateway/                             # Node AI gateway
+|- tests/                               # Unit / integration / e2e / ui tests
+|- scripts/                             # Guardrails, release, and ops scripts
+|- docs/                                # Architecture and runbooks
+|- security/                            # Policy-as-code configs
+|- templates/                           # Prompt and few-shot assets
+|- infra/                               # Terraform resources
+|- pyproject.toml                       # Python packaging metadata
+|- requirements.txt                     # Runtime dependencies
+`- requirements-dev.txt                 # Development dependencies
 ```
 
 ## Quick Start
@@ -68,8 +71,8 @@ npm start
 Then set:
 
 ```powershell
-$env:WRITING_AGENT_LLM_BACKEND=\"node\"
-$env:WRITING_AGENT_NODE_GATEWAY_URL=\"http://127.0.0.1:8787\"
+$env:WRITING_AGENT_LLM_BACKEND="node"
+$env:WRITING_AGENT_NODE_GATEWAY_URL="http://127.0.0.1:8787"
 ```
 
 ## Common Development Commands
@@ -95,6 +98,7 @@ python scripts/release_preflight.py --quick
 ## Documentation
 
 - Documentation index: `docs/INDEX.md`
+- Code reading guide: `docs/READING_GUIDE.md`
 - Getting started: `docs/START_HERE.md`
 - Structure guide: `docs/PROJECT_STRUCTURE.md`
 - Development guide: `docs/DEVELOPMENT.md`

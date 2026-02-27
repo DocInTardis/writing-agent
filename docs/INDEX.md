@@ -2,6 +2,7 @@
 
 ## Start Here
 - `START_HERE.md`
+- `READING_GUIDE.md`
 - `PROJECT_STRUCTURE.md`
 - `DEVELOPMENT.md`
 
