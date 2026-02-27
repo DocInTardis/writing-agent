@@ -2,9 +2,13 @@
   import { instruction, chat, thoughtLog } from '../stores'
   import { createEventDispatcher } from 'svelte'
 
-  const dispatch = createEventDispatcher<{ send: string }>()
+  const dispatch = createEventDispatcher<{
+    send: string
+    upload: { file: File }
+  }>()
   export let variant: 'panel' | 'assistant' = 'panel'
-  let showThoughts = variant === 'panel'
+  let showThoughts = true
+  let uploadInput: HTMLInputElement | null = null
 
   function handleSend() {
     const text = $instruction.trim()
@@ -33,6 +37,18 @@
       const thoughts = document.querySelector('.thought-list')
       if (thoughts) thoughts.scrollTop = thoughts.scrollHeight
     })
+  }
+
+  function triggerUpload() {
+    uploadInput?.click()
+  }
+
+  function handleUploadChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement | null
+    const file = input?.files?.[0]
+    if (!file) return
+    dispatch('upload', { file })
+    if (input) input.value = ''
   }
 </script>
 
@@ -75,6 +91,10 @@
       </div>
     {/each}
   </div>
+  <div class="composer-tools">
+    <button class="attach-btn" on:click={triggerUpload}>上传内容</button>
+    <span class="composer-tip">支持图片与文档</span>
+  </div>
   <div class="composer">
     <textarea
       rows="3"
@@ -84,6 +104,13 @@
     ></textarea>
     <button class="send-btn" on:click={handleSend}>发送</button>
   </div>
+  <input
+    class="hidden-input"
+    type="file"
+    accept="image/*,.doc,.docx,.pdf,.txt,.md,.html,.htm,.ppt,.pptx,.xls,.xlsx,.csv,.json"
+    bind:this={uploadInput}
+    on:change={handleUploadChange}
+  />
 </div>
 
 <style>
@@ -213,6 +240,27 @@
     gap: 8px;
   }
 
+  .composer-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .attach-btn {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(255, 255, 255, 0.88);
+    color: #0f172a;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .composer-tip {
+    font-size: 11px;
+    color: rgba(71, 85, 105, 0.9);
+  }
+
   .composer textarea {
     flex: 1;
     border: 1px solid rgba(148, 163, 184, 0.3);
@@ -229,5 +277,9 @@
     border-radius: 12px;
     padding: 0 14px;
     cursor: pointer;
+  }
+
+  .hidden-input {
+    display: none;
   }
 </style>

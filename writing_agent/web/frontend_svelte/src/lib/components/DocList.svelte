@@ -67,8 +67,20 @@
 </script>
 
 {#if visible}
-  <div class="modal-backdrop" on:click={() => (visible = false)} on:keydown={() => {}}>
-    <div class="modal-panel" on:click|stopPropagation on:keydown={() => {}}>
+  <div
+    class="modal-backdrop"
+    role="button"
+    tabindex="0"
+    aria-label="关闭文档列表"
+    on:click={() => (visible = false)}
+    on:keydown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
+        e.preventDefault()
+        visible = false
+      }
+    }}
+  >
+    <div class="modal-panel" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
       <div class="modal-header">
         <h2>文档列表</h2>
         <button class="close-btn" on:click={() => (visible = false)}>✕</button>
@@ -82,14 +94,14 @@
           <div class="doc-list">
             {#each docs as doc}
               <div class="doc-item">
-                <div class="doc-info" on:click={() => onSelect(doc.doc_id)} on:keydown={() => {}}>
+                <button class="doc-info" type="button" on:click={() => onSelect(doc.doc_id)}>
                   <div class="doc-title">{doc.title || '自动生成文档'}</div>
                   <div class="doc-meta">
                     <span>{formatDate(doc.updated_at)}</span>
                     <span>{doc.char_count || 0} 字</span>
                   </div>
                   <div class="doc-preview">{truncate(doc.text, 80)}</div>
-                </div>
+                </button>
                 <button class="delete-btn" on:click={() => deleteDoc(doc.doc_id)}>删除</button>
               </div>
             {/each}
@@ -188,6 +200,11 @@
   .doc-info {
     flex: 1;
     cursor: pointer;
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 0;
+    font: inherit;
   }
 
   .doc-title {

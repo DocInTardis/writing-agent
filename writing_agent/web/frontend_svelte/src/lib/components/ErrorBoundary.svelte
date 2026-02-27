@@ -9,7 +9,7 @@
   onMount(() => {
     const handleError = (event: ErrorEvent) => {
       hasError = true
-      errorMessage = event.error?.message || event.message || '未知错误'
+      errorMessage = event.error?.message || event.message || fallback
       console.error('捕获到错误:', event.error)
     }
 
