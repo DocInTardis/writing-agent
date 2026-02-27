@@ -223,7 +223,7 @@
     class="perf-backdrop"
     role="button"
     tabindex="0"
-    aria-label="鍏抽棴鎬ц兘瑙傛祴"
+    aria-label="关闭性能观测"
     on:click={() => (visible = false)}
     on:keydown={(e) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
@@ -235,30 +235,30 @@
     <div class="perf-modal" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
       <div class="perf-header">
         <div>
-          <h2>鏍搁獙鎬ц兘瑙傛祴</h2>
-          <div class="perf-sub">绐楀彛缁熻 + 鏈€杩戣姹傛槑缁�</div>
+          <h2>核验性能观测</h2>
+          <div class="perf-sub">Window metrics + recent request details</div>
         </div>
         <div class="perf-actions">
           <button class="btn-refresh" on:click={() => loadMetrics(true)} disabled={loading || refreshing}>
-            {#if refreshing}鍒锋柊涓?..{:else}鍒锋柊{/if}
+            {#if refreshing}Refreshing...{:else}Refresh{/if}
           </button>
-          <button class="btn-close" on:click={() => (visible = false)} aria-label="鍏抽棴">脳</button>
+          <button class="btn-close" on:click={() => (visible = false)} aria-label="关闭">×</button>
         </div>
       </div>
 
       <div class="perf-body">
         {#if loading && !metrics}
-          <div class="perf-empty">鍔犺浇涓?..</div>
+          <div class="perf-empty">Loading...</div>
         {:else if errorMsg}
           <div class="perf-error">{errorMsg}</div>
         {:else if metrics}
-          <div class="perf-updated">鏈€杩戝埛鏂? {updatedAt || '--:--:--'} | 鑷姩杞 {Math.floor(POLL_MS / 1000)}s</div>
+          <div class="perf-updated">Updated {updatedAt || "--:--:--"} | Auto poll {Math.floor(POLL_MS / 1000)}s</div>
           <div class={"perf-health " + (metrics.degraded ? 'warn' : 'ok')}>
             <span class="health-tag">{metrics.degraded ? 'DEGRADED' : 'HEALTHY'}</span>
             {#if metrics.degraded}
-              <span>鎸囨爣鎺ュ彛宸查檷绾ц繑鍥烇紝褰撳墠鏁版嵁鏉ヨ嚜鍏滃簳蹇収銆�</span>
+              <span>Metrics endpoint is degraded; current data comes from fallback snapshot.</span>
             {:else}
-              <span>鎸囨爣鎺ュ彛姝ｅ父銆�</span>
+              <span>Metrics endpoint is healthy.</span>
             {/if}
           </div>
           {#if metrics.degraded && metrics.errors.length > 0}
@@ -456,10 +456,10 @@
             </div>
             <div class="alert-config-actions">
               <button class="btn-alert-save" on:click={saveAlertConfig} disabled={savingAlertConfig || !alertConfigDirty}>
-                {#if savingAlertConfig}淇濆瓨涓?..{:else}淇濆瓨鍛婅閰嶇疆{/if}
+                {#if savingAlertConfig}Saving...{:else}Save alert config{/if}
               </button>
               <button class="btn-alert-reset" on:click={resetAlertConfig} disabled={savingAlertConfig}>
-                鎭㈠榛樿
+                Restore defaults
               </button>
               {#if alertConfigMsg}
                 <span class={"alert-config-msg " + (alertConfigMsgKind || 'ok')}>{alertConfigMsg}</span>
@@ -483,29 +483,29 @@
 
           <div class="perf-cards">
             <div class="perf-card">
-              <div class="label">绐楀彛</div>
+              <div class="label">窗口</div>
               <div class="value">{metrics.observe.runs}/{metrics.observe.max_runs}</div>
               <div class="meta">window {metrics.observe.window_s.toFixed(0)}s</div>
             </div>
             <div class="perf-card">
-              <div class="label">寤惰繜</div>
+              <div class="label">延迟</div>
               <div class="value">{metrics.observe.elapsed_ms.p50.toFixed(1)} / {metrics.observe.elapsed_ms.p95.toFixed(1)} ms</div>
               <div class="meta">max {metrics.observe.elapsed_ms.max.toFixed(1)} ms</div>
             </div>
             <div class="perf-card">
-              <div class="label">璐熻浇</div>
+              <div class="label">负载</div>
               <div class="value">{metrics.observe.items.avg.toFixed(1)} items/run</div>
               <div class="meta">workers avg {metrics.observe.workers.avg.toFixed(1)} | max {metrics.observe.workers.max.toFixed(0)}</div>
             </div>
             <div class="perf-card">
-              <div class="label">閿欒/鍛戒腑</div>
+              <div class="label">Errors/Hit rate</div>
               <div class="value">{formatRate(metrics.observe.errors.rate_per_run)} / {formatRate(metrics.observe.cache_delta.hit_rate)}</div>
               <div class="meta">errors {metrics.observe.errors.total} | hit_delta</div>
             </div>
           </div>
 
           <div class="perf-cache">
-            <div class="title">缂撳瓨蹇収</div>
+            <div class="title">Cache snapshot</div>
             <div class="line">
               size {metrics.cache.size}/{metrics.cache.max_entries} | ttl {metrics.cache.ttl_s.toFixed(0)}s | hit {metrics.cache.hit}/
               {metrics.cache.hit + metrics.cache.miss} ({formatRate(cacheHitRate(metrics.cache))})
@@ -518,7 +518,7 @@
           <div class="perf-recent">
             <div class="title">Recent Runs ({metrics.observe.recent.length})</div>
             {#if metrics.observe.recent.length === 0}
-              <div class="perf-empty">鏆傛棤鏁版嵁</div>
+              <div class="perf-empty">暂无数据</div>
             {:else}
               <div class="recent-list">
                 {#each metrics.observe.recent.slice().reverse() as run, idx (`${run.ts}-${idx}`)}
@@ -540,7 +540,7 @@
             {#if !metrics.trend.enabled}
               <div class="line">trend storage disabled</div>
             {:else if metrics.trend.points.length === 0}
-              <div class="perf-empty">鏆傛棤瓒嬪娍鏁版嵁</div>
+              <div class="perf-empty">暂无趋势数据</div>
             {:else}
               <div class="trend-list">
                 {#each metrics.trend.points.slice().reverse() as point, idx (`${point.id}-${idx}`)}
@@ -560,7 +560,7 @@
             {/if}
           </div>
         {:else}
-          <div class="perf-empty">鏆傛棤瑙傛祴鏁版嵁</div>
+          <div class="perf-empty">暂无观测数据</div>
         {/if}
       </div>
     </div>
