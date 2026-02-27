@@ -1,18 +1,16 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{ title or "写作 Agent 工作台" }}</title>
-    <link rel="stylesheet" href="/static/v2.css" />
+    <title>{{ title or "写作助手" }}</title>
+    <link rel="stylesheet" href="/static/v2.css?v={{ static_version }}" />
+    {% if allow_remote_assets %}
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" async></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+    {% endif %}
   </head>
-  <body>
-    <div class="bg">
-      <div class="bg-grid"></div>
-      <div class="bg-glow a"></div>
-      <div class="bg-glow b"></div>
-      <div class="bg-noise"></div>
-    </div>
+  <body class="{{ 'perf-mode' if perf_mode else '' }}">
     {% block content %}{% endblock %}
     <div id="toastRoot" class="toast-root" aria-live="polite"></div>
     <div id="modalRoot" class="modal-root hidden" role="dialog" aria-modal="true">
@@ -26,6 +24,6 @@
         <div id="modalFoot" class="modal-foot"></div>
       </div>
     </div>
+    <script src="/static/v2.js?v={{ static_version }}" defer></script>
   </body>
 </html>
-

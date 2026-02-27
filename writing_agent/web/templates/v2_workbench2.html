@@ -3,146 +3,159 @@
 <div class="app" data-doc-id="{{ doc_id }}">
   <header class="topbar">
     <div class="brand">
-      <div class="logo">WA</div>
+      <div class="brand-mark">写</div>
       <div class="brand-text">
-        <div class="brand-title">写作 Agent 工作台</div>
-        <div class="brand-sub">图谱流程 · 文本优先 · 本地 Ollama</div>
+        <div class="brand-title">写作助手</div>
+        <div class="brand-sub">对话生成 · 模板排版 · 本地运行</div>
       </div>
     </div>
     <div class="top-actions">
-      <a class="link" href="/download/{{ doc_id }}.docx">导出 .docx</a>
-      <button id="btnNew" class="btn ghost" type="button">新建空白</button>
+      <button id="btnRibbonToggle" class="btn ghost" type="button">工具栏</button>
+      <button id="btnDocList" class="btn ghost" type="button">文档列表</button>
+      <button id="btnVersionHistory" class="btn ghost" type="button" title="版本历史 (Git-like)">版本</button>
+      <button id="btnUndo" class="btn ghost" type="button" title="撤销 (Ctrl+Z)">撤销</button>
+      <button id="btnRedo" class="btn ghost" type="button" title="重做 (Ctrl+Y)">重做</button>
+      <button id="btnSettings" class="btn ghost" type="button" title="设置">⚙️</button>
+      <button id="btnPerf" class="btn ghost" type="button" title="性能监控">📊</button>
+      <button id="btnSave" class="btn ghost" type="button">保存</button>
+      <button id="btnOpen" class="btn ghost" type="button">打开</button>
+      <a class="btn ghost" id="btnDownload" href="/download/{{ doc_id }}.docx">导出 .docx</a>
+      <button id="btnExportMore" class="btn ghost" type="button">导出其他格式</button>
+      <a class="btn ghost" id="btnDownloadPdf" href="/download/{{ doc_id }}.pdf">导出 .pdf</a>
+      <a id="btnNew" class="btn primary" href="/">新建空白</a>
     </div>
   </header>
+
+  <div class="ribbon collapsed" id="ribbon">
+    <div class="ribbon-tabs">
+      <button class="ribbon-tab active" type="button" data-ribbon="home">开始</button>
+      <button class="ribbon-tab" type="button" data-ribbon="insert">插入</button>
+      <button class="ribbon-tab" type="button" data-ribbon="layout">布局</button>
+      <button class="ribbon-tab" type="button" data-ribbon="review">审阅</button>
+      <button class="ribbon-tab" type="button" data-ribbon="view">视图</button>
+    </div>
+    <div class="ribbon-body">
+      <div class="ribbon-group" data-panel="home">
+        <div class="ribbon-block flat">
+          <button class="chip" type="button" data-action="bold">加粗</button>
+          <button class="chip" type="button" data-action="italic">斜体</button>
+          <button class="chip" type="button" data-action="underline">下划线</button>
+          <button class="chip" type="button" data-action="strike">删除线</button>
+          <button class="chip" type="button" data-action="heading1">标题1</button>
+          <button class="chip" type="button" data-action="heading2">标题2</button>
+          <button class="chip" type="button" data-action="heading3">标题3</button>
+          <button class="chip" type="button" data-action="list-bullet">项目符号</button>
+          <button class="chip" type="button" data-action="list-number">编号</button>
+          <button class="chip" type="button" data-action="quote">引用</button>
+          <button class="chip" type="button" data-action="clear-format">清除格式</button>
+        </div>
+      </div>
+      <div class="ribbon-group hidden" data-panel="insert">
+        <div class="ribbon-block flat">
+          <button class="chip" type="button" data-action="insert-table">表格</button>
+          <button class="chip" type="button" data-action="insert-figure">图片</button>
+          <button class="chip" type="button" data-action="insert-chart">图表</button>
+          <button class="chip" type="button" data-action="insert-link">链接</button>
+          <button class="chip" type="button" data-action="insert-citation">引用标记</button>
+          <button class="chip" type="button" data-action="insert-template">模板片段</button>
+        </div>
+      </div>
+      <div class="ribbon-group hidden" data-panel="layout">
+        <div class="ribbon-block flat">
+          <button class="chip" type="button" data-action="margin-normal">标准边距</button>
+          <button class="chip" type="button" data-action="margin-narrow">窄边距</button>
+          <button class="chip" type="button" data-action="line-compact">紧凑行距</button>
+          <button class="chip" type="button" data-action="line-normal">标准行距</button>
+        </div>
+      </div>
+      <div class="ribbon-group hidden" data-panel="review">
+        <div class="ribbon-block flat">
+          <button class="chip" type="button" data-action="check-issues">检查问题</button>
+          <button class="chip" type="button" data-action="word-count">字数统计</button>
+          <button class="chip" type="button" data-action="find-replace">查找替换</button>
+          <button class="chip" type="button" data-action="ai-polish">AI润色</button>
+          <button class="chip" type="button" data-action="ai-expand">AI扩写</button>
+          <button class="chip" type="button" data-action="ai-summarize">AI摘要</button>
+        </div>
+      </div>
+      <div class="ribbon-group hidden" data-panel="view">
+        <div class="ribbon-block flat">
+          <button class="chip" type="button" data-action="view-edit">编辑</button>
+          <button class="chip" type="button" data-action="view-preview">预览</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <div class="status-left">
+      <input id="docTitle" class="doc-title-input" type="text" placeholder="文档标题" />
+      <span class="status-label">生成流程</span>
+      <span id="flowStatus" class="pill">就绪</span>
+      <div id="progressBar" class="progress-bar hidden">
+        <div class="progress-track">
+          <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+        </div>
+        <span id="progressText" class="progress-text">0%</span>
+      </div>
+    </div>
+    <div class="status-right">
+      <span id="docStatus" class="pill ghost">就绪</span>
+      <span id="wordCount" class="muted"></span>
+    </div>
+  </div>
 
   <main class="layout">
     <section class="panel doc">
       <div class="panel-head">
-        <div class="doc-head-left">
-          <div class="tabs">
-            <button class="tab active" data-tab="preview" type="button">预览</button>
-            <button class="tab" data-tab="source" type="button">源文本</button>
-          </div>
-          <div class="toolbar" role="toolbar" aria-label="文档工具栏">
-            <button class="tool-btn" id="tbH1" type="button" title="标题 (#)">H1</button>
-            <button class="tool-btn" id="tbH2" type="button" title="章节 (##)">H2</button>
-            <button class="tool-btn" id="tbH3" type="button" title="小节 (###)">H3</button>
-            <div class="tool-sep"></div>
-            <button class="tool-btn" id="tbTable" type="button" title="插入表格标记">表格</button>
-            <button class="tool-btn" id="tbFigure" type="button" title="插入图表标记">图表</button>
-            <div class="tool-sep"></div>
-            <button class="tool-btn" id="tbSkeleton" type="button" title="插入毕业设计骨架">骨架</button>
-          </div>
+        <div class="tabs">
+          <button class="tab active" data-tab="edit" type="button">编辑</button>
+          <button class="tab" data-tab="preview" type="button">预览</button>
         </div>
-        <div class="doc-meta">
-          <span id="docStatus" class="pill">就绪</span>
-          <span id="wordCount" class="muted"></span>
+        <div class="panel-actions">
+          <button id="btnRevise" class="btn ghost" type="button">修改润色</button>
+          <button id="btnStop" class="btn ghost" type="button" disabled>停止</button>
         </div>
       </div>
-
       <div class="doc-body">
-        <div id="preview" class="paper"></div>
-        <textarea
-          id="source"
-          class="source hidden"
-          placeholder="空白文档：你可以直接写，也可以在右侧用自然语言描述生成要求。"
-        ></textarea>
+        <textarea id="source" class="source"></textarea>
+        <div id="preview" class="paper hidden"></div>
+        <div id="emptyState" class="empty-state hidden" aria-hidden="true">
+          <div class="thinker">
+            <div class="thinker-head"></div>
+            <div class="thinker-body"></div>
+            <div class="thinker-bubble"></div>
+          </div>
+          <div class="empty-text">空白文档，先说说你要写什么吧</div>
+        </div>
       </div>
     </section>
 
     <aside class="panel side">
       <div class="panel-head">
-        <div class="side-title">指令与设置</div>
-        <div class="muted">像说话一样描述你的需求。</div>
+        <div class="side-title">对话写作</div>
+        <div class="muted">输入需求，系统会自动理解并生成文档。</div>
       </div>
-
       <div class="side-body">
-        <div class="card">
-          <div class="card-title">模板</div>
-          <div class="muted">上传 .docx/.html/.txt/.md，系统仅提取章节结构作为生成约束。</div>
-          <input id="templateFile" type="file" accept=".docx,.html,.htm,.txt,.md" />
-          <div id="templateInfo" class="muted"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">文档格式</div>
-          <div class="muted">用于生成约束与 .docx 导出。</div>
-          <div class="form-grid">
-            <label class="field">
-              <span class="field-label">用途</span>
-              <select id="settingPurpose" class="select">
-                <option value="毕业设计/课程设计报告">毕业设计/课程设计报告</option>
-                <option value="论文/学术报告">论文/学术报告</option>
-                <option value="项目文档/设计说明书">项目文档/设计说明书</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field-label">字号</span>
-              <select id="settingFontSize" class="select">
-                <option value="小四|12">小四 (12pt)</option>
-                <option value="五号|10.5">五号 (10.5pt)</option>
-                <option value="小五|9">小五 (9pt)</option>
-                <option value="四号|14">四号 (14pt)</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field-label">行距</span>
-              <select id="settingLineSpacing" class="select">
-                <option value="1.5">1.5</option>
-                <option value="1.0">1.0</option>
-                <option value="1.15">1.15</option>
-                <option value="2.0">2.0</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field-label">导出</span>
-              <div class="chips" style="margin-top:0">
-                <label class="chip"><input id="settingCover" type="checkbox" checked />封面</label>
-                <label class="chip"><input id="settingToc" type="checkbox" checked />目录</label>
-                <label class="chip"><input id="settingHeader" type="checkbox" checked />页眉</label>
-                <label class="chip"><input id="settingPageNo" type="checkbox" checked />页码</label>
-              </div>
-            </label>
+        <div class="chat-card">
+          <div id="thinkingPanel" class="thinking-panel">
+            <div class="thinking-title">思考摘要</div>
+            <div id="thinkingSummary" class="thinking-summary muted">等待解析…</div>
+            <div class="thinking-steps-title">关键步骤</div>
+            <ol id="thinkingSteps" class="thinking-steps"></ol>
+            <div class="thinking-steps-title">思考链</div>
+            <div id="thinkingTimeline" class="thinking-timeline"></div>
+            <ul id="thinkingMissing" class="thinking-missing"></ul>
           </div>
-          <div class="muted" style="margin-top:8px;">偏好图类型（系统会选择插入位置）：</div>
-          <div class="chips" id="figureChips">
-            <label class="chip"><input type="checkbox" value="flow" checked />流程图</label>
-            <label class="chip"><input type="checkbox" value="er" checked />ER 图</label>
-            <label class="chip"><input type="checkbox" value="sequence" checked />时序图</label>
-            <label class="chip"><input type="checkbox" value="timeline" />时间轴</label>
-            <label class="chip"><input type="checkbox" value="bar" checked />柱状图</label>
-            <label class="chip"><input type="checkbox" value="line" checked />折线图</label>
-            <label class="chip"><input type="checkbox" value="pie" />饼图</label>
+          <div id="chatHistory" class="chat-history"></div>
+          <div class="composer">
+            <textarea id="instruction" class="input composer-input" placeholder="例如：生成一个不限内容的周报&#10;提示：Ctrl+Enter 快速发送"></textarea>
+            <button id="btnGenerate" class="btn send" type="button" title="发送指令 (Ctrl+Enter)">发送</button>
           </div>
-          <div class="row">
-            <button id="btnApplySettings" class="btn ghost" type="button">应用</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">生成</div>
-          <textarea id="instruction" class="input" placeholder="例如：写一份关于 XXX 的毕业设计报告，包含必要的表格与图，方法部分给出流程与时序图占位，不要编造数据，用 [待补充] 占位。"></textarea>
-          <div class="row">
-            <button id="btnGenerate" class="btn primary" type="button">开始生成</button>
-            <button id="btnStop" class="btn ghost" type="button" disabled>停止</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">生成流程</div>
-          <div id="graph" class="graph">
-            <div class="node" data-state="PLAN">规划</div>
-            <div class="node" data-state="DRAFT_SECTIONS">起草</div>
-            <div class="node" data-state="AGGREGATE">合并</div>
-            <div class="node" data-state="VALIDATE">校验</div>
-            <div class="node" data-state="REPAIR">修复</div>
-          </div>
-          <div id="problems" class="problems hidden"></div>
         </div>
       </div>
     </aside>
   </main>
 </div>
-
-<script src="/static/v2.js" defer></script>
+<input id="importFile" class="hidden-input" type="file" accept=".doc,.docx,.txt,.md,.pdf,.html,.htm" />
 {% endblock %}

@@ -1,3 +1,8 @@
+"""App module.
+
+This module belongs to `writing_agent.web` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import io
@@ -138,7 +143,7 @@ def index() -> RedirectResponse:
     # 直接进入工作台：自动创建新文档并跳转。
     formatting = FormattingRequirements()
     req = ReportRequest(
-        topic="未命名文档",
+        topic="自动生成文档",
         report_type="",
         formatting=formatting,
         include_figures=False,
@@ -169,7 +174,7 @@ def start(
     # 兼容：如果用户没填格式指标，给一个合理默认值。
     formatting = FormattingRequirements()
     req = ReportRequest(
-        topic=(topic or "").strip() or "未命名文档",
+        topic=(topic or "").strip() or "自动生成文档",
         report_type="",
         formatting=formatting,
         include_figures=False,
@@ -409,8 +414,8 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
         if not targets:
             targets = headings[:]
 
-        worker_count = int(os.environ.get("WRITING_AGENT_WORKERS", "4"))
-        worker_count = max(1, min(8, worker_count))
+        worker_count = int(os.environ.get("WRITING_AGENT_WORKERS", "10"))  # 优化: 4->10
+        worker_count = max(4, min(16, worker_count))  # 至少4个
         models_raw = os.environ.get("WRITING_AGENT_WORKER_MODELS", "").strip()
         worker_models = [m.strip() for m in models_raw.split(",") if m.strip()] if models_raw else [settings.model]
         if not worker_models:

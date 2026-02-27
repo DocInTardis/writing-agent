@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{ title or "写作 Agent 工作台" }}</title>
-    <link rel="stylesheet" href="/static/v2.css" />
+    <title>{{ title or "写作助手" }}</title>
+    <link rel="stylesheet" href="/static/v2.css?v={{ static_version }}" />
   </head>
-  <body>
+  <body class="{{ 'perf-mode' if perf_mode else '' }}">
     <div class="bg">
       <div class="bg-grid"></div>
       <div class="bg-glow a"></div>
@@ -26,6 +26,7 @@
         <div id="modalFoot" class="modal-foot"></div>
       </div>
     </div>
+    <script src="/static/v2.js?v={{ static_version }}" defer></script>
   </body>
 </html>
 

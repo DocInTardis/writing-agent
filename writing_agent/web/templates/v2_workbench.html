@@ -3,34 +3,73 @@
 <div class="app" data-doc-id="{{ doc_id }}">
   <header class="topbar">
     <div class="brand">
-      <div class="logo">WA</div>
+      <div class="logo">写</div>
       <div class="brand-text">
-        <div class="brand-title">写作 Agent 工作台</div>
-        <div class="brand-sub">图谱流程 · 文本优先 · 本地 Ollama</div>
+        <div class="brand-title">写作助手</div>
+        <div class="brand-sub">文档生成 · 模板排版 · 本地运行</div>
       </div>
     </div>
     <div class="top-actions">
-      <a class="link" href="/download/{{ doc_id }}.docx">导出 docx</a>
-      <button id="btnNew" class="btn ghost" type="button">新建空白</button>
+      <a class="link" id="btnDownload" href="/download/{{ doc_id }}.docx">导出 docx</a>
+      <a id="btnNew" class="btn ghost" href="/">新建空白</a>
     </div>
   </header>
+
+  <div class="flow-bar">
+    <div class="flow-label">生成流程</div>
+    <div id="flowStatus" class="flow-pill">就绪</div>
+  </div>
 
   <main class="layout">
     <section class="panel doc">
       <div class="panel-head">
-        <div class="tabs">
-          <button class="tab active" data-tab="preview" type="button">预览</button>
-          <button class="tab" data-tab="source" type="button">源文本</button>
+        <div class="doc-head-left">
+          <div class="tabs">
+            <button class="tab active" data-tab="preview" type="button">预览</button>
+            <button class="tab" data-tab="edit" type="button">编辑</button>
+            <button class="tab" data-tab="source" type="button">源文本</button>
+          </div>
+          <div class="toolbar" role="toolbar" aria-label="文档工具栏">
+            <button class="tool-btn" id="tbUndo" type="button" title="撤销">撤销</button>
+            <button class="tool-btn" id="tbRedo" type="button" title="重做">重做</button>
+            <div class="tool-sep"></div>
+            <button class="tool-btn" id="tbBold" type="button" title="加粗"><b>B</b></button>
+            <button class="tool-btn" id="tbItalic" type="button" title="斜体"><i>I</i></button>
+            <button class="tool-btn" id="tbUnderline" type="button" title="下划线"><u>U</u></button>
+            <button class="tool-btn" id="tbClear" type="button" title="清除格式">清除</button>
+            <div class="tool-sep"></div>
+            <button class="tool-btn" id="tbAlignLeft" type="button" title="左对齐">左</button>
+            <button class="tool-btn" id="tbAlignCenter" type="button" title="居中">中</button>
+            <button class="tool-btn" id="tbAlignRight" type="button" title="右对齐">右</button>
+            <button class="tool-btn" id="tbAlignJustify" type="button" title="两端对齐">两端</button>
+            <select id="tbLineHeight" class="tool-select" title="行距">
+              <option value="">行距</option>
+              <option value="1.0">1.0</option>
+              <option value="1.15">1.15</option>
+              <option value="1.5">1.5</option>
+              <option value="2.0">2.0</option>
+            </select>
+            <div class="tool-sep"></div>
+            <button class="tool-btn" id="tbUL" type="button" title="项目符号列表">无序列表</button>
+            <button class="tool-btn" id="tbOL" type="button" title="编号列表">1. 列表</button>
+            <div class="tool-sep"></div>
+            <div class="tool-sep"></div>
+            <button class="tool-btn" id="tbTable" type="button" title="插入表格标记">表格</button>
+            <button class="tool-btn" id="tbFigure" type="button" title="插入图表标记">图表</button>
+            <div class="tool-sep"></div>
+          </div>
         </div>
         <div class="doc-meta">
           <span id="docStatus" class="pill">就绪</span>
+          <span id="pageInfo" class="muted"></span>
           <span id="wordCount" class="muted"></span>
         </div>
       </div>
 
       <div class="doc-body">
         <div id="preview" class="paper"></div>
-        <textarea id="source" class="source hidden" placeholder="空白文档：你可以直接写，也可以在右侧用自然语言描述生成要求…"></textarea>
+        <div id="editor" class="paper editor hidden"></div>
+        <textarea id="source" class="source hidden"></textarea>
       </div>
     </section>
 
@@ -41,30 +80,31 @@
       </div>
 
       <div class="side-body">
-        <div class="card">
-          <div class="card-title">模板</div>
-          <div class="muted">上传报告/论文模板（.docx/.html/.txt/.md），只提取章节结构用于约束生成。</div>
-          <input id="templateFile" type="file" accept=".docx,.html,.htm,.txt,.md" />
-          <div id="templateInfo" class="muted"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">生成</div>
-          <textarea id="instruction" class="input" placeholder="例如：写一份关于XXX的课程报告，要求包含对比表格与数据图，方法部分给出流程与时序图占位，不要编造数据，用[待补充]占位。"></textarea>
-          <div class="row">
-            <button id="btnGenerate" class="btn primary" type="button">开始生成</button>
-            <button id="btnStop" class="btn ghost" type="button" disabled>停止</button>
+        <div class="card chat-card">
+          <div id="chatHistory" class="chat-history"></div>
+          <div id="chatPrompt" class="chat-prompt hidden"></div>
+          <div class="composer">
+            <div class="composer-shell">
+              <button id="btnAttach" class="compose-icon" type="button" title="上传/资料库">+</button>
+              <button id="btnSlash" class="compose-icon" type="button" title="快捷指令">/</button>
+              <textarea
+                id="instruction"
+                class="input composer-input"
+              ></textarea>
+              <button id="btnGenerate" class="compose-send" type="button" aria-label="开始生成">
+                <span class="send-icon">↑</span>
+                <span class="send-text">开始生成</span>
+              </button>
+            </div>
+            <div class="attach-menu hidden" id="attachMenu">
+              <button id="btnUpload" class="attach-item" type="button">上传文件</button>
+              <button id="btnLibraryManage" class="attach-item" type="button">资料库</button>
+            </div>
+            <input id="uploadFile" class="hidden-input" type="file" />
           </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">生成流程</div>
-          <div id="graph" class="graph">
-            <div class="node" data-state="PLAN">规划</div>
-            <div class="node" data-state="DRAFT_SECTIONS">起草</div>
-            <div class="node" data-state="AGGREGATE">合并</div>
-            <div class="node" data-state="VALIDATE">校验</div>
-            <div class="node" data-state="REPAIR">修复</div>
+          <div class="row">
+            <button id="btnRevise" class="btn ghost" type="button">修改润色</button>
+            <button id="btnStop" class="btn ghost" type="button" disabled>停止</button>
           </div>
           <div id="problems" class="problems hidden"></div>
         </div>
@@ -73,5 +113,4 @@
   </main>
 </div>
 
-<script src="/static/v2.js" defer></script>
 {% endblock %}

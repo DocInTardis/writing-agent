@@ -1,0 +1,284 @@
+{
+  "rules": [
+    {
+      "name": "set_title_1",
+      "op": "set_title",
+      "pattern": "(?:修改|更改|调整|设置)\\s*(?:文档)?(?:标题|题目)\\s*(?:为|成)?\\s*(?P<title>.+)",
+      "args": {
+        "title": "$title"
+      },
+      "clean_title": true,
+      "priority": 10
+    },
+    {
+      "name": "set_title_2",
+      "op": "set_title",
+      "pattern": "(?:标题|题目)\\s*(?:改为|改成|调整为|设置为)\\s*(?P<title>.+)",
+      "args": {
+        "title": "$title"
+      },
+      "clean_title": true,
+      "priority": 11
+    },
+    {
+      "name": "set_title_3",
+      "op": "set_title",
+      "pattern": "把\\s*(?:文档)?(?:标题|题目)\\s*(?:改为|改成|调整为|设置为)\\s*(?P<title>.+)",
+      "args": {
+        "title": "$title"
+      },
+      "clean_title": true,
+      "priority": 12
+    },
+    {
+      "name": "set_title_4",
+      "op": "set_title",
+      "pattern": "将\\s*(?:文档)?(?:标题|题目)\\s*(?:改为|改成|调整为|设置为)\\s*(?P<title>.+)",
+      "args": {
+        "title": "$title"
+      },
+      "clean_title": true,
+      "priority": 13
+    },
+    {
+      "name": "rename_section",
+      "op": "rename_section",
+      "pattern": "(?:将|把)?(?P<old>[^,，;；]{1,40}?)(?:章节|小节|部分|标题|题目)(?:名称)?\\s*(?:改为|改成|调整为|设置为)\\s*(?P<new>[^,，;；]{1,40})",
+      "args": {
+        "old": "$old",
+        "new": "$new"
+      },
+      "clean": [
+        "old",
+        "new"
+      ],
+      "priority": 20
+    },
+    {
+      "name": "replace_text_quoted",
+      "op": "replace_text",
+      "pattern": "[把将]?\\s*[\\\"“‘《【](?P<old>.{1,80}?)[\\\"”’》】]\\s*(?:改为|改成|替换为|换成)\\s*[\\\"“‘《【](?P<new>.{1,80}?)[\\\"”’》】]",
+      "args": {
+        "old": "$old",
+        "new": "$new"
+      },
+      "strip_quotes": [
+        "old",
+        "new"
+      ],
+      "detect_all": true,
+      "priority": 30
+    },
+    {
+      "name": "replace_text_plain",
+      "op": "replace_text",
+      "pattern": "(?P<old>.{1,80}?)\\s*(?:改为|改成|替换为|换成)\\s*(?P<new>.{1,80})",
+      "args": {
+        "old": "$old",
+        "new": "$new"
+      },
+      "strip_quotes": [
+        "old",
+        "new"
+      ],
+      "detect_all": true,
+      "priority": 31
+    },
+    {
+      "name": "add_section_after",
+      "op": "add_section",
+      "pattern": "在(?P<anchor>.{1,40}?)(之后|后面|后)\\s*(?:新增|添加|插入)(?:一|1)?(?:个)?(?:章节|小节|部分)?\\s*(?P<title>.+)",
+      "args": {
+        "title": "$title",
+        "anchor": "$anchor",
+        "position": "after"
+      },
+      "clean": [
+        "title",
+        "anchor"
+      ],
+      "priority": 40
+    },
+    {
+      "name": "add_section_before",
+      "op": "add_section",
+      "pattern": "在(?P<anchor>.{1,40}?)(之前|前面|前)\\s*(?:新增|添加|插入)(?:一|1)?(?:个)?(?:章节|小节|部分)?\\s*(?P<title>.+)",
+      "args": {
+        "title": "$title",
+        "anchor": "$anchor",
+        "position": "before"
+      },
+      "clean": [
+        "title",
+        "anchor"
+      ],
+      "priority": 41
+    },
+    {
+      "name": "add_section",
+      "op": "add_section",
+      "pattern": "(?:新增|添加|插入)(?:一|1)?(?:个)?(?:章节|小节|部分)?\\s*(?P<title>.+)",
+      "args": {
+        "title": "$title"
+      },
+      "clean": [
+        "title"
+      ],
+      "priority": 42
+    },
+    {
+      "name": "delete_section_index",
+      "op": "delete_section",
+      "pattern": "(?:删除|移除|去掉)第?(?P<index>[0-9一二三四五六七八九十]+)(?:章|节|部分)",
+      "args": {
+        "index": "$index"
+      },
+      "types": {
+        "index": "int_chinese"
+      },
+      "priority": 50
+    },
+    {
+      "name": "delete_section",
+      "op": "delete_section",
+      "pattern": "(?:删除|移除|去掉)(?:章节|小节|部分)?\\s*(?P<title>.+)",
+      "args": {
+        "title": "$title"
+      },
+      "clean": [
+        "title"
+      ],
+      "priority": 51
+    },
+    {
+      "name": "move_section_after",
+      "op": "move_section",
+      "pattern": "(?:把|将)?(?P<title>.{1,40}?)(?:章节|小节|部分)?(?:移到|移动到|放到|放在|调整到)\\s*(?P<anchor>.{1,40}?)(之后|后面|后)",
+      "args": {
+        "title": "$title",
+        "anchor": "$anchor",
+        "position": "after"
+      },
+      "clean": [
+        "title",
+        "anchor"
+      ],
+      "priority": 60
+    },
+    {
+      "name": "move_section_before",
+      "op": "move_section",
+      "pattern": "(?:把|将)?(?P<title>.{1,40}?)(?:章节|小节|部分)?(?:移到|移动到|放到|放在|调整到)\\s*(?P<anchor>.{1,40}?)(之前|前面|前)",
+      "args": {
+        "title": "$title",
+        "anchor": "$anchor",
+        "position": "before"
+      },
+      "clean": [
+        "title",
+        "anchor"
+      ],
+      "priority": 61
+    },
+    {
+      "name": "replace_section_content",
+      "op": "replace_section_content",
+      "pattern": "(?:将|把)?(?P<title>[^,，;；]{1,40}?)(?:章节|小节|部分)?(?:内容)?\\s*(?:改为|改成|调整为|替换为)\\s*[:：]?\\s*(?P<content>.+)",
+      "args": {
+        "title": "$title",
+        "content": "$content"
+      },
+      "clean": [
+        "title"
+      ],
+      "strip_quotes": [
+        "content"
+      ],
+      "priority": 62
+    },
+    {
+      "name": "append_section_content",
+      "op": "append_section_content",
+      "pattern": "(?:在|给|往)?(?P<title>[^,，;；]{1,40}?)(?:章节|小节|部分)?(?:末尾|最后|末端)?\\s*(?:追加|补充|添加|补写)\\s*[:：]?\\s*(?P<content>.+)",
+      "args": {
+        "title": "$title",
+        "content": "$content"
+      },
+      "clean": [
+        "title"
+      ],
+      "strip_quotes": [
+        "content"
+      ],
+      "priority": 63
+    },
+    {
+      "name": "merge_sections",
+      "op": "merge_sections",
+      "pattern": "(?:合并|整合|并入)\\s*(?P<first>.{1,40}?)\\s*(?:和|与|、)\\s*(?P<second>.{1,40})",
+      "args": {
+        "first": "$first",
+        "second": "$second"
+      },
+      "clean": [
+        "first",
+        "second"
+      ],
+      "priority": 70
+    },
+    {
+      "name": "swap_sections",
+      "op": "swap_sections",
+      "pattern": "(?:交换|互换|调换|对调)\\s*(?P<first>.{1,40}?)\\s*(?:和|与|、)\\s*(?P<second>.{1,40})",
+      "args": {
+        "first": "$first",
+        "second": "$second"
+      },
+      "clean": [
+        "first",
+        "second"
+      ],
+      "priority": 72
+    },
+    {
+      "name": "split_section",
+      "op": "split_section",
+      "pattern": "(?:拆分|拆成|分拆|分成)\\s*(?P<title>.{1,40}?)(?:章节|小节|部分)?\\s*(?:为|成)\\s*(?P<list>.+)",
+      "args": {
+        "title": "$title",
+        "new_titles": "$list"
+      },
+      "clean": [
+        "title"
+      ],
+      "types": {
+        "new_titles": "list_titles"
+      },
+      "priority": 75
+    },
+    {
+      "name": "reorder_sections",
+      "op": "reorder_sections",
+      "pattern": "(?:章节顺序|顺序|章节顺序调整|顺序调整|重排|排序|排列).{0,6}(?:为|改为|调整为|变为)\\s*(?P<order>.+)",
+      "args": {
+        "order": "$order"
+      },
+      "types": {
+        "order": "list_titles"
+      },
+      "priority": 24
+    },
+    {
+      "name": "reorder_sections_by",
+      "op": "reorder_sections",
+      "pattern": "按(?P<order>.+?)顺序(?:重排|排序|排列)",
+      "args": {
+        "order": "$order"
+      },
+      "types": {
+        "order": "list_titles"
+      },
+      "priority": 25
+    }
+  ]
+}

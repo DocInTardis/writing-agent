@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Writing Agent</title>
+    <link rel="stylesheet" href="/static/v2_svelte/style.css?v={{ static_version }}" />
+  </head>
+  <body data-doc-id="{{ doc_id }}">
+    <div id="app"></div>
+    <script>
+      window.__DOC_ID__ = "{{ doc_id }}";
+    </script>
+    <script type="module" src="/static/v2_svelte/main.js?v={{ static_version }}"></script>
+  </body>
+</html>
