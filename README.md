@@ -95,6 +95,19 @@ python scripts/guard_architecture_boundaries.py --config security/architecture_b
 python scripts/release_preflight.py --quick
 ```
 
+## Idempotency Cache Settings
+
+Generation endpoints use a local file-based idempotency cache at `.data/idempotency`.
+
+- `WRITING_AGENT_IDEMPOTENCY_TTL_S`: expiration window in seconds (default `21600`)
+- `WRITING_AGENT_IDEMPOTENCY_MAX_ENTRIES`: max cache entries to retain (default `2000`)
+- `WRITING_AGENT_IDEMPOTENCY_SWEEP_INTERVAL_S`: active cleanup interval in seconds (default `60`)
+
+Behavior:
+- Lazy expiration on read (`get`)
+- Active sweep after writes (`put`)
+- Oldest-entry eviction when over capacity
+
 ## Documentation
 
 - Documentation index: `docs/INDEX.md`

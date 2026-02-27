@@ -1,6 +1,10 @@
-"""Generation Service module.
+"""生成服务模块（Generation Service）。
 
-This module belongs to `writing_agent.web.services` in the writing-agent codebase.
+职责定位（可类比 Java 的 Service 层）：
+1. 解析并标准化请求参数。
+2. 执行幂等控制与文档级并发锁控制。
+3. 先尝试低延迟快捷路径，再进入完整图生成流程。
+4. 对生成结果做后处理并持久化会话状态。
 """
 
 from __future__ import annotations
@@ -14,28 +18,33 @@ from .base import app_v2_module
 
 
 class GenerationService:
-    """Service wrapper for generation and stream endpoints."""
+    """文档生成与流式生成的服务封装。"""
 
     def __init__(self) -> None:
         self._idempotency = IdempotencyStore()
 
     async def generate_stream(self, doc_id: str, request: Request) -> StreamingResponse:
-        """Proxy streaming generation to the legacy runtime implementation."""
+        """流式生成接口：目前直接代理到历史 runtime 实现。"""
         app_v2 = app_v2_module()
         return await app_v2.api_generate_stream(doc_id, request)
 
     async def generate(self, doc_id: str, request: Request) -> dict:
         """
-        Run generation flow with idempotency, lock control, and fallback strategies.
-
-        The method keeps existing behavior by delegating model/runtime details to
-        `app_v2` while isolating request parsing and shortcut branches in this service.
+        同步生成主流程（非 SSE）：
+        1. 读取会话并解析请求。
+        2. 做幂等命中检查（避免重复提交重复计算）。
+        3. 获取文档级生成锁（避免同一文档并发写入）。
+        4. 先走快捷路径（格式修复/快速改写/快速生成）。
+        5. 快捷路径未命中时，进入完整 graph 生成 + fallback。
+        6. 后处理并落库，最终释放锁。
         """
         app_v2 = app_v2_module()
+        # 阶段1：会话存在性校验。
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
 
+        # 阶段2：请求标准化 + 幂等控制。
         data = await request.json()
         req = self._parse_generate_payload(app_v2, data)
         idempotency_key = self._resolve_idempotency_key(doc_id=doc_id, request=request, payload=data)
@@ -46,11 +55,13 @@ class GenerationService:
         if not req["raw_instruction"]:
             raise app_v2.HTTPException(status_code=400, detail="instruction required")
 
+        # 阶段3：文档级并发锁（防止同一文档并发生成导致状态覆盖）。
         token = app_v2._try_begin_doc_generation_with_wait(doc_id, mode="generate")
         if not token:
             raise app_v2.HTTPException(status_code=409, detail=app_v2._generation_busy_message(doc_id))
 
         try:
+            # 阶段4：构造最终指令（组合模式/续写章节/锚点等）。
             compose_instruction = self._build_generation_instruction(
                 app_v2=app_v2,
                 session=session,
@@ -59,8 +70,10 @@ class GenerationService:
                 resume_sections=req["resume_sections"],
                 cursor_anchor=req["cursor_anchor"],
             )
+            # overwrite 模式下不带历史正文；其他模式优先取请求中的 text，其次会话正文。
             base_text = "" if req["compose_mode"] == "overwrite" else (req["current_text"] or session.doc_text or "")
 
+            # 阶段5：先尝试低延迟快捷路径，命中则直接返回。
             shortcut = self._try_shortcuts(
                 app_v2=app_v2,
                 session=session,
@@ -75,10 +88,12 @@ class GenerationService:
                 self._save_idempotent_result(idempotency_key, shortcut)
                 return shortcut
 
+            # 阶段6：模型可用性检查（本地推理服务不可用时直接报错）。
             ok, msg = app_v2._ensure_ollama_ready()
             if not ok:
                 raise app_v2.HTTPException(status_code=400, detail=msg)
 
+            # 阶段7：准备图生成配置（分析指令、长度目标、并发参数等）。
             analysis_instruction, cfg, target_chars = self._prepare_generation_config(
                 app_v2=app_v2,
                 session=session,
@@ -88,6 +103,7 @@ class GenerationService:
                 base_text=base_text,
             )
 
+            # 阶段8：执行 graph 生成；异常时自动降级到 single-pass 兜底。
             final_text, problems = self._run_graph_with_fallback(
                 app_v2=app_v2,
                 session=session,
@@ -98,6 +114,7 @@ class GenerationService:
                 cfg=cfg,
                 target_chars=target_chars,
             )
+            # 阶段9：统一后处理（清理回声、修复结构等）并持久化。
             final_text = app_v2._postprocess_output_text(
                 session,
                 final_text,
@@ -112,10 +129,11 @@ class GenerationService:
             self._save_idempotent_result(idempotency_key, result)
             return result
         finally:
+            # 阶段10：无论成功失败都释放文档级生成锁。
             app_v2._finish_doc_generation(doc_id, token)
 
     def _parse_generate_payload(self, app_v2, data: dict) -> dict:
-        """Normalize request payload into an internal generation request shape."""
+        """将原始请求体标准化为内部字段结构。"""
         return {
             "raw_instruction": str(data.get("instruction") or "").strip(),
             "current_text": str(data.get("text") or ""),
@@ -126,7 +144,7 @@ class GenerationService:
         }
 
     def _resolve_idempotency_key(self, *, doc_id: str, request: Request, payload: dict) -> str:
-        """Prefer caller-provided idempotency key, otherwise derive a deterministic key."""
+        """优先使用请求头幂等键；否则根据 doc_id+route+body 生成确定性键。"""
         header_key = str(request.headers.get("x-idempotency-key") or "").strip()
         if header_key:
             return header_key
@@ -154,7 +172,7 @@ class GenerationService:
         resume_sections: list[str],
         cursor_anchor: str,
     ) -> str:
-        """Compose a final instruction string based on mode and resume settings."""
+        """按写作模式与续写范围，组装最终提交给模型的指令。"""
         has_existing = bool(str(session.doc_text or "").strip())
         instruction = app_v2._apply_compose_mode_instruction(raw_instruction, compose_mode, has_existing=has_existing)
         if resume_sections:
@@ -177,7 +195,8 @@ class GenerationService:
         selection: str,
         base_text: str,
     ) -> dict | None:
-        """Try low-latency edit/generation shortcuts before full graph execution."""
+        """完整 graph 之前的快捷分支：优先低延迟返回。"""
+        # 快捷分支A：纯格式修改请求（不需要走大模型生成）。
         format_only = app_v2._try_handle_format_only_request(
             session=session,
             instruction=raw_instruction,
@@ -189,10 +208,12 @@ class GenerationService:
             return {"ok": 1, **format_only}
 
         if base_text.strip():
+            # 进入改写前保存“变更前”版本，便于版本回退。
             if base_text != session.doc_text:
                 app_v2._set_doc_text(session, base_text)
             app_v2._auto_commit_version(session, "auto: before update")
 
+        # 快捷分支B：基于规则/轻量模型的快速改写。
         quick_edit = None if resume_sections else app_v2._try_quick_edit(base_text, raw_instruction)
         if quick_edit:
             updated_text, _ = quick_edit
@@ -204,6 +225,7 @@ class GenerationService:
                 base_text=base_text,
             )
 
+        # 快捷分支C：先做快速意图分析，再决定是否走 AI 轻改写。
         analysis_quick = app_v2._run_message_analysis(session, compose_instruction, quick=True)
         ai_edit = None if resume_sections else app_v2._try_ai_intent_edit(base_text, raw_instruction, analysis_quick)
         if ai_edit:
@@ -218,6 +240,7 @@ class GenerationService:
             out["note"] = note
             return out
 
+        # 快捷分支D：命中“修订模式”时走 revise 流程，不进入 graph。
         if app_v2._should_route_to_revision(raw_instruction, base_text, analysis_quick):
             revised = app_v2._try_revision_edit(
                 session=session,
@@ -236,6 +259,7 @@ class GenerationService:
                     base_text=base_text,
                 )
 
+        # 快捷分支E：对短文本/特定意图直接 single-pass 快速生成。
         if app_v2._should_use_fast_generate(raw_instruction, app_v2._resolve_target_chars(session.formatting or {}, session.generation_prefs or {}), session.generation_prefs or {}):
             try:
                 instruction = app_v2._augment_instruction(
@@ -258,11 +282,13 @@ class GenerationService:
                         base_text=base_text,
                     )
             except Exception:
+                # 快捷路径失败不影响主流程，回落到完整 graph。
                 pass
 
         return None
 
     def _build_shortcut_result(self, *, app_v2, session, text: str, instruction: str, base_text: str) -> dict:
+        """统一封装快捷路径返回：后处理 + 落库 + doc_ir。"""
         updated_text = app_v2._postprocess_output_text(
             session,
             text,
@@ -276,7 +302,8 @@ class GenerationService:
         return {"ok": 1, "text": updated_text, "problems": [], "doc_ir": app_v2._safe_doc_ir_payload(updated_text)}
 
     def _prepare_generation_config(self, *, app_v2, session, raw_instruction: str, compose_instruction: str, resume_sections: list[str], base_text: str):
-        """Build analysis instruction and runtime config for the graph path."""
+        """为 graph 路径准备分析结果与运行参数配置。"""
+        # 先做指令分析（带超时保护），避免分析阶段阻塞整体链路。
         analysis_timeout = float(app_v2.os.environ.get("WRITING_AGENT_ANALYSIS_MAX_S", "20"))
         analysis = app_v2._run_with_timeout(
             lambda: app_v2._run_message_analysis(session, compose_instruction),
@@ -290,12 +317,14 @@ class GenerationService:
             generation_prefs=session.generation_prefs or {},
         )
 
+        # 若未指定模板结构，则尝试从指令自动推断大纲。
         if (not resume_sections) and (not session.template_required_h2) and (not session.template_outline):
             auto_outline = app_v2._default_outline_from_instruction(raw_instruction)
             if auto_outline:
                 session.template_required_h2 = auto_outline
                 app_v2.store.put(session)
 
+        # 目标字数存在时，给内部生成预留一定 margin，减少后续补偿生成。
         target_chars = app_v2._resolve_target_chars(session.formatting or {}, session.generation_prefs or {})
         if target_chars <= 0:
             target_chars = app_v2._extract_target_chars_from_instruction(raw_instruction)
@@ -328,13 +357,14 @@ class GenerationService:
         cfg,
         target_chars: int,
     ) -> tuple[str, list[str]]:
-        """Execute graph generation and fallback paths until a valid final text is produced."""
+        """执行 graph 生成；失败或文本不足时自动 fallback 到 single-pass。"""
         required_h2 = list(resume_sections) if resume_sections else list(session.template_required_h2 or [])
         required_outline = [] if resume_sections else list(session.template_outline or [])
 
         final_text: str | None = None
         problems: list[str] = []
         try:
+            # 主路径：事件流 graph 生成（支持章节/状态事件）。
             expand_outline = bool((session.generation_prefs or {}).get("expand_outline", False))
             gen = app_v2.run_generate_graph(
                 instruction=instruction,
@@ -363,6 +393,7 @@ class GenerationService:
                     break
         except Exception as e:
             try:
+                # 兜底1：graph 抛异常时，直接走 single-pass。
                 final_text = app_v2._single_pass_generate(
                     session,
                     instruction=instruction,
@@ -374,6 +405,7 @@ class GenerationService:
 
         if not final_text or len(str(final_text).strip()) < 20:
             try:
+                # 兜底2：graph 没报错但正文过短时，再补一次 single-pass。
                 final_text = app_v2._single_pass_generate(
                     session,
                     instruction=instruction,
