@@ -1,24 +1,24 @@
-# Code Reading Guide
+# 项目阅读指南
 
-This guide is for quickly understanding `writing-agent` as a working system.
+本指南用于快速理解 `writing-agent` 的整体运行方式与关键模块关系。
 
-## 1. Start from Runtime Entrypoints
+## 1. 从运行入口开始
 
-Read in this order:
+建议按以下顺序阅读：
 
 1. `writing_agent/launch.py`
 2. `writing_agent/web/app_v2.py`
-3. `writing_agent/web/api/` (HTTP route modules)
-4. `writing_agent/web/services/` (business orchestration)
+3. `writing_agent/web/api/`（HTTP 路由层）
+4. `writing_agent/web/services/`（业务编排层）
 
-What to extract:
-- how a request enters the system
-- where request state is loaded/saved
-- where generation is dispatched
+重点关注：
+- 请求如何进入系统
+- 会话状态在何处加载与保存
+- 生成任务在何处被分发
 
-## 2. Follow the Generation Pipeline
+## 2. 跟踪生成流水线
 
-Core generation path:
+核心生成路径：
 
 1. `writing_agent/web/services/generation_service.py`
 2. `writing_agent/web/app_v2_generate_stream_runtime.py`
@@ -26,80 +26,80 @@ Core generation path:
 4. `writing_agent/v2/graph_runner.py`
 5. `writing_agent/v2/graph_runner_post_domain.py`
 
-What to extract:
-- planning stage vs drafting stage vs aggregation stage
-- timeout / retry / fallback behavior
-- where quality checks are applied
+重点关注：
+- 规划阶段、起草阶段、聚合阶段的职责边界
+- 超时、重试、兜底策略
+- 质量校验在何处介入
 
-## 3. Understand State and Persistence
+## 3. 理解状态与持久化
 
-Read:
+建议阅读：
 
 1. `writing_agent/storage.py`
 2. `writing_agent/state_engine/`
 3. `writing_agent/v2/text_store.py`
 
-What to extract:
-- in-memory session layout
-- versioning and replay responsibilities
-- text block storage and IDs
+重点关注：
+- 内存会话的数据结构
+- 版本与回放机制的责任划分
+- 文本块存储方式与 ID 规则
 
-## 4. Understand LLM Provider Routing
+## 4. 理解 LLM 提供方路由
 
-Read:
+建议阅读：
 
 1. `writing_agent/llm/provider.py`
 2. `writing_agent/llm/factory.py`
 3. `writing_agent/llm/model_router.py`
 4. `writing_agent/llm/providers/`
 
-What to extract:
-- provider contract
-- backend selection (`ollama`, node gateway, OpenAI-compatible)
-- model fallback behavior
+重点关注：
+- Provider 接口契约
+- 后端选择逻辑（`ollama`、node gateway、OpenAI-compatible）
+- 模型回退策略
 
-## 5. Read Frontend in Vertical Slices
+## 5. 前端按垂直切片阅读
 
-Read:
+建议阅读：
 
 1. `writing_agent/web/frontend_svelte/src/App.svelte`
 2. `writing_agent/web/frontend_svelte/src/AppWorkbench.svelte`
 3. `writing_agent/web/frontend_svelte/src/lib/components/EditorWorkbench.svelte`
 4. `writing_agent/web/frontend_svelte/src/lib/flows/workbenchStateMachine.ts`
 
-What to extract:
-- UI state transitions
-- stream event handling (`delta`, `section`, `final`)
-- error and recovery paths
+重点关注：
+- UI 状态流转
+- 流式事件处理（`delta`、`section`、`final`）
+- 错误与恢复路径
 
-## 6. Read Validation and Guardrails
+## 6. 阅读校验与守护规则
 
-Read:
+建议阅读：
 
-1. `scripts/` guards (size, complexity, architecture boundaries)
-2. `security/*.json` policy-as-code
+1. `scripts/` 下的守护脚本（规模、复杂度、架构边界）
+2. `security/*.json`（policy-as-code）
 3. `.github/workflows/`
 
-What to extract:
-- what quality gates are enforced in CI
-- which failures are warning vs blocking
+重点关注：
+- CI 中哪些质量门禁是强制的
+- 哪些失败是告警、哪些会阻塞合并
 
-## 7. Practical Reading Strategy
+## 7. 实用阅读方法
 
-Use this checklist while reading any module:
+阅读任意模块时，可使用以下检查清单：
 
-1. Identify inputs and outputs first.
-2. Find external dependencies (LLM, storage, file system).
-3. Identify fallback and timeout branches.
-4. Mark side effects (state write, file write, network call).
-5. Confirm where errors are surfaced to API responses.
+1. 先识别输入和输出。
+2. 再定位外部依赖（LLM、存储、文件系统）。
+3. 明确兜底与超时分支。
+4. 标注副作用（写状态、写文件、网络调用）。
+5. 确认错误如何上浮到 API 响应层。
 
-## 8. Fast Debug Entry Map
+## 8. 快速排障入口
 
-If a feature breaks, start here:
+出现问题时可优先定位：
 
-- Generation output wrong: `writing_agent/v2/graph_runner_runtime.py`
-- Stream interrupted: `writing_agent/web/app_v2_generate_stream_runtime.py`
-- Export issues: `writing_agent/web/api/export_flow.py`
-- Citation verify issues: `writing_agent/web/api/citation_flow.py`
-- UI rendering/interaction: `writing_agent/web/frontend_svelte/src/lib/components/`
+- 生成结果异常：`writing_agent/v2/graph_runner_runtime.py`
+- 流式中断：`writing_agent/web/app_v2_generate_stream_runtime.py`
+- 导出问题：`writing_agent/web/api/export_flow.py`
+- 引用核验问题：`writing_agent/web/api/citation_flow.py`
+- UI 渲染或交互问题：`writing_agent/web/frontend_svelte/src/lib/components/`
