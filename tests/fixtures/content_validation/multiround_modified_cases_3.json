@@ -1,0 +1,388 @@
+{
+  "meta": {
+    "name": "multiround_modified_cases_3",
+    "description": "Three practical multi-round revision cases focused on iterative modifications via UI",
+    "version": "1.0",
+    "count": 3
+  },
+  "cases": [
+    {
+      "id": "CMR-001",
+      "title": "Enterprise governance plan iterative revision",
+      "group": "custom_revision",
+      "topic": "企业AI治理实施方案",
+      "anchors": [
+        "背景",
+        "执行计划",
+        "风险"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "请先写《企业AI治理实施方案》初稿，包含：背景、目标、执行计划、风险与应对、结论。语言务实可落地。",
+          "must_keep": [
+            "背景",
+            "执行计划"
+          ],
+          "must_change": [
+            "初稿"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 4200,
+            "required_keywords": [
+              "背景",
+              "执行计划",
+              "结论"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "背景",
+              "执行计划"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "在不删除既有结论的前提下，新增“关键修改点”章节，并把执行计划改成按周拆解（至少8周）。",
+          "must_keep": [
+            "背景",
+            "执行计划",
+            "结论"
+          ],
+          "must_change": [
+            "关键修改点",
+            "第1周"
+          ],
+          "acceptance_checks": {
+            "min_chars": 360,
+            "max_chars": 5200,
+            "required_keywords": [
+              "关键修改点",
+              "第1周",
+              "第8周"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "关键修改点"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "补充“术语映射表”，列出中文术语-英文术语-业务定义，不少于8条；保持其他章节结构。",
+          "must_keep": [
+            "执行计划",
+            "结论"
+          ],
+          "must_change": [
+            "术语映射表"
+          ],
+          "acceptance_checks": {
+            "min_chars": 420,
+            "max_chars": 6200,
+            "required_keywords": [
+              "术语映射表",
+              "业务定义"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "术语映射表"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "输出执行版终稿：新增“免责声明”和“行动检查清单”（至少6条可勾选项），保留前文核心结论。",
+          "must_keep": [
+            "结论",
+            "执行计划"
+          ],
+          "must_change": [
+            "免责声明",
+            "行动检查清单"
+          ],
+          "acceptance_checks": {
+            "min_chars": 520,
+            "max_chars": 7200,
+            "required_keywords": [
+              "免责声明",
+              "行动检查清单",
+              "检查项"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [
+              "绝对保证",
+              "零风险收益"
+            ],
+            "required_headings": [
+              "免责声明",
+              "行动检查清单"
+            ],
+            "required_headings_min_hit": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "CMR-002",
+      "title": "Healthcare SOP iterative revision",
+      "group": "custom_revision",
+      "topic": "医疗客服AI升级SOP",
+      "anchors": [
+        "现状",
+        "合规",
+        "应急"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "生成《医疗客服AI升级SOP》初稿，包含：现状、目标、流程、合规要点、应急机制。",
+          "must_keep": [
+            "现状",
+            "合规"
+          ],
+          "must_change": [
+            "初稿"
+          ],
+          "acceptance_checks": {
+            "min_chars": 300,
+            "max_chars": 4200,
+            "required_keywords": [
+              "现状",
+              "流程",
+              "应急"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "现状",
+              "应急"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "加入“二轮修改意见”章节，模拟来自法务、运维、业务三方各3条意见，并给出逐条响应。",
+          "must_keep": [
+            "合规",
+            "应急"
+          ],
+          "must_change": [
+            "二轮修改意见",
+            "法务",
+            "运维",
+            "业务"
+          ],
+          "acceptance_checks": {
+            "min_chars": 420,
+            "max_chars": 5600,
+            "required_keywords": [
+              "二轮修改意见",
+              "法务",
+              "运维",
+              "业务"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "二轮修改意见"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "新增“监控告警与SLO”章节，至少6条可量化指标，包含阈值、采样周期、触发动作。",
+          "must_keep": [
+            "合规",
+            "应急"
+          ],
+          "must_change": [
+            "监控告警与SLO"
+          ],
+          "acceptance_checks": {
+            "min_chars": 480,
+            "max_chars": 6400,
+            "required_keywords": [
+              "监控告警与SLO",
+              "阈值",
+              "采样周期",
+              "触发动作"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "监控告警与SLO"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "形成发布前终稿：补充“免责声明”与“附录检查清单”（至少8条），并保留前文风险提示。",
+          "must_keep": [
+            "合规",
+            "应急"
+          ],
+          "must_change": [
+            "免责声明",
+            "附录检查清单"
+          ],
+          "acceptance_checks": {
+            "min_chars": 560,
+            "max_chars": 7600,
+            "required_keywords": [
+              "免责声明",
+              "附录检查清单",
+              "检查项"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [
+              "包治百病",
+              "绝对安全"
+            ],
+            "required_headings": [
+              "免责声明",
+              "附录检查清单"
+            ],
+            "required_headings_min_hit": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "CMR-003",
+      "title": "Government service optimization iterative revision",
+      "group": "custom_revision",
+      "topic": "政务热线优化方案",
+      "anchors": [
+        "目标",
+        "执行",
+        "复盘"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "先写《政务热线优化方案》初稿，包含：目标、执行机制、监督评估、风险、复盘安排。",
+          "must_keep": [
+            "目标",
+            "执行"
+          ],
+          "must_change": [
+            "初稿"
+          ],
+          "acceptance_checks": {
+            "min_chars": 300,
+            "max_chars": 4000,
+            "required_keywords": [
+              "目标",
+              "执行",
+              "复盘"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "目标",
+              "执行机制"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "把执行机制改写为“逐周执行清单”（至少10周），每周包含负责人、输入、输出、验收标准。",
+          "must_keep": [
+            "目标",
+            "复盘"
+          ],
+          "must_change": [
+            "逐周执行清单",
+            "第1周"
+          ],
+          "acceptance_checks": {
+            "min_chars": 420,
+            "max_chars": 5600,
+            "required_keywords": [
+              "逐周执行清单",
+              "负责人",
+              "验收标准"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "逐周执行清单"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "新增“风险台账”并至少列出8项风险，包含概率、影响、缓解策略、预警信号。",
+          "must_keep": [
+            "目标",
+            "复盘"
+          ],
+          "must_change": [
+            "风险台账"
+          ],
+          "acceptance_checks": {
+            "min_chars": 500,
+            "max_chars": 6600,
+            "required_keywords": [
+              "风险台账",
+              "概率",
+              "影响",
+              "缓解策略",
+              "预警信号"
+            ],
+            "required_keywords_min_hit": 3,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "风险台账"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "发布版收口：新增“免责声明”和“行动检查清单”（至少6项），全文避免“绝对、保证、必然”等绝对化表达。",
+          "must_keep": [
+            "目标",
+            "复盘"
+          ],
+          "must_change": [
+            "免责声明",
+            "行动检查清单"
+          ],
+          "acceptance_checks": {
+            "min_chars": 560,
+            "max_chars": 7600,
+            "required_keywords": [
+              "免责声明",
+              "行动检查清单"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [
+              "绝对",
+              "保证",
+              "必然"
+            ],
+            "required_headings": [
+              "免责声明",
+              "行动检查清单"
+            ],
+            "required_headings_min_hit": 1
+          }
+        }
+      ]
+    }
+  ]
+}

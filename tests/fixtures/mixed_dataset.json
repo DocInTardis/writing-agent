@@ -1,0 +1,22 @@
+[
+  {
+    "id": "syn-001",
+    "type": "synthetic",
+    "prompt": "\u751f\u6210\u5173\u4e8e\u7f13\u5b58\u4f18\u5316\u7684\u77ed\u62a5\u544a",
+    "expected_sections": [
+      "\u80cc\u666f",
+      "\u65b9\u6848",
+      "\u7ed3\u8bba"
+    ]
+  },
+  {
+    "id": "real-001",
+    "type": "real",
+    "prompt": "\u67d0\u4e1a\u52a1\u7cfb\u7edf\u5728\u9ad8\u5cf0\u671f\u51fa\u73b0\u5199\u5165\u5ef6\u8fdf\uff0c\u8bf7\u8f93\u51fa\u6539\u9020\u65b9\u6848",
+    "expected_sections": [
+      "\u95ee\u9898\u5206\u6790",
+      "\u6539\u9020\u8def\u5f84",
+      "\u98ce\u9669\u63a7\u5236"
+    ]
+  }
+]

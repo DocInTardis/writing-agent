@@ -1,0 +1,295 @@
+{
+  "meta": {
+    "name": "multiround_modified_en_smoke_3",
+    "description": "Three English multi-round revision smoke cases",
+    "version": "1.0",
+    "count": 3
+  },
+  "cases": [
+    {
+      "id": "EMR-001",
+      "title": "Incident response runbook iterative edit",
+      "group": "revision_en_smoke",
+      "topic": "Incident response runbook",
+      "anchors": [
+        "Overview",
+        "Conclusion"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Incident response runbook' with headings: Overview, Current State, Plan, Risks, Conclusion.",
+          "must_keep": [
+            "Overview"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 220,
+            "max_chars": 3200,
+            "required_keywords": [
+              "Overview",
+              "Plan",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Overview",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Revise the document by adding a Change Log section and an Action Checklist with at least five actionable items. Keep the Conclusion.",
+          "must_keep": [
+            "Overview",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Change Log",
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 240,
+            "max_chars": 3600,
+            "required_keywords": [
+              "Change Log",
+              "Action Checklist",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Change Log",
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Produce final version: add a Disclaimer paragraph and a Terminology Mapping table (at least 5 rows: term, english term, business definition).",
+          "must_keep": [
+            "Conclusion"
+          ],
+          "must_change": [
+            "Disclaimer",
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 280,
+            "max_chars": 4200,
+            "required_keywords": [
+              "Disclaimer",
+              "Terminology Mapping",
+              "business definition"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [
+              "guaranteed profit"
+            ],
+            "required_headings": [
+              "Disclaimer",
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "EMR-002",
+      "title": "Customer success playbook iterative edit",
+      "group": "revision_en_smoke",
+      "topic": "Customer success playbook",
+      "anchors": [
+        "Overview",
+        "Conclusion"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Customer success playbook' with headings: Overview, Current State, Plan, Risks, Conclusion.",
+          "must_keep": [
+            "Overview"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 220,
+            "max_chars": 3200,
+            "required_keywords": [
+              "Overview",
+              "Plan",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Overview",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Revise the document by adding a Change Log section and an Action Checklist with at least five actionable items. Keep the Conclusion.",
+          "must_keep": [
+            "Overview",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Change Log",
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 240,
+            "max_chars": 3600,
+            "required_keywords": [
+              "Change Log",
+              "Action Checklist",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Change Log",
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Produce final version: add a Disclaimer paragraph and a Terminology Mapping table (at least 5 rows: term, english term, business definition).",
+          "must_keep": [
+            "Conclusion"
+          ],
+          "must_change": [
+            "Disclaimer",
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 280,
+            "max_chars": 4200,
+            "required_keywords": [
+              "Disclaimer",
+              "Terminology Mapping",
+              "business definition"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [
+              "guaranteed profit"
+            ],
+            "required_headings": [
+              "Disclaimer",
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "EMR-003",
+      "title": "Product launch plan iterative edit",
+      "group": "revision_en_smoke",
+      "topic": "Product launch plan",
+      "anchors": [
+        "Overview",
+        "Conclusion"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Product launch plan' with headings: Overview, Current State, Plan, Risks, Conclusion.",
+          "must_keep": [
+            "Overview"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 220,
+            "max_chars": 3200,
+            "required_keywords": [
+              "Overview",
+              "Plan",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Overview",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Revise the document by adding a Change Log section and an Action Checklist with at least five actionable items. Keep the Conclusion.",
+          "must_keep": [
+            "Overview",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Change Log",
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 240,
+            "max_chars": 3600,
+            "required_keywords": [
+              "Change Log",
+              "Action Checklist",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Change Log",
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Produce final version: add a Disclaimer paragraph and a Terminology Mapping table (at least 5 rows: term, english term, business definition).",
+          "must_keep": [
+            "Conclusion"
+          ],
+          "must_change": [
+            "Disclaimer",
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 280,
+            "max_chars": 4200,
+            "required_keywords": [
+              "Disclaimer",
+              "Terminology Mapping",
+              "business definition"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [
+              "guaranteed profit"
+            ],
+            "required_headings": [
+              "Disclaimer",
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 1
+          }
+        }
+      ]
+    }
+  ]
+}

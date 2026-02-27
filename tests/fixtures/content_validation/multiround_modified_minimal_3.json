@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "name": "multiround_modified_minimal_3",
+    "description": "Minimal-constraint multi-round revision stability cases",
+    "version": "1.0",
+    "count": 3
+  },
+  "cases": [
+    {
+      "id": "MMR-001",
+      "title": "Service improvement note minimal revision flow",
+      "group": "revision_minimal",
+      "topic": "Service improvement note",
+      "anchors": [
+        "Section A",
+        "Section B"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write an initial draft for Service improvement note with Section A, Section B, and Conclusion.",
+          "must_keep": [],
+          "must_change": [],
+          "acceptance_checks": {
+            "min_chars": 120,
+            "max_chars": 2400,
+            "required_keywords": [],
+            "forbidden_keywords": [],
+            "required_headings": []
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Revise the draft: make it clearer, add a short Risks section and an Action List with 3 items.",
+          "must_keep": [],
+          "must_change": [],
+          "acceptance_checks": {
+            "min_chars": 140,
+            "max_chars": 2600,
+            "required_keywords": [],
+            "forbidden_keywords": [],
+            "required_headings": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "MMR-002",
+      "title": "Operational checklist draft minimal revision flow",
+      "group": "revision_minimal",
+      "topic": "Operational checklist draft",
+      "anchors": [
+        "Section A",
+        "Section B"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write an initial draft for Operational checklist draft with Section A, Section B, and Conclusion.",
+          "must_keep": [],
+          "must_change": [],
+          "acceptance_checks": {
+            "min_chars": 120,
+            "max_chars": 2400,
+            "required_keywords": [],
+            "forbidden_keywords": [],
+            "required_headings": []
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Revise the draft: make it clearer, add a short Risks section and an Action List with 3 items.",
+          "must_keep": [],
+          "must_change": [],
+          "acceptance_checks": {
+            "min_chars": 140,
+            "max_chars": 2600,
+            "required_keywords": [],
+            "forbidden_keywords": [],
+            "required_headings": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "MMR-003",
+      "title": "Policy update brief minimal revision flow",
+      "group": "revision_minimal",
+      "topic": "Policy update brief",
+      "anchors": [
+        "Section A",
+        "Section B"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write an initial draft for Policy update brief with Section A, Section B, and Conclusion.",
+          "must_keep": [],
+          "must_change": [],
+          "acceptance_checks": {
+            "min_chars": 120,
+            "max_chars": 2400,
+            "required_keywords": [],
+            "forbidden_keywords": [],
+            "required_headings": []
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Revise the draft: make it clearer, add a short Risks section and an Action List with 3 items.",
+          "must_keep": [],
+          "must_change": [],
+          "acceptance_checks": {
+            "min_chars": 140,
+            "max_chars": 2600,
+            "required_keywords": [],
+            "forbidden_keywords": [],
+            "required_headings": []
+          }
+        }
+      ]
+    }
+  ]
+}

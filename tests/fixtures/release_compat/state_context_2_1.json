@@ -1,0 +1,94 @@
+{
+  "schema_version": "2.1",
+  "trace_id": "fixture-trace-id",
+  "session_id": "fixture-session",
+  "doc_id": "fixture-doc",
+  "request_id": "fixture-request-id",
+  "state": "S02_DOC_READY",
+  "state_rev": 1,
+  "transition_id": null,
+  "last_trigger": null,
+  "created_at": "2026-01-01T00:00:00+00:00",
+  "updated_at": "2026-01-01T00:00:01+00:00",
+  "request": {
+    "source": "chat",
+    "instruction_raw": "fixture raw",
+    "instruction_normalized": "fixture normalized",
+    "user_id": null,
+    "user_cancelled": false
+  },
+  "role": {
+    "role_type": "R04",
+    "confidence": 0.8,
+    "hard_constraints": [
+      "none"
+    ],
+    "soft_style_prompt": ""
+  },
+  "intent": {
+    "intent_type": "I08",
+    "confidence": 0.7,
+    "reason": "fixture"
+  },
+  "scope": {
+    "scope_type": "C07",
+    "target_ids": [],
+    "selection_text": null
+  },
+  "routing": {
+    "route": "E22",
+    "score": {
+      "role_weight": 0.0,
+      "intent_weight": 0.0,
+      "scope_weight": 0.0,
+      "final_score": 0.0
+    }
+  },
+  "locks": {
+    "global_lock": false,
+    "partial_locks": [],
+    "conflict_reason": null,
+    "released": false
+  },
+  "streaming": {
+    "stream_id": null,
+    "section_id": null,
+    "section_key": null,
+    "cursor": 0,
+    "token_usage": {
+      "prompt": 0,
+      "completion": 0
+    },
+    "aborted": false
+  },
+  "media": {
+    "unresolved_media_count": 0,
+    "items": []
+  },
+  "verify": {
+    "checks": [],
+    "has_warning": false,
+    "has_error": false
+  },
+  "rollback": {
+    "failed_snapshot_id": null,
+    "stable_snapshot_id": null,
+    "incident_diff_id": null
+  },
+  "cleanup": {
+    "lock_release_done": false,
+    "temp_clean_done": false,
+    "log_flush_done": false
+  },
+  "error": {
+    "code": null,
+    "message": null,
+    "retryable": false
+  },
+  "telemetry": {
+    "retry_count": 0,
+    "latency_ms": 0,
+    "action_seq": 1,
+    "idempotency_key": "fixture-idempotency"
+  }
+}

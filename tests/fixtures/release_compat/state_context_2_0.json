@@ -1,0 +1,16 @@
+{
+  "schema_version": "2.0",
+  "trace_id": "fixture-trace-id-2-0",
+  "session_id": "fixture-session-2-0",
+  "doc_id": "fixture-doc-2-0",
+  "request_id": "fixture-request-id-2-0",
+  "state": "S02_DOC_READY",
+  "state_rev": 1,
+  "created_at": "2025-12-31T23:59:59+00:00",
+  "updated_at": "2026-01-01T00:00:00+00:00",
+  "request": {
+    "source": "compat-upgrade",
+    "instruction_raw": "upgrade from 2.0",
+    "instruction_normalized": "upgrade from 2.0"
+  }
+}

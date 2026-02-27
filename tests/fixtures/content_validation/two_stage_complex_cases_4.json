@@ -1,0 +1,142 @@
+﻿{
+  "meta": {
+    "name": "two_stage_complex_cases_4",
+    "description": "Two-stage frontend complex prompt validation cases with formatting constraints",
+    "version": "2.0",
+    "count": 4
+  },
+  "cases": [
+    {
+      "id": "TS-001",
+      "group": "enterprise_governance",
+      "topic": "企业AI治理90天落地方案",
+      "stage1_prompt": "请为一家中型制造企业撰写《AI治理90天落地方案》初稿。必须包含治理目标、分阶段计划、风险与合规、执行保障四个部分。请给出至少3个里程碑、每个里程碑的责任人和验收指标。文档中需要明确写出排版规范：正文宋体小四，一级标题黑体三号，行距1.5倍。",
+      "stage2_base_prompt": "请根据第一阶段失败项进行修订，补齐缺失标题与关键词，并增强可执行性。输出完整第二版方案。",
+      "acceptance": {
+        "min_chars": 420,
+        "max_chars": 7200,
+        "required_keywords": [
+          "里程碑",
+          "责任人",
+          "验收指标",
+          "风险闭环",
+          "宋体",
+          "小四",
+          "黑体",
+          "三号"
+        ],
+        "required_keywords_min_hit": 4,
+        "forbidden_keywords": [
+          "无法实现",
+          "随便"
+        ],
+        "required_headings": [
+          "治理目标",
+          "分阶段计划",
+          "风险与合规",
+          "执行保障"
+        ],
+        "required_headings_min_hit": 3
+      }
+    },
+    {
+      "id": "TS-002",
+      "group": "healthcare_service",
+      "topic": "医疗客服AI分诊SOP",
+      "stage1_prompt": "请编写《医疗客服AI分诊SOP》初稿，面向互联网门诊客服团队。必须写出服务SLO、分诊流程、升级机制、值班协同和患者沟通模板。要求给出6条关键步骤，并说明每条步骤的输入、输出和异常处理。文档里请明确字体字号规则：正文宋体小四，二级标题黑体四号。",
+      "stage2_base_prompt": "请在保留有效内容的前提下，修订SLO和升级机制描述，补齐缺失关键词并输出完整修订稿。",
+      "acceptance": {
+        "min_chars": 450,
+        "max_chars": 7600,
+        "required_keywords": [
+          "SLO",
+          "P95",
+          "升级",
+          "值班",
+          "异常处理",
+          "宋体",
+          "小四",
+          "黑体"
+        ],
+        "required_keywords_min_hit": 4,
+        "forbidden_keywords": [
+          "不负责",
+          "忽略"
+        ],
+        "required_headings": [
+          "服务SLO",
+          "分诊流程",
+          "升级机制",
+          "值班协同"
+        ],
+        "required_headings_min_hit": 3
+      }
+    },
+    {
+      "id": "TS-003",
+      "group": "finance_literacy",
+      "topic": "家庭资产配置科普手册",
+      "stage1_prompt": "请写一份《家庭资产配置科普手册》初稿，目标读者是首次理财人群。至少包含用户画像、资产配置策略、风险提示、年度复盘四个部分，并按保守型/平衡型/进取型给出建议比例。必须在正文中写明：正文宋体12磅，标题黑体16磅。",
+      "stage2_base_prompt": "请根据第一阶段检测问题修订文稿，补齐缺失术语和结构，并提升可执行性。输出完整第二版。",
+      "acceptance": {
+        "min_chars": 420,
+        "max_chars": 6800,
+        "required_keywords": [
+          "保守型",
+          "平衡型",
+          "进取型",
+          "再平衡",
+          "风险提示",
+          "宋体",
+          "12磅",
+          "黑体"
+        ],
+        "required_keywords_min_hit": 4,
+        "forbidden_keywords": [
+          "稳赚不赔",
+          "内幕"
+        ],
+        "required_headings": [
+          "用户画像",
+          "资产配置策略",
+          "风险提示",
+          "年度复盘"
+        ],
+        "required_headings_min_hit": 3
+      }
+    },
+    {
+      "id": "TS-004",
+      "group": "education_design",
+      "topic": "项目制课程教学设计说明",
+      "stage1_prompt": "请生成《项目制课程教学设计说明》初稿，面向高中信息技术教师。必须覆盖课程目标、单元设计、评价量表、家校沟通四个模块，并给出至少2个课堂活动示例和1个Rubric评分表结构。请在文中声明版式：正文宋体小四，标题黑体三号，图表标题楷体五号。",
+      "stage2_base_prompt": "请结合第一阶段失败项完成二次修订，确保标题完整、关键词齐全，并输出可直接发布的第二版。",
+      "acceptance": {
+        "min_chars": 450,
+        "max_chars": 7200,
+        "required_keywords": [
+          "形成性评价",
+          "总结性评价",
+          "Rubric",
+          "课堂活动",
+          "家校沟通",
+          "宋体",
+          "小四",
+          "黑体"
+        ],
+        "required_keywords_min_hit": 4,
+        "forbidden_keywords": [
+          "随意",
+          "不知道"
+        ],
+        "required_headings": [
+          "课程目标",
+          "单元设计",
+          "评价量表",
+          "家校沟通"
+        ],
+        "required_headings_min_hit": 3
+      }
+    }
+  ]
+}

@@ -1,0 +1,3079 @@
+{
+  "meta": {
+    "count": 24
+  },
+  "cases": [
+    {
+      "id": "MR-001",
+      "title": "Academic iterative paper revision",
+      "group": "academic_research",
+      "topic": "Course reform effectiveness review",
+      "anchors": [
+        "Background",
+        "Method",
+        "Conclusion"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Course reform effectiveness review' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Background",
+            "Method"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Background",
+              "Method",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Background",
+            "Method",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Background",
+              "Conclusion",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Restructure into Style Guide plus body text. Keep title SimHei 16pt and body SimSun 12pt, line spacing 28pt.",
+          "must_keep": [
+            "Background",
+            "Method",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Style Guide"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "SimSun",
+              "12pt",
+              "28pt"
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Style Guide"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Background",
+            "Method",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Background",
+              "Conclusion",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-002",
+      "title": "Government memo multi-review",
+      "group": "government_public",
+      "topic": "Hotline efficiency action plan",
+      "anchors": [
+        "Execution Plan",
+        "Oversight",
+        "Risk Control"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Hotline efficiency action plan' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Execution Plan",
+            "Oversight"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Execution Plan",
+              "Oversight",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Execution Plan",
+            "Oversight",
+            "Risk Control"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Execution Plan",
+              "Risk Control",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Terminology Mapping section with at least three entries in Chinese - English format while preserving conclusions.",
+          "must_keep": [
+            "Execution Plan",
+            "Oversight",
+            "Risk Control"
+          ],
+          "must_change": [
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              " - "
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Execution Plan",
+            "Oversight",
+            "Risk Control"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Execution Plan",
+              "Risk Control",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-003",
+      "title": "Marketing copy compliance rewrite",
+      "group": "marketing_brand",
+      "topic": "New product launch communication",
+      "anchors": [
+        "Target Audience",
+        "Core Value",
+        "Compliance Note"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'New product launch communication' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Target Audience",
+            "Core Value"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Target Audience",
+              "Core Value",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Target Audience",
+            "Core Value",
+            "Compliance Note"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Target Audience",
+              "Compliance Note",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Disclaimer section and include this exact sentence: General information only; not professional advice.. Remove absolute statements.",
+          "must_keep": [
+            "Target Audience",
+            "Core Value",
+            "Compliance Note"
+          ],
+          "must_change": [
+            "Disclaimer"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Disclaimer",
+              "General information only; not professional advice."
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Disclaimer"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Target Audience",
+            "Core Value",
+            "Compliance Note"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Target Audience",
+              "Compliance Note",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-004",
+      "title": "Complaint response iterative polish",
+      "group": "customer_service",
+      "topic": "Delivery delay complaint closure",
+      "anchors": [
+        "Issue Summary",
+        "Resolution Plan",
+        "Follow-up"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Delivery delay complaint closure' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Issue Summary",
+            "Resolution Plan"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Issue Summary",
+              "Resolution Plan",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Issue Summary",
+            "Resolution Plan",
+            "Follow-up"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Issue Summary",
+              "Follow-up",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Restructure into Style Guide plus body text. Keep title SimHei 16pt and body SimSun 12pt, line spacing 28pt.",
+          "must_keep": [
+            "Issue Summary",
+            "Resolution Plan",
+            "Follow-up"
+          ],
+          "must_change": [
+            "Style Guide"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "SimSun",
+              "12pt",
+              "28pt"
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Style Guide"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Issue Summary",
+            "Resolution Plan",
+            "Follow-up"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Issue Summary",
+              "Follow-up",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-005",
+      "title": "Bilingual doc round-trip",
+      "group": "academic_research",
+      "topic": "Cross-campus project statement",
+      "anchors": [
+        "Project Goal",
+        "Terminology Mapping",
+        "Timeline"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Cross-campus project statement' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Project Goal",
+            "Terminology Mapping"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Project Goal",
+              "Terminology Mapping",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Project Goal",
+            "Terminology Mapping",
+            "Timeline"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Project Goal",
+              "Timeline",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Terminology Mapping section with at least three entries in Chinese - English format while preserving conclusions.",
+          "must_keep": [
+            "Project Goal",
+            "Terminology Mapping",
+            "Timeline"
+          ],
+          "must_change": [
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              " - "
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Project Goal",
+            "Terminology Mapping",
+            "Timeline"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Project Goal",
+              "Timeline",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-006",
+      "title": "Report to summary and restore",
+      "group": "enterprise_management",
+      "topic": "Quarterly operations review",
+      "anchors": [
+        "Objective",
+        "Milestones",
+        "Improvement Actions"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Quarterly operations review' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Objective",
+            "Milestones"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Objective",
+              "Milestones",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Objective",
+            "Milestones",
+            "Improvement Actions"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Objective",
+              "Improvement Actions",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Disclaimer section and include this exact sentence: General information only; not professional advice.. Remove absolute statements.",
+          "must_keep": [
+            "Objective",
+            "Milestones",
+            "Improvement Actions"
+          ],
+          "must_change": [
+            "Disclaimer"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Disclaimer",
+              "General information only; not professional advice."
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Disclaimer"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Objective",
+            "Milestones",
+            "Improvement Actions"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Objective",
+              "Improvement Actions",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-007",
+      "title": "Figure numbering multi-edit",
+      "group": "technical_manual",
+      "topic": "Capacity evaluation report",
+      "anchors": [
+        "Figure 1",
+        "Table 1",
+        "Conclusion"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Capacity evaluation report' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Figure 1",
+            "Table 1"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Figure 1",
+              "Table 1",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Figure 1",
+            "Table 1",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Figure 1",
+              "Conclusion",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Restructure into Style Guide plus body text. Keep title SimHei 16pt and body SimSun 12pt, line spacing 28pt.",
+          "must_keep": [
+            "Figure 1",
+            "Table 1",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Style Guide"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "SimSun",
+              "12pt",
+              "28pt"
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Style Guide"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Figure 1",
+            "Table 1",
+            "Conclusion"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Figure 1",
+              "Conclusion",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-008",
+      "title": "Template switch rewrite",
+      "group": "enterprise_management",
+      "topic": "Procurement optimization plan",
+      "anchors": [
+        "Objective",
+        "Resource Plan",
+        "Risk Control"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Procurement optimization plan' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Objective",
+            "Resource Plan"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Objective",
+              "Resource Plan",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Objective",
+            "Resource Plan",
+            "Risk Control"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Objective",
+              "Risk Control",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Terminology Mapping section with at least three entries in Chinese - English format while preserving conclusions.",
+          "must_keep": [
+            "Objective",
+            "Resource Plan",
+            "Risk Control"
+          ],
+          "must_change": [
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              " - "
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Objective",
+            "Resource Plan",
+            "Risk Control"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Objective",
+              "Risk Control",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-009",
+      "title": "Font-size strict revision",
+      "group": "academic_research",
+      "topic": "Final course paper",
+      "anchors": [
+        "Style Guide",
+        "SimHei",
+        "SimSun"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Final course paper' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Style Guide",
+            "SimHei"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Style Guide",
+            "SimHei",
+            "SimSun"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Style Guide",
+              "SimSun",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Disclaimer section and include this exact sentence: General information only; not professional advice.. Remove absolute statements.",
+          "must_keep": [
+            "Style Guide",
+            "SimHei",
+            "SimSun"
+          ],
+          "must_change": [
+            "Disclaimer"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Disclaimer",
+              "General information only; not professional advice."
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Disclaimer"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Style Guide",
+            "SimHei",
+            "SimSun"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Style Guide",
+              "SimSun",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-010",
+      "title": "High-risk boundary correction",
+      "group": "legal_compliance",
+      "topic": "Labor dispute explanation",
+      "anchors": [
+        "Facts",
+        "Legal Risk",
+        "Suggested Steps"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Labor dispute explanation' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Facts",
+            "Legal Risk"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Facts",
+              "Legal Risk",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Facts",
+            "Legal Risk",
+            "Suggested Steps"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Facts",
+              "Suggested Steps",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Restructure into Style Guide plus body text. Keep title SimHei 16pt and body SimSun 12pt, line spacing 28pt.",
+          "must_keep": [
+            "Facts",
+            "Legal Risk",
+            "Suggested Steps"
+          ],
+          "must_change": [
+            "Style Guide"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "SimSun",
+              "12pt",
+              "28pt"
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Style Guide"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Facts",
+            "Legal Risk",
+            "Suggested Steps"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Facts",
+              "Suggested Steps",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-011",
+      "title": "Role-conflict alignment",
+      "group": "marketing_brand",
+      "topic": "Public response draft",
+      "anchors": [
+        "Product Stance",
+        "Legal Boundary",
+        "Market Tone"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Public response draft' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Product Stance",
+            "Legal Boundary"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Product Stance",
+              "Legal Boundary",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Product Stance",
+            "Legal Boundary",
+            "Market Tone"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Product Stance",
+              "Market Tone",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Terminology Mapping section with at least three entries in Chinese - English format while preserving conclusions.",
+          "must_keep": [
+            "Product Stance",
+            "Legal Boundary",
+            "Market Tone"
+          ],
+          "must_change": [
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              " - "
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Product Stance",
+            "Legal Boundary",
+            "Market Tone"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Product Stance",
+              "Market Tone",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-012",
+      "title": "Long draft refinement",
+      "group": "technical_manual",
+      "topic": "Production incident review",
+      "anchors": [
+        "Timeline",
+        "Root Cause",
+        "Action Items"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Production incident review' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Timeline",
+            "Root Cause"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Timeline",
+              "Root Cause",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Timeline",
+            "Root Cause",
+            "Action Items"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Timeline",
+              "Action Items",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Disclaimer section and include this exact sentence: General information only; not professional advice.. Remove absolute statements.",
+          "must_keep": [
+            "Timeline",
+            "Root Cause",
+            "Action Items"
+          ],
+          "must_change": [
+            "Disclaimer"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Disclaimer",
+              "General information only; not professional advice."
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Disclaimer"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Timeline",
+            "Root Cause",
+            "Action Items"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Timeline",
+              "Action Items",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-013",
+      "title": "Elder health guide optimization",
+      "group": "healthcare_science",
+      "topic": "Daily blood pressure handbook",
+      "anchors": [
+        "Target Group",
+        "Precautions",
+        "When to Seek Care"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Daily blood pressure handbook' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Target Group",
+            "Precautions"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Target Group",
+              "Precautions",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Target Group",
+            "Precautions",
+            "When to Seek Care"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Target Group",
+              "When to Seek Care",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Restructure into Style Guide plus body text. Keep title SimHei 16pt and body SimSun 12pt, line spacing 28pt.",
+          "must_keep": [
+            "Target Group",
+            "Precautions",
+            "When to Seek Care"
+          ],
+          "must_change": [
+            "Style Guide"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "SimSun",
+              "12pt",
+              "28pt"
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Style Guide"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Target Group",
+            "Precautions",
+            "When to Seek Care"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Target Group",
+              "When to Seek Care",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-014",
+      "title": "Middle school science simplification",
+      "group": "inclusive_education",
+      "topic": "Online fraud prevention guide",
+      "anchors": [
+        "Audience Fit",
+        "Readability",
+        "Accessibility"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Online fraud prevention guide' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Audience Fit",
+            "Readability"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Audience Fit",
+              "Readability",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Audience Fit",
+            "Readability",
+            "Accessibility"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Audience Fit",
+              "Accessibility",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Terminology Mapping section with at least three entries in Chinese - English format while preserving conclusions.",
+          "must_keep": [
+            "Audience Fit",
+            "Readability",
+            "Accessibility"
+          ],
+          "must_change": [
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              " - "
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Audience Fit",
+            "Readability",
+            "Accessibility"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Audience Fit",
+              "Accessibility",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-015",
+      "title": "Whitepaper to pre-sales script",
+      "group": "technical_manual",
+      "topic": "Zero trust architecture",
+      "anchors": [
+        "Prerequisites",
+        "Steps",
+        "Benefits"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Zero trust architecture' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Prerequisites",
+            "Steps"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Prerequisites",
+              "Steps",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Prerequisites",
+            "Steps",
+            "Benefits"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Prerequisites",
+              "Benefits",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Disclaimer section and include this exact sentence: General information only; not professional advice.. Remove absolute statements.",
+          "must_keep": [
+            "Prerequisites",
+            "Steps",
+            "Benefits"
+          ],
+          "must_change": [
+            "Disclaimer"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Disclaimer",
+              "General information only; not professional advice."
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Disclaimer"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Prerequisites",
+            "Steps",
+            "Benefits"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Prerequisites",
+              "Benefits",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-016",
+      "title": "Pre-sales back to technical spec",
+      "group": "technical_manual",
+      "topic": "Document platform upgrade",
+      "anchors": [
+        "Requirements",
+        "Implementation Path",
+        "Acceptance"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Document platform upgrade' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Requirements",
+            "Implementation Path"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Requirements",
+              "Implementation Path",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Requirements",
+            "Implementation Path",
+            "Acceptance"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Requirements",
+              "Acceptance",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Restructure into Style Guide plus body text. Keep title SimHei 16pt and body SimSun 12pt, line spacing 28pt.",
+          "must_keep": [
+            "Requirements",
+            "Implementation Path",
+            "Acceptance"
+          ],
+          "must_change": [
+            "Style Guide"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "SimSun",
+              "12pt",
+              "28pt"
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Style Guide"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Requirements",
+            "Implementation Path",
+            "Acceptance"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Requirements",
+              "Acceptance",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-017",
+      "title": "Job description bias reduction",
+      "group": "inclusive_education",
+      "topic": "Data analyst hiring post",
+      "anchors": [
+        "Role Scope",
+        "Capability Requirements",
+        "Fair Wording"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Data analyst hiring post' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Role Scope",
+            "Capability Requirements"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Role Scope",
+              "Capability Requirements",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Role Scope",
+            "Capability Requirements",
+            "Fair Wording"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Role Scope",
+              "Fair Wording",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Terminology Mapping section with at least three entries in Chinese - English format while preserving conclusions.",
+          "must_keep": [
+            "Role Scope",
+            "Capability Requirements",
+            "Fair Wording"
+          ],
+          "must_change": [
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              " - "
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Role Scope",
+            "Capability Requirements",
+            "Fair Wording"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Role Scope",
+              "Fair Wording",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-018",
+      "title": "Contract clause risk reduction",
+      "group": "legal_compliance",
+      "topic": "SaaS terms interpretation",
+      "anchors": [
+        "Facts",
+        "Legal Risk",
+        "Disclaimer"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'SaaS terms interpretation' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Facts",
+            "Legal Risk"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Facts",
+              "Legal Risk",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Facts",
+            "Legal Risk",
+            "Disclaimer"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Facts",
+              "Disclaimer",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Disclaimer section and include this exact sentence: General information only; not legal advice.. Remove absolute statements.",
+          "must_keep": [
+            "Facts",
+            "Legal Risk",
+            "Disclaimer"
+          ],
+          "must_change": [
+            "Disclaimer"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Disclaimer",
+              "General information only; not legal advice."
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Disclaimer"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Facts",
+            "Legal Risk",
+            "Disclaimer"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Facts",
+              "Disclaimer",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-019",
+      "title": "Finance tone de-risking",
+      "group": "finance_literacy",
+      "topic": "Household allocation note",
+      "anchors": [
+        "Risk Reminder",
+        "Allocation Logic",
+        "Long-term Principle"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Household allocation note' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Risk Reminder",
+            "Allocation Logic"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Risk Reminder",
+              "Allocation Logic",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Risk Reminder",
+            "Allocation Logic",
+            "Long-term Principle"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Risk Reminder",
+              "Long-term Principle",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Restructure into Style Guide plus body text. Keep title SimHei 16pt and body SimSun 12pt, line spacing 28pt.",
+          "must_keep": [
+            "Risk Reminder",
+            "Allocation Logic",
+            "Long-term Principle"
+          ],
+          "must_change": [
+            "Style Guide"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "SimSun",
+              "12pt",
+              "28pt"
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Style Guide"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Risk Reminder",
+            "Allocation Logic",
+            "Long-term Principle"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Risk Reminder",
+              "Long-term Principle",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-020",
+      "title": "Emergency notice compression",
+      "group": "government_public",
+      "topic": "Typhoon class suspension notice",
+      "anchors": [
+        "Execution Plan",
+        "Public Notice",
+        "Contact Point"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Typhoon class suspension notice' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Execution Plan",
+            "Public Notice"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Execution Plan",
+              "Public Notice",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Execution Plan",
+            "Public Notice",
+            "Contact Point"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Execution Plan",
+              "Contact Point",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Terminology Mapping section with at least three entries in Chinese - English format while preserving conclusions.",
+          "must_keep": [
+            "Execution Plan",
+            "Public Notice",
+            "Contact Point"
+          ],
+          "must_change": [
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              " - "
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Execution Plan",
+            "Public Notice",
+            "Contact Point"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Execution Plan",
+              "Contact Point",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-021",
+      "title": "Release notes cross-team alignment",
+      "group": "enterprise_management",
+      "topic": "Version update brief",
+      "anchors": [
+        "Change Summary",
+        "Impact Scope",
+        "Rollback Plan"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Version update brief' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Change Summary",
+            "Impact Scope"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Change Summary",
+              "Impact Scope",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Change Summary",
+            "Impact Scope",
+            "Rollback Plan"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Change Summary",
+              "Rollback Plan",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Disclaimer section and include this exact sentence: General information only; not professional advice.. Remove absolute statements.",
+          "must_keep": [
+            "Change Summary",
+            "Impact Scope",
+            "Rollback Plan"
+          ],
+          "must_change": [
+            "Disclaimer"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Disclaimer",
+              "General information only; not professional advice."
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Disclaimer"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Change Summary",
+            "Impact Scope",
+            "Rollback Plan"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Change Summary",
+              "Rollback Plan",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-022",
+      "title": "Lesson plan iterative adaptation",
+      "group": "inclusive_education",
+      "topic": "Middle school history lesson",
+      "anchors": [
+        "Teaching Goal",
+        "Class Activity",
+        "Evaluation"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Middle school history lesson' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Teaching Goal",
+            "Class Activity"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Teaching Goal",
+              "Class Activity",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Teaching Goal",
+            "Class Activity",
+            "Evaluation"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Teaching Goal",
+              "Evaluation",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Restructure into Style Guide plus body text. Keep title SimHei 16pt and body SimSun 12pt, line spacing 28pt.",
+          "must_keep": [
+            "Teaching Goal",
+            "Class Activity",
+            "Evaluation"
+          ],
+          "must_change": [
+            "Style Guide"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Style Guide",
+              "SimHei",
+              "SimSun",
+              "12pt",
+              "28pt"
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Style Guide"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Teaching Goal",
+            "Class Activity",
+            "Evaluation"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Teaching Goal",
+              "Evaluation",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-023",
+      "title": "Incident report evidence enrichment",
+      "group": "technical_manual",
+      "topic": "Database incident postmortem",
+      "anchors": [
+        "Timeline",
+        "Evidence",
+        "Action Items"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Database incident postmortem' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Timeline",
+            "Evidence"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Timeline",
+              "Evidence",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Timeline",
+            "Evidence",
+            "Action Items"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Timeline",
+              "Action Items",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Terminology Mapping section with at least three entries in Chinese - English format while preserving conclusions.",
+          "must_keep": [
+            "Timeline",
+            "Evidence",
+            "Action Items"
+          ],
+          "must_change": [
+            "Terminology Mapping"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              " - "
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Terminology Mapping"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Timeline",
+            "Evidence",
+            "Action Items"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Timeline",
+              "Action Items",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "MR-024",
+      "title": "Multilingual release harmonization",
+      "group": "marketing_brand",
+      "topic": "Global release statement",
+      "anchors": [
+        "Terminology Mapping",
+        "Version Scope",
+        "Precautions"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "Write a first draft for 'Global release statement' with sections Background, Current State, Recommendations, Conclusion.",
+          "must_keep": [
+            "Terminology Mapping",
+            "Version Scope"
+          ],
+          "must_change": [
+            "first draft"
+          ],
+          "acceptance_checks": {
+            "min_chars": 380,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Terminology Mapping",
+              "Version Scope",
+              "Conclusion"
+            ],
+            "required_keywords_min_hit": 2,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Background",
+              "Conclusion"
+            ],
+            "required_headings_min_hit": 1
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "Compress the draft to about 70 percent and add a Key Points section while keeping original conclusions. Add section header: Key Points (关键要点).",
+          "must_keep": [
+            "Terminology Mapping",
+            "Version Scope",
+            "Precautions"
+          ],
+          "must_change": [
+            "Key Points"
+          ],
+          "acceptance_checks": {
+            "min_chars": 80,
+            "max_chars": 2600,
+            "required_keywords": [
+              "Terminology Mapping",
+              "Precautions",
+              "Key Points"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "Key Points"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "Add a Disclaimer section and include this exact sentence: General information only; not professional advice.. Remove absolute statements.",
+          "must_keep": [
+            "Terminology Mapping",
+            "Version Scope",
+            "Precautions"
+          ],
+          "must_change": [
+            "Disclaimer"
+          ],
+          "acceptance_checks": {
+            "min_chars": 100,
+            "max_chars": 3000,
+            "required_keywords": [
+              "Disclaimer",
+              "General information only; not professional advice."
+            ],
+            "required_keywords_min_hit": 0,
+            "forbidden_keywords": [
+              "best in the world",
+              "100 percent guarantee"
+            ],
+            "required_headings": [
+              "Disclaimer"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 4,
+          "round_input": "Produce final draft and append an Action Checklist with at least five executable items. Keep all prior constraints. Add section header: Action Checklist (可执行清单), at least 5 items.",
+          "must_keep": [
+            "Terminology Mapping",
+            "Version Scope",
+            "Precautions"
+          ],
+          "must_change": [
+            "Action Checklist"
+          ],
+          "acceptance_checks": {
+            "min_chars": 320,
+            "max_chars": 3400,
+            "required_keywords": [
+              "Terminology Mapping",
+              "Precautions",
+              "Action Checklist"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "absolute guarantee",
+              "risk-free profit",
+              "certain outcome"
+            ],
+            "required_headings": [
+              "Action Checklist"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    }
+  ]
+}

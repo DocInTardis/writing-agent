@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "name": "complex_prompt_docx_cases_2",
+    "description": "Two complex prompts for frontend docx export verification",
+    "version": "1.0"
+  },
+  "cases": [
+    {
+      "id": "CP-001",
+      "group": "custom_complex",
+      "group_label": "Custom Complex Prompt",
+      "prompt": "你是一名企业知识工程负责人。请用中文撰写《跨部门AI治理实施蓝图（90天）》：1) 必须包含以下一级章节：目标与范围、角色与职责、数据分级与权限、模型准入与评测、上线发布与回滚、监控告警与SLO、审计与合规、风险台账、里程碑计划、预算与资源、培训与变更管理、附录检查清单。2) 在“预算与资源”中给出分阶段人力与成本估算（按周列示），并写出假设条件。3) 在“监控告警与SLO”中给出至少8条可量化指标，包含阈值、采样周期、触发动作。4) 在“风险台账”中给出至少10项风险，包含概率、影响、缓解策略、预警信号。5) 在“附录检查清单”里给出可执行打勾项，至少20条。6) 文风务实、可落地，避免空话。全文长度不低于1200字。",
+      "constraints": {
+        "format_required": true
+      },
+      "acceptance": {
+        "min_chars": 600,
+        "max_chars": 8000,
+        "required_keywords": [],
+        "forbidden_keywords": [],
+        "required_headings": []
+      }
+    },
+    {
+      "id": "CP-002",
+      "group": "custom_complex",
+      "group_label": "Custom Complex Prompt",
+      "prompt": "请生成一份《医疗健康AI客服系统升级项目方案（含多轮修改预案）》：A. 第一部分“初稿方案”需要包含：项目背景、用户画像分层、对话策略矩阵、知识库治理、隐私与安全、上线灰度、应急回退、质量评估、成本收益测算。B. 第二部分“二轮修改指引”需模拟来自法务、运维、业务、客服主管四类角色的修改意见，每类至少5条，并给出逐条响应策略。C. 第三部分“执行版清单”需输出按周分解的任务表（至少12周），每周包含负责人、输入、输出、验收标准。D. 必须提供“术语映射表”（中文术语-英文术语-业务定义）不少于15项。E. 必须提供“对外沟通免责声明”段落。F. 全文要求结构清晰、可执行、避免绝对化表述，长度不低于1400字。",
+      "constraints": {
+        "format_required": true
+      },
+      "acceptance": {
+        "min_chars": 700,
+        "max_chars": 9000,
+        "required_keywords": [],
+        "forbidden_keywords": [],
+        "required_headings": []
+      }
+    }
+  ]
+}

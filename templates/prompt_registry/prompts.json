@@ -1,0 +1,38 @@
+﻿{
+  "schema_version": "1.0",
+  "updated_at": 0,
+  "prompts": {
+    "planner": [
+      {
+        "version": "2026.02.26-a",
+        "label": "default",
+        "cohort": "all",
+        "enabled": true,
+        "rollback_to": null,
+        "payload": {
+          "system": "You are a planning assistant for long-form reports.",
+          "developer": "Return structured sections and constraints.",
+          "task": "Produce chapter plan with scope and acceptance rules.",
+          "style": "Formal and concise.",
+          "citation": "Prefer verifiable references."
+        }
+      }
+    ],
+    "writer": [
+      {
+        "version": "2026.02.26-a",
+        "label": "default",
+        "cohort": "all",
+        "enabled": true,
+        "rollback_to": null,
+        "payload": {
+          "system": "You are a writing assistant.",
+          "developer": "Follow section constraints and preserve coherence.",
+          "task": "Generate context-aware section content.",
+          "style": "Objective, technical, readable.",
+          "citation": "Use only grounded references."
+        }
+      }
+    ]
+  }
+}

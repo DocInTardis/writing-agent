@@ -1,0 +1,275 @@
+{
+  "meta": {
+    "name": "multiround_modified_smoke_3",
+    "description": "Lightweight multi-round revision smoke cases",
+    "version": "1.0",
+    "count": 3
+  },
+  "cases": [
+    {
+      "id": "SMR-001",
+      "title": "Policy memo iterative edit",
+      "group": "revision_smoke",
+      "topic": "?????",
+      "anchors": [
+        "??",
+        "??"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "???????????????????????????????",
+          "must_keep": [
+            "??"
+          ],
+          "must_change": [
+            "??"
+          ],
+          "acceptance_checks": {
+            "min_chars": 180,
+            "max_chars": 2600,
+            "required_keywords": [
+              "??",
+              "??"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "??"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "??????????????????????3??????",
+          "must_keep": [
+            "??",
+            "??"
+          ],
+          "must_change": [
+            "?????"
+          ],
+          "acceptance_checks": {
+            "min_chars": 140,
+            "max_chars": 3200,
+            "required_keywords": [
+              "?????",
+              "??"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "?????"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "?????????????????5????????",
+          "must_keep": [
+            "??",
+            "??"
+          ],
+          "must_change": [
+            "????"
+          ],
+          "acceptance_checks": {
+            "min_chars": 180,
+            "max_chars": 3600,
+            "required_keywords": [
+              "????",
+              "??"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "????"
+            ],
+            "required_headings": [
+              "????"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "SMR-002",
+      "title": "Customer reply iterative polish",
+      "group": "revision_smoke",
+      "topic": "??????",
+      "anchors": [
+        "????",
+        "????"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "?????????????????????????????????",
+          "must_keep": [
+            "????"
+          ],
+          "must_change": [
+            "??"
+          ],
+          "acceptance_checks": {
+            "min_chars": 160,
+            "max_chars": 2600,
+            "required_keywords": [
+              "????",
+              "????"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "????"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "?????????????????????????????",
+          "must_keep": [
+            "????",
+            "????"
+          ],
+          "must_change": [
+            "????",
+            "????"
+          ],
+          "acceptance_checks": {
+            "min_chars": 160,
+            "max_chars": 3200,
+            "required_keywords": [
+              "????",
+              "????"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "????"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "?????????????????5???????????",
+          "must_keep": [
+            "????"
+          ],
+          "must_change": [
+            "????",
+            "????"
+          ],
+          "acceptance_checks": {
+            "min_chars": 180,
+            "max_chars": 3600,
+            "required_keywords": [
+              "????",
+              "????"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "???"
+            ],
+            "required_headings": [
+              "????"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "SMR-003",
+      "title": "Ops runbook iterative revision",
+      "group": "revision_smoke",
+      "topic": "??????",
+      "anchors": [
+        "??",
+        "??"
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "round_input": "??????????????????????????????????",
+          "must_keep": [
+            "??",
+            "??"
+          ],
+          "must_change": [
+            "??"
+          ],
+          "acceptance_checks": {
+            "min_chars": 180,
+            "max_chars": 3000,
+            "required_keywords": [
+              "??",
+              "??"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "??"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 2,
+          "round_input": "???????????????????4??",
+          "must_keep": [
+            "??"
+          ],
+          "must_change": [
+            "?1?",
+            "?4?"
+          ],
+          "acceptance_checks": {
+            "min_chars": 180,
+            "max_chars": 3400,
+            "required_keywords": [
+              "?1?",
+              "?4?"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [],
+            "required_headings": [
+              "????"
+            ],
+            "required_headings_min_hit": 0
+          }
+        },
+        {
+          "round": 3,
+          "round_input": "???????????????5??????????",
+          "must_keep": [
+            "??"
+          ],
+          "must_change": [
+            "????"
+          ],
+          "acceptance_checks": {
+            "min_chars": 220,
+            "max_chars": 4200,
+            "required_keywords": [
+              "????",
+              "??"
+            ],
+            "required_keywords_min_hit": 1,
+            "forbidden_keywords": [
+              "????"
+            ],
+            "required_headings": [
+              "????"
+            ],
+            "required_headings_min_hit": 0
+          }
+        }
+      ]
+    }
+  ]
+}

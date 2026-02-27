@@ -1,0 +1,43 @@
+﻿{
+  "meta": {
+    "name": "two_stage_complex_case_smoke_1",
+    "description": "Two-stage frontend complex prompt smoke case",
+    "version": "2.0",
+    "count": 1
+  },
+  "cases": [
+    {
+      "id": "TS-001",
+      "group": "enterprise_governance",
+      "topic": "企业AI治理90天落地方案",
+      "stage1_prompt": "请为一家中型制造企业撰写《AI治理90天落地方案》初稿。必须包含治理目标、分阶段计划、风险与合规、执行保障四个部分。请给出至少3个里程碑、每个里程碑的责任人和验收指标。文档中需要明确写出排版规范：正文宋体小四，一级标题黑体三号，行距1.5倍。",
+      "stage2_base_prompt": "请根据第一阶段失败项进行修订，补齐缺失标题与关键词，并增强可执行性。输出完整第二版方案。",
+      "acceptance": {
+        "min_chars": 420,
+        "max_chars": 7200,
+        "required_keywords": [
+          "里程碑",
+          "责任人",
+          "验收指标",
+          "风险闭环",
+          "宋体",
+          "小四",
+          "黑体",
+          "三号"
+        ],
+        "required_keywords_min_hit": 4,
+        "forbidden_keywords": [
+          "无法实现",
+          "随便"
+        ],
+        "required_headings": [
+          "治理目标",
+          "分阶段计划",
+          "风险与合规",
+          "执行保障"
+        ],
+        "required_headings_min_hit": 3
+      }
+    }
+  ]
+}

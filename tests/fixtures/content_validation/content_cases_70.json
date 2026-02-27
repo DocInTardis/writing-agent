@@ -1,0 +1,2630 @@
+{
+  "meta": {
+    "count": 70
+  },
+  "cases": [
+    {
+      "id": "C-001",
+      "group": "academic_research",
+      "group_label": "Academic Research",
+      "genre": "Research Report",
+      "audience": "undergraduate student",
+      "topic": "Impact of generative AI on course design quality",
+      "prompt": "Write a Research Report for undergraduate student on topic 'Impact of generative AI on course design quality'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Background",
+          "Method",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "zero risk",
+          "guaranteed perfect"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-002",
+      "group": "academic_research",
+      "group_label": "Academic Research",
+      "genre": "Research Report",
+      "audience": "graduate student",
+      "topic": "Learning engagement in hybrid classrooms",
+      "prompt": "Write a Research Report for graduate student on topic 'Learning engagement in hybrid classrooms'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Background",
+          "Method",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "zero risk",
+          "guaranteed perfect"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-003",
+      "group": "academic_research",
+      "group_label": "Academic Research",
+      "genre": "Research Report",
+      "audience": "teaching assistant",
+      "topic": "Fairness evaluation for auto-grading labs",
+      "prompt": "Write a Research Report for teaching assistant on topic 'Fairness evaluation for auto-grading labs'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Background",
+          "Method",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "zero risk",
+          "guaranteed perfect"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-004",
+      "group": "academic_research",
+      "group_label": "Academic Research",
+      "genre": "Research Report",
+      "audience": "junior lecturer",
+      "topic": "Citation verification workflow improvement",
+      "prompt": "Write a Research Report for junior lecturer on topic 'Citation verification workflow improvement'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Background",
+          "Method",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "zero risk",
+          "guaranteed perfect",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-005",
+      "group": "academic_research",
+      "group_label": "Academic Research",
+      "genre": "Research Report",
+      "audience": "research editor",
+      "topic": "Accuracy benchmark of campus QA assistant",
+      "prompt": "Write a Research Report for research editor on topic 'Accuracy benchmark of campus QA assistant'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Background",
+          "Method",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "zero risk",
+          "guaranteed perfect"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-006",
+      "group": "academic_research",
+      "group_label": "Academic Research",
+      "genre": "Research Report",
+      "audience": "cross-domain analyst",
+      "topic": "Cross-school project collaboration model",
+      "prompt": "Write a Research Report for cross-domain analyst on topic 'Cross-school project collaboration model'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Background",
+          "Method",
+          "Disclaimer"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "zero risk",
+          "guaranteed perfect",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-007",
+      "group": "academic_research",
+      "group_label": "Academic Research",
+      "genre": "Research Report",
+      "audience": "university administrator",
+      "topic": "Academic integrity risk mitigation in coursework",
+      "prompt": "Write a Research Report for university administrator on topic 'Academic integrity risk mitigation in coursework'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Background",
+          "Method",
+          "Draft Body",
+          "Editable Checklist"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "zero risk",
+          "guaranteed perfect"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-008",
+      "group": "government_public",
+      "group_label": "Government and Public Service",
+      "genre": "Policy Execution Brief",
+      "audience": "frontline clerk",
+      "topic": "Community eldercare expansion plan",
+      "prompt": "Write a Policy Execution Brief for frontline clerk on topic 'Community eldercare expansion plan'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Execution Plan",
+          "Risk Control",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "one-size-fits-all",
+          "indefinite delay"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-009",
+      "group": "government_public",
+      "group_label": "Government and Public Service",
+      "genre": "Policy Execution Brief",
+      "audience": "district officer",
+      "topic": "Flood-season emergency supply dispatch",
+      "prompt": "Write a Policy Execution Brief for district officer on topic 'Flood-season emergency supply dispatch'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Execution Plan",
+          "Risk Control",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "one-size-fits-all",
+          "indefinite delay"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-010",
+      "group": "government_public",
+      "group_label": "Government and Public Service",
+      "genre": "Policy Execution Brief",
+      "audience": "community resident",
+      "topic": "Service hotline quality improvement",
+      "prompt": "Write a Policy Execution Brief for community resident on topic 'Service hotline quality improvement'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Execution Plan",
+          "Risk Control",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "one-size-fits-all",
+          "indefinite delay"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-011",
+      "group": "government_public",
+      "group_label": "Government and Public Service",
+      "genre": "Policy Execution Brief",
+      "audience": "public service desk staff",
+      "topic": "Shared parking peak-hour optimization",
+      "prompt": "Write a Policy Execution Brief for public service desk staff on topic 'Shared parking peak-hour optimization'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Execution Plan",
+          "Risk Control",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "one-size-fits-all",
+          "indefinite delay",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-012",
+      "group": "government_public",
+      "group_label": "Government and Public Service",
+      "genre": "Policy Execution Brief",
+      "audience": "emergency operator",
+      "topic": "Waste sorting supervision loop",
+      "prompt": "Write a Policy Execution Brief for emergency operator on topic 'Waste sorting supervision loop'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Execution Plan",
+          "Risk Control",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "one-size-fits-all",
+          "indefinite delay"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-013",
+      "group": "government_public",
+      "group_label": "Government and Public Service",
+      "genre": "Policy Execution Brief",
+      "audience": "citizen supervisor",
+      "topic": "After-school training inspection flow",
+      "prompt": "Write a Policy Execution Brief for citizen supervisor on topic 'After-school training inspection flow'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Execution Plan",
+          "Risk Control",
+          "Disclaimer"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "one-size-fits-all",
+          "indefinite delay",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-014",
+      "group": "government_public",
+      "group_label": "Government and Public Service",
+      "genre": "Policy Execution Brief",
+      "audience": "media liaison",
+      "topic": "Emergency public notice standard",
+      "prompt": "Write a Policy Execution Brief for media liaison on topic 'Emergency public notice standard'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Execution Plan",
+          "Risk Control",
+          "Draft Body",
+          "Editable Checklist"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "one-size-fits-all",
+          "indefinite delay"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-015",
+      "group": "enterprise_management",
+      "group_label": "Enterprise Management",
+      "genre": "Operations Improvement Proposal",
+      "audience": "business manager",
+      "topic": "Delivery variance control in manufacturing",
+      "prompt": "Write a Operations Improvement Proposal for business manager on topic 'Delivery variance control in manufacturing'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Objective",
+          "Milestones",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "random guess",
+          "just do it"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-016",
+      "group": "enterprise_management",
+      "group_label": "Enterprise Management",
+      "genre": "Operations Improvement Proposal",
+      "audience": "operations lead",
+      "topic": "Call center scheduling optimization",
+      "prompt": "Write a Operations Improvement Proposal for operations lead on topic 'Call center scheduling optimization'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Objective",
+          "Milestones",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "random guess",
+          "just do it"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-017",
+      "group": "enterprise_management",
+      "group_label": "Enterprise Management",
+      "genre": "Operations Improvement Proposal",
+      "audience": "project supervisor",
+      "topic": "Procurement cost-quality balancing",
+      "prompt": "Write a Operations Improvement Proposal for project supervisor on topic 'Procurement cost-quality balancing'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Objective",
+          "Milestones",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "random guess",
+          "just do it"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-018",
+      "group": "enterprise_management",
+      "group_label": "Enterprise Management",
+      "genre": "Operations Improvement Proposal",
+      "audience": "HR manager",
+      "topic": "Cross-team requirement review redesign",
+      "prompt": "Write a Operations Improvement Proposal for HR manager on topic 'Cross-team requirement review redesign'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Objective",
+          "Milestones",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "random guess",
+          "just do it",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-019",
+      "group": "enterprise_management",
+      "group_label": "Enterprise Management",
+      "genre": "Operations Improvement Proposal",
+      "audience": "procurement manager",
+      "topic": "Sales forecast error reduction",
+      "prompt": "Write a Operations Improvement Proposal for procurement manager on topic 'Sales forecast error reduction'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Objective",
+          "Milestones",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "random guess",
+          "just do it"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-020",
+      "group": "enterprise_management",
+      "group_label": "Enterprise Management",
+      "genre": "Operations Improvement Proposal",
+      "audience": "internal control analyst",
+      "topic": "Warehouse turnover reduction plan",
+      "prompt": "Write a Operations Improvement Proposal for internal control analyst on topic 'Warehouse turnover reduction plan'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Objective",
+          "Milestones",
+          "Disclaimer"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "random guess",
+          "just do it",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-021",
+      "group": "enterprise_management",
+      "group_label": "Enterprise Management",
+      "genre": "Operations Improvement Proposal",
+      "audience": "middle manager",
+      "topic": "90-day onboarding improvement path",
+      "prompt": "Write a Operations Improvement Proposal for middle manager on topic '90-day onboarding improvement path'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Objective",
+          "Milestones",
+          "Draft Body",
+          "Editable Checklist"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "random guess",
+          "just do it"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-022",
+      "group": "marketing_brand",
+      "group_label": "Marketing and Brand",
+      "genre": "Campaign Content Plan",
+      "audience": "brand manager",
+      "topic": "New purifier launch messaging",
+      "prompt": "Write a Campaign Content Plan for brand manager on topic 'New purifier launch messaging'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Target Audience",
+          "Core Value",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "best in the world",
+          "100 percent cure",
+          "risk-free profit",
+          "absolute guarantee"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-023",
+      "group": "marketing_brand",
+      "group_label": "Marketing and Brand",
+      "genre": "Campaign Content Plan",
+      "audience": "content operator",
+      "topic": "Smart study lamp brand refresh",
+      "prompt": "Write a Campaign Content Plan for content operator on topic 'Smart study lamp brand refresh'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Target Audience",
+          "Core Value",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "best in the world",
+          "100 percent cure",
+          "risk-free profit",
+          "absolute guarantee"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-024",
+      "group": "marketing_brand",
+      "group_label": "Marketing and Brand",
+      "genre": "Campaign Content Plan",
+      "audience": "e-commerce support",
+      "topic": "Seasonal promotion copy governance",
+      "prompt": "Write a Campaign Content Plan for e-commerce support on topic 'Seasonal promotion copy governance'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Target Audience",
+          "Core Value",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "best in the world",
+          "100 percent cure",
+          "risk-free profit",
+          "absolute guarantee"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-025",
+      "group": "marketing_brand",
+      "group_label": "Marketing and Brand",
+      "genre": "Campaign Content Plan",
+      "audience": "PR specialist",
+      "topic": "Short-video landing page conversion",
+      "prompt": "Write a Campaign Content Plan for PR specialist on topic 'Short-video landing page conversion'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Target Audience",
+          "Core Value",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "best in the world",
+          "100 percent cure",
+          "risk-free profit",
+          "absolute guarantee",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-026",
+      "group": "marketing_brand",
+      "group_label": "Marketing and Brand",
+      "genre": "Campaign Content Plan",
+      "audience": "channel partner",
+      "topic": "Member reactivation messaging",
+      "prompt": "Write a Campaign Content Plan for channel partner on topic 'Member reactivation messaging'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Target Audience",
+          "Core Value",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "best in the world",
+          "100 percent cure",
+          "risk-free profit",
+          "absolute guarantee"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-027",
+      "group": "marketing_brand",
+      "group_label": "Marketing and Brand",
+      "genre": "Campaign Content Plan",
+      "audience": "social media editor",
+      "topic": "Media narrative for launch event",
+      "prompt": "Write a Campaign Content Plan for social media editor on topic 'Media narrative for launch event'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Target Audience",
+          "Core Value",
+          "Disclaimer"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "best in the world",
+          "100 percent cure",
+          "risk-free profit",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-028",
+      "group": "marketing_brand",
+      "group_label": "Marketing and Brand",
+      "genre": "Campaign Content Plan",
+      "audience": "brand legal reviewer",
+      "topic": "Word-of-mouth growth campaign review",
+      "prompt": "Write a Campaign Content Plan for brand legal reviewer on topic 'Word-of-mouth growth campaign review'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Target Audience",
+          "Core Value",
+          "Draft Body",
+          "Editable Checklist"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "best in the world",
+          "100 percent cure",
+          "risk-free profit",
+          "absolute guarantee"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-029",
+      "group": "customer_service",
+      "group_label": "Customer Service",
+      "genre": "Customer Communication Script",
+      "audience": "agent",
+      "topic": "Bulk delay complaint handling",
+      "prompt": "Write a Customer Communication Script for agent on topic 'Bulk delay complaint handling'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Issue Summary",
+          "Resolution Plan",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "not my problem",
+          "you are on your own"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-030",
+      "group": "customer_service",
+      "group_label": "Customer Service",
+      "genre": "Customer Communication Script",
+      "audience": "team lead",
+      "topic": "Post-upgrade feature issue explanation",
+      "prompt": "Write a Customer Communication Script for team lead on topic 'Post-upgrade feature issue explanation'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Issue Summary",
+          "Resolution Plan",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "not my problem",
+          "you are on your own"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-031",
+      "group": "customer_service",
+      "group_label": "Customer Service",
+      "genre": "Customer Communication Script",
+      "audience": "after-sales engineer",
+      "topic": "Refund dispute response template",
+      "prompt": "Write a Customer Communication Script for after-sales engineer on topic 'Refund dispute response template'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Issue Summary",
+          "Resolution Plan",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "not my problem",
+          "you are on your own"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-032",
+      "group": "customer_service",
+      "group_label": "Customer Service",
+      "genre": "Customer Communication Script",
+      "audience": "customer success manager",
+      "topic": "VIP renewal objection handling",
+      "prompt": "Write a Customer Communication Script for customer success manager on topic 'VIP renewal objection handling'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Issue Summary",
+          "Resolution Plan",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "not my problem",
+          "you are on your own",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-033",
+      "group": "customer_service",
+      "group_label": "Customer Service",
+      "genre": "Customer Communication Script",
+      "audience": "complaint specialist",
+      "topic": "On-site schedule conflict resolution",
+      "prompt": "Write a Customer Communication Script for complaint specialist on topic 'On-site schedule conflict resolution'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Issue Summary",
+          "Resolution Plan",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "not my problem",
+          "you are on your own"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-034",
+      "group": "customer_service",
+      "group_label": "Customer Service",
+      "genre": "Customer Communication Script",
+      "audience": "QA reviewer",
+      "topic": "Compensation workflow transparency",
+      "prompt": "Write a Customer Communication Script for QA reviewer on topic 'Compensation workflow transparency'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Issue Summary",
+          "Resolution Plan",
+          "Disclaimer"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "not my problem",
+          "you are on your own",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-035",
+      "group": "customer_service",
+      "group_label": "Customer Service",
+      "genre": "Customer Communication Script",
+      "audience": "service desk operator",
+      "topic": "Repeated low-rating callback strategy",
+      "prompt": "Write a Customer Communication Script for service desk operator on topic 'Repeated low-rating callback strategy'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Issue Summary",
+          "Resolution Plan",
+          "Draft Body",
+          "Editable Checklist"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "not my problem",
+          "you are on your own"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-036",
+      "group": "healthcare_science",
+      "group_label": "Healthcare Education",
+      "genre": "Health Education Material",
+      "audience": "general public",
+      "topic": "Seasonal flu prevention at home",
+      "prompt": "Write a Health Education Material for general public on topic 'Seasonal flu prevention at home'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Target Group",
+          "Precautions",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "miracle cure",
+          "instant recovery",
+          "no doctor needed"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-037",
+      "group": "healthcare_science",
+      "group_label": "Healthcare Education",
+      "genre": "Health Education Material",
+      "audience": "family caregiver",
+      "topic": "Daily blood pressure self-management",
+      "prompt": "Write a Health Education Material for family caregiver on topic 'Daily blood pressure self-management'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Target Group",
+          "Precautions",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "miracle cure",
+          "instant recovery",
+          "no doctor needed"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-038",
+      "group": "healthcare_science",
+      "group_label": "Healthcare Education",
+      "genre": "Health Education Material",
+      "audience": "community nurse",
+      "topic": "Neck and shoulder strain prevention",
+      "prompt": "Write a Health Education Material for community nurse on topic 'Neck and shoulder strain prevention'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Target Group",
+          "Precautions",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "miracle cure",
+          "instant recovery",
+          "no doctor needed"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-039",
+      "group": "healthcare_science",
+      "group_label": "Healthcare Education",
+      "genre": "Health Education Material",
+      "audience": "school health teacher",
+      "topic": "Sleep hygiene and routine reset",
+      "prompt": "Write a Health Education Material for school health teacher on topic 'Sleep hygiene and routine reset'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Target Group",
+          "Precautions",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "miracle cure",
+          "instant recovery",
+          "no doctor needed",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-040",
+      "group": "healthcare_science",
+      "group_label": "Healthcare Education",
+      "genre": "Health Education Material",
+      "audience": "older adults",
+      "topic": "Summer digestive care tips",
+      "prompt": "Write a Health Education Material for older adults on topic 'Summer digestive care tips'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Target Group",
+          "Precautions",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "miracle cure",
+          "instant recovery",
+          "no doctor needed"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-041",
+      "group": "healthcare_science",
+      "group_label": "Healthcare Education",
+      "genre": "Health Education Material",
+      "audience": "pregnancy group",
+      "topic": "Eye strain management for office workers",
+      "prompt": "Write a Health Education Material for pregnancy group on topic 'Eye strain management for office workers'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable. Use this exact disclaimer: For education only; not a medical diagnosis.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Target Group",
+          "Precautions",
+          "Disclaimer",
+          "For education only; not a medical diagnosis."
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "miracle cure",
+          "instant recovery",
+          "no doctor needed",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-042",
+      "group": "healthcare_science",
+      "group_label": "Healthcare Education",
+      "genre": "Health Education Material",
+      "audience": "employee wellness admin",
+      "topic": "Early response for sports injuries",
+      "prompt": "Write a Health Education Material for employee wellness admin on topic 'Early response for sports injuries'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable. Use this exact disclaimer: For education only; not a medical diagnosis.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Target Group",
+          "Precautions",
+          "Draft Body",
+          "Editable Checklist",
+          "For education only; not a medical diagnosis."
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "miracle cure",
+          "instant recovery",
+          "no doctor needed"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-043",
+      "group": "legal_compliance",
+      "group_label": "Legal and Compliance",
+      "genre": "Risk Notice Document",
+      "audience": "legal assistant",
+      "topic": "Probation dispute handling note",
+      "prompt": "Write a Risk Notice Document for legal assistant on topic 'Probation dispute handling note'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Facts",
+          "Legal Risk",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "certain win in court",
+          "no lawyer needed",
+          "fully legal for sure"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-044",
+      "group": "legal_compliance",
+      "group_label": "Legal and Compliance",
+      "genre": "Risk Notice Document",
+      "audience": "contract admin",
+      "topic": "Key clauses in e-commerce terms",
+      "prompt": "Write a Risk Notice Document for contract admin on topic 'Key clauses in e-commerce terms'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Facts",
+          "Legal Risk",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "certain win in court",
+          "no lawyer needed",
+          "fully legal for sure"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-045",
+      "group": "legal_compliance",
+      "group_label": "Legal and Compliance",
+      "genre": "Risk Notice Document",
+      "audience": "startup founder",
+      "topic": "Data processing agreement risk points",
+      "prompt": "Write a Risk Notice Document for startup founder on topic 'Data processing agreement risk points'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Facts",
+          "Legal Risk",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "certain win in court",
+          "no lawyer needed",
+          "fully legal for sure"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-046",
+      "group": "legal_compliance",
+      "group_label": "Legal and Compliance",
+      "genre": "Risk Notice Document",
+      "audience": "consumer",
+      "topic": "Supplier breach evidence process",
+      "prompt": "Write a Risk Notice Document for consumer on topic 'Supplier breach evidence process'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Facts",
+          "Legal Risk",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "certain win in court",
+          "no lawyer needed",
+          "fully legal for sure",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-047",
+      "group": "legal_compliance",
+      "group_label": "Legal and Compliance",
+      "genre": "Risk Notice Document",
+      "audience": "procurement lead",
+      "topic": "Ad claim compliance checklist",
+      "prompt": "Write a Risk Notice Document for procurement lead on topic 'Ad claim compliance checklist'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Facts",
+          "Legal Risk",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "certain win in court",
+          "no lawyer needed",
+          "fully legal for sure"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-048",
+      "group": "legal_compliance",
+      "group_label": "Legal and Compliance",
+      "genre": "Risk Notice Document",
+      "audience": "HR specialist",
+      "topic": "IP complaint response workflow",
+      "prompt": "Write a Risk Notice Document for HR specialist on topic 'IP complaint response workflow'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable. Use this exact disclaimer: General information only; not legal advice.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Facts",
+          "Legal Risk",
+          "Disclaimer",
+          "General information only; not legal advice."
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "certain win in court",
+          "no lawyer needed",
+          "fully legal for sure",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-049",
+      "group": "legal_compliance",
+      "group_label": "Legal and Compliance",
+      "genre": "Risk Notice Document",
+      "audience": "sales representative",
+      "topic": "Online terms update communication",
+      "prompt": "Write a Risk Notice Document for sales representative on topic 'Online terms update communication'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable. Use this exact disclaimer: General information only; not legal advice.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Facts",
+          "Legal Risk",
+          "Draft Body",
+          "Editable Checklist",
+          "General information only; not legal advice."
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "certain win in court",
+          "no lawyer needed",
+          "fully legal for sure"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-050",
+      "group": "finance_literacy",
+      "group_label": "Financial Literacy",
+      "genre": "Personal Finance Education Note",
+      "audience": "new investor",
+      "topic": "Emergency fund setup basics",
+      "prompt": "Write a Personal Finance Education Note for new investor on topic 'Emergency fund setup basics'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Risk Reminder",
+          "Allocation Logic",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "guaranteed return",
+          "risk-free high yield",
+          "buy with no thinking"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-051",
+      "group": "finance_literacy",
+      "group_label": "Financial Literacy",
+      "genre": "Personal Finance Education Note",
+      "audience": "household planner",
+      "topic": "Intro to long-term index investing",
+      "prompt": "Write a Personal Finance Education Note for household planner on topic 'Intro to long-term index investing'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Risk Reminder",
+          "Allocation Logic",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "guaranteed return",
+          "risk-free high yield",
+          "buy with no thinking"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-052",
+      "group": "finance_literacy",
+      "group_label": "Financial Literacy",
+      "genre": "Personal Finance Education Note",
+      "audience": "new graduate",
+      "topic": "Difference between insurance and savings",
+      "prompt": "Write a Personal Finance Education Note for new graduate on topic 'Difference between insurance and savings'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Risk Reminder",
+          "Allocation Logic",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "guaranteed return",
+          "risk-free high yield",
+          "buy with no thinking"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-053",
+      "group": "finance_literacy",
+      "group_label": "Financial Literacy",
+      "genre": "Personal Finance Education Note",
+      "audience": "mid-career saver",
+      "topic": "Credit and consumer loan risk basics",
+      "prompt": "Write a Personal Finance Education Note for mid-career saver on topic 'Credit and consumer loan risk basics'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Risk Reminder",
+          "Allocation Logic",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "guaranteed return",
+          "risk-free high yield",
+          "buy with no thinking",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-054",
+      "group": "finance_literacy",
+      "group_label": "Financial Literacy",
+      "genre": "Personal Finance Education Note",
+      "audience": "community volunteer",
+      "topic": "Asset diversification fundamentals",
+      "prompt": "Write a Personal Finance Education Note for community volunteer on topic 'Asset diversification fundamentals'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Risk Reminder",
+          "Allocation Logic",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "guaranteed return",
+          "risk-free high yield",
+          "buy with no thinking"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-055",
+      "group": "finance_literacy",
+      "group_label": "Financial Literacy",
+      "genre": "Personal Finance Education Note",
+      "audience": "company employee",
+      "topic": "Emotion control during volatility",
+      "prompt": "Write a Personal Finance Education Note for company employee on topic 'Emotion control during volatility'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable. Use this exact disclaimer: For education only; not investment advice.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Risk Reminder",
+          "Allocation Logic",
+          "Disclaimer",
+          "For education only; not investment advice."
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "guaranteed return",
+          "risk-free high yield",
+          "buy with no thinking",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-056",
+      "group": "finance_literacy",
+      "group_label": "Financial Literacy",
+      "genre": "Personal Finance Education Note",
+      "audience": "retired citizen",
+      "topic": "Pre-retirement cashflow planning",
+      "prompt": "Write a Personal Finance Education Note for retired citizen on topic 'Pre-retirement cashflow planning'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable. Use this exact disclaimer: For education only; not investment advice.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Risk Reminder",
+          "Allocation Logic",
+          "Draft Body",
+          "Editable Checklist",
+          "For education only; not investment advice."
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "guaranteed return",
+          "risk-free high yield",
+          "buy with no thinking"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-057",
+      "group": "technical_manual",
+      "group_label": "Technical Documentation",
+      "genre": "Technical Operation Manual",
+      "audience": "junior engineer",
+      "topic": "Rollback workflow in staged releases",
+      "prompt": "Write a Technical Operation Manual for junior engineer on topic 'Rollback workflow in staged releases'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Prerequisites",
+          "Steps",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "change prod directly",
+          "skip backup",
+          "drop database first"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-058",
+      "group": "technical_manual",
+      "group_label": "Technical Documentation",
+      "genre": "Technical Operation Manual",
+      "audience": "on-call operator",
+      "topic": "Database migration rehearsal checklist",
+      "prompt": "Write a Technical Operation Manual for on-call operator on topic 'Database migration rehearsal checklist'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Prerequisites",
+          "Steps",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "change prod directly",
+          "skip backup",
+          "drop database first"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-059",
+      "group": "technical_manual",
+      "group_label": "Technical Documentation",
+      "genre": "Technical Operation Manual",
+      "audience": "QA engineer",
+      "topic": "Log anomaly triage guide",
+      "prompt": "Write a Technical Operation Manual for QA engineer on topic 'Log anomaly triage guide'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Prerequisites",
+          "Steps",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "change prod directly",
+          "skip backup",
+          "drop database first"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-060",
+      "group": "technical_manual",
+      "group_label": "Technical Documentation",
+      "genre": "Technical Operation Manual",
+      "audience": "technical support",
+      "topic": "API authentication troubleshooting",
+      "prompt": "Write a Technical Operation Manual for technical support on topic 'API authentication troubleshooting'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Prerequisites",
+          "Steps",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "change prod directly",
+          "skip backup",
+          "drop database first",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-061",
+      "group": "technical_manual",
+      "group_label": "Technical Documentation",
+      "genre": "Technical Operation Manual",
+      "audience": "product manager",
+      "topic": "Cache stampede incident response",
+      "prompt": "Write a Technical Operation Manual for product manager on topic 'Cache stampede incident response'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Prerequisites",
+          "Steps",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "change prod directly",
+          "skip backup",
+          "drop database first"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-062",
+      "group": "technical_manual",
+      "group_label": "Technical Documentation",
+      "genre": "Technical Operation Manual",
+      "audience": "implementation consultant",
+      "topic": "CI pipeline failure diagnosis",
+      "prompt": "Write a Technical Operation Manual for implementation consultant on topic 'CI pipeline failure diagnosis'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Prerequisites",
+          "Steps",
+          "Disclaimer"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "change prod directly",
+          "skip backup",
+          "drop database first",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-063",
+      "group": "technical_manual",
+      "group_label": "Technical Documentation",
+      "genre": "Technical Operation Manual",
+      "audience": "development lead",
+      "topic": "Cross-environment config consistency",
+      "prompt": "Write a Technical Operation Manual for development lead on topic 'Cross-environment config consistency'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Prerequisites",
+          "Steps",
+          "Draft Body",
+          "Editable Checklist"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "change prod directly",
+          "skip backup",
+          "drop database first"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-064",
+      "group": "inclusive_education",
+      "group_label": "Inclusive and Accessible Writing",
+      "genre": "Inclusive Communication Draft",
+      "audience": "older user",
+      "topic": "How to use a public service app",
+      "prompt": "Write a Inclusive Communication Draft for older user on topic 'How to use a public service app'. Requirements: Use section headers: Background, Current State, Recommendations, Conclusion. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "structured",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2800,
+        "required_keywords": [
+          "Audience Fit",
+          "Readability",
+          "Background",
+          "Current State",
+          "Recommendations",
+          "Conclusion"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "bias label",
+          "insulting tone",
+          "discriminatory wording"
+        ],
+        "required_headings": [
+          "Background",
+          "Conclusion"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-065",
+      "group": "inclusive_education",
+      "group_label": "Inclusive and Accessible Writing",
+      "genre": "Inclusive Communication Draft",
+      "audience": "teen student",
+      "topic": "Fraud-prevention quick guide",
+      "prompt": "Write a Inclusive Communication Draft for teen student on topic 'Fraud-prevention quick guide'. Requirements: Include a Markdown risk-mitigation table with at least 3 rows and a Priority section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "table_risk",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3200,
+        "required_keywords": [
+          "Audience Fit",
+          "Readability",
+          "Risk",
+          "Mitigation",
+          "|"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "bias label",
+          "insulting tone",
+          "discriminatory wording"
+        ],
+        "required_headings": [
+          "Priority"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-066",
+      "group": "inclusive_education",
+      "group_label": "Inclusive and Accessible Writing",
+      "genre": "Inclusive Communication Draft",
+      "audience": "screen-reader user",
+      "topic": "Job posting risk signals",
+      "prompt": "Write a Inclusive Communication Draft for screen-reader user on topic 'Job posting risk signals'. Requirements: Start with a Style Guide section: title SimHei size 16pt, body SimSun size 12pt, line spacing 28pt. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "font_size_strict",
+        "format_required": true,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": {
+          "title_font": "SimHei",
+          "title_size": "16pt",
+          "body_font": "SimSun",
+          "body_size": "12pt",
+          "line_spacing": "28pt"
+        }
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Audience Fit",
+          "Readability",
+          "Style Guide",
+          "SimHei",
+          "SimSun",
+          "12pt",
+          "28pt"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "bias label",
+          "insulting tone",
+          "discriminatory wording"
+        ],
+        "required_headings": [
+          "Style Guide"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-067",
+      "group": "inclusive_education",
+      "group_label": "Inclusive and Accessible Writing",
+      "genre": "Inclusive Communication Draft",
+      "audience": "low digital literacy user",
+      "topic": "Telehealth appointment workflow",
+      "prompt": "Write a Inclusive Communication Draft for low digital literacy user on topic 'Telehealth appointment workflow'. Requirements: Use short sentences for low reading burden and add a Key Takeaway line after each section. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "audience_readable",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2400,
+        "required_keywords": [
+          "Audience Fit",
+          "Readability",
+          "Key Takeaway"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "bias label",
+          "insulting tone",
+          "discriminatory wording",
+          "jargon overload"
+        ],
+        "required_headings": [],
+        "required_headings_min_hit": 0
+      }
+    },
+    {
+      "id": "C-068",
+      "group": "inclusive_education",
+      "group_label": "Inclusive and Accessible Writing",
+      "genre": "Inclusive Communication Draft",
+      "audience": "migrant worker",
+      "topic": "School safety notice rewrite",
+      "prompt": "Write a Inclusive Communication Draft for migrant worker on topic 'School safety notice rewrite'. Requirements: Add a Terminology Mapping section with at least 3 entries in the format Chinese - English. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "bilingual_terms",
+        "format_required": false,
+        "multi_language_required": true,
+        "safety_boundary_required": false,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Audience Fit",
+          "Readability",
+          "Terminology Mapping",
+          " - "
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "bias label",
+          "insulting tone",
+          "discriminatory wording"
+        ],
+        "required_headings": [
+          "Terminology Mapping"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-069",
+      "group": "inclusive_education",
+      "group_label": "Inclusive and Accessible Writing",
+      "genre": "Inclusive Communication Draft",
+      "audience": "bilingual community member",
+      "topic": "Transit transfer instruction rewrite",
+      "prompt": "Write a Inclusive Communication Draft for bilingual community member on topic 'Transit transfer instruction rewrite'. Requirements: Add a Disclaimer section and avoid absolute statements. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "safety_boundary",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 2600,
+        "required_keywords": [
+          "Audience Fit",
+          "Readability",
+          "Disclaimer"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "bias label",
+          "insulting tone",
+          "discriminatory wording",
+          "absolute guarantee",
+          "certain outcome"
+        ],
+        "required_headings": [
+          "Disclaimer"
+        ],
+        "required_headings_min_hit": 1
+      }
+    },
+    {
+      "id": "C-070",
+      "group": "inclusive_education",
+      "group_label": "Inclusive and Accessible Writing",
+      "genre": "Inclusive Communication Draft",
+      "audience": "public comms editor",
+      "topic": "Disaster alert accessibility rewrite",
+      "prompt": "Write a Inclusive Communication Draft for public comms editor on topic 'Disaster alert accessibility rewrite'. Requirements: Output two parts: Draft Body and Editable Checklist for next-round revision. Keep the text practical and executable.",
+      "constraints": {
+        "variant": "revision_ready",
+        "format_required": false,
+        "multi_language_required": false,
+        "safety_boundary_required": true,
+        "style_hint": null
+      },
+      "acceptance": {
+        "min_chars": 280,
+        "max_chars": 3000,
+        "required_keywords": [
+          "Audience Fit",
+          "Readability",
+          "Draft Body",
+          "Editable Checklist"
+        ],
+        "required_keywords_min_hit": 1,
+        "forbidden_keywords": [
+          "bias label",
+          "insulting tone",
+          "discriminatory wording"
+        ],
+        "required_headings": [
+          "Editable Checklist"
+        ],
+        "required_headings_min_hit": 1
+      }
+    }
+  ]
+}
