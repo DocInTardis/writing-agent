@@ -1,3 +1,8 @@
+"""Docx Builder module.
+
+This module belongs to `writing_agent.document` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import io
@@ -6,6 +11,7 @@ import re
 from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Pt
+from docx.enum.text import WD_LINE_SPACING
 
 from writing_agent.agents.citations import CitationAgent
 from writing_agent.document.docx_hyperlink import add_hyperlink
@@ -67,7 +73,12 @@ class DocxBuilder:
         normal = doc.styles["Normal"]
         normal.font.name = formatting.font_name
         normal.font.size = Pt(formatting.font_size_pt)
-        normal.paragraph_format.line_spacing = formatting.line_spacing
+        line_spacing = formatting.line_spacing
+        if line_spacing >= 4:
+            normal.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+            normal.paragraph_format.line_spacing = Pt(line_spacing)
+        else:
+            normal.paragraph_format.line_spacing = line_spacing
         try:
             r_pr = normal._element.get_or_add_rPr()  # type: ignore[attr-defined]
             r_fonts = r_pr.get_or_add_rFonts()

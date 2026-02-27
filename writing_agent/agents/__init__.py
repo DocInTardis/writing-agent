@@ -1,3 +1,8 @@
+"""Init module.
+
+This module belongs to `writing_agent.agents` in the writing-agent codebase.
+"""
+
 from writing_agent.agents.citations import CitationAgent
 from writing_agent.agents.figures import FigureAgent
 from writing_agent.agents.outline import OutlineAgent

@@ -1,3 +1,8 @@
+"""Main module.
+
+This module belongs to `writing_agent` in the writing-agent codebase.
+"""
+
 from writing_agent.launch import main
 
 

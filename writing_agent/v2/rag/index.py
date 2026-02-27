@@ -1,3 +1,8 @@
+"""Index module.
+
+This module belongs to `writing_agent.v2.rag` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -81,6 +86,65 @@ class RagIndex:
         all_chunks = kept + chunks
         self._write_chunks(all_chunks)
         return chunks
+
+    def upsert_from_text(
+        self,
+        *,
+        paper_id: str,
+        title: str,
+        text: str,
+        abs_url: str = "",
+        embed: bool = True,
+        chunk_max_chars: int = 900,
+        chunk_overlap: int = 120,
+    ) -> list[RagChunk]:
+        self.ensure()
+        pid = (paper_id or "").strip()
+        if not pid:
+            return []
+        base_text = (text or "").strip()
+        if not base_text:
+            return []
+
+        embed_model = _embed_model_name() if embed else ""
+        embed_client = _make_embed_client(embed_model) if embed_model else None
+
+        chunks: list[RagChunk] = []
+        for i, c in enumerate(chunk_text(text=base_text, max_chars=chunk_max_chars, overlap=chunk_overlap), start=1):
+            emb_b64 = ""
+            dim = 0
+            if embed_client and embed_model:
+                vec = embed_client.embeddings(prompt=c, model=embed_model)
+                emb_b64, dim = _encode_vec(vec)
+            chunks.append(
+                RagChunk(
+                    chunk_id=f"{safe_paper_key(pid)}:text:{i:03d}",
+                    paper_id=pid,
+                    title=title or "",
+                    abs_url=abs_url or "",
+                    kind="text",
+                    text=c,
+                    embedding_b64=emb_b64,
+                    dim=dim,
+                )
+            )
+
+        existing = self.load_chunks()
+        kept = [x for x in existing if x.paper_id != pid]
+        all_chunks = kept + chunks
+        self._write_chunks(all_chunks)
+        return chunks
+
+    def delete_by_paper_id(self, paper_id: str) -> int:
+        pid = (paper_id or "").strip()
+        if not pid:
+            return 0
+        existing = self.load_chunks()
+        kept = [x for x in existing if x.paper_id != pid]
+        removed = len(existing) - len(kept)
+        if removed:
+            self._write_chunks(kept)
+        return removed
 
     def rebuild(self, *, embed: bool = True) -> int:
         rag = RagStore(self.rag_dir)

@@ -1,3 +1,8 @@
+"""Document Edit module.
+
+This module belongs to `writing_agent.agents` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -32,7 +37,7 @@ class DocumentEditAgent:
         if sel:
             selection_hint = f"\n用户选中内容（优先针对这段修改）：\n{sel}\n"
 
-        section_rule = "必须包含这些章节：摘要、引言、方法、结果、结论、参考文献。"
+        section_rule = "必须包含这些章节：引言、方法、结果、结论、参考文献。"
         if required_headings:
             section_rule = f"必须包含这些章节（按模板）：{', '.join(required_headings)}。"
 
@@ -93,7 +98,7 @@ class DocumentEditAgent:
         return EditResult(html=enforced.html, assistant=assistant)
 
     def bootstrap(self, topic: str | None = None, template_html: str | None = None) -> str:
-        t = (topic or "").strip() or "未命名报告"
+        t = (topic or "").strip() or "自动生成文档"
         base = (template_html or "").strip()
         if base:
             base = base.replace("{{TITLE}}", t).replace("[TITLE]", t)

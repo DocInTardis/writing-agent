@@ -1,3 +1,8 @@
+"""Init module.
+
+This module belongs to `writing_agent` in the writing-agent codebase.
+"""
+
 __all__ = ["__version__"]
 
 __version__ = "0.1.0"

@@ -1,3 +1,8 @@
+"""Rag Ingest Arxiv command utility.
+
+This script is part of the writing-agent operational toolchain.
+"""
+
 from __future__ import annotations
 
 import argparse

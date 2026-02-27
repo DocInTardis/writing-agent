@@ -1,8 +1,15 @@
+"""Ollama module.
+
+This module belongs to `writing_agent.llm` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -41,6 +48,7 @@ class OllamaClient:
 
     def chat(self, system: str, user: str, temperature: float = 0.2, options: dict[str, Any] | None = None) -> str:
         opts: dict[str, Any] = {"temperature": temperature}
+        _apply_env_options(opts)
         if options:
             opts.update({k: v for k, v in options.items() if v is not None})
         payload = {
@@ -96,6 +104,7 @@ class OllamaClient:
 
     def chat_stream(self, system: str, user: str, temperature: float = 0.2, options: dict[str, Any] | None = None):
         opts: dict[str, Any] = {"temperature": temperature}
+        _apply_env_options(opts)
         if options:
             opts.update({k: v for k, v in options.items() if v is not None})
         payload = {
@@ -110,28 +119,42 @@ class OllamaClient:
         url = f"{self.base_url}/api/chat"
         body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url=url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8", errors="replace").strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except Exception:
-                        continue
-                    if isinstance(data, dict) and data.get("done") is True:
-                        break
-                    msg = data.get("message") if isinstance(data, dict) else None
-                    if isinstance(msg, dict):
-                        delta = str(msg.get("content") or "")
-                        if delta:
-                            yield delta
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", errors="replace") if hasattr(e, "read") else str(e)
-            raise OllamaError(f"Ollama HTTP错误: {e.code} {e.reason}: {detail}") from e
-        except Exception as e:
-            raise OllamaError(f"无法连接Ollama: {e}") from e
+        retries = int(os.environ.get("WRITING_AGENT_OLLAMA_RETRIES", "2"))
+        backoff_s = float(os.environ.get("WRITING_AGENT_OLLAMA_RETRY_BACKOFF_S", "1.5"))
+        attempt = 0
+        while True:
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+                    for raw_line in resp:
+                        line = raw_line.decode("utf-8", errors="replace").strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except Exception:
+                            continue
+                        if isinstance(data, dict) and data.get("done") is True:
+                            break
+                        msg = data.get("message") if isinstance(data, dict) else None
+                        if isinstance(msg, dict):
+                            delta = str(msg.get("content") or "")
+                            if delta:
+                                yield delta
+                return
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode("utf-8", errors="replace") if hasattr(e, "read") else str(e)
+                lowered = detail.lower()
+                if attempt < retries and ("loading model" in lowered or "llm server loading model" in lowered):
+                    attempt += 1
+                    time.sleep(backoff_s * attempt)
+                    continue
+                raise OllamaError(f"Ollama HTTP错误: {e.code} {e.reason}: {detail}") from e
+            except Exception as e:
+                if attempt < retries:
+                    attempt += 1
+                    time.sleep(backoff_s * attempt)
+                    continue
+                raise OllamaError(f"无法连接Ollama: {e}") from e
 
     def _request_json(self, method: str, path: str, payload: dict[str, Any] | None) -> Any:
         url = f"{self.base_url}{path}"
@@ -153,3 +176,26 @@ class OllamaClient:
             return json.loads(raw) if raw else {}
         except Exception as e:
             raise OllamaError(f"Ollama返回无法解析JSON: {raw[:2000]}") from e
+
+
+def _apply_env_options(opts: dict[str, Any]) -> None:
+    def read_int(name: str) -> int | None:
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except Exception:
+            return None
+
+    num_predict = read_int("WRITING_AGENT_MAX_TOKENS")
+    if num_predict is None:
+        num_predict = read_int("OLLAMA_NUM_PREDICT")
+    if num_predict is not None:
+        opts.setdefault("num_predict", num_predict)
+
+    num_ctx = read_int("WRITING_AGENT_NUM_CTX")
+    if num_ctx is None:
+        num_ctx = read_int("OLLAMA_NUM_CTX")
+    if num_ctx is not None:
+        opts.setdefault("num_ctx", num_ctx)

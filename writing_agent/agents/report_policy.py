@@ -1,3 +1,8 @@
+"""Report Policy module.
+
+This module belongs to `writing_agent.agents` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import re
@@ -14,7 +19,7 @@ class PolicyResult:
 class ReportPolicy:
     """
     Enforces a "report must look like a report" baseline:
-    - requires common sections (摘要/引言/方法/结果/结论/参考文献)
+    - requires common sections (引言/方法/结果/结论/参考文献)
     - requires each section to have at least N paragraphs
     - requires minimum total text length (so it won't be a one-liner)
     """
@@ -59,8 +64,8 @@ class ReportPolicy:
         text_len = len(self._strip_tags(self._join_chunks(chunks)).strip())
         if text_len < self.min_total_chars:
             issues.append(f"内容偏短（{text_len} chars），已自动补全占位段落。")
-            # Prefer enriching 摘要/引言/方法/结果/结论
-            preferred = ["引言", "方法", "结果", "结论", "摘要"]
+            # Prefer enriching 引言/方法/结果/结论
+            preferred = ["引言", "方法", "结果", "结论"]
             for key in preferred:
                 idx = self._find_section(chunks, [key])
                 if idx is None:
@@ -101,7 +106,6 @@ class ReportPolicy:
 
     def _required_sections(self) -> dict[str, list[str]]:
         return {
-            "摘要": ["摘要", "Abstract"],
             "引言": ["引言", "背景", "绪论", "Introduction"],
             "方法": ["方法", "过程", "实现", "Method", "Methods"],
             "结果": ["结果", "分析", "实验结果", "Results", "Evaluation"],
@@ -159,11 +163,6 @@ class ReportPolicy:
             return (
                 "<p>请在此列出可验证来源（URL/DOI）。正文中用 <strong>[@citekey]</strong> 标注引用键。</p>"
                 "<p>[待补充]：补充至少 3 条参考资料，并保证与正文引用一致。</p>"
-            )
-        if section == "摘要":
-            return (
-                "<p>摘要应概括研究/报告的背景、方法、主要结果与结论，避免编造数据，缺失信息用 [待补充]。</p>"
-                "<p>[待补充]：补充本文的关键贡献与结论要点。</p>"
             )
         if section == "引言":
             return (

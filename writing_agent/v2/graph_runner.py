@@ -1,3 +1,8 @@
+"""Graph Runner module.
+
+This module belongs to `writing_agent.v2` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import json
@@ -7,22 +12,74 @@ import re
 import threading
 import time
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 import ctypes
 import subprocess
 from pathlib import Path
+from urllib.parse import quote
+
+from writing_agent.v2.prompts import PromptBuilder, get_prompt_config
 
 from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
-from writing_agent.v2.doc_format import parse_report_text, validate_doc
+from writing_agent.sections_catalog import find_section_description, section_catalog_text
+from writing_agent.v2.doc_format import DocBlock, ParsedDoc, parse_report_text
+from writing_agent.v2.cache import LocalCache, AcademicPhraseCache  # 鏂板缂撳瓨
+from writing_agent.v2 import (
+    draft_model_domain,
+    graph_aggregate_domain,
+    graph_plan_domain,
+    graph_reference_domain,
+    graph_section_draft_domain,
+    graph_text_sanitize_domain,
+)
+from writing_agent.v2.text_store import TextStore
 
 
 @dataclass(frozen=True)
 class GenerateConfig:
-    workers: int = 4
+    workers: int = 8  # 4鈫? 骞跺彂鎻愬崌
     worker_models: list[str] | None = None
     aggregator_model: str | None = None
     min_section_paragraphs: int = 4
     min_total_chars: int = 1800
+    max_total_chars: int = 0
+
+
+def _target_total_chars(config: GenerateConfig) -> int:
+    if config.max_total_chars and config.max_total_chars > 0:
+        return max(config.min_total_chars or 0, config.max_total_chars)
+    if config.min_total_chars and config.min_total_chars > 0:
+        return config.min_total_chars
+    return 1800
+
+
+def _load_section_weights() -> dict[str, float]:
+    return {}
+
+
+def _guess_section_weight(section: str) -> float:
+    s = (section or "").strip()
+    if not s:
+        return 1.0
+    if _is_reference_section(s):
+        return 0.4
+    if any(k in s for k in ["寮曡█", "鑳屾櫙", "姒傝堪"]):
+        return 0.8
+    if any(k in s for k in ["鏂规硶", "瀹炵幇", "璁捐", "鏋舵瀯", "鏂规"]):
+        return 1.2
+    if any(k in s for k in ["缁撹", "鎬荤粨", "灞曟湜"]):
+        return 0.8
+    return 1.0
+
+
+def _max_chars_for_section(section: str) -> int:
+    return 0
+
+
+def _compute_section_targets(*, sections: list[str], base_min_paras: int, total_chars: int) -> dict[str, SectionTargets]:
+    from writing_agent.v2.graph_runner_runtime import _compute_section_targets as _impl
+
+    return _impl(sections=sections, base_min_paras=base_min_paras, total_chars=total_chars)
 
 
 class ModelPool:
@@ -45,772 +102,991 @@ class SectionTargets:
     weight: float
     min_paras: int
     min_chars: int
+    max_chars: int
     min_tables: int
     min_figures: int
+
+
+@dataclass(frozen=True)
+class PlanSection:
+    title: str
+    target_chars: int
+    min_chars: int
+    max_chars: int
+    min_tables: int
+    min_figures: int
+    key_points: list[str]
+    figures: list[dict]
+    tables: list[dict]
+    evidence_queries: list[str]
+
+
+def _split_csv_env(raw: str) -> list[str]:
+    return [s.strip() for s in (raw or "").split(",") if s and s.strip()]
+
+
+def _require_json_response(
+    *,
+    client: OllamaClient,
+    system: str,
+    user: str,
+    stage: str,
+    temperature: float,
+    max_retries: int = 2,
+) -> dict:
+    last_err: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            raw = client.chat(system=system, user=user, temperature=temperature)
+            raw_json = _extract_json_block(raw)
+            if not raw_json:
+                raise ValueError(f"{stage}: empty json block")
+            data = json.loads(raw_json)
+            if not isinstance(data, dict):
+                raise ValueError(f"{stage}: json is not object")
+            return data
+        except Exception as exc:
+            last_err = exc
+            system = (
+                system
+                + "\n\nYour previous output was not valid JSON. Return exactly one JSON object with no markdown."
+            )
+            user = "Return only a JSON object."
+            time.sleep(0.4 * attempt)
+            continue
+    raise ValueError(f"{stage}: json parse failed: {last_err}")
+
+
+def _plan_timeout_s() -> float:
+    raw = os.environ.get("WRITING_AGENT_PLAN_TIMEOUT_S", "").strip()
+    if raw:
+        try:
+            return max(5.0, float(raw))
+        except Exception:
+            pass
+    return 40.0  # 20s鈫?0s 缈诲€?
+
+
+def _analysis_timeout_s() -> float:
+    raw = os.environ.get("WRITING_AGENT_ANALYSIS_TIMEOUT_S", "").strip()
+    if raw:
+        try:
+            return max(3.0, float(raw))
+        except Exception:
+            pass
+    return 24.0  # 12s鈫?4s 缈诲€?
+
+
+def _section_timeout_s() -> float:
+    raw = os.environ.get("WRITING_AGENT_SECTION_TIMEOUT_S", "").strip()
+    if raw:
+        try:
+            return max(10.0, float(raw))
+        except Exception:
+            pass
+    return 120.0  # 60s鈫?20s 缈诲€嶏紝缁欐ā鍨嬫洿鍏呰冻鐨勬椂闂?
+
+
+def _is_evidence_enabled() -> bool:
+    # Evidence/RAG is expensive and can stall on offline setups.
+    # Default to disabled unless explicitly turned on.
+    raw = os.environ.get("WRITING_AGENT_EVIDENCE_ENABLED", "0").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _truncate_text(text: str, *, max_chars: int = 1200) -> str:
+    s = (text or "").strip()
+    if len(s) <= max_chars:
+        return s
+    return s[: max(0, max_chars - 3)].rstrip() + "..."
+
+_DISALLOWED_SECTIONS = {"\u6458\u8981", "\u5173\u952e\u8bcd", "\u76ee\u5f55", "Abstract", "Keywords"}
+_ACK_SECTIONS = {"\u81f4\u8c22", "\u9e23\u8c22"}
+
+_PHASE_METRICS_PATH = Path(".data/metrics/phase_timing.json")
+_PHASE_METRICS_LOCK = threading.Lock()
+
+
+def _load_phase_metrics() -> dict:
+    if not _PHASE_METRICS_PATH.exists():
+        return {"runs": []}
+    try:
+        data = json.loads(_PHASE_METRICS_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("runs"), list):
+            return data
+    except Exception:
+        pass
+    return {"runs": []}
+
+
+def _save_phase_metrics(data: dict) -> None:
+    _PHASE_METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _PHASE_METRICS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _record_phase_timing(run_id: str, payload: dict) -> None:
+    with _PHASE_METRICS_LOCK:
+        data = _load_phase_metrics()
+        runs = data.get("runs") if isinstance(data.get("runs"), list) else []
+        entry = {"run_id": run_id, "ts": time.time()}
+        entry.update(payload or {})
+        runs.append(entry)
+        data["runs"] = runs[-200:]
+        _save_phase_metrics(data)
+
+def _filter_disallowed_sections(items: list[str]) -> list[str]:
+    if not items:
+        return []
+    return [s for s in items if s not in _DISALLOWED_SECTIONS]
+
+def _strip_disallowed_sections_text(text: str) -> str:
+    if not text:
+        return text
+    lines = text.splitlines()
+    out: list[str] = []
+    skip = False
+    for line in lines:
+        m = re.match(r"^(#{1,3})\s+(.+?)\s*$", line)
+        if m:
+            title = (m.group(2) or "").strip()
+            title = _clean_section_title(title)
+            if title in _DISALLOWED_SECTIONS:
+                skip = True
+                continue
+            skip = False
+        if skip:
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+def _strip_ack_sections_text(text: str, *, allow_ack: bool) -> str:
+    if allow_ack or not text:
+        return text
+    lines = text.splitlines()
+    out: list[str] = []
+    skip = False
+    skip_level = 0
+    for line in lines:
+        m = re.match(r"^(#{1,3})\s+(.+?)\s*$", line)
+        if m:
+            level = len(m.group(1))
+            title = (m.group(2) or "").strip()
+            title = _clean_section_title(title)
+            if title in _ACK_SECTIONS:
+                skip = True
+                skip_level = level
+                continue
+            if skip and level <= skip_level:
+                skip = False
+        if skip:
+            continue
+        if line.strip() in _ACK_SECTIONS:
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+def _default_outline_from_instruction(text: str) -> list[str]:
+    s = (text or "").lower()
+    if "weekly" in s or "week report" in s or "周报" in str(text or ""):
+        return ["This Week Work", "Issues and Risks", "Next Week Plan", "Support Needed"]
+    return []
+
+
+def _pick_draft_models(worker_models: list[str], *, agg_model: str, fallback: str) -> tuple[str, str]:
+    return draft_model_domain.pick_draft_models(
+        worker_models=worker_models,
+        agg_model=agg_model,
+        fallback=fallback,
+        env_main=os.environ.get("WRITING_AGENT_DRAFT_MAIN_MODEL", "").strip(),
+        env_support=os.environ.get("WRITING_AGENT_DRAFT_SUPPORT_MODEL", "").strip(),
+        installed=_ollama_installed_models(),
+        sizes=_ollama_model_sizes_gb(),
+        is_embedding_model=_looks_like_embedding_model,
+    )
+
+
+
+
+def _extract_json_block(text: str) -> str:
+    s = (text or "").strip()
+    if not s:
+        return ""
+    s = s.replace("```json", "").replace("```", "").strip()
+    start = s.find("{")
+    end = s.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return ""
+    return s[start : end + 1]
+
+
+def _compute_section_weights(sections: list[str]) -> dict[str, float]:
+    weights = _load_section_weights()
+    out: dict[str, float] = {}
+    for s in sections:
+        title = _section_title(s) or s
+        w = weights.get(title)
+        if w is None:
+            w = _guess_section_weight(title)
+        out[s] = float(max(0.3, min(3.0, w)))
+    return out
+
+
+def _classify_section_type(title: str) -> str:
+    """Classify section type for target length scaling."""
+    t = (title or "").strip().lower()
+    if any(k in t for k in ["introduction", "background", "overview", "综述", "引言"]):
+        return "intro"
+    if any(k in t for k in ["method", "design", "implementation", "architecture", "analysis", "方法", "设计", "实现", "架构"]):
+        return "method"
+    if any(k in t for k in ["conclusion", "summary", "结论", "总结", "展望"]):
+        return "conclusion"
+    return "default"
+
+
+def _default_plan_map(
+    *,
+    sections: list[str],
+    base_targets: dict[str, SectionTargets],
+    total_chars: int,
+) -> dict[str, PlanSection]:
+    return graph_reference_domain.default_plan_map(
+        sections=sections,
+        base_targets=base_targets,
+        total_chars=total_chars,
+        compute_section_weights=_compute_section_weights,
+        section_title=_section_title,
+        is_reference_section=_is_reference_section,
+        classify_section_type=_classify_section_type,
+        plan_section_cls=PlanSection,
+    )
+
+
+def _plan_sections_with_model(
+    *,
+    base_url: str,
+    model: str,
+    title: str,
+    instruction: str,
+    sections: list[str],
+    total_chars: int,
+) -> dict:
+    if not sections:
+        return {}
+    client = OllamaClient(base_url=base_url, model=model, timeout_s=_plan_timeout_s())
+    config = get_prompt_config("planner")
+    system, user = PromptBuilder.build_planner_prompt(
+        title=title,
+        total_chars=total_chars,
+        sections=sections,
+        instruction=instruction
+    )
+    return _require_json_response(
+        client=client,
+        system=system,
+        user=user,
+        stage="plan",
+        temperature=config.temperature,
+        max_retries=max(2, int(os.environ.get("WRITING_AGENT_JSON_RETRIES", "2"))),
+    )
+
+
+def _sanitize_planned_sections(sections: list[str]) -> list[str]:
+    banned = {"\u6458\u8981", "\u5173\u952e\u8bcd", "\u76ee\u5f55", "Abstract", "Keywords", "\u5efa\u8bae", "\u9644\u5f55"}
+    out: list[str] = []
+    seen: set[str] = set()
+    for s in sections or []:
+        title = _clean_section_title(str(s or ""))
+        if not title:
+            continue
+        if title in banned:
+            continue
+        if title in _ACK_SECTIONS:
+            continue
+        if title in _DISALLOWED_SECTIONS:
+            continue
+        if title in seen:
+            continue
+        seen.add(title)
+        out.append(title)
+    # ensure references last
+    refs = [t for t in out if _is_reference_section(t)]
+    out = [t for t in out if not _is_reference_section(t)]
+    if refs:
+        out.append("\u53c2\u8003\u6587\u732e")
+    else:
+        out.append("\u53c2\u8003\u6587\u732e")
+    return out
+
+
+def _clean_section_title(title: str) -> str:
+    return graph_plan_domain.clean_section_title(
+        title,
+        strip_chapter_prefix_local=_strip_chapter_prefix_local,
+    )
+
+
+
+
+def _clean_outline_title(title: str) -> str:
+    s = _strip_chapter_prefix_local(str(title or "")).strip()
+    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", s)
+    s = re.sub(r"\s*#+\s*$", "", s).strip()
+    return s
+
+def _strip_chapter_prefix_local(text: str) -> str:
+    s = (text or "").strip()
+    s = re.sub(r"^\u7b2c\s*\d+\s*\u7ae0\s*", "", s)
+    s = re.sub(r"^\d+(?:\.\d+)*\s*", "", s)
+    return s.strip()
+
+
+def _sanitize_section_tokens(sections: list[str], *, keep_full_titles: bool = False) -> list[str]:
+    banned = {"\u6458\u8981", "\u5173\u952e\u8bcd", "\u76ee\u5f55", "Abstract", "Keywords", "\u5efa\u8bae", "\u9644\u5f55"}
+    out: list[str] = []
+    refs: list[str] = []
+    seen: set[tuple[int, str]] = set()
+    for sec in sections or []:
+        lvl, title = _split_section_token(sec)
+        clean = _clean_outline_title(title) if keep_full_titles else _clean_section_title(title)
+        if not clean:
+            continue
+        if clean in banned or clean in _ACK_SECTIONS or clean in _DISALLOWED_SECTIONS:
+            continue
+        key = (lvl if lvl >= 3 else 2, clean)
+        if key in seen:
+            continue
+        seen.add(key)
+        token = _encode_section(lvl, clean) if lvl >= 3 else clean
+        if _is_reference_section(clean):
+            refs.append(token)
+        else:
+            out.append(token)
+    if refs:
+        out.append("\u53c2\u8003\u6587\u732e")
+    else:
+        out.append("\u53c2\u8003\u6587\u732e")
+    return out
+
+
+def _sanitize_outline(outline: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    if not outline:
+        return []
+    out: list[tuple[int, str]] = []
+    seen: set[tuple[int, str]] = set()
+    refs = False
+    numbered_re = re.compile(r"^\s*(?:\u7b2c\s*\d+\s*\u7ae0|\d+[\s.])")
+    has_numbered = any(numbered_re.match(str(txt or "")) for _, txt in outline)
+    for lvl, txt in outline:
+        try:
+            lvl_i = int(lvl)
+        except Exception:
+            lvl_i = 1
+        lvl_i = 1 if lvl_i <= 1 else (2 if lvl_i == 2 else 3)
+        clean = _clean_outline_title(txt)
+        if not clean:
+            continue
+        if has_numbered and not numbered_re.match(str(txt or "")):
+            lvl_i = 2
+        if clean in _DISALLOWED_SECTIONS or clean in _ACK_SECTIONS:
+            continue
+        key = (lvl_i, clean)
+        if key in seen:
+            continue
+        seen.add(key)
+        if _is_reference_section(clean):
+            refs = True
+            continue
+        out.append((lvl_i, clean))
+    if refs:
+        out.append((1, "\u53c2\u8003\u6587\u732e"))
+    return out
+
+
+def _plan_sections_list_with_model(
+    *,
+    base_url: str,
+    model: str,
+    title: str,
+    instruction: str,
+) -> list[str]:
+    client = OllamaClient(base_url=base_url, model=model, timeout_s=_plan_timeout_s())
+    catalog = section_catalog_text()
+    system = """????????????Agent????JSON???Markdown?
+Schema: {sections:[string]}.
+??????????????????????16??????????????????????????/???/??/??/????????????????????????????????4-12???
+???????{"sections":["??","????","????","???????","??","????"]}
+"""
+    user = (
+        f"\u62a5\u544a\u6807\u9898\uff1a{title}\n"
+        f"\u7528\u6237\u9700\u6c42\uff1a\n{instruction}\n\n"
+        f"\u53ef\u9009\u7ae0\u8282\u5e93\uff08\u6309\u9700\u6311\u9009\uff0c\u4e0d\u5fc5\u5168\u90e8\u4f7f\u7528\uff09\uff1a\n{catalog}\n\n"
+        "\u8bf7\u7ed9\u51fa\u7ae0\u8282\u5217\u8868JSON\u3002"
+    )
+    data = _require_json_response(
+        client=client,
+        system=system,
+        user=user,
+        stage="plan_sections",
+        temperature=0.2,
+        max_retries=max(2, int(os.environ.get("WRITING_AGENT_JSON_RETRIES", "2"))),
+    )
+    sections = data.get("sections") if isinstance(data, dict) else None
+    if not isinstance(sections, list):
+        raise ValueError("plan_sections: sections must be list")
+    cleaned = _sanitize_planned_sections([str(x) for x in sections])
+    return cleaned or ["\u5f15\u8a00", "\u7ed3\u8bba", "\u53c2\u8003\u6587\u732e"]
+
+
+def _predict_num_tokens(*, min_chars: int, max_chars: int, is_reference: bool) -> int:
+    # 浼樺寲: 榛樿鍚敤杞檺鍒舵ā寮忥紝璁╂ā鍨嬭嚜鐒剁粨鏉?
+    # 璁剧疆鐜鍙橀噺 WRITING_AGENT_HARD_MAX=1 鍙垏鍥炵‖闄愬埗妯″紡
+    hard_max_mode = os.environ.get("WRITING_AGENT_HARD_MAX", "0").strip() in {"1", "true", "yes"}
+    
+    base = max(1200, int(round(min_chars * 4.0)))
+    
+    if max_chars > 0 and hard_max_mode:
+        # 纭檺鍒舵ā寮忥細涓ユ牸闄愬埗鏈€澶у瓧鏁?
+        base = min(base, int(round(max_chars * 3.0)))
+    # 杞檺鍒舵ā寮忥紙榛樿锛夛細蹇界暐max_chars锛岃妯″瀷鑷敱鍙戞尌
+    
+    if is_reference:
+        base = min(base, 2400)
+    
+    return max(800, min(8192, base))
+
+
+def _normalize_plan_map(
+    *,
+    plan_raw: dict,
+    sections: list[str],
+    base_targets: dict[str, SectionTargets],
+    total_chars: int,
+) -> dict[str, PlanSection]:
+    return graph_plan_domain.normalize_plan_map(
+        plan_raw=plan_raw,
+        sections=sections,
+        base_targets=base_targets,
+        total_chars=total_chars,
+        default_plan_map=lambda s, b, t: _default_plan_map(sections=s, base_targets=b, total_chars=t),
+        section_title=_section_title,
+        classify_section_type=_classify_section_type,
+        is_reference_section=_is_reference_section,
+        plan_section_cls=PlanSection,
+    )
+
+
+def _analyze_instruction(
+    *,
+    base_url: str,
+    model: str,
+    instruction: str,
+    current_text: str,
+) -> dict:
+    fast_raw = os.environ.get("WRITING_AGENT_ANALYSIS_FAST", "").strip().lower()
+    force_fast = fast_raw in {"force", "always"}
+    if force_fast or fast_raw in {"1", "true", "yes", "on"}:
+        if force_fast or (len((instruction or "").strip()) <= 120 and not (current_text or "").strip()):
+            return {"topic": (instruction or "").strip(), "doc_type": "report"}
+    client = OllamaClient(base_url=base_url, model=model, timeout_s=_analysis_timeout_s())
+    config = get_prompt_config("analysis")
+    excerpt = _truncate_text(current_text or "", max_chars=800)
+    system, user = PromptBuilder.build_analysis_prompt(
+        instruction=instruction,
+        excerpt=excerpt
+    )
+    return _require_json_response(
+        client=client,
+        system=system,
+        user=user,
+        stage="analysis",
+        temperature=config.temperature,
+        max_retries=max(2, int(os.environ.get("WRITING_AGENT_JSON_RETRIES", "2"))),
+    )
+
+
+def _format_analysis_summary(analysis: dict, *, fallback: str) -> str:
+    if not isinstance(analysis, dict) or not analysis:
+        return (fallback or "").strip()
+
+    lines: list[str] = []
+
+    def _add(label: str, value: object) -> None:
+        val = str(value or "").strip()
+        if val:
+            lines.append(f"{label}: {val}")
+
+    def _add_list(label: str, values: list[str], limit: int = 10) -> None:
+        items = [str(x).strip() for x in values if str(x).strip()]
+        if items:
+            lines.append(f"{label}: " + "、".join(items[:limit]))
+
+    _add("topic", analysis.get("topic"))
+    _add("doc_type", analysis.get("doc_type"))
+    _add("audience", analysis.get("audience"))
+    _add("style", analysis.get("style"))
+    _add_list("keywords", list(analysis.get("keywords") or []))
+    _add_list("must_include", list(analysis.get("must_include") or []))
+    _add_list("avoid_sections", list(analysis.get("avoid_sections") or []))
+    _add_list("constraints", list(analysis.get("constraints") or []))
+    _add_list("questions", list(analysis.get("questions") or []), limit=6)
+
+    return "\n".join(lines).strip() or (fallback or "").strip()
+
+
+def _build_evidence_queries(*, section_title: str, plan: PlanSection | None, analysis: dict | None) -> list[str]:
+    items: list[str] = []
+    if section_title:
+        items.append(section_title)
+    if plan:
+        items.extend([str(x).strip() for x in (plan.evidence_queries or []) if str(x).strip()])
+        items.extend([str(x).strip() for x in (plan.key_points or []) if str(x).strip()])
+    if isinstance(analysis, dict):
+        items.extend([str(x).strip() for x in (analysis.get("keywords") or []) if str(x).strip()])
+        topic = str(analysis.get("topic") or "").strip()
+        if topic:
+            items.append(topic)
+    out: list[str] = []
+    seen: set[str] = set()
+    for it in items:
+        if not it or it in seen:
+            continue
+        seen.add(it)
+        out.append(it)
+    return out
+
+
+def _extract_sources_from_context(context: str) -> list[dict]:
+    blocks = [b for b in (context or "").split("\n\n") if b.strip()]
+    out: list[dict] = []
+    for block in blocks:
+        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
+        if not lines:
+            continue
+        head = lines[0]
+        url = ""
+        if len(lines) > 1 and lines[1].startswith("http"):
+            url = lines[1]
+        m = re.match(r"^\[(.+?)\]\s+(.+?)(?:\s+\((.+)\))?$", head)
+        if m:
+            paper_id = m.group(1).strip()
+            title = m.group(2).strip()
+            kind = (m.group(3) or "").strip()
+            out.append({"id": paper_id, "title": title, "kind": kind, "url": url})
+        else:
+            out.append({"id": "", "title": head.strip(), "kind": "", "url": url})
+    return out
+
+
+def _extract_year(text: str) -> str:
+    return graph_reference_domain.extract_year(text)
+
+
+def _format_authors(authors: list[str]) -> str:
+    return graph_reference_domain.format_authors(authors)
+
+
+def _enrich_sources_with_rag(sources: list[dict]) -> list[dict]:
+    return graph_reference_domain.enrich_sources_with_rag(sources)
+
+
+def _collect_reference_sources(evidence_map: dict[str, dict]) -> list[dict]:
+    sources: list[dict] = []
+    seen: set[str] = set()
+    for data in (evidence_map or {}).values():
+        items = data.get("sources") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            continue
+        for s in items:
+            if not isinstance(s, dict):
+                continue
+            url = str(s.get("url") or "").strip()
+            title = str(s.get("title") or "").strip()
+            key = url or title or str(s.get("id") or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            sources.append(
+                {
+                    "url": url,
+                    "title": title,
+                    "id": str(s.get("id") or "").strip(),
+                    "kind": str(s.get("kind") or "").strip(),
+                    "authors": s.get("authors") or [],
+                    "published": s.get("published") or "",
+                    "updated": s.get("updated") or "",
+                    "source": s.get("source") or "",
+                }
+            )
+    return _enrich_sources_with_rag(sources)
+
+
+def _format_reference_items(sources: list[dict]) -> list[str]:
+    return graph_reference_domain.format_reference_items(
+        sources,
+        extract_year_fn=_extract_year,
+        format_authors_fn=_format_authors,
+    )
+
+
+def _fallback_reference_sources(*, instruction: str) -> list[dict]:
+    return graph_reference_domain.fallback_reference_sources(
+        instruction=instruction,
+        mcp_rag_retrieve=lambda query, top_k, per_paper, max_chars: _mcp_rag_retrieve(
+            query=query,
+            top_k=top_k,
+            per_paper=per_paper,
+            max_chars=max_chars,
+        ),
+        extract_sources_from_context=_extract_sources_from_context,
+        enrich_sources_with_rag_fn=_enrich_sources_with_rag,
+        extract_year_fn=_extract_year,
+    )
+
+
+def _summarize_evidence(
+    *,
+    base_url: str,
+    model: str,
+    section: str,
+    analysis_summary: str,
+    context: str,
+    sources: list[dict],
+) -> dict:
+    return graph_reference_domain.summarize_evidence(
+        base_url=base_url,
+        model=model,
+        section=section,
+        analysis_summary=analysis_summary,
+        context=context,
+        sources=sources,
+        require_json_response=_require_json_response,
+        ollama_client_cls=OllamaClient,
+    )
+
+
+def _format_evidence_summary(facts: list[dict], sources: list[dict]) -> tuple[str, list[str]]:
+    return graph_reference_domain.format_evidence_summary(facts, sources)
+
+
+def _build_evidence_pack(
+    *,
+    instruction: str,
+    section: str,
+    analysis: dict | None,
+    plan: PlanSection | None,
+    base_url: str,
+    model: str,
+) -> dict:
+    enabled_raw = os.environ.get("WRITING_AGENT_EVIDENCE_ENABLED", "1").strip().lower()
+    if enabled_raw not in {"1", "true", "yes", "on"}:
+        return {"summary": "", "sources": [], "allowed_urls": []}
+    try:
+        from writing_agent.v2.rag.retrieve import retrieve_context
+    except Exception:
+        return {"summary": "", "sources": [], "allowed_urls": []}
+    repo_root = Path(__file__).resolve().parents[2]
+    data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
+    rag_dir = data_dir / "rag"
+    queries = _build_evidence_queries(section_title=_section_title(section) or section, plan=plan, analysis=analysis)
+    q = " ".join([instruction] + queries).strip()
+    top_k = int(os.environ.get("WRITING_AGENT_RAG_TOP_K", "6"))
+    max_chars = int(os.environ.get("WRITING_AGENT_RAG_MAX_CHARS", "2800"))
+    per_paper = int(os.environ.get("WRITING_AGENT_RAG_PER_PAPER", "2"))
+    res = retrieve_context(rag_dir=rag_dir, query=q, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
+    context = res.context or ""
+    sources = _extract_sources_from_context(context)
+    summary_data = _summarize_evidence(
+        base_url=base_url,
+        model=model,
+        section=section,
+        analysis_summary=_format_analysis_summary(analysis or {}, fallback=instruction),
+        context=context,
+        sources=sources,
+    )
+    summary_text, allowed_urls = _format_evidence_summary(summary_data.get("facts") or [], sources)
+    return {"summary": summary_text, "sources": sources, "allowed_urls": allowed_urls}
+
+
+def _format_plan_hint(plan: PlanSection | None) -> str:
+    if not plan:
+        return ""
+    lines: list[str] = []
+    desc = find_section_description(plan.title or "")
+    if desc:
+        lines.append(f"section role: {desc}")
+    lines.append(f"target chars: {plan.target_chars} (allow +/-30%)")
+    if plan.key_points:
+        lines.append("key points: " + "、".join(plan.key_points))
+    if plan.evidence_queries:
+        lines.append("suggested evidence queries: " + "、".join(plan.evidence_queries[:6]))
+    if plan.figures:
+        fig_items = []
+        for f in plan.figures:
+            f_type = str(f.get("type") or "").strip()
+            cap = str(f.get("caption") or "").strip()
+            if f_type or cap:
+                fig_items.append(f"{f_type or 'figure'}:{cap}" if cap else f_type)
+        if fig_items:
+            lines.append("suggested figures: " + "、".join(fig_items))
+    if plan.tables:
+        tab_items = []
+        for t in plan.tables:
+            cap = str(t.get("caption") or "").strip()
+            if cap:
+                tab_items.append(cap)
+        if tab_items:
+            lines.append("suggested tables: " + "、".join(tab_items))
+    return "\n".join(lines)
+
+
+def _sync_plan_media(plan_map: dict[str, PlanSection], targets: dict[str, SectionTargets]) -> dict[str, PlanSection]:
+    out: dict[str, PlanSection] = {}
+    for sec, plan in plan_map.items():
+        t = targets.get(sec)
+        if not t:
+            out[sec] = plan
+            continue
+        min_tables = max(plan.min_tables, int(t.min_tables))
+        min_figures = max(plan.min_figures, int(t.min_figures))
+        if min_tables == plan.min_tables and min_figures == plan.min_figures:
+            out[sec] = plan
+            continue
+        out[sec] = PlanSection(
+            title=plan.title,
+            target_chars=plan.target_chars,
+            min_chars=plan.min_chars,
+            max_chars=plan.max_chars,
+            min_tables=min_tables,
+            min_figures=min_figures,
+            key_points=plan.key_points,
+            figures=plan.figures,
+            tables=plan.tables,
+            evidence_queries=plan.evidence_queries,
+        )
+    return out
+
+
+def _section_body_len(text: str) -> int:
+    if not text:
+        return 0
+    body = re.sub(r"\[\[(?:FIGURE|TABLE)\s*:\s*\{[\s\S]*?\}\s*\]\]", "", text, flags=re.IGNORECASE)
+    return len(body.strip())
+
+
+def _doc_body_len(text: str) -> int:
+    if not text:
+        return 0
+    body = re.sub(r"(?m)^#{1,6}\s+.+$", "", text or "")
+    return _section_body_len(body)
+
+
+def _count_text_chars(text: str) -> int:
+    if not text:
+        return 0
+    return len(str(text).strip())
+
+
+def _truncate_to_chars(text: str, max_chars: int) -> str:
+    if not text or max_chars <= 0:
+        return ""
+    s = str(text).strip()
+    if len(s) <= max_chars:
+        return s
+    clipped = s[:max_chars]
+    # Prefer cutting at a sentence boundary if possible.
+    for sep in ["。", "！", "？", ".", "!", "?", ";"]:
+        idx = clipped.rfind(sep)
+        if idx >= max(0, int(max_chars * 0.5)):
+            return clipped[: idx + 1].strip()
+    return clipped.strip()
+
+
+def _blocks_to_doc_text(blocks: list[DocBlock]) -> str:
+    if not blocks:
+        return ""
+    out: list[str] = []
+    for b in blocks:
+        if b.type == "heading":
+            level = b.level or 1
+            out.append(f"{'#' * level} {(b.text or '').strip()}")
+        elif b.type == "paragraph":
+            out.append((b.text or "").strip())
+        elif b.type == "table":
+            out.append("[[TABLE:{}]]".format(json.dumps(b.table or {}, ensure_ascii=False)))
+        elif b.type == "figure":
+            out.append("[[FIGURE:{}]]".format(json.dumps(b.figure or {}, ensure_ascii=False)))
+    return "\n\n".join([s for s in out if s])
+
+
+def _validate_plan_results(
+    *,
+    base_url: str,
+    model: str,
+    title: str,
+    instruction: str,
+    sections: list[str],
+    plan_map: dict[str, PlanSection],
+    section_text: dict[str, str],
+) -> list[dict]:
+    _ = (base_url, model, title, instruction)
+    if not sections:
+        return []
+
+    issues: list[dict] = []
+    for sec in sections:
+        plan = plan_map.get(sec)
+        if not plan:
+            continue
+        chars = _section_body_len(section_text.get(sec) or "")
+        if chars < int(plan.min_chars):
+            issues.append({"title": plan.title or sec, "issue": "short", "action": "expand"})
+        elif int(plan.max_chars) > 0 and chars > int(plan.max_chars):
+            issues.append({"title": plan.title or sec, "issue": "long", "action": "trim"})
+    return issues
+
+
+def _load_support_section_keywords() -> list[str]:
+    raw = os.environ.get("WRITING_AGENT_SUPPORT_SECTIONS", "").strip()
+    if raw:
+        return _split_csv_env(raw)
+    return ["引言", "背景", "相关", "综述", "文献", "参考", "绪论", "概述"]
+
+
+def _is_support_section(section: str, keywords: list[str]) -> bool:
+    s = (_section_title(section) or "").strip()
+    if not s:
+        return False
+    for k in keywords:
+        if k and k in s:
+            return True
+    return False
 
 
 def run_generate_graph(
     *,
     instruction: str,
     current_text: str,
-    required_h2: list[str] | None,
-    config: GenerateConfig,
+    required_h2: list[str],
+    required_outline: list[tuple[int, str]] | list[str] | None,
+    expand_outline: bool = False,
+    config: GenerateConfig = GenerateConfig(),
+):
+    from writing_agent.v2.graph_runner_runtime import run_generate_graph as _run_generate_graph_impl
+
+    return _run_generate_graph_impl(
+        instruction=instruction,
+        current_text=current_text,
+        required_h2=required_h2,
+        required_outline=required_outline,
+        expand_outline=expand_outline,
+        config=config,
+    )
+
+
+def run_generate_graph_dual_engine(
+    *,
+    instruction: str,
+    current_text: str,
+    required_h2: list[str],
+    required_outline: list[tuple[int, str]] | list[str] | None,
+    expand_outline: bool = False,
+    config: GenerateConfig = GenerateConfig(),
+    compose_mode: str = "auto",
+    resume_sections: list[str] | None = None,
+    format_only: bool = False,
 ):
     """
-    Yields dict events suitable for SSE:
-      - {"event":"state","name":...,"phase":"start"|"end"}
-      - {"event":"plan","title":...,"sections":[...]}
-      - {"event":"section","phase":"start"|"delta"|"end","section":...,"delta":...}
-      - {"event":"final","text":...,"problems":[...]}
+    Dual-engine orchestration entry.
+    Native graph remains default. LangGraph can be enabled via WRITING_AGENT_GRAPH_ENGINE=langgraph|dual|auto.
     """
-    settings = get_ollama_settings()
-    if not settings.enabled:
-        raise OllamaError("未启用Ollama（WRITING_AGENT_USE_OLLAMA=0）")
-    client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-    if not client.is_running():
-        raise OllamaError("Ollama 未运行")
+    from writing_agent.state_engine import DualGraphEngine, should_use_langgraph
 
-    agg_model = config.aggregator_model or os.environ.get("WRITING_AGENT_AGG_MODEL", "").strip() or "qwen:7b"
-    installed = _ollama_installed_models()
-    if installed and agg_model not in installed:
-        agg_model = settings.model
+    def _planner(payload: dict) -> dict:
+        return {
+            "required_h2": list(required_h2 or []),
+            "required_outline": list(required_outline or []),
+            "plan": {"compose_mode": compose_mode, "resume_sections": list(resume_sections or [])},
+        }
 
-    worker_models = (config.worker_models or [])[:]
-    if not worker_models:
-        models_raw = os.environ.get("WRITING_AGENT_WORKER_MODELS", "").strip()
-        if models_raw:
-            worker_models = [m.strip() for m in models_raw.split(",") if m.strip()]
-        else:
-            worker_models = _default_worker_models(preferred=settings.model)
-
-    # Prefer using smaller models for drafting; avoid using the aggregator model for drafts if possible.
-    worker_models = _select_models_by_memory(worker_models, fallback=settings.model)
-    if len(worker_models) > 1:
-        worker_models = [m for m in worker_models if m != agg_model] or worker_models
-
-    # Keep 1 draft model resident by default to avoid swapping/loading thrash.
-    draft_max = int(os.environ.get("WRITING_AGENT_DRAFT_MAX_MODELS", "1"))
-    draft_max = max(1, min(4, draft_max))
-    worker_models = worker_models[:draft_max] or [settings.model]
-
-    pool = ModelPool(worker_models or [settings.model])
-
-    yield {"event": "state", "name": "PLAN", "phase": "start"}
-    title, sections = _plan_title_sections(current_text=current_text, instruction=instruction, required_h2=required_h2)
-    targets = _compute_section_targets(sections=sections, base_min_paras=config.min_section_paragraphs, total_chars=_target_total_chars(config))
-    yield {"event": "plan", "title": title, "sections": sections}
-    yield {"event": "targets", "targets": {k: targets[k].__dict__ for k in sections if k in targets}}
-    yield {"event": "delta", "delta": f"草稿模型：{', '.join(worker_models)}；合并模型：{agg_model}"}
-    yield {"event": "state", "name": "PLAN", "phase": "end"}
-
-    yield {"event": "state", "name": "DRAFT_SECTIONS", "phase": "start"}
-    q: queue.Queue[dict] = queue.Queue()
-    section_text: dict[str, str] = {s: "" for s in sections}
-
-    def worker(section: str, model: str) -> None:
-        q.put({"event": "section", "phase": "start", "section": section})
-        attempts = max(1, int(os.environ.get("WRITING_AGENT_SECTION_RETRIES", "2")))
-        last_err: Exception | None = None
-        sec_t = targets.get(section) or SectionTargets(weight=1.0, min_paras=config.min_section_paragraphs, min_chars=800, min_tables=0, min_figures=0)
-        for attempt in range(1, attempts + 1):
-            try:
-                if attempt > 1:
-                    q.put({"event": "section", "phase": "delta", "section": section, "delta": f"\n\n[重试 {attempt}/{attempts}] …"})
-                    time.sleep(0.8 * attempt)
-                txt = _generate_section_stream(
-                    base_url=settings.base_url,
-                    model=model,
-                    title=title,
-                    section=section,
-                    instruction=instruction,
-                    min_paras=sec_t.min_paras,
-                    min_chars=sec_t.min_chars,
-                    min_tables=sec_t.min_tables,
-                    min_figures=sec_t.min_figures,
-                    out_queue=q,
-                )
-                txt2 = _ensure_section_minimums_stream(
-                    base_url=settings.base_url,
-                    model=model,
-                    title=title,
-                    section=section,
-                    instruction=instruction,
-                    draft=txt,
-                    min_paras=sec_t.min_paras,
-                    min_chars=sec_t.min_chars,
-                    min_tables=sec_t.min_tables,
-                    min_figures=sec_t.min_figures,
-                    out_queue=q,
-                )
-                section_text[section] = txt2
-                q.put({"event": "section", "phase": "end", "section": section})
-                return
-            except Exception as e:
-                last_err = e
-                continue
-        fallback = f"[待补充]（章节生成失败：{last_err}）"
-        section_text[section] = fallback
-        q.put({"event": "section", "phase": "delta", "section": section, "delta": fallback})
-        q.put({"event": "section", "phase": "end", "section": section})
-
-    unique_models = sorted({m for m in worker_models if m})
-    per_model = max(1, int(os.environ.get("WRITING_AGENT_PER_MODEL_CONCURRENCY", "1")))
-    cap = max(1, per_model * max(1, len(unique_models)))
-    requested = max(1, int(config.workers))
-    max_workers = max(1, min(8, min(requested, cap)))
-
-    # Default behavior: rotate models sequentially to keep Ollama stable on limited RAM.
-    parallel_raw = os.environ.get("WRITING_AGENT_DRAFT_PARALLEL", "0").strip().lower()
-    parallel = parallel_raw in {"1", "true", "yes", "on"}
-    if not parallel or len(unique_models) <= 1:
-        max_workers = 1
-
-    # Keep one draft model "sticky" across all sections to reduce reload thrash.
-    draft_model = (worker_models[0] if worker_models else settings.model) or settings.model
-
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futs = []
-        for sec in sections:
-            futs.append(ex.submit(worker, sec, draft_model))
-
-        while True:
-            try:
-                ev = q.get(timeout=0.2)
-                yield ev
-                continue
-            except queue.Empty:
-                pass
-            done_count = sum(1 for f in futs if f.done())
-            if done_count == len(futs) and q.empty():
-                break
-
-    yield {"event": "state", "name": "DRAFT_SECTIONS", "phase": "end"}
-
-    yield {"event": "state", "name": "AGGREGATE", "phase": "start"}
-    merged_draft = _merge_sections_text(title, sections, section_text)
-    merged = _aggregate_fix_stream(
-        base_url=settings.base_url,
-        model=agg_model,
-        title=title,
-        instruction=instruction,
-        draft=merged_draft,
-        required_h2=required_h2,
-        targets=targets,
-    )
-    if _doc_body_len(merged) < int(_doc_body_len(merged_draft) * 0.75):
-        yield {"event": "delta", "delta": "合并稿明显偏短，已回退为章节草稿并进入校验/修复流程。"}
-        merged = merged_draft
-    yield {"event": "state", "name": "AGGREGATE", "phase": "end"}
-
-    yield {"event": "state", "name": "VALIDATE", "phase": "start"}
-    parsed = parse_report_text(merged)
-    problems = validate_doc(
-        parsed,
-        required_h2=required_h2,
-        min_paragraphs_per_section={k: v.min_paras for k, v in targets.items()},
-        min_chars_per_section={k: v.min_chars for k, v in targets.items()},
-        min_tables_per_section={k: v.min_tables for k, v in targets.items()},
-        min_figures_per_section={k: v.min_figures for k, v in targets.items()},
-        min_total_chars=config.min_total_chars,
-    )
-    yield {"event": "state", "name": "VALIDATE", "phase": "end"}
-
-    if problems:
-        yield {"event": "state", "name": "REPAIR", "phase": "start"}
-        merged2 = _repair_stream(
-            base_url=settings.base_url,
-            model=agg_model,
-            title=title,
+    def _writer(payload: dict) -> dict:
+        generator = run_generate_graph(
             instruction=instruction,
-            draft=merged,
-            problems=problems,
-            required_h2=required_h2,
-            targets=targets,
+            current_text=current_text,
+            required_h2=list(payload.get("required_h2") or required_h2 or []),
+            required_outline=list(payload.get("required_outline") or required_outline or []),
+            expand_outline=expand_outline,
+            config=config,
         )
-        yield {"event": "state", "name": "REPAIR", "phase": "end"}
-        parsed2 = parse_report_text(merged2)
-        problems2 = validate_doc(
-            parsed2,
-            required_h2=required_h2,
-            min_paragraphs_per_section={k: v.min_paras for k, v in targets.items()},
-            min_chars_per_section={k: v.min_chars for k, v in targets.items()},
-            min_tables_per_section={k: v.min_tables for k, v in targets.items()},
-            min_figures_per_section={k: v.min_figures for k, v in targets.items()},
-            min_total_chars=config.min_total_chars,
-        )
-        yield {"event": "final", "text": merged2, "problems": problems2}
-        return
-
-    yield {"event": "final", "text": merged, "problems": problems}
-
-
-def _plan_title_sections(*, current_text: str, instruction: str, required_h2: list[str] | None) -> tuple[str, list[str]]:
-    text = (current_text or "").strip()
-    m = None
-    for line in text.splitlines():
-        if line.startswith("# "):
-            m = line[2:].strip()
-            break
-    title = m or _guess_title(instruction) or "未命名报告"
-
-    if required_h2:
-        secs = [s.strip() for s in required_h2 if s and s.strip()]
-        if secs:
-            return title, secs
-    # default
-    return title, ["摘要", "引言", "方法", "结果", "结论", "参考文献"]
-
-
-def _guess_title(instruction: str) -> str:
-    s = (instruction or "").strip().replace("\r", "").replace("\n", " ")
-    if not s:
-        return ""
-    # take first sentence-ish fragment
-    for sep in ["。", ".", "！", "!", "？", "?"]:
-        if sep in s:
-            s = s.split(sep, 1)[0]
-            break
-    s = s.strip()
-    return s[:40]
-
-
-def _generate_section_stream(
-    *,
-    base_url: str,
-    model: str,
-    title: str,
-    section: str,
-    instruction: str,
-    min_paras: int,
-    min_chars: int,
-    min_tables: int,
-    min_figures: int,
-    out_queue: queue.Queue[dict],
-) -> str:
-    # When Ollama queues requests, the first token can take a while; keep timeout generous.
-    client = OllamaClient(base_url=base_url, model=model, timeout_s=300.0)
-
-    table_hint = ""
-    fig_hint = ""
-    if min_tables > 0 or section in {"结果"}:
-        table_hint = "本章节必须包含至少 1 个表格标记 [[TABLE:{...}]]，用于呈现关键指标/对比/实验结果。"
-    if min_figures > 0:
-        fig_hint = "本章节必须包含至少 1 个图标记 [[FIGURE:{...}]]（按内容选择 bar/line/pie/timeline/sequence/flow/er）。"
-    elif section in {"结果"}:
-        fig_hint = "本章节必须包含至少 1 个图标记 [[FIGURE:{...}]]（优先 bar/line/pie）。"
-    elif section in {"方法"}:
-        fig_hint = "本章节尽量包含 1 个图标记 [[FIGURE:{...}]]（优先 flow/sequence）。"
-    elif section in {"引言"}:
-        fig_hint = "如涉及发展脉络/阶段，可加入 [[FIGURE:{...}]]（timeline）。"
-
-    system = (
-        "你是一个严谨的报告写作Agent，只负责输出“一个章节”的正文内容。\n"
-        "输出规则（必须遵守）：\n"
-        "1) 只输出纯文本，不要HTML，不要Markdown，不要列表符号渲染（允许自然语言编号）。\n"
-        f"2) 至少输出 {max(2, int(min_paras))} 段，段与段之间用空行分隔；每段要具体、可执行、包含定义/步骤/约束/边界条件。\n"
-        f"3) 目标长度约 {max(220, int(min_chars))} 字符（可略超，但不要明显不足）。\n"
-        "4) 不要编造真实数据/引用；未知信息用 [待补充]。\n"
-        "5) 需要结构化呈现时可插入标记（单行、JSON必须合法）：\n"
-        "   - 表格：[[TABLE:{\"caption\":\"...\",\"columns\":[\"...\"],\"rows\":[[\"...\"],[\"...\"]]}]]\n"
-        "   - 图：[[FIGURE:{\"type\":\"bar|line|pie|timeline|sequence|flow|er\",\"caption\":\"...\",\"data\":{...}}]]\n"
-        f"6) {table_hint} {fig_hint}\n"
-    )
-
-    rag_context = _maybe_rag_context(instruction=instruction, section=section)
-    if rag_context:
-        system = system + "6) 可参考给定的论文/摘要材料，但不要捏造具体数值或真实引用。\n"
-
-    user = (
-        f"文档标题：{title}\n"
-        f"你负责章节：{section}\n\n"
-        f"用户整体要求：\n{instruction}\n\n"
-    )
-    if rag_context:
-        user += f"可用参考材料（摘要/元数据，仅供辅助）：\n{rag_context}\n\n"
-    user += "请直接输出该章节正文内容。"
-
-    buf: list[str] = []
-    for delta in client.chat_stream(system=system, user=user, temperature=0.35):
-        buf.append(delta)
-        out_queue.put({"event": "section", "phase": "delta", "section": section, "delta": delta})
-    txt = "".join(buf)
-    return _postprocess_section(section, txt, min_paras=min_paras, min_chars=min_chars, min_tables=min_tables, min_figures=min_figures)
-
-
-def _maybe_rag_context(*, instruction: str, section: str) -> str:
-    enabled_raw = os.environ.get("WRITING_AGENT_RAG_ENABLED", "0").strip().lower()
-    if enabled_raw not in {"1", "true", "yes", "on"}:
-        return ""
-
-    try:
-        from writing_agent.v2.rag.retrieve import retrieve_context
-    except Exception:
-        return ""
-
-    repo_root = Path(__file__).resolve().parents[2]
-    data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
-    rag_dir = data_dir / "rag"
-
-    q = (instruction or "").strip()
-    if section:
-        q = (q + " " + section).strip()
-    top_k = int(os.environ.get("WRITING_AGENT_RAG_TOP_K", "4"))
-    max_chars = int(os.environ.get("WRITING_AGENT_RAG_MAX_CHARS", "2500"))
-    per_paper = int(os.environ.get("WRITING_AGENT_RAG_PER_PAPER", "2"))
-    res = retrieve_context(rag_dir=rag_dir, query=q, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
-    return res.context
-
-def _select_models_by_memory(models: list[str], *, fallback: str) -> list[str]:
-    candidates = [m.strip() for m in (models or []) if m and m.strip()]
-    if not candidates:
-        return [fallback]
-
-    # Drop embedding-only models; they are not useful for text generation.
-    candidates = [m for m in candidates if not _looks_like_embedding_model(m)]
-    if not candidates:
-        return [fallback]
-
-    installed = _ollama_installed_models()
-    if installed:
-        candidates = [m for m in candidates if m in installed]
-    if not candidates:
-        return [fallback]
-
-    max_active = int(os.environ.get("WRITING_AGENT_MAX_ACTIVE_MODELS", "2"))
-    max_active = max(1, min(8, max_active))
-
-    reserve_gb = float(os.environ.get("WRITING_AGENT_RAM_RESERVE_GB", "4"))
-    ratio = float(os.environ.get("WRITING_AGENT_MODEL_BUDGET_RATIO", "0.55"))
-    ratio = min(0.95, max(0.2, ratio))
-
-    total_b, avail_b = _get_memory_bytes()
-    avail_gb = avail_b / (1024**3)
-    budget_gb = max(0.0, (avail_gb - reserve_gb) * ratio)
-    if budget_gb <= 0.2:
-        return [candidates[0]]
-
-    sizes = _ollama_model_sizes_gb()
-    out: list[str] = []
-    used = 0.0
-    for m in candidates:
-        est = float(sizes.get(m, 4.0))
-        # empirical overhead factor
-        est = est * 1.15
-        if not out:
-            out.append(m)
-            used += est
-            if len(out) >= max_active:
+        final_text = ""
+        problems: list[str] = []
+        for event in generator:
+            if isinstance(event, dict) and event.get("event") == "final":
+                final_text = str(event.get("text") or "")
+                problems = list(event.get("problems") or [])
                 break
-            continue
-        if used + est <= budget_gb and len(out) < max_active:
-            out.append(m)
-            used += est
-    return out or [candidates[0]]
+        return {"draft": final_text, "problems": problems}
 
-
-def _default_worker_models(*, preferred: str) -> list[str]:
-    installed = _ollama_installed_models()
-    if not installed:
-        return [preferred]
-    out: list[str] = []
-    if preferred in installed and not _looks_like_embedding_model(preferred):
-        out.append(preferred)
-    # Add other non-embedding models as fallback candidates.
-    for m in sorted(installed):
-        if m == preferred:
-            continue
-        if _looks_like_embedding_model(m):
-            continue
-        out.append(m)
-    return out or [preferred]
-
-
-def _looks_like_embedding_model(name: str) -> bool:
-    n = (name or "").lower()
-    return any(k in n for k in ["embed", "embedding", "bge-", "e5-", "nomic-embed"])
-
-
-def _ollama_installed_models() -> set[str]:
-    try:
-        p = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=8)
-        if p.returncode != 0:
-            return set()
-        lines = (p.stdout or "").splitlines()
-        out: set[str] = set()
-        for line in lines[1:]:
-            parts = line.split()
-            if parts:
-                out.add(parts[0].strip())
-        return out
-    except Exception:
-        return set()
-
-
-def _ollama_model_sizes_gb() -> dict[str, float]:
-    # Parse `ollama list` SIZE column; best-effort.
-    try:
-        p = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=8)
-        if p.returncode != 0:
-            return {}
-        out: dict[str, float] = {}
-        for line in (p.stdout or "").splitlines()[1:]:
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-            name = parts[0].strip()
-            # SIZE is usually the 3rd column, e.g. "4.1" "GB"
-            try:
-                num = float(parts[2])
-                unit = parts[3].upper() if len(parts) > 3 else "GB"
-                if unit.startswith("MB"):
-                    gb = num / 1024.0
-                elif unit.startswith("KB"):
-                    gb = num / (1024.0 * 1024.0)
-                else:
-                    gb = num
-                out[name] = max(0.1, gb)
-            except Exception:
-                continue
-        return out
-    except Exception:
-        return {}
-
-
-def _get_memory_bytes() -> tuple[int, int]:
-    # Windows GlobalMemoryStatusEx; fallback returns (0,0)
-    class MEMORYSTATUSEX(ctypes.Structure):
-        _fields_ = [
-            ("dwLength", ctypes.c_ulong),
-            ("dwMemoryLoad", ctypes.c_ulong),
-            ("ullTotalPhys", ctypes.c_ulonglong),
-            ("ullAvailPhys", ctypes.c_ulonglong),
-            ("ullTotalPageFile", ctypes.c_ulonglong),
-            ("ullAvailPageFile", ctypes.c_ulonglong),
-            ("ullTotalVirtual", ctypes.c_ulonglong),
-            ("ullAvailVirtual", ctypes.c_ulonglong),
-            ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-        ]
-
-    try:
-        st = MEMORYSTATUSEX()
-        st.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):  # type: ignore[attr-defined]
-            return int(st.ullTotalPhys), int(st.ullAvailPhys)
-    except Exception:
-        pass
-    return 0, 0
-
-
-def _postprocess_section(section: str, txt: str, *, min_paras: int, min_chars: int, min_tables: int, min_figures: int) -> str:
-    s = (txt or "").replace("\r", "").strip()
-    # Normalize paragraphs (model sometimes emits single-newline wrapped text)
-    paras = [p.strip() for p in re.split(r"\n\s*\n+", s) if p.strip()]
-    if len(paras) <= 1 and "\n" in s:
-        # treat each non-empty line as a paragraph when no blank lines are used
-        lines = [ln.strip() for ln in re.split(r"\n+", s) if ln.strip()]
-        if len(lines) >= 2:
-            paras = lines
-    if len(paras) <= 1 and len(s) >= 420:
-        # CJK-friendly fallback: split long single paragraph by sentences into 3-6 paragraphs
-        parts = [p.strip() for p in re.split(r"(?<=[。！？!?.])\s*", s) if p.strip()]
-        if len(parts) >= 6:
-            chunked: list[str] = []
-            buf: list[str] = []
-            for part in parts:
-                buf.append(part)
-                if len("".join(buf)) >= 180:
-                    chunked.append("".join(buf).strip())
-                    buf = []
-            if buf:
-                chunked.append("".join(buf).strip())
-            paras = [p for p in chunked if p]
-    if len(paras) < max(2, min_paras):
-        need = max(2, min_paras) - len(paras)
-        paras.extend([f"[待补充]：补充“{section}”的关键细节与可操作步骤。" for _ in range(need)])
-
-    joined = "\n\n".join(paras)
-    if min_tables > 0 and "[[TABLE:" not in joined:
-        joined += (
-            "\n\n[[TABLE:{\"caption\":\"关键结果汇总（待补充）\",\"columns\":[\"指标\",\"方法A\",\"方法B\",\"备注\"],"
-            "\"rows\":[[\"[待补充]\",\"[待补充]\",\"[待补充]\",\"[待补充]\"]]}]]"
+    def _reviewer(payload: dict) -> dict:
+        draft = str(payload.get("draft") or "")
+        issues = _light_self_check(
+            text=draft,
+            sections=list(required_h2 or []),
+            target_chars=_target_total_chars(config),
+            evidence_enabled=_is_evidence_enabled(),
+            reference_sources=[],
         )
-    if min_figures > 0 and "[[FIGURE:" not in joined:
-        ftype = "bar" if ("结果" in section or "实验" in section or "评估" in section) else ("flow" if ("方法" in section or "实现" in section or "设计" in section) else "timeline")
-        joined += f'\n\n[[FIGURE:{{"type":"{ftype}","caption":"{section}图示（待补充）","data":{{}}}}]]'
-    if min_chars > 0:
-        body_len = len(re.sub(r"\[\[(?:FIGURE|TABLE)\s*:\s*\{[\s\S]*?\}\s*\]\]", "", joined).strip())
-        if body_len < min_chars and len(paras) >= max(2, min_paras):
-            joined += f"\n\n[待补充]：补齐“{section}”的论证细节、定义边界、步骤与可落地建议（目标补足至约 {min_chars} 字符）。"
-    return joined.strip()
+        return {"review": {"issues": issues}, "fixups": []}
 
+    def _qa(payload: dict) -> dict:
+        return {
+            "final_text": str(payload.get("draft") or ""),
+            "problems": list((payload.get("review") or {}).get("issues") or payload.get("problems") or []),
+        }
 
-def _ensure_section_minimums_stream(
-    *,
-    base_url: str,
-    model: str,
-    title: str,
-    section: str,
-    instruction: str,
-    draft: str,
-    min_paras: int,
-    min_chars: int,
-    min_tables: int,
-    min_figures: int,
-    out_queue: queue.Queue[dict],
-) -> str:
-    txt = _postprocess_section(section, draft, min_paras=min_paras, min_chars=min_chars, min_tables=min_tables, min_figures=min_figures)
-    body_len = len(re.sub(r"\[\[(?:FIGURE|TABLE)\s*:\s*\{[\s\S]*?\}\s*\]\]", "", txt).strip())
-    paras = [p for p in re.split(r"\n\s*\n+", txt) if p.strip()]
-    if (len(paras) >= min_paras) and (min_chars <= 0 or body_len >= min_chars):
-        return txt
-
-    rounds = max(0, min(2, int(os.environ.get("WRITING_AGENT_SECTION_CONTINUE_ROUNDS", "2"))))
-    if rounds <= 0:
-        return txt
-
-    client = OllamaClient(base_url=base_url, model=model, timeout_s=240.0)
-    for r in range(rounds):
-        missing_chars = max(0, int(min_chars) - body_len) if min_chars > 0 else 0
-        out_queue.put({"event": "section", "phase": "delta", "section": section, "delta": f"\n\n[补齐 {r+1}/{rounds}] …\n"})
-        system = (
-            "你是报告续写Agent，只负责在不改变风格的前提下补齐该章节。\n"
-            "规则：只输出纯文本；不要重复已有内容；不要编造真实数据/引用；未知信息用[待补充]。\n"
-            "尽量补充：定义边界、步骤、可执行方案、风险与对策、验收方式。\n"
-        )
-        user = (
-            f"文档标题：{title}\n章节：{section}\n\n"
-            f"用户整体要求：\n{instruction}\n\n"
-            f"当前章节草稿：\n{txt}\n\n"
-            f"请继续补充该章节，至少新增 {max(220, missing_chars)} 字符，并确保最终至少 {min_paras} 段。"
-        )
-        buf: list[str] = []
-        for delta in client.chat_stream(system=system, user=user, temperature=0.25):
-            buf.append(delta)
-            out_queue.put({"event": "section", "phase": "delta", "section": section, "delta": delta})
-        txt = (txt + "\n\n" + "".join(buf)).strip()
-        txt = _postprocess_section(section, txt, min_paras=min_paras, min_chars=min_chars, min_tables=min_tables, min_figures=min_figures)
-        body_len = len(re.sub(r"\[\[(?:FIGURE|TABLE)\s*:\s*\{[\s\S]*?\}\s*\]\]", "", txt).strip())
-        paras = [p for p in re.split(r"\n\s*\n+", txt) if p.strip()]
-        if (len(paras) >= min_paras) and (min_chars <= 0 or body_len >= min_chars):
-            break
-
-    return txt
-
-
-def _target_total_chars(config: GenerateConfig) -> int:
-    raw = os.environ.get("WRITING_AGENT_TARGET_TOTAL_CHARS", "").strip()
-    if raw.isdigit():
-        return max(int(config.min_total_chars), int(raw))
-    return max(int(config.min_total_chars), 4500)
-
-
-def _compute_section_targets(*, sections: list[str], base_min_paras: int, total_chars: int) -> dict[str, SectionTargets]:
-    weights = _load_section_weights()
-    sec_weights: dict[str, float] = {}
-    for s in sections:
-        w = weights.get(s)
-        if w is None:
-            w = _guess_section_weight(s)
-        sec_weights[s] = float(max(0.3, min(3.0, w)))
-
-    denom = sum(sec_weights.values()) or 1.0
-    out: dict[str, SectionTargets] = {}
-    for sec in sections:
-        w = sec_weights.get(sec, 1.0)
-        min_paras = int(round(max(2.0, float(base_min_paras) * w)))
-        min_paras = max(2, min(12, min_paras))
-
-        share = int(round(float(total_chars) * (w / denom)))
-        floor = 260 if "摘要" in sec else (180 if "参考" in sec else 420)
-        min_chars = max(floor, min(9000, share))
-
-        min_tables = 0
-        min_figures = 0
-        if any(k in sec for k in ["结果", "实验", "评估", "对比"]):
-            min_tables = 1
-            min_figures = 1
-        elif any(k in sec for k in ["方法", "实现", "设计", "架构", "流程"]):
-            min_figures = 1
-        elif w >= 1.35 and "参考" not in sec and "附录" not in sec:
-            min_figures = 1
-
-        out[sec] = SectionTargets(weight=w, min_paras=min_paras, min_chars=min_chars, min_tables=min_tables, min_figures=min_figures)
-    return out
-
-
-def _guess_section_weight(section: str) -> float:
-    s = (section or "").strip()
-    if not s:
-        return 1.0
-    if "摘要" in s:
-        return 0.7
-    if "引言" in s or "背景" in s or "概述" in s:
-        return 1.0
-    if any(k in s for k in ["方法", "实现", "设计", "系统", "架构"]):
-        return 1.35
-    if any(k in s for k in ["实验", "结果", "评估", "分析", "讨论"]):
-        return 1.45
-    if "结论" in s or "总结" in s:
-        return 0.9
-    if "参考" in s:
-        return 0.6
-    if "附录" in s:
-        return 0.55
-    return 1.0
-
-
-def _load_section_weights() -> dict[str, float]:
-    raw = os.environ.get("WRITING_AGENT_SECTION_WEIGHTS", "").strip()
-    if not raw:
-        return {}
-    try:
-        if raw.lstrip().startswith("{"):
-            obj = json.loads(raw)
-            if isinstance(obj, dict):
-                out: dict[str, float] = {}
-                for k, v in obj.items():
-                    if not isinstance(k, str):
-                        continue
-                    try:
-                        out[k.strip()] = float(v)
-                    except Exception:
-                        continue
-                return out
-    except Exception:
-        pass
-
-    out2: dict[str, float] = {}
-    for part in raw.split(","):
-        if "=" not in part:
-            continue
-        k, v = part.split("=", 1)
-        k = k.strip()
-        try:
-            out2[k] = float(v.strip())
-        except Exception:
-            continue
-    return out2
-
-
-def _format_section_constraints(*, required: list[str], targets: dict[str, SectionTargets] | None) -> str:
-    if not targets:
-        return "- 每章：>=3段（空行分隔），内容具体。"
-    lines: list[str] = []
-    for sec in required[:18]:
-        t = targets.get(sec)
-        if t is None:
-            continue
-        extra: list[str] = []
-        if t.min_tables > 0:
-            extra.append(f"表>={t.min_tables}")
-        if t.min_figures > 0:
-            extra.append(f"图>={t.min_figures}")
-        suffix = ("，" + "，".join(extra)) if extra else ""
-        lines.append(f"- {sec}：段>={t.min_paras}，字>={t.min_chars}{suffix}")
-    if len(required) > 18:
-        lines.append("- 其余章节：按对应权重目标补齐。")
-    return "\n".join(lines) if lines else "- 每章：>=3段（空行分隔），内容具体。"
-
-
-def _doc_body_len(text: str) -> int:
-    s = (text or "").replace("\r", "")
-    # strip headings
-    s = re.sub(r"(?m)^#{1,3}\s+.*?$", "", s)
-    # strip markers
-    s = re.sub(r"\[\[(?:FIGURE|TABLE)\s*:\s*\{[\s\S]*?\}\s*\]\]", "", s, flags=re.IGNORECASE)
-    return len(s.strip())
-
-
-def _merge_sections_text(title: str, sections: list[str], section_text: dict[str, str]) -> str:
-    out = [f"# {title}"]
-    for sec in sections:
-        out.append(f"## {sec}")
-        out.append((section_text.get(sec) or "").strip() or "[待补充]")
-    return "\n\n".join(out).strip() + "\n"
-
-
-def _aggregate_fix_stream(
-    *,
-    base_url: str,
-    model: str,
-    title: str,
-    instruction: str,
-    draft: str,
-    required_h2: list[str] | None,
-    targets: dict[str, SectionTargets] | None,
-) -> str:
-    client = OllamaClient(base_url=base_url, model=model, timeout_s=180.0)
-    required = [h.strip() for h in (required_h2 or []) if h and h.strip()]
-    if not required:
-        required = ["摘要", "引言", "方法", "结果", "结论", "参考文献"]
-
-    constraints = _format_section_constraints(required=required, targets=targets)
-    draft_len = _doc_body_len(draft)
-    system = (
-        "你是“报告统筹合并Agent”。你会收到一份草稿文本（含章节），需要把它改成更完整、更一致的最终稿。\n"
-        "输出规则（必须遵守）：\n"
-        "1) 只输出纯文本，不要HTML，不要Markdown（但可以保留以“# 标题 / ## 章节”形式的标题行）。\n"
-        "2) 必须保留并输出这些章节（按顺序）："
-        + "、".join(required)
-        + "。\n"
-        "3) 按章节最低要求补齐篇幅与结构（空行分隔，内容要具体；缺失信息用 [待补充]）：\n"
-        + constraints
-        + "\n"
-        "4) 不要删除草稿中的任何正文段落（除非明显重复/乱码），不要把草稿浓缩成很短的摘要；输出长度应 >= 草稿长度的 85%（当前草稿约 "
-        + str(draft_len)
-        + " 字符）。\n"
-        "5) 不要删除草稿中的 [[TABLE:...]] / [[FIGURE:...]] 标记；可以补充更多标记但必须是合法JSON。\n"
-        "6) 不要编造真实数据/引用。\n"
+    engine = DualGraphEngine(use_langgraph=should_use_langgraph())
+    run_id = f"graph_{int(time.time() * 1000)}"
+    state, _events = engine.run(
+        run_id=run_id,
+        payload={
+            "instruction": instruction,
+            "current_text": current_text,
+            "compose_mode": compose_mode,
+            "resume_sections": list(resume_sections or []),
+            "format_only": bool(format_only),
+        },
+        handlers={
+            "planner": _planner,
+            "writer": _writer,
+            "reviewer": _reviewer,
+            "qa": _qa,
+        },
     )
-    user = f"文档标题：{title}\n用户要求：{instruction}\n\n草稿：\n{draft}\n\n请输出最终稿。"
+    return {
+        "ok": 1,
+        "text": str(state.get("final_text") or ""),
+        "problems": list(state.get("problems") or []),
+        "trace_id": str(state.get("trace_id") or ""),
+        "engine": "langgraph" if should_use_langgraph() else "native",
+    }
 
-    buf: list[str] = []
-    for delta in client.chat_stream(system=system, user=user, temperature=0.2):
-        buf.append(delta)
-    return "".join(buf).strip() or draft
+from writing_agent.v2 import graph_runner_post_domain as post_domain
 
-
-def _repair_stream(
-    *,
-    base_url: str,
-    model: str,
-    title: str,
-    instruction: str,
-    draft: str,
-    problems: list[str],
-    required_h2: list[str] | None,
-    targets: dict[str, SectionTargets] | None,
-) -> str:
-    client = OllamaClient(base_url=base_url, model=model, timeout_s=180.0)
-    required = [h.strip() for h in (required_h2 or []) if h and h.strip()]
-    if not required:
-        required = ["摘要", "引言", "方法", "结果", "结论", "参考文献"]
-
-    constraints = _format_section_constraints(required=required, targets=targets)
-    draft_len = _doc_body_len(draft)
-    system = (
-        "你是“报告修复Agent”。你会收到一份报告草稿和一组校验问题，需要在不偷懒的前提下修复。\n"
-        "输出规则：\n"
-        "1) 只输出纯文本；保留“# 标题 / ## 章节”标题行。\n"
-        "2) 必须包含并按顺序输出这些章节："
-        + "、".join(required)
-        + "。\n"
-        "3) 修复段落不足/内容过短，按章节最低要求补齐：\n"
-        + constraints
-        + "\n"
-        "4) 不要删除草稿中的任何正文段落（除非明显重复/乱码），不要把草稿浓缩成很短的摘要；输出长度应 >= 草稿长度的 85%（当前草稿约 "
-        + str(draft_len)
-        + " 字符）。\n"
-        "5) 必须保留并可补充 [[TABLE:...]] / [[FIGURE:...]] 标记；JSON必须合法。\n"
-        "6) 不要编造真实数据/引用。\n"
-    )
-    user = (
-        f"文档标题：{title}\n用户要求：{instruction}\n\n"
-        f"校验问题：\n- " + "\n- ".join(problems) + "\n\n"
-        f"草稿：\n{draft}\n\n"
-        "请输出修复后的最终稿。"
-    )
-    buf: list[str] = []
-    for delta in client.chat_stream(system=system, user=user, temperature=0.2):
-        buf.append(delta)
-    return "".join(buf).strip() or draft
+for _post_name in (
+    "_extract_h2_titles _count_citations _light_self_check _plan_title _normalize_title_line _default_title "
+    "_fallback_title_from_instruction _plan_title_sections _guess_title _wants_acknowledgement _filter_ack_headings "
+    "_filter_ack_outline _filter_disallowed_outline _is_engineering_instruction _boost_media_targets "
+    "_generate_section_stream _maybe_rag_context _mcp_rag_enabled _mcp_rag_retrieve _looks_like_rag_meta_line "
+    "_has_cjk _is_mostly_ascii_line _strip_rag_meta_lines _plan_point_paragraph _expand_with_context "
+    "_select_models_by_memory _default_worker_models _looks_like_embedding_model _ollama_installed_models "
+    "_ollama_model_sizes_gb _get_memory_bytes _sanitize_output_text _strip_markdown_noise _should_merge_tail "
+    "_clean_generated_text _normalize_final_output _is_reference_section _looks_like_heading_text "
+    "_strip_inline_headings _format_references _ensure_media_markers _generic_fill_paragraph _fast_fill_references "
+    "_fast_fill_section _postprocess_section _ensure_section_minimums_stream _strip_reference_like_lines "
+    "_normalize_section_id _stream_structured_blocks _trim_total_chars _encode_section _split_section_token "
+    "_section_title _sections_from_outline _map_section_parents _merge_sections_text _apply_section_updates"
+).split():
+    globals()[_post_name] = getattr(post_domain, _post_name)
+del _post_name

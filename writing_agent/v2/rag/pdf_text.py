@@ -1,3 +1,8 @@
+"""Pdf Text module.
+
+This module belongs to `writing_agent.v2.rag` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

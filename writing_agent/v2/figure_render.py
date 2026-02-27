@@ -1,3 +1,8 @@
+"""Figure Render module.
+
+This module belongs to `writing_agent.v2` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import html

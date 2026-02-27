@@ -1,0 +1,28 @@
+﻿{
+  "schema_version": "1.0",
+  "tools": [
+    {
+      "name": "rag_search",
+      "description": "Search indexed references and return ranked snippets",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "top_k": {"type": "integer", "minimum": 1, "maximum": 20}
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "citation_verify",
+      "description": "Verify citation metadata/reachability",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "doc_id": {"type": "string"}
+        },
+        "required": ["doc_id"]
+      }
+    }
+  ]
+}

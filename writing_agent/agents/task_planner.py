@@ -1,3 +1,8 @@
+"""Task Planner module.
+
+This module belongs to `writing_agent.agents` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

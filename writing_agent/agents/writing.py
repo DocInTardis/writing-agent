@@ -1,3 +1,8 @@
+"""Writing module.
+
+This module belongs to `writing_agent.agents` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import re
@@ -17,7 +22,7 @@ class WritingAgent:
     CITE_PATTERN = re.compile(r"\[@(?P<key>[a-zA-Z0-9_-]+)\]")
 
     def generate_draft(self, req: ReportRequest, outline: OutlineNode, citations: dict[str, object]) -> WriteResult:
-        title = req.topic.strip() or "未命名报告"
+        title = req.topic.strip() or "自动生成文档"
         sections: list[SectionDraft] = []
         usage: dict[str, list[str]] = {}
 
@@ -126,7 +131,8 @@ class WritingAgent:
 
         system = (
             "你是一个学术写作助手，负责为指定章节写作内容。"
-            "必须避免编造不可验证事实；需要具体数据/结论时用“[待补充]”。"
+            "必须避免编造不可验证事实；需要具体数据/结论时用'[待补充]'。"
+            "**重要**：凡是引用他人观点、数据或结论，必须在句末添加引用标记（如 [@key]），以便读者验证来源。"
             "输出仅包含该章节的正文段落，段落之间用一个空行分隔，不要输出标题。"
         )
         user = (
@@ -135,7 +141,10 @@ class WritingAgent:
             f"要点提示：{notes}\n"
             f"写作风格：{req.writing_style}\n"
             f"引用规则：{cite_rule}\n"
-            "\n请写 2-4 段正文，每段 2-5 句，行文连贯。若需要引用，请在句末用形如 [@key] 标注。"
+            "\n请写 2-4 段正文，每段 2-5 句，行文连贯。"
+            "**必须在陈述事实、引用观点或数据的句子末尾添加引用标记** [@key]，例如："
+            '\n"根据研究表明，XX方法可以提升性能 [@zhang2020]。"'
+            "\n确保至少在2-3处添加引用标记，以增强论证可信度。"
         )
         try:
             text = client.chat(system=system, user=user, temperature=0.3).strip()

@@ -1,3 +1,8 @@
+"""Store module.
+
+This module belongs to `writing_agent.v2.rag` in the writing-agent codebase.
+"""
+
 from __future__ import annotations
 
 import json
@@ -23,6 +28,7 @@ class RagPaperRecord:
     primary_category: str
     pdf_path: str
     meta_path: str
+    source: str = ""
 
 
 class RagStore:
@@ -70,6 +76,47 @@ class RagStore:
             primary_category=paper.primary_category,
             pdf_path=str(pdf_path),
             meta_path=str(meta_path),
+            source="arxiv",
+        )
+
+    def put_openalex_work(self, work, *, pdf_bytes: bytes | None) -> RagPaperRecord:
+        self.ensure()
+        safe = safe_paper_key(work.paper_id)
+        meta_path = self.papers_dir / f"{safe}.json"
+        pdf_path = self.papers_dir / f"{safe}.pdf"
+
+        meta = {
+            "source": "openalex",
+            "paper_id": work.paper_id,
+            "title": work.title,
+            "summary": work.summary,
+            "authors": work.authors,
+            "published": work.published,
+            "updated": work.updated,
+            "abs_url": work.abs_url,
+            "pdf_url": work.pdf_url,
+            "categories": work.categories,
+            "primary_category": work.primary_category,
+            "pdf_path": str(pdf_path),
+        }
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        if pdf_bytes:
+            pdf_path.write_bytes(pdf_bytes)
+
+        return RagPaperRecord(
+            paper_id=work.paper_id,
+            title=work.title,
+            summary=work.summary,
+            authors=work.authors,
+            published=work.published,
+            updated=work.updated,
+            abs_url=work.abs_url,
+            pdf_url=work.pdf_url,
+            categories=work.categories,
+            primary_category=work.primary_category,
+            pdf_path=str(pdf_path),
+            meta_path=str(meta_path),
+            source="openalex",
         )
 
     def list_papers(self) -> list[RagPaperRecord]:
@@ -101,6 +148,7 @@ class RagStore:
                     primary_category=str(meta.get("primary_category") or ""),
                     pdf_path=str(pdf_path),
                     meta_path=str(meta_path),
+                    source=str(meta.get("source") or ""),
                 )
             )
         return out
@@ -123,4 +171,3 @@ def safe_paper_key(paper_id: str) -> str:
     s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
     s = s.strip("._-")
     return s or "paper"
-
