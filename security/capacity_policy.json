@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "citation_metrics": {
+    "target_peak_rps": 15.018,
+    "required_headroom_ratio": 1.2,
+    "load_report_max_age_s": 172800.0,
+    "soak_report_max_age_s": 604800.0,
+    "max_latency_p95_ms": 1200.0,
+    "max_degraded_rate": 0.05,
+    "min_success_rate": 0.99,
+    "quick_relax": {
+      "required_headroom_ratio": 1.15,
+      "allow_headroom_history_fallback": true,
+      "max_latency_p95_ms": 2200.0,
+      "max_degraded_rate": 0.08
+    },
+    "headroom_history": {
+      "enabled": true,
+      "mode": "warn",
+      "mode_by_release_tier": {
+        "dev": "warn",
+        "staging": "warn",
+        "prod": "enforce"
+      },
+      "mode_by_runtime_env": {
+        "local": "warn",
+        "dev": "warn",
+        "ci": "warn",
+        "staging": "warn",
+        "production": "enforce",
+        "prod": "enforce"
+      },
+      "mode_by_branch_pattern": [
+        {
+          "pattern": "main",
+          "mode": "enforce"
+        },
+        {
+          "pattern": "master",
+          "mode": "enforce"
+        },
+        {
+          "pattern": "release/*",
+          "mode": "enforce"
+        },
+        {
+          "pattern": "hotfix/*",
+          "mode": "enforce"
+        },
+        {
+          "pattern": "staging/*",
+          "mode": "warn"
+        },
+        {
+          "pattern": "feature/*",
+          "mode": "warn"
+        }
+      ],
+      "strict_promote_to_enforce": true,
+      "promote_when_quick_with_sufficient_history": false,
+      "window_runs": 4,
+      "min_required_runs": 3,
+      "allow_insufficient_history": true,
+      "max_latest_drop_ratio_to_window_median": 0.12,
+      "quick_relax": {
+        "mode": "warn",
+        "strict_promote_to_enforce": true,
+        "promote_when_quick_with_sufficient_history": false,
+        "window_runs": 3,
+        "min_required_runs": 2,
+        "allow_insufficient_history": true,
+        "max_latest_drop_ratio_to_window_median": 0.18
+      }
+    },
+    "soak": {
+      "min_duration_s": 1200.0,
+      "min_window_count": 10,
+      "min_success_rate": 0.995,
+      "max_latency_p95_ms": 2000.0,
+      "quick_relax": {
+        "min_duration_s": 300.0,
+        "min_window_count": 5,
+        "min_success_rate": 0.99,
+        "max_latency_p95_ms": 2500.0
+      }
+    },
+    "profile_overrides": {
+      "default": {
+        "target_peak_rps": 15.018,
+        "required_headroom_ratio": 1.2,
+        "max_latency_p95_ms": 1200.0,
+        "max_degraded_rate": 0.05,
+        "min_success_rate": 0.99
+      },
+      "dev": {
+        "target_peak_rps": 12.0,
+        "required_headroom_ratio": 1.1,
+        "max_latency_p95_ms": 1800.0,
+        "max_degraded_rate": 0.08,
+        "min_success_rate": 0.985
+      },
+      "staging": {
+        "target_peak_rps": 14.0,
+        "required_headroom_ratio": 1.15,
+        "max_latency_p95_ms": 1500.0,
+        "max_degraded_rate": 0.06,
+        "min_success_rate": 0.99
+      },
+      "prod": {
+        "target_peak_rps": 15.018,
+        "required_headroom_ratio": 1.2,
+        "max_latency_p95_ms": 1200.0,
+        "max_degraded_rate": 0.05,
+        "min_success_rate": 0.99
+      }
+    },
+    "baseline_meta": {
+      "updated_at": 1771680247.058,
+      "updated_by": "scripts/update_capacity_baseline.py",
+      "source_load_report": ".data/out/citation_verify_load_probe_1771680154.json",
+      "effective_rps": 20.023361,
+      "required_headroom_ratio": 1.2,
+      "reserve_ratio": 0.9,
+      "previous_target_peak_rps": 20.0,
+      "candidate_target_peak_rps": 15.018,
+      "direction": "decrease",
+      "allow_regression": true,
+      "reason": "calibrate local baseline after repeated quick preflight headroom misses"
+    }
+  }
+}

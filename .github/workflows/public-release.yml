@@ -1,0 +1,74 @@
+name: public-release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version (semantic version, e.g. 0.1.0)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  release-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Resolve Release Version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.release_version }}" ]; then
+            VERSION="${{ github.event.inputs.release_version }}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(python - <<'PY'
+import re
+from pathlib import Path
+text = Path("writing_agent/__init__.py").read_text(encoding="utf-8")
+m = re.search(r'__version__\s*=\s*"([^"]+)"', text)
+print(m.group(1) if m else "")
+PY
+)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Public Release Guard
+        env:
+          WA_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python scripts/public_release_guard.py \
+            --strict \
+            --release-version "${WA_RELEASE_VERSION}" \
+            --write-release-notes \
+            --release-notes-out ".data/out/release_notes_${WA_RELEASE_VERSION}.md"
+      - name: Migration Assistant
+        env:
+          WA_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python scripts/migration_assistant.py \
+            --strict \
+            --to-version "${WA_RELEASE_VERSION}" \
+            --out-md ".data/out/migration_assistant_${WA_RELEASE_VERSION}.md"
+      - name: Upload Release Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-release-artifacts
+          path: |
+            .data/out/public_release_guard_*.json
+            .data/out/release_notes_*.md
+            .data/out/migration_assistant_*.json
+            .data/out/migration_assistant_*.md
+          if-no-files-found: ignore

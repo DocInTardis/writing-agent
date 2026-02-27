@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "description": "Channel routing policy for incident notifications.",
+  "default_channels": [
+    "webhook",
+    "slack",
+    "feishu",
+    "email"
+  ],
+  "rules": [
+    {
+      "id": "critical_all_channels",
+      "enabled": true,
+      "min_severity": "critical",
+      "channels": [
+        "webhook",
+        "slack",
+        "feishu",
+        "email"
+      ]
+    },
+    {
+      "id": "high_business_hours",
+      "enabled": true,
+      "min_severity": "high",
+      "days_of_week": [0, 1, 2, 3, 4],
+      "hours_utc": {"start": 8, "end": 20},
+      "channels": [
+        "webhook",
+        "slack",
+        "email"
+      ]
+    },
+    {
+      "id": "high_off_hours",
+      "enabled": true,
+      "min_severity": "high",
+      "channels": [
+        "webhook",
+        "email"
+      ]
+    },
+    {
+      "id": "medium_ops_signal",
+      "enabled": true,
+      "min_severity": "medium",
+      "channels": [
+        "webhook",
+        "slack"
+      ]
+    }
+  ]
+}

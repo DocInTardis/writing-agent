@@ -1,0 +1,71 @@
+name: citation-soak
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: "Soak duration in minutes"
+        required: false
+        default: "20"
+      interval_seconds:
+        description: "Window interval in seconds"
+        required: false
+        default: "30"
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Start App (no ollama)
+        env:
+          WRITING_AGENT_USE_OLLAMA: "0"
+          WRITING_AGENT_CITATION_VERIFY_ALERTS: "1"
+        run: |
+          mkdir -p .data/out
+          nohup python -m uvicorn writing_agent.web.app_v2:app --host 127.0.0.1 --port 18190 > .data/out/soak_app.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18190/api/metrics/citation_verify > /dev/null; then
+              echo "app ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "app failed to become ready"
+          exit 1
+      - name: Run Soak Probe
+        env:
+          WA_METRICS_BASE_URL: "http://127.0.0.1:18190"
+        run: |
+          DURATION_MINUTES="${{ github.event.inputs.duration_minutes || '20' }}"
+          INTERVAL_SECONDS="${{ github.event.inputs.interval_seconds || '30' }}"
+          python scripts/citation_verify_soak.py \
+            --duration-s "$((DURATION_MINUTES * 60))" \
+            --interval-s "${INTERVAL_SECONDS}" \
+            --requests-per-window 24 \
+            --concurrency 8 \
+            --timeout-s 6 \
+            --min-overall-success-rate 0.99 \
+            --max-overall-p95-ms 2500 \
+            --max-overall-degraded-rate 0.08 \
+            --label "github-actions-nightly"
+      - name: Upload Soak Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: citation-soak-artifacts
+          path: |
+            .data/out/citation_verify_soak_*.json
+            .data/out/soak_app.log
+            .data/citation_verify_alert_events.json
+          if-no-files-found: ignore

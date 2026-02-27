@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "citation_verify": {
+    "window_runs": 6,
+    "min_required_runs": 4,
+    "allow_insufficient_history": true,
+    "consecutive_worsen_limit": 3,
+    "worsen": {
+      "p95_increase_ratio_min": 0.08,
+      "success_rate_drop_min": 0.002,
+      "degraded_rate_increase_min": 0.003
+    },
+    "latest_guard": {
+      "max_p95_ratio_to_window_median": 1.35,
+      "min_success_rate_delta_to_window_median": -0.01,
+      "max_degraded_rate_delta_to_window_median": 0.01
+    },
+    "soak_trend": {
+      "enabled": true,
+      "required_in_strict": false,
+      "window_runs": 5,
+      "min_required_runs": 3,
+      "allow_insufficient_history": true,
+      "consecutive_worsen_limit": 2,
+      "worsen": {
+        "p95_increase_ratio_min": 0.1,
+        "success_rate_drop_min": 0.002,
+        "degraded_rate_increase_min": 0.003
+      },
+      "latest_guard": {
+        "max_p95_ratio_to_window_median": 1.3,
+        "min_success_rate_delta_to_window_median": -0.005,
+        "max_degraded_rate_delta_to_window_median": 0.01
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+﻿{
+  "WRITING_AGENT_LLM_PROVIDER": "ollama",
+  "WRITING_AGENT_GRAPH_ENGINE": "native"
+}

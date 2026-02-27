@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "doc_globs": [
+    "README.md",
+    "docs/**/*.md"
+  ],
+  "path_prefixes": [
+    "docs/",
+    "scripts/",
+    "security/",
+    ".github/workflows/",
+    "writing_agent/"
+  ],
+  "max_missing_paths": 0,
+  "max_command_failures": 0
+}

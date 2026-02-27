@@ -1,0 +1,18 @@
+﻿{
+  "flags": {
+    "dual_graph_engine": {
+      "enabled": true,
+      "tenants": ["beta-tenant", "internal"]
+    },
+    "ai_sdk_stream_bridge": {
+      "enabled": true,
+      "tenants": ["internal"]
+    },
+    "node_ai_gateway_backend": {
+      "enabled": false,
+      "rollout_percent": 5,
+      "rollout_steps": [5, 20, 50, 100],
+      "tenants": ["internal"]
+    }
+  }
+}

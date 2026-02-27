@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "default_max_unmasked_findings": 0,
+  "artifact_rules": [
+    {
+      "id": "out_json",
+      "glob": ".data/out/**/*.json",
+      "classification": "internal",
+      "max_age_days": 45,
+      "required": false
+    },
+    {
+      "id": "out_markdown",
+      "glob": ".data/out/**/*.md",
+      "classification": "internal",
+      "max_age_days": 90,
+      "required": false
+    },
+    {
+      "id": "dead_letter",
+      "glob": ".data/out/dead_letter/**/*.json",
+      "classification": "restricted",
+      "max_age_days": 14,
+      "required": false
+    },
+    {
+      "id": "audit_chain",
+      "glob": ".data/audit/*.ndjson",
+      "classification": "restricted",
+      "max_age_days": 365,
+      "required": false
+    },
+    {
+      "id": "ops_runtime_state",
+      "glob": ".data/citation_verify_*.json",
+      "classification": "sensitive",
+      "max_age_days": 30,
+      "required": false
+    }
+  ],
+  "class_limits": {
+    "public": {
+      "max_unmasked_findings": 0
+    },
+    "internal": {
+      "max_unmasked_findings": 0
+    },
+    "sensitive": {
+      "max_unmasked_findings": 0
+    },
+    "restricted": {
+      "max_unmasked_findings": 0
+    }
+  },
+  "sensitive_patterns": [
+    {
+      "id": "openai_key",
+      "regex": "\\bsk-[A-Za-z0-9]{20,}\\b"
+    },
+    {
+      "id": "aws_access_key",
+      "regex": "\\bAKIA[0-9A-Z]{16}\\b"
+    },
+    {
+      "id": "private_key_marker",
+      "regex": "-----BEGIN (?:RSA|EC|DSA|OPENSSH|PGP) PRIVATE KEY-----"
+    },
+    {
+      "id": "credential_assignment",
+      "regex": "(?i)\\b(api[_-]?key|token|secret|password)\\b\\s*[:=]\\s*['\\\"]?[A-Za-z0-9_\\-]{8,}"
+    },
+    {
+      "id": "bearer_token",
+      "regex": "(?i)\\bbearer\\s+[A-Za-z0-9._\\-]{20,}\\b"
+    }
+  ]
+}

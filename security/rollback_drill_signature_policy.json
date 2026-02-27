@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "required": false,
+  "required_in_strict": false,
+  "require_signing_key": true,
+  "algorithm": "hmac-sha256",
+  "key_env": "WA_ROLLBACK_DRILL_SIGNING_KEY",
+  "key_id_env": "WA_ROLLBACK_DRILL_SIGNING_KEY_ID",
+  "max_signature_age_s": 2592000
+}

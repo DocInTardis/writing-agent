@@ -1,0 +1,14 @@
+﻿version: "3.9"
+
+services:
+  writing-agent:
+    build: .
+    container_name: writing-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - WRITING_AGENT_USE_OLLAMA=0
+      - WRITING_AGENT_DATA_DIR=/app/.data
+    volumes:
+      - ./.data:/app/.data
+    restart: unless-stopped

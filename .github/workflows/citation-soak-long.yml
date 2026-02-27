@@ -1,0 +1,147 @@
+name: citation-soak-long
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Soak profile"
+        required: false
+        default: "long-12h"
+        type: choice
+        options:
+          - long-12h
+          - long-24h
+          - custom
+      custom_duration_minutes:
+        description: "Custom duration in minutes when profile=custom"
+        required: false
+        default: "180"
+      strict:
+        description: "Fail workflow when long-soak guard fails"
+        required: false
+        default: true
+        type: boolean
+      runner_label:
+        description: "Runner label, e.g. self-hosted or ubuntu-latest"
+        required: false
+        default: "self-hosted"
+  schedule:
+    - cron: "0 1 * * 1"
+    - cron: "0 1 1 * *"
+
+jobs:
+  long-soak:
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.runner_label || 'self-hosted' }}
+    timeout-minutes: 1800
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Restore Long-Soak History Cache
+        uses: actions/cache@v4
+        with:
+          path: .data/perf
+          key: citation-soak-long-history-${{ github.run_id }}
+          restore-keys: |
+            citation-soak-long-history-
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Resolve Profile
+        id: resolve
+        shell: bash
+        run: |
+          RUNNER_LABEL="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.runner_label || 'self-hosted' }}"
+          PROFILE="long-12h"
+          STRICT="true"
+          DURATION_S="43200"
+          INTERVAL_S="45"
+          REQUESTS_PER_WINDOW="32"
+          CONCURRENCY="8"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PROFILE="${{ github.event.inputs.profile }}"
+            STRICT="${{ github.event.inputs.strict }}"
+          elif [ "${{ github.event.schedule }}" = "0 1 1 * *" ]; then
+            PROFILE="long-24h"
+          else
+            PROFILE="long-12h"
+          fi
+
+          if [ "${PROFILE}" = "long-24h" ]; then
+            DURATION_S="86400"
+            INTERVAL_S="60"
+            REQUESTS_PER_WINDOW="24"
+            CONCURRENCY="8"
+          elif [ "${PROFILE}" = "custom" ]; then
+            MINUTES="${{ github.event.inputs.custom_duration_minutes || '180' }}"
+            if [ -z "${MINUTES}" ]; then
+              MINUTES="180"
+            fi
+            DURATION_S="$((MINUTES * 60))"
+            INTERVAL_S="30"
+            REQUESTS_PER_WINDOW="24"
+            CONCURRENCY="8"
+          fi
+
+          if [ "${RUNNER_LABEL}" = "ubuntu-latest" ] && [ "${DURATION_S}" -gt 21000 ]; then
+            echo "Long profiles above ~6h require self-hosted runner."
+            echo "runner_label=${RUNNER_LABEL}, duration_s=${DURATION_S}, profile=${PROFILE}"
+            exit 2
+          fi
+
+          echo "profile=${PROFILE}" >> "$GITHUB_OUTPUT"
+          echo "strict=${STRICT}" >> "$GITHUB_OUTPUT"
+          echo "duration_s=${DURATION_S}" >> "$GITHUB_OUTPUT"
+          echo "interval_s=${INTERVAL_S}" >> "$GITHUB_OUTPUT"
+          echo "requests_per_window=${REQUESTS_PER_WINDOW}" >> "$GITHUB_OUTPUT"
+          echo "concurrency=${CONCURRENCY}" >> "$GITHUB_OUTPUT"
+      - name: Start App (no ollama)
+        run: |
+          mkdir -p .data/out .data/perf
+          nohup python -m uvicorn writing_agent.web.app_v2:app --host 127.0.0.1 --port 18191 > .data/out/soak_long_app.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18191/api/metrics/citation_verify > /dev/null; then
+              echo "app ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "app failed to become ready"
+          exit 1
+      - name: Run Long Soak Probe
+        env:
+          WA_METRICS_BASE_URL: "http://127.0.0.1:18191"
+        run: |
+          python scripts/citation_verify_soak.py \
+            --duration-s "${{ steps.resolve.outputs.duration_s }}" \
+            --interval-s "${{ steps.resolve.outputs.interval_s }}" \
+            --requests-per-window "${{ steps.resolve.outputs.requests_per_window }}" \
+            --concurrency "${{ steps.resolve.outputs.concurrency }}" \
+            --timeout-s 6 \
+            --min-overall-success-rate 0.99 \
+            --max-overall-p95-ms 2500 \
+            --max-overall-degraded-rate 0.08 \
+            --label "github-actions-${{ steps.resolve.outputs.profile }}"
+      - name: Validate Long Soak Retention And Regression
+        shell: bash
+        run: |
+          CMD="python scripts/citation_verify_long_soak_guard.py --policy security/long_soak_policy.json --history-file .data/perf/citation_verify_long_soak_history.json"
+          if [ "${{ steps.resolve.outputs.strict }}" = "true" ]; then
+            CMD="${CMD} --strict"
+          fi
+          eval "$CMD"
+      - name: Upload Long Soak Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: citation-soak-long-artifacts
+          path: |
+            .data/out/citation_verify_soak_*.json
+            .data/out/citation_verify_long_soak_guard_*.json
+            .data/out/soak_long_app.log
+            .data/perf/citation_verify_long_soak_history.json
+            .data/citation_verify_alert_events.json
+          if-no-files-found: ignore

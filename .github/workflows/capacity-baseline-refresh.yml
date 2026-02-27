@@ -1,0 +1,187 @@
+name: capacity-baseline-refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_regression:
+        description: "Allow target_peak_rps decrease"
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: "Do not overwrite policy file"
+        required: false
+        default: true
+        type: boolean
+      update_threshold_policy:
+        description: "Apply suggested capacity thresholds to policy"
+        required: false
+        default: false
+        type: boolean
+      allow_relax_threshold_patch:
+        description: "Allow relax direction when applying threshold patch"
+        required: false
+        default: false
+        type: boolean
+      threshold_patch_strict:
+        description: "Fail workflow when threshold patch validation fails"
+        required: false
+        default: false
+        type: boolean
+      threshold_patch_min_confidence:
+        description: "Minimum confidence for threshold patch apply"
+        required: false
+        default: "0.45"
+        type: string
+      threshold_patch_max_exceeded:
+        description: "Max exceeded metrics allowed for threshold patch apply"
+        required: false
+        default: "0"
+        type: string
+  schedule:
+    - cron: "35 2 * * 1"
+
+jobs:
+  refresh:
+    strategy:
+      fail-fast: false
+      matrix:
+        capacity_profile: [dev, staging, prod]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Runtime Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi uvicorn jinja2 python-multipart python-docx cairosvg pypdf
+      - name: Run Load Probe For Baseline
+        run: |
+          set -euo pipefail
+          PROFILE="${{ matrix.capacity_profile }}"
+          case "$PROFILE" in
+            dev)
+              REQUESTS=220
+              CONCURRENCY=12
+              MAX_P95=2000
+              ;;
+            staging)
+              REQUESTS=280
+              CONCURRENCY=16
+              MAX_P95=1700
+              ;;
+            prod)
+              REQUESTS=360
+              CONCURRENCY=24
+              MAX_P95=1500
+              ;;
+            *)
+              REQUESTS=300
+              CONCURRENCY=20
+              MAX_P95=1500
+              ;;
+          esac
+          export WRITING_AGENT_USE_OLLAMA=0
+          python -m uvicorn writing_agent.web.app_v2:app --host 127.0.0.1 --port 18086 >/tmp/wa_app.log 2>&1 &
+          APP_PID=$!
+          trap "kill $APP_PID || true" EXIT
+          python - <<'PY'
+          import time
+          import urllib.request
+          url = "http://127.0.0.1:18086/api/metrics/citation_verify"
+          deadline = time.time() + 25
+          while time.time() < deadline:
+              try:
+                  with urllib.request.urlopen(url, timeout=1.5) as resp:
+                      code = int(getattr(resp, "status", 0) or resp.getcode() or 0)
+                  if 200 <= code < 300:
+                      break
+              except Exception:
+                  time.sleep(0.25)
+          else:
+              raise SystemExit("app_not_ready")
+          PY
+          python scripts/citation_verify_load_probe.py \
+            --base-url http://127.0.0.1:18086 \
+            --requests "$REQUESTS" \
+            --concurrency "$CONCURRENCY" \
+            --timeout-s 6 \
+            --min-success-rate 0.99 \
+            --max-p95-ms "$MAX_P95" \
+            --max-degraded-rate 0.05
+      - name: Refresh Capacity Baseline
+        run: |
+          ALLOW_REG="${{ github.event.inputs.allow_regression || 'false' }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'true' }}"
+          PROFILE="${{ matrix.capacity_profile }}"
+          CMD="python scripts/update_capacity_baseline.py --capacity-profile \"$PROFILE\" --reason \"capacity baseline refresh workflow ($PROFILE)\""
+          if [ "$ALLOW_REG" = "true" ]; then
+            CMD="$CMD --allow-regression"
+          fi
+          if [ "$DRY_RUN" = "true" ]; then
+            CMD="$CMD --dry-run"
+          fi
+          eval "$CMD"
+      - name: Generate Capacity Forecast
+        run: |
+          PROFILE="${{ matrix.capacity_profile }}"
+          python scripts/capacity_forecast.py --capacity-profile "$PROFILE" --horizon-days 30 --min-samples 4
+      - name: Suggest Capacity Alert Thresholds
+        run: |
+          PROFILE="${{ matrix.capacity_profile }}"
+          python scripts/suggest_capacity_alert_thresholds.py \
+            --capacity-profile "$PROFILE" \
+            --load-window 8 \
+            --soak-window 6 \
+            --write-thresholds ".data/out/capacity_alert_thresholds_suggested_${PROFILE}.json"
+      - name: Check Capacity Alert Policy Drift
+        run: |
+          PROFILE="${{ matrix.capacity_profile }}"
+          DRIFT_CMD="python scripts/capacity_alert_policy_drift.py \
+            --capacity-profile \"$PROFILE\" \
+            --suggested .data/out/capacity_alert_thresholds_suggested_${PROFILE}.json \
+            --write-patch .data/out/capacity_policy_threshold_patch_suggested_${PROFILE}.json \
+            --policy-level critical"
+          if [ "${{ github.event.inputs.threshold_patch_strict || 'false' }}" = "true" ]; then
+            DRIFT_CMD="$DRIFT_CMD --strict"
+          fi
+          eval "$DRIFT_CMD"
+      - name: Optionally Apply Capacity Threshold Patch
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.update_threshold_policy == 'true' }}
+        run: |
+          PROFILE="${{ matrix.capacity_profile }}"
+          APPLY_CMD="python scripts/apply_capacity_policy_threshold_patch.py \
+            --patch .data/out/capacity_policy_threshold_patch_suggested_${PROFILE}.json \
+            --capacity-profile \"$PROFILE\" \
+            --reason \"capacity baseline refresh threshold policy update ($PROFILE)\" \
+            --min-confidence \"${{ github.event.inputs.threshold_patch_min_confidence || '0.45' }}\" \
+            --max-exceeded-metrics \"${{ github.event.inputs.threshold_patch_max_exceeded || '0' }}\" \
+            --strict"
+          if [ "${{ github.event.inputs.allow_relax_threshold_patch || 'false' }}" = "true" ]; then
+            APPLY_CMD="$APPLY_CMD --allow-relax"
+          fi
+          if [ "${{ github.event.inputs.dry_run || 'true' }}" = "true" ]; then
+            APPLY_CMD="$APPLY_CMD --dry-run"
+          fi
+          eval "$APPLY_CMD"
+      - name: Upload Baseline Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-baseline-refresh-${{ matrix.capacity_profile }}
+          path: |
+            .data/out/citation_verify_load_probe_*.json
+            .data/out/capacity_baseline_refresh_*.json
+            .data/out/capacity_forecast_*.json
+            .data/out/capacity_forecast_*.md
+            .data/out/capacity_policy_generated_*.json
+            .data/out/capacity_alert_threshold_suggest_*.json
+            .data/out/capacity_alert_thresholds_suggested_*.json
+            .data/out/capacity_alert_policy_drift_*.json
+            .data/out/capacity_policy_threshold_patch_suggested_*.json
+            .data/out/capacity_policy_patch_apply_*.json
+            .data/out/capacity_policy_backup_*.json
+          if-no-files-found: ignore

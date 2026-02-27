@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python-quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: File line limits guard
+        run: python scripts/guard_file_line_limits.py --config security/file_line_limits.json
+      - name: Function complexity guard
+        run: python scripts/guard_function_complexity.py --config security/function_complexity_limits.json
+      - name: Architecture boundaries guard
+        run: python scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json
+
+  build-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test
+        run: cargo test --workspace
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Coverage
+        run: cargo llvm-cov --workspace --lcov --output-path coverage.lcov
+
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+      - name: Build smoke
+        run: cargo build -p wa_engine --bin smoke --release
+      - name: Valgrind
+        run: valgrind --leak-check=full --error-exitcode=1 target/release/smoke

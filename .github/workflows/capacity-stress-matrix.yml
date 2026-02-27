@@ -1,0 +1,88 @@
+name: capacity-stress-matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      quick:
+        description: "Run quick matrix"
+        required: false
+        default: true
+        type: boolean
+      include_soak:
+        description: "Include soak profile"
+        required: false
+        default: true
+        type: boolean
+      strict:
+        description: "Fail workflow on stress check failures"
+        required: false
+        default: false
+        type: boolean
+      soak_duration_s:
+        description: "Optional soak duration override in seconds"
+        required: false
+        default: ""
+        type: string
+  schedule:
+    - cron: "20 3 * * 0"
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Runtime Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install fastapi uvicorn jinja2 python-multipart python-docx cairosvg pypdf
+      - name: Run Capacity Stress Matrix
+        run: |
+          CMD="python scripts/capacity_stress_matrix.py"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.quick }}" = "true" ]; then
+            CMD="$CMD --quick"
+          elif [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            CMD="$CMD --quick"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.include_soak }}" = "true" ]; then
+            CMD="$CMD --include-soak"
+          elif [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            CMD="$CMD --include-soak"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.soak_duration_s }}" ]; then
+            CMD="$CMD --soak-duration-s ${{ github.event.inputs.soak_duration_s }}"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.strict }}" = "true" ]; then
+            CMD="$CMD --strict"
+          fi
+          eval "$CMD"
+      - name: Run Capacity Stress Gate
+        if: always()
+        run: |
+          GATE_CMD="python scripts/capacity_stress_gate.py --max-age-s 1209600 --min-profiles 3 --max-failed-profiles 0"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.include_soak }}" = "true" ]; then
+            GATE_CMD="$GATE_CMD --require-soak"
+          elif [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            GATE_CMD="$GATE_CMD --require-soak"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.strict }}" = "true" ]; then
+            GATE_CMD="$GATE_CMD --strict"
+          fi
+          eval "$GATE_CMD"
+      - name: Upload Stress Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capacity-stress-matrix
+          path: |
+            .data/out/capacity_stress_matrix_*.json
+            .data/out/capacity_stress_gate_*.json
+            .data/out/citation_verify_load_probe_stress_*.json
+            .data/out/citation_verify_soak_stress_*.json
+          if-no-files-found: ignore

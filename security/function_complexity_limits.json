@@ -1,0 +1,20 @@
+{
+  "description": "Core business-function complexity guardrails. Hard cap for function lines is 120.",
+  "include": [
+    "writing_agent/web/services/**/*.py",
+    "writing_agent/web/domains/**/*.py",
+    "writing_agent/state_engine/**/*.py",
+    "writing_agent/v2/**/*.py"
+  ],
+  "exclude": [
+    "**/__pycache__/**",
+    "**/node_modules/**",
+    "**/.venv/**"
+  ],
+  "default_limits": {
+    "max_function_lines": 120,
+    "max_parameters": 12,
+    "max_cyclomatic": 60
+  },
+  "overrides": {}
+}

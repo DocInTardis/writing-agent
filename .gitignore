@@ -39,3 +39,4 @@ _misc_root/*.out
 _misc_root/*.txt
 _misc_root/*.py
 _misc_root/.tmp_*
+*.corrupt_backup

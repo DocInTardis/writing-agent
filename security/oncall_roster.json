@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "source": "bootstrap",
+  "updated_at": "2026-02-22T00:00:00Z",
+  "primary": {
+    "id": "oncall-primary",
+    "name": "Writing-Agent Primary On-Call",
+    "webhook_url": "",
+    "slack_webhook_url": "",
+    "feishu_webhook_url": "",
+    "email": [
+      "oncall@example.local"
+    ]
+  },
+  "rotations": []
+}

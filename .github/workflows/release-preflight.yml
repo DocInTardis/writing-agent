@@ -1,0 +1,220 @@
+name: release-preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      quick:
+        description: "Run quick mode"
+        required: false
+        default: true
+        type: boolean
+      with_soak:
+        description: "Run soak probe and require soak evidence"
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Restore Long-Soak History Cache
+        uses: actions/cache@v4
+        with:
+          path: .data/perf
+          key: citation-soak-long-history-preflight-${{ github.run_id }}
+          restore-keys: |
+            citation-soak-long-history-
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run Release Preflight
+        env:
+          WA_PREFLIGHT_REQUIRE_PIP_AUDIT: "1"
+          WA_RELEASE_GOVERNANCE_STRICT: "1"
+          WA_RELEASE_REQUIRE_CHANGES_VERSION: "1"
+          WA_RELEASE_MANIFEST_REQUIRE_GATE_EVIDENCE: "1"
+          WA_RELEASE_CHANNEL_STRICT: "1"
+          WA_RELEASE_COMPAT_MATRIX_STRICT: "1"
+          WA_RELEASE_TRAFFIC_ADAPTER_STRICT: "1"
+          WA_RELEASE_ROLLOUT_STRICT: "1"
+          WA_RELEASE_ROLLOUT_MAX_HISTORY_AGE_S: "2592000"
+          WA_RELEASE_ROLLOUT_PLAN_STRICT: "1"
+          WA_DOC_ENCODING_GUARD_STRICT: "1"
+          WA_DOC_ENCODING_MAX_SUSPICIOUS_FILES: "0"
+          WA_DOC_REALITY_POLICY_FILE: "security/docs_reality_policy.json"
+          WA_DOC_REALITY_GUARD_STRICT: "1"
+          WA_DOC_REALITY_GUARD_REQUIRE_PYTHON_CHECK: "1"
+          WA_DOC_REALITY_GUARD_MAX_MISSING_PATHS: "0"
+          WA_DOC_REALITY_GUARD_MAX_COMMAND_FAILURES: "0"
+          WA_ALERT_ESCALATION_STRICT: "1"
+          WA_CORRELATION_GUARD_STRICT: "1"
+          WA_TREND_GUARD_STRICT: "1"
+          WA_INCIDENT_ONCALL_ROSTER_FILE: "security/oncall_roster.json"
+          WA_INCIDENT_REQUIRE_ONCALL_ROSTER: "1"
+          WA_INCIDENT_USE_ONCALL_ROSTER: "1"
+          WA_INCIDENT_CONFIG_STRICT: "1"
+          WA_SENSITIVE_OUTPUT_SCAN_STRICT: "1"
+          WA_DATA_CLASS_POLICY_FILE: "security/data_classification_policy.json"
+          WA_DATA_CLASS_GUARD_STRICT: "1"
+          WA_DATA_CLASS_GUARD_MAX_UNMASKED_FINDINGS: "0"
+          WA_ARTIFACT_SCHEMA_CATALOG_FILE: "docs/ARTIFACT_SCHEMA_CATALOG.md"
+          WA_ARTIFACT_SCHEMA_CATALOG_POLICY_FILE: "security/artifact_schema_catalog_policy.json"
+          WA_ARTIFACT_SCHEMA_CATALOG_STRICT: "1"
+          WA_PUBLIC_RELEASE_POLICY_FILE: "security/public_release_policy.json"
+          WA_PUBLIC_RELEASE_CHANGES_FILE: "CHANGES.md"
+          WA_PUBLIC_RELEASE_WRITE_RELEASE_NOTES: "1"
+          WA_PUBLIC_RELEASE_GUARD_STRICT: "1"
+          WA_MIGRATION_MATRIX_FILE: "security/release_compat_matrix.json"
+          WA_MIGRATION_POLICY_FILE: "security/release_policy.json"
+          WA_MIGRATION_ASSISTANT_STRICT: "1"
+          WA_AUDIT_CHAIN_STRICT: "1"
+          WA_AUDIT_CHAIN_REQUIRE_LOG: "1"
+          WA_AUDIT_CHAIN_MAX_AGE_S: "7200"
+          WA_AUDIT_CHAIN_LOG: ".data/audit/operations_audit_chain.ndjson"
+          WA_AUDIT_CHAIN_STATE_FILE: ".data/audit/operations_audit_chain_state.json"
+          WA_CAPACITY_GUARD_STRICT: "1"
+          WA_CAPACITY_FORECAST_STRICT: "1"
+          WA_LONG_SOAK_POLICY_FILE: "security/long_soak_policy.json"
+          WA_LONG_SOAK_HISTORY_FILE: ".data/perf/citation_verify_long_soak_history.json"
+          WA_CAPACITY_POLICY_LEVEL: "critical"
+          WA_CAPACITY_POLICY_PATCH_MAX_EXCEEDED: "0"
+          WA_CAPACITY_POLICY_PATCH_MIN_CONFIDENCE: "0.45"
+          WA_CAPACITY_STRESS_MAX_AGE_S: "1209600"
+          WA_CAPACITY_STRESS_MIN_PROFILES: "3"
+          WA_CAPACITY_STRESS_MAX_FAILED_PROFILES: "0"
+          WA_ROLLBACK_DRILL_MAX_AGE_S: "2592000"
+          WA_ROLLBACK_DRILL_MIN_INCIDENT_DRILLS: "1"
+          WA_ROLLBACK_DRILL_MIN_ROLLBACK_BUNDLES: "1"
+          WA_ROLLBACK_DRILL_REQUIRE_SIGNATURE: "1"
+          WA_ROLLBACK_DRILL_SIGNATURE_POLICY: "security/rollback_drill_signature_policy.json"
+          WA_ROLLBACK_DRILL_SIGNATURE_PATTERN: ".data/out/rollback_drill_signature_*.json"
+          WA_ROLLBACK_DRILL_SIGNATURE_MAX_AGE_S: "2592000"
+          WA_ROLLBACK_DRILL_SIGNING_KEY: "${{ secrets.WA_ROLLBACK_DRILL_SIGNING_KEY }}"
+        run: |
+          export WA_CAPACITY_RELEASE_BRANCH="${GITHUB_REF_NAME}"
+          export WA_RUNTIME_ENV="ci"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            export WA_CAPACITY_RELEASE_TIER="prod"
+          elif [ "${GITHUB_REF_NAME}" = "main" ] || [ "${GITHUB_REF_NAME}" = "master" ]; then
+            export WA_CAPACITY_RELEASE_TIER="prod"
+          elif [[ "${GITHUB_REF_NAME}" == staging/* ]] || [[ "${GITHUB_REF_NAME}" == stage/* ]]; then
+            export WA_CAPACITY_RELEASE_TIER="staging"
+          else
+            export WA_CAPACITY_RELEASE_TIER="dev"
+          fi
+          export WA_CAPACITY_PROFILE="${WA_CAPACITY_RELEASE_TIER}"
+          SAFE_REF="$(echo "${GITHUB_REF_NAME}" | tr '/ ' '--')"
+          export WA_RELEASE_CANDIDATE_ID="rc-${SAFE_REF}-${GITHUB_SHA::12}"
+          export WA_PUBLIC_RELEASE_VERSION="$(python - <<'PY'
+import re
+from pathlib import Path
+text = Path("writing_agent/__init__.py").read_text(encoding="utf-8")
+m = re.search(r'__version__\s*=\s*"([^"]+)"', text)
+print(m.group(1) if m else "")
+PY
+)"
+          export WA_PUBLIC_RELEASE_NOTES_OUT=".data/out/release_notes_${WA_PUBLIC_RELEASE_VERSION}_preflight.md"
+          export WA_MIGRATION_FROM_VERSION="0.0.9"
+          export WA_MIGRATION_TO_VERSION="${WA_PUBLIC_RELEASE_VERSION}"
+          export WA_MIGRATION_OUT_MD=".data/out/migration_assistant_${WA_PUBLIC_RELEASE_VERSION}_preflight.md"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            export WA_LONG_SOAK_GUARD_STRICT=1
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.with_soak }}" = "true" ]; then
+            if [ "${{ github.event.inputs.quick }}" = "true" ]; then
+              export WA_PREFLIGHT_SOAK_DURATION_S=300
+              export WA_PREFLIGHT_SOAK_INTERVAL_S=30
+              export WA_PREFLIGHT_SOAK_REQUESTS_PER_WINDOW=24
+              export WA_PREFLIGHT_SOAK_CONCURRENCY=8
+            else
+              export WA_PREFLIGHT_SOAK_DURATION_S=1200
+              export WA_PREFLIGHT_SOAK_INTERVAL_S=30
+              export WA_PREFLIGHT_SOAK_REQUESTS_PER_WINDOW=32
+              export WA_PREFLIGHT_SOAK_CONCURRENCY=8
+            fi
+            export WA_CAPACITY_REQUIRE_SOAK=1
+            export WA_TREND_REQUIRE_SOAK=1
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.quick }}" = "true" ]; then
+            python scripts/release_preflight.py --quick
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.quick }}" = "false" ]; then
+            python scripts/release_preflight.py
+          else
+            python scripts/release_preflight.py
+          fi
+      - name: Upload Preflight Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-preflight-report
+          path: |
+            .data/out/release_preflight_*.json
+            .data/out/file_line_limits_guard_*.json
+            .data/out/function_complexity_guard_*.json
+            .data/out/architecture_boundaries_guard_*.json
+            .data/out/dependency_audit_*.json
+            .data/out/release_governance_*.json
+            .data/out/release_manifest_*.json
+            .data/out/release_channels_validate_*.json
+            .data/out/release_compat_matrix_*.json
+            .data/out/release_rollout_adapter_contract_*.json
+            .data/out/release_rollout_guard_*.json
+            .data/out/release_rollout_executor_*.json
+            .data/out/rollback_bundle_report_*.json
+            .data/out/rollback_bundle_*/
+            .data/out/rollback_drill_guard_*.json
+            .data/out/rollback_drill_signature_*.json
+            .data/out/doc_encoding_guard_*.json
+            .data/out/docs_reality_guard_*.json
+            .data/out/slo_guard_*.json
+            .data/out/capacity_guard_*.json
+            .data/out/capacity_forecast_*.json
+            .data/out/capacity_forecast_*.md
+            .data/out/capacity_baseline_refresh_*.json
+            .data/out/capacity_policy_generated_*.json
+            .data/out/capacity_alert_threshold_suggest_*.json
+            .data/out/capacity_alert_thresholds_suggested.json
+            .data/out/capacity_alert_policy_drift_*.json
+            .data/out/capacity_policy_threshold_patch_suggested.json
+            .data/out/capacity_policy_patch_apply_*.json
+            .data/out/capacity_stress_gate_*.json
+            .data/out/capacity_stress_matrix_*.json
+            .data/out/citation_verify_soak_*.json
+            .data/out/citation_verify_long_soak_guard_*.json
+            .data/out/preflight_trend_guard_*.json
+            .data/out/alert_escalation_*.json
+            .data/out/correlation_trace_guard_*.json
+            .data/out/incident_report_*.json
+            .data/out/incident_report_*.md
+            .data/out/incident_notify_*.json
+            .data/out/incident_notify_drill_*.json
+            .data/out/incident_notify_drill_notify_*.json
+            .data/out/incident_report_drill_*.json
+            .data/out/incident_config_guard_*.json
+            .data/out/sensitive_output_scan_*.json
+            .data/out/data_classification_guard_*.json
+            .data/out/artifact_schema_catalog_guard_*.json
+            .data/out/public_release_guard_*.json
+            .data/out/migration_assistant_*.json
+            .data/out/migration_assistant_*.md
+            .data/out/release_notes_*.md
+            .data/out/audit_chain_verify_*.json
+            .data/audit/operations_audit_chain.ndjson
+            .data/audit/operations_audit_chain_state.json
+            .data/out/sbom/**
+            .data/perf/citation_verify_long_soak_history.json
+          if-no-files-found: ignore

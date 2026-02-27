@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "citation_metrics": {
+    "success_rate_min": 0.995,
+    "latency_p95_ms_max": 1500.0,
+    "degraded_rate_max": 0.01,
+    "events_recent_min": 1
+  }
+}

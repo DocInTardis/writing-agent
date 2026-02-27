@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "roles": {
+    "viewer": [
+      "alerts.read",
+      "job:read",
+      "event:read"
+    ],
+    "operator": [
+      "alerts.read",
+      "alerts.write",
+      "job:read",
+      "job:write",
+      "event:read",
+      "event:write"
+    ],
+    "admin": [
+      "*"
+    ]
+  },
+  "principals": [
+    {
+      "id": "admin",
+      "role": "admin",
+      "token_env": "WRITING_AGENT_ADMIN_API_KEY"
+    },
+    {
+      "id": "ops-viewer",
+      "role": "viewer",
+      "token_env": "WRITING_AGENT_OPS_VIEWER_API_KEY"
+    },
+    {
+      "id": "ops-operator",
+      "role": "operator",
+      "token_env": "WRITING_AGENT_OPS_OPERATOR_API_KEY"
+    }
+  ]
+}

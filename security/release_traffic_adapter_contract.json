@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "placeholders": {
+    "allowed": [
+      "action",
+      "target_version",
+      "from_version",
+      "to_version",
+      "correlation_id",
+      "release_candidate_id",
+      "from_rollout_percent",
+      "to_rollout_percent",
+      "canary_rollout_percent",
+      "stable_rollout_percent",
+      "canary_version",
+      "stable_version",
+      "before_canary_rollout_percent",
+      "before_stable_rollout_percent",
+      "before_canary_version",
+      "before_stable_version"
+    ],
+    "required": [
+      "action",
+      "target_version"
+    ],
+    "recommended": [
+      "correlation_id",
+      "release_candidate_id",
+      "canary_rollout_percent",
+      "stable_rollout_percent"
+    ]
+  },
+  "rules": {
+    "require_examples": true
+  },
+  "adapters": [
+    {
+      "id": "ingress_nginx_canary_weight",
+      "kind": "ingress-nginx",
+      "description": "Patch ingress canary weight to mirror canary/stable split.",
+      "required_placeholders": [
+        "canary_rollout_percent",
+        "stable_rollout_percent"
+      ],
+      "command_template": "kubectl --namespace prod annotate ingress app-canary nginx.ingress.kubernetes.io/canary-weight={canary_rollout_percent} release.stable-weight={stable_rollout_percent} release.action={action} release.target-version={target_version} release.correlation-id={correlation_id} release.candidate-id={release_candidate_id} --overwrite"
+    },
+    {
+      "id": "istio_virtual_service_weight",
+      "kind": "service-mesh-istio",
+      "description": "Patch Istio VirtualService route weights for canary and stable subsets.",
+      "required_placeholders": [
+        "canary_rollout_percent",
+        "stable_rollout_percent",
+        "canary_version",
+        "stable_version"
+      ],
+      "command_template": "istioctl x set-route-weight virtualservice/app default canary={canary_rollout_percent} stable={stable_rollout_percent} --set action={action} --set targetVersion={target_version} --set canaryVersion={canary_version} --set stableVersion={stable_version} --set correlationId={correlation_id}"
+    },
+    {
+      "id": "api_gateway_stage_split",
+      "kind": "api-gateway",
+      "description": "Update API gateway stage routing percentages for target candidate.",
+      "required_placeholders": [
+        "target_version",
+        "to_rollout_percent"
+      ],
+      "command_template": "gatewayctl route-update --service writing-agent --target-version {target_version} --canary-percent {to_rollout_percent} --action {action} --release-candidate {release_candidate_id}"
+    }
+  ]
+}

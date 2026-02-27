@@ -1,0 +1,23 @@
+{
+  "description": "Line-count guardrails for large business files; enforce post-decoupling targets.",
+  "include": [
+    "writing_agent/**/*.py",
+    "scripts/**/*.py"
+  ],
+  "exclude": [
+    "**/__pycache__/**",
+    "**/node_modules/**",
+    "**/.venv/**"
+  ],
+  "default_limits": {
+    ".py": 1000
+  },
+  "overrides": {
+    "writing_agent/web/app_v2.py": 1500,
+    "writing_agent/v2/graph_runner.py": 1200,
+    "writing_agent/document/v2_report_docx.py": 800,
+    "scripts/ui_content_validation_runner.py": 1000,
+    "scripts/release_preflight.py": 400,
+    "scripts/release_rollout_executor.py": 1100
+  }
+}

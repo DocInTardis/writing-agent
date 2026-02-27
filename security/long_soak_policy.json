@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "history": {
+    "retention_days": 180,
+    "max_records": 240
+  },
+  "gate": {
+    "min_reports": 6,
+    "max_report_age_s": 1209600
+  },
+  "profiles": [
+    {
+      "id": "long_12h",
+      "min_duration_s": 43200,
+      "required_count": 1,
+      "window_days": 14
+    },
+    {
+      "id": "long_24h",
+      "min_duration_s": 86400,
+      "required_count": 1,
+      "window_days": 45
+    }
+  ],
+  "regression": {
+    "window_runs": 12,
+    "min_required_runs": 4,
+    "min_duration_s": 43200,
+    "max_p95_ratio_to_median": 1.25,
+    "min_success_rate_delta_to_median": -0.005,
+    "max_degraded_rate_delta_to_median": 0.01
+  }
+}

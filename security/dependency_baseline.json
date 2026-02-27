@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "generated_at": 1771648000.0,
+  "levels": {
+    "npm_prod": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "unknown": 0,
+      "total": 0
+    },
+    "npm_dev": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "unknown": 0,
+      "total": 0
+    },
+    "pip": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "unknown": 0,
+      "total": 0
+    }
+  }
+}

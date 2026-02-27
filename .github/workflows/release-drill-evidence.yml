@@ -1,0 +1,66 @@
+name: release-drill-evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: "Fail workflow if drill guard detects gaps"
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: "10 4 * * 2"
+
+jobs:
+  drills:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run Incident Notify Drill
+        run: |
+          python scripts/incident_notify_drill.py --with-email
+      - name: Build Rollback Bundle Evidence
+        run: |
+          python scripts/create_rollback_bundle.py --label drill --recent 4
+      - name: Sign Rollback Drill Evidence
+        env:
+          WA_ROLLBACK_DRILL_SIGNING_KEY: ${{ secrets.WA_ROLLBACK_DRILL_SIGNING_KEY }}
+          WA_ROLLBACK_DRILL_SIGNING_KEY_ID: "github-actions"
+        run: |
+          CMD="python scripts/sign_rollback_drill_evidence.py --recent 4"
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.strict }}" = "true" ]; then
+            CMD="$CMD --strict --require-key"
+          fi
+          eval "$CMD"
+      - name: Validate Drill Evidence
+        env:
+          WA_ROLLBACK_DRILL_SIGNING_KEY: ${{ secrets.WA_ROLLBACK_DRILL_SIGNING_KEY }}
+        run: |
+          CMD="python scripts/rollback_drill_guard.py --require-email-drill --max-age-s 2592000 --signature-max-age-s 2592000 --min-incident-drills 1 --min-rollback-bundles 1 --require-signature --signing-key \"${WA_ROLLBACK_DRILL_SIGNING_KEY}\""
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.strict }}" = "true" ]; then
+            CMD="$CMD --strict"
+          fi
+          eval "$CMD"
+      - name: Upload Drill Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-drill-evidence
+          path: |
+            .data/out/incident_notify_drill_*.json
+            .data/out/incident_notify_drill_notify_*.json
+            .data/out/incident_report_drill_*.json
+            .data/out/oncall_roster_drill_*.json
+            .data/out/rollback_drill_signature_*.json
+            .data/out/rollback_bundle_report_*.json
+            .data/out/rollback_bundle_*/
+            .data/out/rollback_drill_guard_*.json
+          if-no-files-found: ignore

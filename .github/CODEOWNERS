@@ -1,0 +1,7 @@
+* @writing-agent-maintainers
+
+/writing_agent/web/ @writing-agent-maintainers
+/writing_agent/v2/ @writing-agent-maintainers
+/scripts/ @writing-agent-maintainers
+/security/ @writing-agent-maintainers
+/docs/ @writing-agent-maintainers

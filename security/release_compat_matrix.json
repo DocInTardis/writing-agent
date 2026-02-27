@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "upgrade_state_context_2_0_to_2_1",
+      "direction": "upgrade",
+      "from_version": "0.0.9",
+      "to_version": "0.1.0",
+      "from_schema": "2.0",
+      "to_schema": "2.1",
+      "state_fixture": "tests/fixtures/release_compat/state_context_2_0.json",
+      "expect_readable": true
+    },
+    {
+      "id": "upgrade_state_context_2_1_to_2_1",
+      "direction": "upgrade",
+      "from_version": "0.1.0",
+      "to_version": "0.1.0",
+      "from_schema": "2.1",
+      "to_schema": "2.1",
+      "state_fixture": "tests/fixtures/release_compat/state_context_2_1.json",
+      "expect_readable": true
+    },
+    {
+      "id": "upgrade_state_context_2_1_to_2_2",
+      "direction": "upgrade",
+      "from_version": "0.1.0",
+      "to_version": "0.2.0",
+      "from_schema": "2.1",
+      "to_schema": "2.2",
+      "state_fixture": "tests/fixtures/release_compat/state_context_2_1.json",
+      "expect_readable": true
+    },
+    {
+      "id": "rollback_state_context_2_2_to_2_1",
+      "direction": "rollback",
+      "from_version": "0.2.0",
+      "to_version": "0.1.0",
+      "from_schema": "2.2",
+      "to_schema": "2.1",
+      "allow_forward_schema_source": true,
+      "state_fixture": "tests/fixtures/release_compat/state_context_2_2.json",
+      "expect_readable": true
+    },
+    {
+      "id": "rollback_state_context_2_2_to_2_1_malformed_fixture",
+      "direction": "rollback",
+      "from_version": "0.2.0",
+      "to_version": "0.1.0",
+      "from_schema": "2.2",
+      "to_schema": "2.1",
+      "state_fixture": "tests/fixtures/release_compat/state_context_malformed.json",
+      "expect_readable": false,
+      "expected_failed_checks": [
+        "fixture_loaded",
+        "from_schema_backward_compatible"
+      ]
+    },
+    {
+      "id": "rollback_state_context_2_1_to_2_1",
+      "direction": "rollback",
+      "from_version": "0.1.0",
+      "to_version": "0.1.0",
+      "from_schema": "2.1",
+      "to_schema": "2.1",
+      "state_fixture": "tests/fixtures/release_compat/state_context_2_1.json",
+      "expect_readable": true
+    }
+  ],
+  "rules": {
+    "require_upgrade_case_for_current_schema": true,
+    "require_rollback_case_for_current_schema": true,
+    "require_n_minus_one_upgrade_case": true,
+    "require_n_plus_one_upgrade_case": true,
+    "require_n_plus_one_rollback_case": true,
+    "require_failure_mode_case": true,
+    "enforce_runtime_contract": true
+  }
+}

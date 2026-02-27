@@ -1,0 +1,17 @@
+name: Performance
+
+on:
+  pull_request:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Bench
+        run: cargo bench -p wa_benches --bench baseline
+      - name: Compare
+        run: python scripts/compare_bench.py
+      - name: Thresholds
+        run: python scripts/bench_thresholds.py

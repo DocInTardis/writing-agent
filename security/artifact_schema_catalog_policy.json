@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "release_preflight",
+      "artifact_glob": ".data/out/release_preflight_*.json",
+      "required_fields": [
+        "ok",
+        "started_at",
+        "ended_at",
+        "steps"
+      ]
+    },
+    {
+      "id": "release_rollout_executor",
+      "artifact_glob": ".data/out/release_rollout_executor_*.json",
+      "required_fields": [
+        "ok",
+        "plan",
+        "apply_result",
+        "checks",
+        "correlation"
+      ]
+    },
+    {
+      "id": "incident_notify",
+      "artifact_glob": ".data/out/incident_notify_*.json",
+      "required_fields": [
+        "ok",
+        "incident_report",
+        "channels",
+        "routed_channels"
+      ]
+    },
+    {
+      "id": "audit_chain_verify",
+      "artifact_glob": ".data/out/audit_chain_verify_*.json",
+      "required_fields": [
+        "ok",
+        "log_path",
+        "entry_count",
+        "checks"
+      ]
+    },
+    {
+      "id": "data_classification_guard",
+      "artifact_glob": ".data/out/data_classification_guard_*.json",
+      "required_fields": [
+        "ok",
+        "policy_file",
+        "findings",
+        "retention_violations",
+        "checks"
+      ]
+    },
+    {
+      "id": "docs_reality_guard",
+      "artifact_glob": ".data/out/docs_reality_guard_*.json",
+      "required_fields": [
+        "ok",
+        "policy_file",
+        "missing_paths",
+        "checks"
+      ]
+    },
+    {
+      "id": "public_release_guard",
+      "artifact_glob": ".data/out/public_release_guard_*.json",
+      "required_fields": [
+        "ok",
+        "release_version",
+        "checks"
+      ]
+    },
+    {
+      "id": "migration_assistant",
+      "artifact_glob": ".data/out/migration_assistant_*.json",
+      "required_fields": [
+        "ok",
+        "from_version",
+        "to_version",
+        "plan",
+        "checks"
+      ]
+    }
+  ]
+}

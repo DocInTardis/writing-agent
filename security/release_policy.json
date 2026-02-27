@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "app_version": "0.1.0",
+  "state_schema": {
+    "current": "2.1",
+    "backward_read_compatible": [
+      "2.0",
+      "2.1"
+    ]
+  },
+  "runtime_data": {
+    "files": [
+      {
+        "path": ".data/citation_verify_alerts_config.json",
+        "kind": "json_object",
+        "required": false
+      },
+      {
+        "path": ".data/citation_verify_alert_events.json",
+        "kind": "json_array",
+        "required": false
+      },
+      {
+        "path": ".data/citation_verify_metrics_trends.json",
+        "kind": "json_object",
+        "required": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+﻿{
+  "WRITING_AGENT_LLM_PROVIDER": "remote",
+  "WRITING_AGENT_GRAPH_ENGINE": "dual"
+}

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "required_docs": [
+    "docs/START_HERE.md",
+    "docs/TROUBLESHOOTING_DECISION_TREE.md",
+    "docs/ARTIFACT_SCHEMA_CATALOG.md",
+    "docs/PRIVACY_DATA_CLASSIFICATION.md",
+    "docs/RELEASE_ENGINEERING.md",
+    "docs/RELEASE_AND_ROLLBACK.md"
+  ],
+  "required_workflows": [
+    ".github/workflows/release-preflight.yml",
+    ".github/workflows/public-release.yml"
+  ],
+  "required_scripts": [
+    "scripts/generate_release_notes.py",
+    "scripts/public_release_guard.py",
+    "scripts/migration_assistant.py"
+  ],
+  "release_notes": {
+    "required": true
+  }
+}

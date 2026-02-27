@@ -1,0 +1,114 @@
+name: release-rollout-automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: "Target semantic version to rollout (blank uses writing_agent/__init__.py)"
+        required: false
+        default: ""
+        type: string
+      apply:
+        description: "Apply action to release_channels.json (otherwise dry-run only)"
+        required: false
+        default: false
+        type: boolean
+      strict:
+        description: "Fail workflow when rollout checks fail"
+        required: false
+        default: true
+        type: boolean
+      allow_gate_failures:
+        description: "Allow apply even if required gate reports fail (emergency only)"
+        required: false
+        default: false
+        type: boolean
+      traffic_apply_command:
+        description: "Optional command template to apply real traffic weights (placeholders supported)"
+        required: false
+        default: ""
+        type: string
+      correlation_id:
+        description: "Optional correlation ID for rollout traceability"
+        required: false
+        default: ""
+        type: string
+      release_candidate_id:
+        description: "Optional release candidate ID for rollout traceability"
+        required: false
+        default: ""
+        type: string
+  schedule:
+    - cron: "15 4 * * *"
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Evaluate Rollout Guard
+        run: |
+          python scripts/release_rollout_guard.py --strict
+      - name: Evaluate Rollback Drill Guard
+        run: |
+          python scripts/rollback_drill_guard.py --strict --require-email-drill
+      - name: Validate Traffic Adapter Contract
+        run: |
+          CMD="python scripts/release_rollout_adapter_contract_check.py"
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.strict }}" = "true" ]; then
+            CMD="$CMD --strict"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.traffic_apply_command }}" ]; then
+            CMD="$CMD --command-template \"${{ github.event.inputs.traffic_apply_command }}\" --require-runtime-command"
+          fi
+          eval "$CMD"
+      - name: Execute Rollout Stage
+        run: |
+          CMD="python scripts/release_rollout_executor.py"
+          CORR="${{ github.event.inputs.correlation_id || '' }}"
+          RC="${{ github.event.inputs.release_candidate_id || '' }}"
+          if [ -z "$CORR" ]; then
+            CORR="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fi
+          if [ -z "$RC" ]; then
+            RC="$CORR"
+          fi
+          CMD="$CMD --correlation-id \"$CORR\" --release-candidate-id \"$RC\""
+          TARGET="${{ github.event.inputs.target_version || '' }}"
+          if [ -n "$TARGET" ]; then
+            CMD="$CMD --target-version $TARGET"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.apply }}" = "true" ]; then
+            CMD="$CMD --apply"
+          else
+            CMD="$CMD --dry-run"
+          fi
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.strict }}" = "true" ]; then
+            CMD="$CMD --strict"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.allow_gate_failures }}" = "true" ]; then
+            CMD="$CMD --allow-gate-failures"
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.traffic_apply_command }}" ]; then
+            CMD="$CMD --traffic-apply-required --traffic-apply-command \"${{ github.event.inputs.traffic_apply_command }}\""
+          fi
+          eval "$CMD"
+      - name: Upload Rollout Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-rollout-automation
+          path: |
+            .data/out/release_rollout_adapter_contract_*.json
+            .data/out/release_rollout_guard_*.json
+            .data/out/rollback_drill_guard_*.json
+            .data/out/release_rollout_executor_*.json
+          if-no-files-found: ignore

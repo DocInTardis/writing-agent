@@ -1,0 +1,82 @@
+{
+  "description": "Layer dependency guard for writing_agent.web modules.",
+  "include": [
+    "writing_agent/web/**/*.py"
+  ],
+  "exclude": [
+    "**/__pycache__/**",
+    "**/node_modules/**",
+    "**/.venv/**"
+  ],
+  "layers": {
+    "app": {
+      "path_patterns": [
+        "writing_agent/web/app.py",
+        "writing_agent/web/app_v2.py"
+      ],
+      "module_prefixes": [
+        "writing_agent.web.app",
+        "writing_agent.web.app_v2"
+      ]
+    },
+    "api": {
+      "path_patterns": [
+        "writing_agent/web/api/*.py",
+        "writing_agent/web/api/**/*.py"
+      ],
+      "module_prefixes": [
+        "writing_agent.web.api"
+      ]
+    },
+    "services": {
+      "path_patterns": [
+        "writing_agent/web/services/*.py",
+        "writing_agent/web/services/**/*.py"
+      ],
+      "module_prefixes": [
+        "writing_agent.web.services"
+      ]
+    },
+    "domains": {
+      "path_patterns": [
+        "writing_agent/web/domains/*.py",
+        "writing_agent/web/domains/**/*.py"
+      ],
+      "module_prefixes": [
+        "writing_agent.web.domains"
+      ]
+    }
+  },
+  "forbidden_dependencies": {
+    "api": [
+      "app"
+    ],
+    "services": [
+      "api",
+      "app"
+    ],
+    "domains": [
+      "api",
+      "services",
+      "app"
+    ]
+  },
+  "allow": [
+    {
+      "source_path": "writing_agent/web/api/editing_flow.py",
+      "target_module": "writing_agent.web.app_v2"
+    },
+    {
+      "source_path": "writing_agent/web/api/rag_flow.py",
+      "target_module": "writing_agent.web.app_v2"
+    },
+    {
+      "source_path": "writing_agent/web/api/template_flow.py",
+      "target_module": "writing_agent.web.app_v2"
+    },
+    {
+      "source_path": "writing_agent/web/services/base.py",
+      "target_module": "writing_agent.web.app_v2"
+    }
+  ]
+}

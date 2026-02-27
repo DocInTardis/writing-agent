@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "updated_at": 0.0,
+  "channels": {
+    "canary": {
+      "version": "0.1.0",
+      "rollout_percent": 5,
+      "updated_at": 0.0
+    },
+    "stable": {
+      "version": "0.1.0",
+      "rollout_percent": 100,
+      "updated_at": 0.0
+    }
+  },
+  "history": []
+}

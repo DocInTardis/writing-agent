@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "citation_verify": {
+    "lookback_minutes": 30,
+    "thresholds": {
+      "critical_events_min": 1,
+      "warn_events_min": 3,
+      "repeat_events_min": 6,
+      "suppressed_events_min": 8,
+      "webhook_failures_min": 2
+    },
+    "slo_guard": {
+      "require_report": false,
+      "fail_as_critical": true
+    },
+    "actions": {
+      "p1": [
+        "page_oncall",
+        "freeze_release",
+        "open_incident",
+        "prepare_rollback"
+      ],
+      "p2": [
+        "notify_oncall_channel",
+        "create_incident_report",
+        "analyze_recent_alert_trends"
+      ]
+    }
+  }
+}

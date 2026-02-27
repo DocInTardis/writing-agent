@@ -1,0 +1,27 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-ast
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: repo-guard-file-lines
+        name: Guard file line limits
+        entry: python scripts/guard_file_line_limits.py --config security/file_line_limits.json --root .
+        language: system
+        pass_filenames: false
+      - id: repo-guard-function-complexity
+        name: Guard function complexity
+        entry: python scripts/guard_function_complexity.py --config security/function_complexity_limits.json --root .
+        language: system
+        pass_filenames: false

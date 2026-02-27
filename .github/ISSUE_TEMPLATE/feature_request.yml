@@ -1,0 +1,41 @@
+name: Feature Request
+description: Propose an enhancement for writing-agent
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe expected behavior and API/UX changes
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility / Migration
+      description: Backward compatibility impact, if any
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked existing issues and discussions.
+          required: true
+        - label: I included concrete acceptance criteria.
+          required: true

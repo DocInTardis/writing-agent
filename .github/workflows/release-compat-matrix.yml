@@ -1,0 +1,40 @@
+name: release-compat-matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: "Fail workflow when compatibility matrix check fails"
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: "25 4 * * 3"
+
+jobs:
+  compat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python Deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run Release Compatibility Matrix
+        run: |
+          CMD="python scripts/release_compat_matrix.py"
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.strict }}" = "true" ]; then
+            CMD="$CMD --strict"
+          fi
+          eval "$CMD"
+      - name: Upload Compatibility Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-compat-matrix
+          path: .data/out/release_compat_matrix_*.json
+          if-no-files-found: ignore

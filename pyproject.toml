@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "writing-agent"
+version = "0.1.0"
+description = "Writing Agent for report drafting, citation-aware generation, and document export."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = ["writing", "rag", "fastapi", "docx", "agent"]
+authors = [
+  { name = "writing-agent contributors" }
+]
+dependencies = [
+  "fastapi>=0.109",
+  "uvicorn>=0.24",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.7",
+  "python-docx>=1.1.0",
+  "cairosvg>=2.8.2",
+  "playwright>=1.57.0",
+  "rapidocr-onnxruntime>=1.4.4",
+  "PySide6>=6.6",
+  "pypdf>=6.6.0",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: MIT License",
+  "Framework :: FastAPI",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "pip-audit>=2.8",
+  "aiosmtpd>=1.4.5",
+]
+
+[project.scripts]
+writing-agent = "writing_agent.launch:main"
+
+[tool.setuptools.packages.find]
+include = ["writing_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+norecursedirs = ["tests/legacy"]

@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "channels": {
+    "canary": {
+      "min_rollout_percent": 1,
+      "max_rollout_percent": 25
+    },
+    "stable": {
+      "required_rollout_percent": 100
+    }
+  },
+  "history": {
+    "min_entries": 0,
+    "max_age_s": 2592000,
+    "require_reason": true,
+    "require_actor": true,
+    "allow_initial_equal_without_history": true
+  },
+  "promotion": {
+    "require_canary_for_stable": true,
+    "min_canary_observe_s": 1800,
+    "allow_direct_stable_set": false,
+    "direct_stable_reason_keywords": [
+      "hotfix",
+      "emergency",
+      "security",
+      "rollback"
+    ]
+  },
+  "stages": {
+    "canary": [
+      5,
+      20,
+      50
+    ],
+    "stable": [
+      100
+    ],
+    "min_stage_observe_s": 1800
+  },
+  "gates": {
+    "required_reports": [
+      {
+        "id": "release_rollout_guard",
+        "pattern": ".data/out/release_rollout_guard_*.json",
+        "max_age_s": 604800,
+        "required": true,
+        "require_ok": true
+      },
+      {
+        "id": "rollback_drill_guard",
+        "pattern": ".data/out/rollback_drill_guard_*.json",
+        "max_age_s": 604800,
+        "required": true,
+        "require_ok": true
+      },
+      {
+        "id": "capacity_guard",
+        "pattern": ".data/out/capacity_guard_*.json",
+        "max_age_s": 604800,
+        "required": false,
+        "require_ok": true
+      },
+      {
+        "id": "preflight_trend_guard",
+        "pattern": ".data/out/preflight_trend_guard_*.json",
+        "max_age_s": 604800,
+        "required": false,
+        "require_ok": true
+      }
+    ]
+  }
+}
