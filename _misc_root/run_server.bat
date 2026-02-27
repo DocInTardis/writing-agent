@@ -1,0 +1,11 @@
+@echo off
+cd /d %~dp0
+set WRITING_AGENT_USE_OLLAMA=1
+set OLLAMA_MODEL=qwen2.5:3b
+set WRITING_AGENT_ANALYSIS_TIMEOUT_S=45
+set WRITING_AGENT_WORKERS=2
+set WRITING_AGENT_WORKER_MODELS=qwen2.5:1.5b,qwen2.5:3b
+set WRITING_AGENT_AGG_MODEL=qwen2.5:7b
+set WRITING_AGENT_DRAFT_MAIN_MODEL=qwen2.5:1.5b
+set WRITING_AGENT_DRAFT_SUPPORT_MODEL=qwen2.5:3b
+.\\.venv\\Scripts\\python -m writing_agent.launch 1>run.out 2>run.err

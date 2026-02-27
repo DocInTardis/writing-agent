@@ -1,0 +1,178 @@
+{
+  "cp001": {
+    "score": 58.35,
+    "tier": "C（可迭代）",
+    "items": [
+      {
+        "name": "章节覆盖（12项）",
+        "score": 16.666666666666668,
+        "max": 25.0,
+        "details": {
+          "hit_count": 8,
+          "required_count": 12,
+          "hits": {
+            "目标与范围": true,
+            "角色与职责": true,
+            "数据分级与权限": true,
+            "模型准入与评测": true,
+            "上线发布与回滚": true,
+            "监控告警与SLO": true,
+            "审计与合规": true,
+            "风险台账": true,
+            "里程碑计划": false,
+            "预算与资源": false,
+            "培训与变更管理": false,
+            "附录检查清单": false
+          }
+        }
+      },
+      {
+        "name": "长度要求（>=1200字）",
+        "score": 10.0,
+        "max": 10.0,
+        "details": {
+          "chars": 1667
+        }
+      },
+      {
+        "name": "预算与资源细化",
+        "score": 0.0,
+        "max": 15.0,
+        "details": {
+          "has_section": false,
+          "has_weekly_breakdown": false,
+          "has_manpower": false,
+          "has_cost": false,
+          "has_assumptions": false
+        }
+      },
+      {
+        "name": "监控告警与SLO",
+        "score": 12.75,
+        "max": 15.0,
+        "details": {
+          "metric_count_estimate": 5,
+          "has_threshold": true,
+          "has_sampling_cycle": true,
+          "has_trigger_action": true
+        }
+      },
+      {
+        "name": "风险台账完整度",
+        "score": 9.6,
+        "max": 15.0,
+        "details": {
+          "risk_item_ids": [
+            "R1"
+          ],
+          "risk_item_count": 1,
+          "has_probability": true,
+          "has_impact": true,
+          "has_mitigation": true,
+          "has_warning_signal": true
+        }
+      },
+      {
+        "name": "附录检查清单",
+        "score": 0.0,
+        "max": 10.0,
+        "details": {
+          "checklist_item_count_estimate": 0,
+          "has_checklist_section": false
+        }
+      },
+      {
+        "name": "可执行性表达",
+        "score": 9.333333333333334,
+        "max": 10.0,
+        "details": {
+          "action_verb_hits": 28
+        }
+      }
+    ]
+  },
+  "cp002": {
+    "score": 77.2,
+    "tier": "B（可内测）",
+    "items": [
+      {
+        "name": "Part A 初稿方案章节",
+        "score": 25.0,
+        "max": 25.0,
+        "details": {
+          "hit_count": 9,
+          "required_count": 9,
+          "hits": {
+            "项目背景": true,
+            "用户画像分层": true,
+            "对话策略矩阵": true,
+            "知识库治理": true,
+            "隐私与安全": true,
+            "上线灰度": true,
+            "应急回退": true,
+            "质量评估": true,
+            "成本收益测算": true
+          }
+        }
+      },
+      {
+        "name": "Part B 二轮修改指引",
+        "score": 20.0,
+        "max": 20.0,
+        "details": {
+          "role_coverage": 4,
+          "response_count_by_role": {
+            "法务意见": 5,
+            "运维意见": 5,
+            "业务意见": 5,
+            "客服主管意见": 5
+          }
+        }
+      },
+      {
+        "name": "Part C 执行版清单",
+        "score": 16.0,
+        "max": 20.0,
+        "details": {
+          "week_line_count": 7,
+          "covered_weeks_count": 14,
+          "field_complete_entries": 7,
+          "range_line_count": 6
+        }
+      },
+      {
+        "name": "Part D 术语映射表",
+        "score": 6.2,
+        "max": 15.0,
+        "details": {
+          "has_section": true,
+          "term_rows_estimate": 3
+        }
+      },
+      {
+        "name": "Part E 对外沟通免责声明",
+        "score": 0.0,
+        "max": 10.0,
+        "details": {
+          "has_disclaimer": false
+        }
+      },
+      {
+        "name": "长度要求（>=1400字）",
+        "score": 5.0,
+        "max": 5.0,
+        "details": {
+          "chars": 2621
+        }
+      },
+      {
+        "name": "表达稳健性（避免绝对化）",
+        "score": 5.0,
+        "max": 5.0,
+        "details": {
+          "absolute_hits": []
+        }
+      }
+    ]
+  }
+}
