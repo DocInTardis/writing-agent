@@ -23,7 +23,7 @@ from writing_agent.v2.prompts import PromptBuilder, get_prompt_config
 from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
 from writing_agent.sections_catalog import find_section_description, section_catalog_text
 from writing_agent.v2.doc_format import DocBlock, ParsedDoc, parse_report_text
-from writing_agent.v2.cache import LocalCache, AcademicPhraseCache  # 鏂板缂撳瓨
+from writing_agent.v2.cache import LocalCache, AcademicPhraseCache  # cache backends
 from writing_agent.v2 import (
     draft_model_domain,
     graph_aggregate_domain,
@@ -37,7 +37,7 @@ from writing_agent.v2.text_store import TextStore
 
 @dataclass(frozen=True)
 class GenerateConfig:
-    workers: int = 8  # 4鈫? 骞跺彂鎻愬崌
+    workers: int = 8  # default 8 workers (raised from 4 for better CPU utilization)
     worker_models: list[str] | None = None
     aggregator_model: str | None = None
     min_section_paragraphs: int = 4
@@ -63,11 +63,11 @@ def _guess_section_weight(section: str) -> float:
         return 1.0
     if _is_reference_section(s):
         return 0.4
-    if any(k in s for k in ["寮曡█", "鑳屾櫙", "姒傝堪"]):
+    if any(k in s for k in ["引言", "背景", "概述"]):
         return 0.8
-    if any(k in s for k in ["鏂规硶", "瀹炵幇", "璁捐", "鏋舵瀯", "鏂规"]):
+    if any(k in s for k in ["方法", "实现", "设计", "架构", "方案"]):
         return 1.2
-    if any(k in s for k in ["缁撹", "鎬荤粨", "灞曟湜"]):
+    if any(k in s for k in ["结论", "总结", "展望"]):
         return 0.8
     return 1.0
 
@@ -164,7 +164,7 @@ def _plan_timeout_s() -> float:
             return max(5.0, float(raw))
         except Exception:
             pass
-    return 40.0  # 20s鈫?0s 缈诲€?
+    return 40.0  # default raised from 20s to 40s
 
 
 def _analysis_timeout_s() -> float:
@@ -174,7 +174,7 @@ def _analysis_timeout_s() -> float:
             return max(3.0, float(raw))
         except Exception:
             pass
-    return 24.0  # 12s鈫?4s 缈诲€?
+    return 24.0  # default raised from 12s to 24s
 
 
 def _section_timeout_s() -> float:
@@ -184,7 +184,7 @@ def _section_timeout_s() -> float:
             return max(10.0, float(raw))
         except Exception:
             pass
-    return 120.0  # 60s鈫?20s 缈诲€嶏紝缁欐ā鍨嬫洿鍏呰冻鐨勬椂闂?
+    return 120.0  # default raised from 60s to 120s for long sections
 
 
 def _is_evidence_enabled() -> bool:
@@ -514,10 +514,10 @@ def _plan_sections_list_with_model(
 ) -> list[str]:
     client = OllamaClient(base_url=base_url, model=model, timeout_s=_plan_timeout_s())
     catalog = section_catalog_text()
-    system = """????????????Agent????JSON???Markdown?
-Schema: {sections:[string]}.
-??????????????????????16??????????????????????????/???/??/??/????????????????????????????????4-12???
-???????{"sections":["??","????","????","???????","??","????"]}
+    system = """You are a Chinese academic writing structure planner. Output JSON only; no markdown.
+Schema: {"sections":[string]}.
+Rules: at most 16 sections, no duplicates, no empty titles; do not include abstract/keywords/acknowledgement unless explicitly requested. Typical size is 4-12 sections.
+Example: {"sections":["Introduction","Related Work","Method","Experiments","Conclusion","References"]}
 """
     user = (
         f"\u62a5\u544a\u6807\u9898\uff1a{title}\n"
@@ -541,16 +541,16 @@ Schema: {sections:[string]}.
 
 
 def _predict_num_tokens(*, min_chars: int, max_chars: int, is_reference: bool) -> int:
-    # 浼樺寲: 榛樿鍚敤杞檺鍒舵ā寮忥紝璁╂ā鍨嬭嚜鐒剁粨鏉?
-    # 璁剧疆鐜鍙橀噺 WRITING_AGENT_HARD_MAX=1 鍙垏鍥炵‖闄愬埗妯″紡
+    # Soft-limit mode by default: let the model finish naturally within token budget.
+    # Set WRITING_AGENT_HARD_MAX=1 to enforce max_chars as a hard ceiling.
     hard_max_mode = os.environ.get("WRITING_AGENT_HARD_MAX", "0").strip() in {"1", "true", "yes"}
     
     base = max(1200, int(round(min_chars * 4.0)))
     
     if max_chars > 0 and hard_max_mode:
-        # 纭檺鍒舵ā寮忥細涓ユ牸闄愬埗鏈€澶у瓧鏁?
+        # Hard-max mode: clamp generation budget to max_chars-derived token budget.
         base = min(base, int(round(max_chars * 3.0)))
-    # 杞檺鍒舵ā寮忥紙榛樿锛夛細蹇界暐max_chars锛岃妯″瀷鑷敱鍙戞尌
+    # Soft-max mode: ignore max_chars hard cap and rely on post-trim logic.
     
     if is_reference:
         base = min(base, 2400)

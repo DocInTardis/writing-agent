@@ -189,7 +189,8 @@ if (-not $SkipPull) {
   }
 }
 
-# 濡傛灉绔彛琚湰椤圭洰鍗犵敤锛屽垯寮哄埗缁撴潫锛涘惁鍒欎繚鐣欏苟鎹㈢鍙?$procId = Get-PortProcessId -Port $Port
+# If the target port is used by this project, stop it; otherwise keep it and switch to another port.
+$procId = Get-PortProcessId -Port $Port
 if ($procId -and (Is-ThisProjectProcess -Pid $procId)) {
   Write-Host "Port $Port is used by this project. Stopping process $procId."
   Stop-PortProcess -Port $Port

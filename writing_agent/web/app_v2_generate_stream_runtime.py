@@ -90,7 +90,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         ok = bool(result.get("ok"))
         msg = str(result.get("msg") or "")
         if not ok:
-            yield emit("error", {"message": msg or "妯″瀷鍑嗗澶辫触"})
+            yield emit("error", {"message": msg or "model preparation failed"})
             return
         prefs = session.generation_prefs or {}
         fmt = session.formatting or {}
@@ -137,7 +137,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             return
         if _should_route_to_revision(raw_instruction, base_text, analysis_quick):
             summary = "Detected revision instruction and switched to quick edit flow."
-            yield emit("analysis", {"summary": summary, "steps": ["瀹氫綅淇敼鐩爣", "鎵ц鏀瑰啓", "鏍″缁撴瀯"], "missing": []})
+            yield emit("analysis", {"summary": summary, "steps": ["locate target scope", "apply rewrite", "validate structure"], "missing": []})
             revised = _try_revision_edit(
                 session=session,
                 instruction=raw_instruction,
@@ -237,7 +237,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             formatting=session.formatting or {},
             generation_prefs=session.generation_prefs or {},
         )
-        # auto-outline for common doc types when濞屸剝婀佸Ο鈩冩緲/韫囧懘鈧2
+        # Auto-outline for common document types when no template outline is present.
         if not session.template_required_h2 and not session.template_outline:
             auto_outline = _default_outline_from_instruction(raw_instruction)
             if auto_outline:
@@ -261,13 +261,13 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             margin = max(0.0, min(0.3, margin))
             internal_target = int(round(target_chars * (1.0 + margin)))
             cfg = GenerateConfig(
-                workers=int(os.environ.get("WRITING_AGENT_WORKERS", "12")),  # 浼樺寲: 10->12锛屽厖鍒嗗埄鐢ㄥ鏍?
+                workers=int(os.environ.get("WRITING_AGENT_WORKERS", "12")),  # tuned from 10 -> 12
                 min_total_chars=internal_target,
                 max_total_chars=internal_target,
             )
         else:
             cfg = GenerateConfig(
-                workers=int(os.environ.get("WRITING_AGENT_WORKERS", "12")),  # 浼樺寲: 10->12锛屽厖鍒嗗埄鐢ㄥ鏍?
+                workers=int(os.environ.get("WRITING_AGENT_WORKERS", "12")),  # tuned from 10 -> 12
             )
         final_text: str | None = None
         problems: list[str] = []
@@ -383,7 +383,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             except Exception as ee:
                 yield emit("error", {"message": f"generation failed: {e}; fallback failed: {ee}"})
         if final_text is None or len(final_text.strip()) < 20:
-            # 鍏滃簳锛氬崟杞敓鎴愶紝閬垮厤绌虹粨鏋滄垨杩囧害瓒呮椂
+            # Fallback: single-pass generation to avoid empty output on stream failures.
             try:
                 final_text = None
                 saw_stream_delta = False
@@ -420,9 +420,9 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     )
                     _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
             except Exception as e:
-                yield emit("error", {"message": f"鐢熸垚澶辫触锛氭湭寰楀埌姝ｆ枃涓斿厹搴曞け璐ワ細{e}"})
+                yield emit("error", {"message": f"生成失败：未得到正文且兜底失败：{e}"})
                 return
-        # 鎸佷箙鍖栨渶缁堟枃鏈紝鍒锋柊鍚庝笉涓㈠け
+        # Persist final text so refresh/reconnect keeps latest generated content.
         if final_text is not None:
             _set_doc_text(session, final_text)
             _auto_commit_version(session, "auto: after update")

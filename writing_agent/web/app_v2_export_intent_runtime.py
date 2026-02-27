@@ -153,7 +153,7 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> None:
             errors.append(f"docx2pdf: {e}")
     soffice = _resolve_soffice_path()
     if not soffice:
-        detail = "PDF 瀵煎嚭澶辫触锛氭湭鎵惧埌 LibreOffice"
+        detail = "PDF 导出失败：未找到 LibreOffice"
         if errors:
             detail += "; " + "; ".join(errors)[:200]
         raise HTTPException(status_code=500, detail=detail)
@@ -165,7 +165,7 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> None:
     if result.returncode != 0 or not pdf_path.exists():
         stderr = result.stderr.decode("utf-8", errors="ignore").strip()
         stdout = result.stdout.decode("utf-8", errors="ignore").strip()
-        msg = stderr or stdout or "LibreOffice 杞崲澶辫触"
+        msg = stderr or stdout or "LibreOffice conversion failed"
         raise HTTPException(status_code=500, detail=f"PDF 导出失败：{msg}")
 
 def download_pdf(doc_id: str) -> StreamingResponse:
@@ -214,18 +214,18 @@ def _quick_intent_guess(raw: str) -> dict:
     if not text:
         return {"name": "other", "confidence": 0.1, "reason": ""}
     compact = re.sub(r"\s+", "", text).lower()
-    if re.search(r"(??|??|docx|pdf|word|export)", compact):
+    if re.search("(导出|下载|docx|pdf|word|export)", compact):
         return {"name": "export", "confidence": 0.6, "reason": "keyword: export"}
-    if re.search(r"(??|??|??|??|??|??|??|??|??|??|??|??|??|??|??|??|modify|revise|edit)", compact):
+    if re.search("(修改|改写|重写|润色|优化|纠错|调整|编辑|修订|改动|变更|完善|补充|删减|改格式|modify|revise|edit)", compact):
         return {"name": "modify", "confidence": 0.6, "reason": "keyword: modify"}
-    if re.search(r"(??|??|??|??|??|??|??|???|header|footer|template|format|style)", compact):
+    if re.search("(模板|样式|格式|排版|页眉|页脚|字体|标题样式|header|footer|template|format|style)", compact):
         return {"name": "template", "confidence": 0.55, "reason": "keyword: template"}
-    if re.search(r"(??|??|??|??|upload|import)", compact):
+    if re.search("(上传|导入|附件|文件|upload|import)", compact):
         return {"name": "upload", "confidence": 0.55, "reason": "keyword: upload"}
-    if re.search(r"(??|??|??|??|??|outline|section)", compact):
+    if re.search("(大纲|章节|结构|目录|小节|outline|section)", compact):
         return {"name": "outline", "confidence": 0.55, "reason": "keyword: outline"}
-    if re.search(r"(??|??|??|??|??|generate|write|draft)", compact):
+    if re.search("(生成|写作|撰写|草稿|扩写|续写|generate|write|draft)", compact):
         return {"name": "generate", "confidence": 0.55, "reason": "keyword: generate"}
-    if re.search(r"[??]", text):
+    if re.search("[？?]", text):
         return {"name": "question", "confidence": 0.4, "reason": "contains question mark"}
     return {"name": "other", "confidence": 0.2, "reason": "fallback"}

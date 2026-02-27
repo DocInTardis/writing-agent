@@ -30,7 +30,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response, Streamin
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-# 閰嶇疆鏃ュ織
+# 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
@@ -788,7 +788,7 @@ def _warm_ollama_model(model: str) -> None:
     except Exception:
         return
 async def _startup_warm_models() -> None:
-    """鍚姩鏃堕鐑ā鍨嬶紝鍑忓皯棣栨鐢熸垚寤惰繜"""
+    """Warm a selected model during startup to reduce first-token latency."""
     model = os.environ.get("WRITING_AGENT_EXTRACT_MODEL", "").strip() or get_ollama_settings().model
     thread = threading.Thread(target=_warm_ollama_model, args=(model,), daemon=True)
     thread.start()
@@ -798,23 +798,23 @@ def root() -> RedirectResponse:
     _set_doc_text(session, "")
     # Defaults: graduation design / report settings (user can override in UI).
     session.formatting = {
-        "font_name": "瀹嬩綋",
-        "font_name_east_asia": "瀹嬩綋",
-        "font_size_name": "灏忓洓",
+        "font_name": "宋体",
+        "font_name_east_asia": "宋体",
+        "font_size_name": "小四",
         "font_size_pt": 12,
         "line_spacing": 28,
-        "heading1_font_name": "榛戜綋",
-        "heading1_font_name_east_asia": "榛戜綋",
+        "heading1_font_name": "黑体",
+        "heading1_font_name_east_asia": "黑体",
         "heading1_size_pt": 22,
-        "heading2_font_name": "榛戜綋",
-        "heading2_font_name_east_asia": "榛戜綋",
+        "heading2_font_name": "黑体",
+        "heading2_font_name_east_asia": "黑体",
         "heading2_size_pt": 16,
-        "heading3_font_name": "榛戜綋",
-        "heading3_font_name_east_asia": "榛戜綋",
+        "heading3_font_name": "黑体",
+        "heading3_font_name_east_asia": "黑体",
         "heading3_size_pt": 16,
     }
     session.generation_prefs = {
-        "purpose": "姣曚笟璁捐/璇剧▼璁捐鎶ュ憡",
+        "purpose": "毕业设计/课程报告",
         "figure_types": ["flow", "er", "sequence", "bar", "line"],
         "table_types": ["summary", "metrics", "compare"],
         "include_cover": True,

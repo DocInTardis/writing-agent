@@ -55,8 +55,8 @@ class PlanSection:
     evidence_queries: list[str]
 
 
-_DISALLOWED_SECTIONS = {"??", "???", "??", "Abstract", "Keywords"}
-_ACK_SECTIONS = {"??", "??"}
+_DISALLOWED_SECTIONS = {"摘要", "关键词", "目录", "Abstract", "Keywords"}
+_ACK_SECTIONS = {"致谢", "鸣谢"}
 _META_PHRASES = [
     "\u4e0b\u9762\u662f",
     "\u4ee5\u4e0b\u662f",
@@ -216,7 +216,7 @@ def _fallback_title_from_instruction(instruction: str) -> str:
     if not s:
         return ""
     s = re.sub(r"\s+", " ", s)
-    s = re.split(r"[銆?!?锛侊紵]", s)[0].strip()
+    s = re.split(r"[。！？?!;；]", s)[0].strip()
     s = re.sub(
         r"^(?:\u751f\u6210|\u5199\u4e00\u4efd?|\u5199|\u5236\u4f5c|\u5e2e\u6211|\u8bf7|\u9700\u8981)\s*",
         "",
@@ -262,17 +262,17 @@ def _wants_acknowledgement(instruction: str) -> bool:
     s = (instruction or "").replace(" ", "")
     if not s:
         return False
-    return ("鑷磋阿" in s) or ("鎰熻阿" in s) or ("鑷磋緸" in s)
+    return ("致谢" in s) or ("感谢" in s) or ("致辞" in s)
 
 def _filter_ack_headings(headings: list[str], *, allow_ack: bool) -> list[str]:
     if allow_ack:
         return headings
-    return [h for h in headings if "鑷磋阿" not in h and "鑷磋緸" not in h]
+    return [h for h in headings if "致谢" not in h and "致辞" not in h]
 
 def _filter_ack_outline(outline: list[tuple[int, str]], *, allow_ack: bool) -> list[tuple[int, str]]:
     if allow_ack:
         return outline
-    return [(lvl, txt) for lvl, txt in outline if ("鑷磋阿" not in txt and "鑷磋緸" not in txt)]
+    return [(lvl, txt) for lvl, txt in outline if ("致谢" not in txt and "致辞" not in txt)]
 
 def _filter_disallowed_outline(outline: list[tuple[int, str]]) -> list[tuple[int, str]]:
     return [(lvl, txt) for lvl, txt in outline if txt not in _DISALLOWED_SECTIONS]
@@ -290,7 +290,7 @@ def _boost_media_targets(targets: dict[str, SectionTargets], sections: list[str]
         if not t:
             continue
         title = (_section_title(sec) or sec).strip()
-        if _is_reference_section(title) or "闄勫綍" in title:
+        if _is_reference_section(title) or "附录" in title:
             continue
         min_tables = t.min_tables
         min_figures = t.min_figures
@@ -450,7 +450,7 @@ def _strip_rag_meta_lines(text: str) -> str:
 def _plan_point_paragraph(section: str, plan: PlanSection | None, idx: int) -> str:
     if not plan or not plan.key_points:
         return ""
-    sec = (_section_title(section) or section).strip() or "鏈妭"
+    sec = (_section_title(section) or section).strip() or "本节"
     points = [p for p in plan.key_points if p]
     if not points:
         return ""

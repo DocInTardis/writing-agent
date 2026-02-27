@@ -58,14 +58,14 @@ def run_generate_graph(
     if len(worker_models) > 1:
         worker_models = [m for m in worker_models if m != agg_model] or worker_models
 
-    # 浼樺寲: 鍏佽鏇村妯″瀷骞惰,鍏呭垎鍒╃敤12鏍窩PU
+    # Prefer more draft models by default to better use multi-core CPUs.
     draft_max = int(os.environ.get("WRITING_AGENT_DRAFT_MAX_MODELS", "3"))
-    draft_max = max(2, min(4, draft_max))  # 鑷冲皯2涓ā鍨?
+    draft_max = max(2, min(4, draft_max))  # at least 2 models
     worker_models = worker_models[:draft_max] or [settings.model]
 
     pool = ModelPool(worker_models or [settings.model])
 
-    # 鍒濆鍖栫紦瀛樼郴缁?
+    # Initialize local caches.
     repo_root = Path(__file__).resolve().parents[2]
     data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
     cache_dir = data_dir / "cache"
@@ -299,7 +299,7 @@ def run_generate_graph(
             sec_label = f"{parent_title} / {sec_title}"
         else:
             sec_label = sec_title
-        # 浼樺寲: 鍙湪绔犺妭寮€濮嬫椂鏄剧ず,鍑忓皯骞叉壈
+        # Try cache first to reduce repeated generation for identical requests.
         q.put({"event": "section", "phase": "start", "section": section, "title": sec_label, "ts": time.time()})
         
         # 妫€鏌ョ紦瀛?
@@ -366,7 +366,7 @@ def run_generate_graph(
                     min_figures=sec_t.min_figures,
                 )
                 section_text[section] = txt2
-                # 瀛樺叆缂撳瓨
+                # 存入缓存
                 if txt2 and len(txt2.strip()) > 100:
                     local_cache.put_section(sec_title, instruction, sec_t.min_chars, txt2)
                 q.put({"event": "section", "phase": "end", "section": section, "ts": time.time()})
@@ -402,16 +402,16 @@ def run_generate_graph(
     requested = max(1, int(config.workers))
     max_workers = max(1, min(12, min(requested, cap)))  # 8鈫?2 閫傞厤楂樻€ц兘CPU
 
-    # 浼樺寲: 榛樿寮€鍚苟琛屾ā寮?鍏呭垎鍒╃敤12鏍窩PU
-    parallel_raw = os.environ.get("WRITING_AGENT_DRAFT_PARALLEL", "1").strip().lower()  # 淇敼: 榛樿"1"
+    # Parallel drafting enabled by default; cap by model-count and CPU budget.
+    parallel_raw = os.environ.get("WRITING_AGENT_DRAFT_PARALLEL", "1").strip().lower()  # default enabled: "1"
     parallel = parallel_raw in {"1", "true", "yes", "on"}
-    # 鍏佽澶氭ā鍨嬪苟琛岀敓鎴?鎻愬崌閫熷害
+    # Only force serial mode when explicitly disabled by env var.
     if not parallel:
-        max_workers = 1  # 浠呭綋鏄庣‘绂佺敤鏃舵墠涓茶
+        max_workers = 1  # strict serial mode
     elif len(unique_models) <= 1:
-        max_workers = min(max_workers, 8)  # 6->8,鍗曟ā鍨嬩篃鍏呭垎骞惰
+        max_workers = min(max_workers, 8)  # allow higher parallelism for single-model runs
 
-    # 淇: 鎵嬪姩绠＄悊绾跨▼姹?閬垮厤generator涓瓀ith璇彞鍐茬獊
+    # Manage thread pool manually to avoid generator/context-manager conflicts.
     ex = ThreadPoolExecutor(max_workers=max_workers)
     try:
         futs = []
@@ -457,7 +457,7 @@ def run_generate_graph(
                         pct = int((len(completed) / max(1, total_sections)) * 100)
                         elapsed_s = int(time.time() - draft_start_ts) if draft_start_ts else 0
                         
-                        # 浼樺寲: 闄愭祦杩涘害浜嬩欢,閬垮厤鍓嶇娓叉煋鍗￠】
+                        # Throttle progress events to avoid flooding frontend render pipeline.
                         now = time.time()
                         if now - last_progress_time >= 0.5:  # 鏈€澶氭瘡0.5s鍙戦€佷竴娆?
                             yield {
@@ -469,7 +469,7 @@ def run_generate_graph(
                                 "elapsed_s": elapsed_s,
                             }
                             last_progress_time = now
-                        yield {"event": "delta", "delta": f"宸插畬鎴?{len(completed)}/{total_sections}"}
+                        yield {"event": "delta", "delta": f"Completed {len(completed)}/{total_sections}"}
                         continue
                 yield ev
                 continue
@@ -479,14 +479,14 @@ def run_generate_graph(
             if done_count == len(futs) and q.empty():
                 break
         
-        # 浼樺寲: 纭繚鎵€鏈墂orker瀹屾垚,鐢‵uture.result()鏇夸唬杞
+        # Ensure all workers are finalized via Future.result() before exit.
         for f in futs:
             try:
                 f.result(timeout=1.0)  # 姣忎釜鏈€澶氱瓑1绉?
             except Exception:
                 pass  # 蹇界暐寮傚父,缁х画澶勭悊涓嬩竴涓?
     finally:
-        # 淇: 鍦╣enerator涓笉鑳借皟鐢╯hutdown,鐢╟ancel鍙栨秷鏈畬鎴愪换鍔?
+        # Do not call shutdown() from inside generator; cancel unfinished futures instead.
         for f in futs:
             if not f.done():
                 f.cancel()
@@ -714,8 +714,8 @@ def _compute_section_targets(*, sections: list[str], base_min_paras: int, total_
         share = int(round(float(total_chars) * (per_sec_weight.get(sec, 1.0) / total_weight))) if total_chars > 0 else 0
         min_chars = max(220, int(share * 0.7)) if share > 0 else 800
         max_chars = _max_chars_for_section(title)
-        min_tables = 1 if "缁撴灉" in title or "鏁版嵁" in title else 0
-        min_figures = 1 if "鏋舵瀯" in title or "娴佺▼" in title else 0
+        min_tables = 1 if "结果" in title or "数据" in title else 0
+        min_figures = 1 if "架构" in title or "流程" in title else 0
         out[sec] = SectionTargets(
             weight=per_sec_weight.get(sec, 1.0),
             min_paras=base_min_paras,
@@ -793,7 +793,7 @@ def _generate_section_stream(
     client = OllamaClient(base_url=base_url, model=model, timeout_s=_section_timeout_s())
     table_hint = ""
     fig_hint = ""
-    if min_tables > 0 or section in {"??"}:
+    if min_tables > 0 or section in {"结果", "数据分析", "Results"}:
         table_hint = "\nPlease include at least one table (use table blocks)."
     if min_figures > 0:
         fig_hint = "\nPlease include at least one figure (use figure blocks)."

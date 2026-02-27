@@ -482,11 +482,11 @@ class GenerationService:
             plan_steps = [str(x).strip() for x in (decision.get("plan") or []) if str(x).strip()]
         plan_hint = ""
         if plan_steps:
-            plan_hint = "淇璁″垝:\n- " + "\n- ".join(plan_steps) + "\n\n"
+            plan_hint = "Execution plan:\n- " + "\n- ".join(plan_steps) + "\n\n"
 
         if selection:
-            system = "浣犳槸鏂囨。淇鍔╂墜銆傚彧杈撳嚭鏇挎崲鍚庣殑鐗囨鏂囨湰锛屼笉瑕佽В閲娿€?"
-            user = f"閫変腑鏂囨湰:\n{selection}\n\n淇瑕佹眰:\n{analysis_instruction}\n\n{plan_hint}璇疯緭鍑烘浛鎹㈠悗鐨勫唴瀹广€?"
+            system = "You are a document revision assistant. Output only the revised replacement snippet."
+            user = f"Selected text:\n{selection}\n\nRevision request:\n{analysis_instruction}\n\n{plan_hint}Return only the replacement content."
             buf: list[str] = []
             for delta in client.chat_stream(system=system, user=user, temperature=0.25):
                 buf.append(delta)
@@ -495,8 +495,8 @@ class GenerationService:
                 text = text.replace(selection, rewritten, 1)
             text = app_v2._replace_question_headings(text)
         else:
-            system = "浣犳槸鏂囨。淇鍔╂墜銆傝緭鍑哄畬鏁翠慨璁㈠悗鐨?Markdown 鏂囨湰銆?"
-            user = f"淇瑕佹眰:\n{analysis_instruction}\n\n{plan_hint}鍘熸枃:\n{text}\n\n璇疯緭鍑轰慨璁㈠悗鐨勫畬鏁存枃鏈€?"
+            system = "You are a document revision assistant. Output the fully revised Markdown text."
+            user = f"Revision request:\n{analysis_instruction}\n\n{plan_hint}Original text:\n{text}\n\nReturn the complete revised text."
             buf: list[str] = []
             for delta in client.chat_stream(system=system, user=user, temperature=0.25):
                 buf.append(delta)

@@ -367,7 +367,7 @@ def _normalize_generated_text(text: str, instruction: str, current_text: str) ->
     converted = _maybe_convert_json_doc(s)
     if converted:
         s = converted
-    # Normalize heading markers like "##鏍囬" -> "## 鏍囬"
+    # Normalize heading markers like "##Title" -> "## Title".
     s = re.sub(r"(?m)^(#{1,6})([^#\s])", r"\1 \2", s)
     if not re.search(r"(?m)^#\s+", s):
         title = _plan_title(current_text=current_text or s, instruction=instruction)
