@@ -1,0 +1,22 @@
+﻿[package]
+name = "wa_core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+
+[features]
+default = []
+export_docx = ["docx-rs"]
+
+[dependencies.docx-rs]
+version = "0.4"
+optional = true
+
+[dev-dependencies]
+uuid.workspace = true

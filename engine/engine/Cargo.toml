@@ -1,0 +1,22 @@
+﻿[package]
+name = "wa_engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+wa_core = { path = "../core", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+unicode-linebreak = "0.1"
+fontdue = "0.9"
+lru = "0.12"
+rayon = { version = "1.10", optional = true }
+
+[features]
+parallel = ["rayon"]
+
+[dev-dependencies]
+uuid.workspace = true

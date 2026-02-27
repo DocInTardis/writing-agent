@@ -1,0 +1,56 @@
+﻿[
+    {
+        "input":  "engine/tests/samples/sample.md",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\sample_md.docx",
+        "chars":  12
+    },
+    {
+        "input":  "engine/tests/samples/sample.txt",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\sample_txt.docx",
+        "chars":  9
+    },
+    {
+        "input":  "engine/tests/samples/sample.html",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\sample_html.docx",
+        "chars":  11
+    },
+    {
+        "input":  "engine/tests/samples/sample.odt",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\sample_odt.docx",
+        "chars":  11
+    },
+    {
+        "input":  "engine/tests/samples/sample.rtf",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\sample_rtf.docx",
+        "chars":  11
+    },
+    {
+        "input":  "engine/tests/samples/sample.docx",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\sample_docx.docx",
+        "chars":  11
+    },
+    {
+        "input":  "templates\\一种可选的章节结构（仅供参考）.doc",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\一种可选的章节结构_仅供参考__doc.docx",
+        "chars":  3382
+    },
+    {
+        "input":  "templates\\一种可选的章节结构（仅供参考）.docx",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\一种可选的章节结构_仅供参考__docx.docx",
+        "chars":  3382
+    },
+    {
+        "input":  ".data\\rag\\papers\\1002.1181v1.pdf",
+        "ok":  true,
+        "out":  "engine\\tests\\samples\\exported\\1002_1181v1_pdf.docx",
+        "chars":  28218
+    }
+]

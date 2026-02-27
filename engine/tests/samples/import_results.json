@@ -1,0 +1,47 @@
+﻿[
+    {
+        "path":  "engine/tests/samples/sample.md",
+        "ok":  true,
+        "chars":  3
+    },
+    {
+        "path":  "engine/tests/samples/sample.txt",
+        "ok":  true,
+        "chars":  2
+    },
+    {
+        "path":  "engine/tests/samples/sample.html",
+        "ok":  true,
+        "chars":  11
+    },
+    {
+        "path":  "engine/tests/samples/sample.odt",
+        "ok":  true,
+        "chars":  2
+    },
+    {
+        "path":  "engine/tests/samples/sample.rtf",
+        "ok":  true,
+        "chars":  2
+    },
+    {
+        "path":  "engine/tests/samples/sample.docx",
+        "ok":  true,
+        "chars":  2
+    },
+    {
+        "path":  "templates\\一种可选的章节结构（仅供参考）.doc",
+        "ok":  true,
+        "chars":  190
+    },
+    {
+        "path":  "templates\\一种可选的章节结构（仅供参考）.docx",
+        "ok":  true,
+        "chars":  190
+    },
+    {
+        "path":  ".data\\rag\\papers\\1002.1181v1.pdf",
+        "ok":  true,
+        "chars":  791
+    }
+]

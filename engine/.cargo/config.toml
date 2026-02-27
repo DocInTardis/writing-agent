@@ -1,0 +1,5 @@
+﻿[build]
+target-dir = "target"
+
+[term]
+verbose = false
