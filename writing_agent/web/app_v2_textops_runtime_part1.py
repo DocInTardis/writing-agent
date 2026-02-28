@@ -102,19 +102,30 @@ EXPORTED_FUNCTIONS = [
 ]
 
 
-def _try_quick_edit(text: str, instruction: str) -> tuple[str, str] | None:
+def _try_quick_edit(text: str, instruction: str, confirm_apply: bool = False) -> revision_edit_runtime_domain.EditExecutionResult | None:
     return revision_edit_runtime_domain.try_quick_edit(
         text,
         instruction,
         looks_like_modify_instruction=_looks_like_modify_instruction,
+        confirm_apply=confirm_apply,
+        get_ollama_settings_fn=get_ollama_settings,
+        ollama_client_cls=OllamaClient,
     )
 
-def _try_ai_intent_edit(text: str, instruction: str, analysis: dict | None = None) -> tuple[str, str] | None:
+def _try_ai_intent_edit(
+    text: str,
+    instruction: str,
+    analysis: dict | None = None,
+    confirm_apply: bool = False,
+) -> revision_edit_runtime_domain.EditExecutionResult | None:
     return revision_edit_runtime_domain.try_ai_intent_edit(
         text,
         instruction,
         analysis,
         looks_like_modify_instruction=_looks_like_modify_instruction,
+        confirm_apply=confirm_apply,
+        get_ollama_settings_fn=get_ollama_settings,
+        ollama_client_cls=OllamaClient,
     )
 
 def _looks_like_modify_instruction(raw: str) -> bool:

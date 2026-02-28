@@ -83,6 +83,7 @@ class GenerationService:
                 resume_sections=req["resume_sections"],
                 selection=req["selection"],
                 base_text=base_text,
+                confirm_apply=req["confirm_apply"],
             )
             if shortcut is not None:
                 self._save_idempotent_result(idempotency_key, shortcut)
@@ -141,6 +142,7 @@ class GenerationService:
             "compose_mode": app_v2._normalize_compose_mode(data.get("compose_mode")),
             "resume_sections": app_v2._normalize_resume_sections(data.get("resume_sections")),
             "cursor_anchor": str(data.get("cursor_anchor") or ""),
+            "confirm_apply": bool(data.get("confirm_apply") is True),
         }
 
     def _resolve_idempotency_key(self, *, doc_id: str, request: Request, payload: dict) -> str:
@@ -194,9 +196,9 @@ class GenerationService:
         resume_sections: list[str],
         selection: str,
         base_text: str,
+        confirm_apply: bool,
     ) -> dict | None:
-        """完整 graph 之前的快捷分支：优先低延迟返回。"""
-        # 快捷分支A：纯格式修改请求（不需要走大模型生成）。
+        """Shortcut branches before full graph generation."""
         format_only = app_v2._try_handle_format_only_request(
             session=session,
             instruction=raw_instruction,
@@ -207,40 +209,51 @@ class GenerationService:
         if format_only is not None:
             return {"ok": 1, **format_only}
 
-        if base_text.strip():
-            # 进入改写前保存“变更前”版本，便于版本回退。
-            if base_text != session.doc_text:
-                app_v2._set_doc_text(session, base_text)
-            app_v2._auto_commit_version(session, "auto: before update")
-
-        # 快捷分支B：基于规则/轻量模型的快速改写。
-        quick_edit = None if resume_sections else app_v2._try_quick_edit(base_text, raw_instruction)
+        quick_edit = None if resume_sections else app_v2._try_quick_edit(base_text, raw_instruction, confirm_apply)
         if quick_edit:
-            updated_text, _ = quick_edit
-            return self._build_shortcut_result(
-                app_v2=app_v2,
-                session=session,
-                text=updated_text,
-                instruction=raw_instruction,
-                base_text=base_text,
-            )
-
-        # 快捷分支C：先做快速意图分析，再决定是否走 AI 轻改写。
-        analysis_quick = app_v2._run_message_analysis(session, compose_instruction, quick=True)
-        ai_edit = None if resume_sections else app_v2._try_ai_intent_edit(base_text, raw_instruction, analysis_quick)
-        if ai_edit:
-            updated_text, note = ai_edit
+            if quick_edit.requires_confirmation:
+                return self._build_confirmation_shortcut_result(
+                    app_v2=app_v2,
+                    base_text=base_text,
+                    note=quick_edit.note,
+                    confirmation_reason=quick_edit.confirmation_reason,
+                    risk_level=quick_edit.risk_level,
+                    source=quick_edit.source,
+                    operations_count=quick_edit.operations_count,
+                )
             out = self._build_shortcut_result(
                 app_v2=app_v2,
                 session=session,
-                text=updated_text,
+                text=quick_edit.text,
                 instruction=raw_instruction,
                 base_text=base_text,
             )
-            out["note"] = note
+            out["note"] = quick_edit.note
             return out
 
-        # 快捷分支D：命中“修订模式”时走 revise 流程，不进入 graph。
+        analysis_quick = app_v2._run_message_analysis(session, compose_instruction, quick=True)
+        ai_edit = None if resume_sections else app_v2._try_ai_intent_edit(base_text, raw_instruction, analysis_quick, confirm_apply)
+        if ai_edit:
+            if ai_edit.requires_confirmation:
+                return self._build_confirmation_shortcut_result(
+                    app_v2=app_v2,
+                    base_text=base_text,
+                    note=ai_edit.note,
+                    confirmation_reason=ai_edit.confirmation_reason,
+                    risk_level=ai_edit.risk_level,
+                    source=ai_edit.source,
+                    operations_count=ai_edit.operations_count,
+                )
+            out = self._build_shortcut_result(
+                app_v2=app_v2,
+                session=session,
+                text=ai_edit.text,
+                instruction=raw_instruction,
+                base_text=base_text,
+            )
+            out["note"] = ai_edit.note
+            return out
+
         if app_v2._should_route_to_revision(raw_instruction, base_text, analysis_quick):
             revised = app_v2._try_revision_edit(
                 session=session,
@@ -259,8 +272,11 @@ class GenerationService:
                     base_text=base_text,
                 )
 
-        # 快捷分支E：对短文本/特定意图直接 single-pass 快速生成。
-        if app_v2._should_use_fast_generate(raw_instruction, app_v2._resolve_target_chars(session.formatting or {}, session.generation_prefs or {}), session.generation_prefs or {}):
+        if app_v2._should_use_fast_generate(
+            raw_instruction,
+            app_v2._resolve_target_chars(session.formatting or {}, session.generation_prefs or {}),
+            session.generation_prefs or {},
+        ):
             try:
                 instruction = app_v2._augment_instruction(
                     compose_instruction,
@@ -282,13 +298,17 @@ class GenerationService:
                         base_text=base_text,
                     )
             except Exception:
-                # 快捷路径失败不影响主流程，回落到完整 graph。
                 pass
 
         return None
 
     def _build_shortcut_result(self, *, app_v2, session, text: str, instruction: str, base_text: str) -> dict:
         """统一封装快捷路径返回：后处理 + 落库 + doc_ir。"""
+        if base_text.strip():
+            # Save a rollback point only when we are about to apply a real mutation.
+            if base_text != session.doc_text:
+                app_v2._set_doc_text(session, base_text)
+            app_v2._auto_commit_version(session, "auto: before update")
         updated_text = app_v2._postprocess_output_text(
             session,
             text,
@@ -300,6 +320,32 @@ class GenerationService:
         app_v2._auto_commit_version(session, "auto: after update")
         app_v2.store.put(session)
         return {"ok": 1, "text": updated_text, "problems": [], "doc_ir": app_v2._safe_doc_ir_payload(updated_text)}
+
+    def _build_confirmation_shortcut_result(
+        self,
+        *,
+        app_v2,
+        base_text: str,
+        note: str,
+        confirmation_reason: str,
+        risk_level: str,
+        source: str,
+        operations_count: int,
+    ) -> dict:
+        # Confirmation-required response must not mutate document/session.
+        return {
+            "ok": 1,
+            "text": base_text,
+            "problems": [],
+            "doc_ir": app_v2._safe_doc_ir_payload(base_text),
+            "note": note,
+            "requires_confirmation": True,
+            "confirmation_reason": confirmation_reason or "high_risk_edit",
+            "risk_level": risk_level or "high",
+            "plan_source": source or "rules",
+            "operations_count": int(operations_count or 0),
+            "confirmation_action": "confirm_apply",
+        }
 
     def _prepare_generation_config(self, *, app_v2, session, raw_instruction: str, compose_instruction: str, resume_sections: list[str], base_text: str):
         """为 graph 路径准备分析结果与运行参数配置。"""
@@ -548,3 +594,4 @@ class GenerationService:
         app_v2._set_doc_text(session, text)
         app_v2.store.put(session)
         return {"ok": 1, "text": text, "doc_ir": session.doc_ir or {}}
+

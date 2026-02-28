@@ -8,8 +8,12 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
+import threading
+import time
+from hashlib import sha256
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Callable
 
 from writing_agent.web.domains import section_edit_ops_domain
 
@@ -90,6 +94,159 @@ class RuleSpec:
 
 _EDIT_RULES_CACHE: dict = {"mtime": 0.0, "rules": []}
 
+_ALLOWED_EDIT_OPS = {
+    "set_title",
+    "replace_text",
+    "rename_section",
+    "add_section",
+    "delete_section",
+    "move_section",
+    "replace_section_content",
+    "append_section_content",
+    "merge_sections",
+    "swap_sections",
+    "split_section",
+    "reorder_sections",
+}
+_LOW_RISK_OPS = {"set_title", "replace_text"}
+_MEDIUM_RISK_OPS = {"rename_section", "add_section", "move_section", "replace_section_content", "append_section_content"}
+_HIGH_RISK_OPS = {"delete_section", "merge_sections", "swap_sections", "split_section", "reorder_sections"}
+_CONFIRM_TOKENS_RE = re.compile(
+    r"(?:\u786e\u8ba4\u6267\u884c|\u7ee7\u7eed\u6267\u884c|\u7acb\u5373\u6267\u884c|\u5f3a\u5236\u6267\u884c|confirm\s*apply|force\s*apply)",
+    flags=re.IGNORECASE,
+)
+_EDIT_PLAN_METRICS_LOCK = threading.Lock()
+
+
+@dataclass
+class EditPlanV2:
+    operations: list[EditOp] = field(default_factory=list)
+    version: str = "v2"
+    confidence: float = 0.0
+    ambiguities: list[str] = field(default_factory=list)
+    requires_confirmation: bool = False
+    risk_level: str = "low"
+    source: str = "rules"
+
+
+@dataclass
+class EditExecutionResult:
+    text: str
+    note: str
+    applied: bool = False
+    requires_confirmation: bool = False
+    confirmation_reason: str = ""
+    risk_level: str = "low"
+    source: str = "rules"
+    confidence: float = 0.0
+    operations_count: int = 0
+
+
+def _edit_plan_metrics_enabled() -> bool:
+    raw = os.environ.get("WRITING_AGENT_EDIT_PLAN_METRICS_ENABLE", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _edit_plan_metrics_path() -> Path:
+    raw = os.environ.get("WRITING_AGENT_EDIT_PLAN_METRICS_PATH", "").strip()
+    if raw:
+        return Path(raw)
+    return Path(".data/metrics/edit_plan_events.jsonl")
+
+
+def _edit_plan_metrics_max_bytes() -> int:
+    raw = os.environ.get("WRITING_AGENT_EDIT_PLAN_METRICS_MAX_BYTES", "2097152").strip()
+    try:
+        value = int(float(raw))
+    except Exception:
+        value = 2097152
+    return max(262144, value)
+
+
+def _trim_metrics_file_locked(path: Path, max_bytes: int) -> None:
+    try:
+        if not path.exists():
+            return
+        size = path.stat().st_size
+    except Exception:
+        return
+    if size <= max_bytes:
+        return
+    try:
+        raw = path.read_bytes()
+    except Exception:
+        return
+    if len(raw) <= max_bytes:
+        return
+    tail = raw[-max_bytes:]
+    # Keep complete lines to avoid broken JSON rows.
+    first_nl = tail.find(b"\n")
+    if first_nl >= 0 and first_nl + 1 < len(tail):
+        tail = tail[first_nl + 1 :]
+    try:
+        path.write_bytes(tail)
+    except Exception:
+        return
+
+
+def _request_fingerprint(raw: str) -> str:
+    value = _normalize_edit_instruction_text(raw)
+    if not value:
+        return ""
+    try:
+        return sha256(value.encode("utf-8")).hexdigest()[:16]
+    except Exception:
+        return ""
+
+
+def _record_edit_plan_metric(
+    event: str,
+    *,
+    raw: str,
+    prefer_model: bool,
+    fallback_used: bool,
+    plan: EditPlanV2 | None = None,
+    executed: bool | None = None,
+    blocked_reason: str = "",
+    parse_ok: bool | None = None,
+) -> None:
+    if not _edit_plan_metrics_enabled():
+        return
+    row: dict[str, Any] = {
+        "ts": round(time.time(), 3),
+        "event": str(event or "").strip() or "unknown",
+        "request_fp": _request_fingerprint(raw),
+        "prefer_model": bool(prefer_model),
+        "fallback_used": bool(fallback_used),
+    }
+    if parse_ok is not None:
+        row["parse_ok"] = bool(parse_ok)
+    if executed is not None:
+        row["executed"] = bool(executed)
+    if blocked_reason:
+        row["blocked_reason"] = str(blocked_reason)
+    if plan is not None:
+        row.update(
+            {
+                "source": plan.source,
+                "risk_level": plan.risk_level,
+                "requires_confirmation": bool(plan.requires_confirmation),
+                "operations_count": len(plan.operations),
+                "confidence": round(float(plan.confidence or 0.0), 4),
+            }
+        )
+    path = _edit_plan_metrics_path()
+    line = json.dumps(row, ensure_ascii=False) + "\n"
+    with _EDIT_PLAN_METRICS_LOCK:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _trim_metrics_file_locked(path, _edit_plan_metrics_max_bytes())
+            with path.open("a", encoding="utf-8") as f:
+                f.write(line)
+            _trim_metrics_file_locked(path, _edit_plan_metrics_max_bytes())
+        except Exception:
+            return
+
 
 def _compile_rule_flags(flag_list: list[str]) -> int:
     flags = 0
@@ -160,6 +317,31 @@ def _split_instruction_clauses(raw: str) -> list[str]:
     return parts or [str(raw or "").strip()]
 
 
+def _normalize_edit_instruction_text(raw: str) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    # Normalize frequent colloquial patterns before rule parsing.
+    value = value.replace("\u6539\u4e00\u4e0b", "\u6539\u4e3a")
+    value = value.replace("\u6362\u4e00\u4e0b", "\u6362\u6210")
+    value = value.replace("\u6316\u5230", "\u79fb\u5230")
+    value = value.replace("\u632a\u5230", "\u79fb\u5230")
+    value = value.replace("\u4e0d\u8981\u4e86", "\u5220\u9664")
+    value = re.sub(
+        r"\u7b2c\s*([0-9\u4e00-\u4e5d\u5341]+)\s*(?:\u7ae0|\u8282)\s*\u5220\u9664?",
+        "\u5220\u9664\u7b2c\\1\u8282",
+        value,
+        flags=re.IGNORECASE,
+    )
+    value = re.sub(
+        r"\u7b2c\s*([0-9\u4e00-\u4e5d\u5341]+)\s*(?:\u7ae0|\u8282)\s*\u4e0d\u8981\u4e86",
+        "\u5220\u9664\u7b2c\\1\u8282",
+        value,
+        flags=re.IGNORECASE,
+    )
+    return value
+
+
 def _strip_quotes(text: str) -> str:
     return str(text or "").strip().strip("\"'[]{}")
 
@@ -195,6 +377,11 @@ def _build_rule_args(rule: RuleSpec, match: re.Match, clause: str) -> dict | Non
     for key in list(args.keys()):
         if isinstance(args[key], str) and not args[key].strip():
             args[key] = ""
+    if rule.op == "replace_text":
+        old = str(args.get("old") or "").strip()
+        if old:
+            old = re.sub(r"^(?:\u628a|\u5c06)\s*", "", old).strip()
+            args["old"] = old
     return args
 
 
@@ -417,6 +604,7 @@ def _parse_edit_ops(raw: str) -> list[EditOp]:
     if not value:
         return []
     value = re.sub(r"^(请|麻烦|帮我|请帮我|帮忙)", "", value).strip()
+    value = _normalize_edit_instruction_text(value)
     clauses = _split_instruction_clauses(value)
     rules = _load_edit_rules()
     ops: list[EditOp] = []
@@ -487,9 +675,478 @@ def _build_quick_edit_note(ops: list[EditOp]) -> str:
     return "quick edit applied"
 
 
-def _parse_edit_ops_with_model(raw: str, text: str) -> list[EditOp]:
-    _ = raw, text
-    return []
+def _extract_json_block(text: str) -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-zA-Z0-9_-]*", "", raw).strip().strip("`").strip()
+    if raw.startswith("{") and raw.endswith("}"):
+        return raw
+    match = re.search(r"\{[\s\S]*\}", raw)
+    if not match:
+        return ""
+    return match.group(0).strip()
+
+
+def _coerce_int(value: object) -> int | None:
+    try:
+        return int(float(value))
+    except Exception:
+        return None
+
+
+def _collect_section_titles(text: str) -> list[str]:
+    titles: list[str] = []
+    for line in str(text or "").replace("\r", "").split("\n"):
+        m = re.match(r"^\s*#{1,6}\s+(.+?)\s*$", line)
+        if not m:
+            continue
+        title = _clean_section_title(m.group(1))
+        if title:
+            titles.append(title)
+    # keep order, drop duplicates
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in titles:
+        key = _normalize_heading_text(item)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def _risk_level_from_ops(ops: list[EditOp]) -> str:
+    if not ops:
+        return "low"
+    for op in ops:
+        if op.op == "replace_text" and bool((op.args or {}).get("all")):
+            return "high"
+        if op.op in _HIGH_RISK_OPS:
+            return "high"
+    if len(ops) >= 4:
+        return "high"
+    if any(op.op in _MEDIUM_RISK_OPS for op in ops) or len(ops) >= 2:
+        return "medium"
+    return "low"
+
+
+def _requires_confirmation(risk_level: str) -> bool:
+    enabled = os.environ.get("WRITING_AGENT_EDIT_REQUIRE_CONFIRM_HIGH", "1").strip().lower() not in {"0", "false", "no", "off"}
+    return enabled and risk_level == "high"
+
+
+def _has_confirmation_token(raw: str) -> bool:
+    return bool(_CONFIRM_TOKENS_RE.search(str(raw or "")))
+
+
+def _normalize_edit_op_item(item: object) -> EditOp | None:
+    if not isinstance(item, dict):
+        return None
+    op = str(item.get("op") or item.get("operation") or "").strip()
+    if op not in _ALLOWED_EDIT_OPS:
+        return None
+    args_in = item.get("args")
+    if not isinstance(args_in, dict):
+        args_in = {k: v for k, v in item.items() if k not in {"op", "operation", "args"}}
+    args: dict[str, Any] = dict(args_in or {})
+
+    if op == "set_title":
+        args = {"title": _clean_title_candidate(args.get("title"))}
+    elif op == "replace_text":
+        old = _strip_quotes(args.get("old"))
+        old = re.sub(r"^(?:\u628a|\u5c06)\s*", "", old).strip()
+        new = _strip_quotes(args.get("new"))
+        args = {"old": old, "new": new, "all": bool(args.get("all"))}
+    elif op == "rename_section":
+        args = {"old": _clean_section_title(args.get("old")), "new": _clean_section_title(args.get("new"))}
+    elif op == "add_section":
+        level = _coerce_int(args.get("level"))
+        out: dict[str, Any] = {
+            "title": _clean_section_title(args.get("title")),
+            "anchor": _clean_section_title(args.get("anchor")),
+            "position": str(args.get("position") or "after").strip().lower() or "after",
+        }
+        if level and 1 <= level <= 6:
+            out["level"] = level
+        args = out
+    elif op == "delete_section":
+        index_raw = args.get("index")
+        index = _coerce_int(index_raw)
+        if index is None and index_raw is not None:
+            index = _parse_chinese_number(str(index_raw))
+        args = {"title": _clean_section_title(args.get("title")), "index": index}
+    elif op == "move_section":
+        args = {
+            "title": _clean_section_title(args.get("title")),
+            "anchor": _clean_section_title(args.get("anchor")),
+            "position": str(args.get("position") or "after").strip().lower() or "after",
+        }
+    elif op == "replace_section_content":
+        args = {"title": _clean_section_title(args.get("title")), "content": _strip_quotes(args.get("content"))}
+    elif op == "append_section_content":
+        args = {"title": _clean_section_title(args.get("title")), "content": _strip_quotes(args.get("content"))}
+    elif op == "merge_sections":
+        args = {"first": _clean_section_title(args.get("first")), "second": _clean_section_title(args.get("second"))}
+    elif op == "swap_sections":
+        args = {"first": _clean_section_title(args.get("first")), "second": _clean_section_title(args.get("second"))}
+    elif op == "split_section":
+        new_titles = args.get("new_titles")
+        if isinstance(new_titles, list):
+            split_titles = [_clean_section_title(x) for x in new_titles]
+            split_titles = [x for x in split_titles if x]
+        else:
+            split_titles = _split_title_list(str(new_titles or ""))
+        args = {"title": _clean_section_title(args.get("title")), "new_titles": split_titles}
+    elif op == "reorder_sections":
+        order = args.get("order")
+        if isinstance(order, list):
+            items = [_clean_section_title(x) for x in order]
+            items = [x for x in items if x]
+        else:
+            items = _split_title_list(str(order or ""))
+        args = {"order": items}
+    return EditOp(op=op, args=args)
+
+
+def _normalize_edit_plan_payload(payload: object, *, source: str) -> EditPlanV2 | None:
+    data: dict[str, Any]
+    if isinstance(payload, list):
+        data = {"operations": payload}
+    elif isinstance(payload, dict):
+        data = dict(payload)
+    else:
+        return None
+    ops_raw = data.get("operations")
+    if not isinstance(ops_raw, list):
+        return None
+    ops: list[EditOp] = []
+    for item in ops_raw:
+        op = _normalize_edit_op_item(item)
+        if op is None:
+            continue
+        ops.append(op)
+    if not ops:
+        return None
+    try:
+        confidence = float(data.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+    ambiguities = data.get("ambiguities")
+    if isinstance(ambiguities, list):
+        ambiguity_list = [str(x).strip() for x in ambiguities if str(x).strip()]
+    else:
+        ambiguity_list = []
+    risk_level = str(data.get("risk_level") or "").strip().lower()
+    if risk_level not in {"low", "medium", "high"}:
+        risk_level = _risk_level_from_ops(ops)
+    requires_confirmation = bool(data.get("requires_confirmation")) or _requires_confirmation(risk_level)
+    return EditPlanV2(
+        operations=ops,
+        version="v2",
+        confidence=confidence,
+        ambiguities=ambiguity_list,
+        requires_confirmation=requires_confirmation,
+        risk_level=risk_level,
+        source=source,
+    )
+
+
+def _validate_edit_plan(plan: EditPlanV2, text: str) -> tuple[bool, list[str]]:
+    warnings: list[str] = []
+    errors: list[str] = []
+    heading_titles = _collect_section_titles(text)
+    heading_keys = {_normalize_heading_text(title) for title in heading_titles}
+    section_count = len(heading_titles)
+
+    def has_section(title: str) -> bool:
+        key = _normalize_heading_text(title)
+        return bool(key) and key in heading_keys
+
+    deleted_titles: set[str] = set()
+    for op in plan.operations:
+        args = op.args or {}
+        kind = op.op
+        if kind not in _ALLOWED_EDIT_OPS:
+            errors.append(f"unsupported op: {kind}")
+            continue
+        if kind == "set_title":
+            if not str(args.get("title") or "").strip():
+                errors.append("set_title.title required")
+        elif kind == "replace_text":
+            old = str(args.get("old") or "").strip()
+            new = str(args.get("new") or "").strip()
+            if not old or not new or old == new:
+                errors.append("replace_text old/new invalid")
+            elif old not in str(text or "") and not bool(args.get("all")):
+                warnings.append(f"replace target not found: {old[:30]}")
+        elif kind == "rename_section":
+            old = str(args.get("old") or "").strip()
+            new = str(args.get("new") or "").strip()
+            if not old or not new:
+                errors.append("rename_section old/new required")
+            elif heading_keys and not has_section(old):
+                errors.append(f"section not found: {old}")
+        elif kind == "add_section":
+            if not str(args.get("title") or "").strip():
+                errors.append("add_section.title required")
+            anchor = str(args.get("anchor") or "").strip()
+            if anchor and heading_keys and not has_section(anchor):
+                errors.append(f"anchor not found: {anchor}")
+        elif kind == "delete_section":
+            title = str(args.get("title") or "").strip()
+            index = args.get("index")
+            if not title and not index:
+                errors.append("delete_section needs title or index")
+            if title and heading_keys and not has_section(title):
+                errors.append(f"section not found: {title}")
+            if index is not None:
+                try:
+                    idx = int(index)
+                except Exception:
+                    idx = 0
+                if idx <= 0:
+                    errors.append("delete_section.index must be positive")
+                if section_count > 0 and idx > section_count:
+                    errors.append(f"delete_section.index out of range: {idx}")
+            if title:
+                deleted_titles.add(_normalize_heading_text(title))
+        elif kind == "move_section":
+            title = str(args.get("title") or "").strip()
+            anchor = str(args.get("anchor") or "").strip()
+            if not title or not anchor:
+                errors.append("move_section title/anchor required")
+            if heading_keys and title and not has_section(title):
+                errors.append(f"section not found: {title}")
+            if heading_keys and anchor and not has_section(anchor):
+                errors.append(f"anchor not found: {anchor}")
+        elif kind in {"replace_section_content", "append_section_content"}:
+            title = str(args.get("title") or "").strip()
+            content = str(args.get("content") or "").strip()
+            if not title or not content:
+                errors.append(f"{kind} title/content required")
+            if heading_keys and title and not has_section(title):
+                errors.append(f"section not found: {title}")
+        elif kind in {"merge_sections", "swap_sections"}:
+            first = str(args.get("first") or "").strip()
+            second = str(args.get("second") or "").strip()
+            if not first or not second:
+                errors.append(f"{kind} first/second required")
+            if heading_keys and first and not has_section(first):
+                errors.append(f"section not found: {first}")
+            if heading_keys and second and not has_section(second):
+                errors.append(f"section not found: {second}")
+        elif kind == "split_section":
+            title = str(args.get("title") or "").strip()
+            new_titles = args.get("new_titles")
+            if not title:
+                errors.append("split_section.title required")
+            if not isinstance(new_titles, list) or len(new_titles) < 2:
+                errors.append("split_section.new_titles requires >=2 items")
+            if heading_keys and title and not has_section(title):
+                errors.append(f"section not found: {title}")
+        elif kind == "reorder_sections":
+            order = args.get("order")
+            if not isinstance(order, list) or not order:
+                errors.append("reorder_sections.order required")
+            elif heading_keys:
+                for item in order:
+                    if not has_section(str(item)):
+                        errors.append(f"section not found in order: {item}")
+
+        title_ref = str(args.get("title") or "").strip()
+        title_key = _normalize_heading_text(title_ref) if title_ref else ""
+        if kind != "delete_section" and title_key and title_key in deleted_titles:
+            errors.append(f"conflict: operation on deleted section {title_ref}")
+    if errors:
+        return False, errors
+    if warnings:
+        for note in warnings:
+            if note not in plan.ambiguities:
+                plan.ambiguities.append(note)
+    return True, []
+
+
+def _build_model_edit_plan(
+    raw: str,
+    text: str,
+    *,
+    get_ollama_settings_fn: Callable[[], Any] | None = None,
+    ollama_client_cls: Any = None,
+) -> EditPlanV2 | None:
+    enabled = os.environ.get("WRITING_AGENT_EDIT_PLAN_ENABLE", "1").strip().lower() not in {"0", "false", "no", "off"}
+    if not enabled:
+        return None
+    if not callable(get_ollama_settings_fn) or ollama_client_cls is None:
+        return None
+    try:
+        settings = get_ollama_settings_fn()
+    except Exception:
+        return None
+    if not getattr(settings, "enabled", False):
+        return None
+    timeout_s = float(os.environ.get("WRITING_AGENT_EDIT_PLAN_TIMEOUT_S", str(getattr(settings, "timeout_s", 20.0))))
+    model = (
+        os.environ.get("WRITING_AGENT_EDIT_PLAN_MODEL", "").strip()
+        or os.environ.get("WRITING_AGENT_REVISE_MODEL", "").strip()
+        or str(getattr(settings, "model", "")).strip()
+    )
+    if not model:
+        return None
+    try:
+        client = ollama_client_cls(base_url=settings.base_url, model=model, timeout_s=timeout_s)
+        if not client.is_running():
+            return None
+    except Exception:
+        return None
+
+    headings = _collect_section_titles(text)[:20]
+    heading_hint = ", ".join(headings) if headings else "<none>"
+    system = (
+        "You are an edit intent planner.\n"
+        "Output JSON only. No markdown.\n"
+        "Schema:\n"
+        "{"
+        "\"version\":\"v2\","
+        "\"confidence\":0.0-1.0,"
+        "\"risk_level\":\"low|medium|high\","
+        "\"requires_confirmation\":bool,"
+        "\"ambiguities\":[string],"
+        "\"operations\":[{\"op\":string,\"args\":object}]"
+        "}\n"
+        "Allowed op: set_title, replace_text, rename_section, add_section, delete_section, "
+        "move_section, replace_section_content, append_section_content, merge_sections, "
+        "swap_sections, split_section, reorder_sections.\n"
+        "Do not invent sections not present in heading list unless operation does not need a heading."
+    )
+    user = (
+        f"Instruction:\n{raw}\n\n"
+        f"Known headings:\n{heading_hint}\n\n"
+        "Return only valid JSON following schema."
+    )
+    try:
+        raw_out = client.chat(system=system, user=user, temperature=0.1)
+    except Exception:
+        return None
+    raw_json = _extract_json_block(raw_out)
+    if not raw_json:
+        return None
+    try:
+        payload = json.loads(raw_json)
+    except Exception:
+        return None
+    plan = _normalize_edit_plan_payload(payload, source="model")
+    if plan is None:
+        return None
+    ok, _errors = _validate_edit_plan(plan, text)
+    if not ok:
+        return None
+    plan.risk_level = _risk_level_from_ops(plan.operations)
+    plan.requires_confirmation = plan.requires_confirmation or _requires_confirmation(plan.risk_level)
+    if plan.confidence <= 0:
+        plan.confidence = 0.55
+    return plan
+
+
+def _build_rule_edit_plan(raw: str, text: str) -> EditPlanV2 | None:
+    ops = _parse_edit_ops(raw)
+    if not ops:
+        return None
+    plan = EditPlanV2(operations=ops, confidence=0.72, source="rules")
+    plan.risk_level = _risk_level_from_ops(plan.operations)
+    plan.requires_confirmation = _requires_confirmation(plan.risk_level)
+    ok, _errors = _validate_edit_plan(plan, text)
+    if not ok:
+        return None
+    return plan
+
+
+def _build_edit_plan_v2(
+    raw: str,
+    text: str,
+    *,
+    prefer_model: bool,
+    get_ollama_settings_fn: Callable[[], Any] | None = None,
+    ollama_client_cls: Any = None,
+) -> EditPlanV2 | None:
+    value = _normalize_edit_instruction_text(raw)
+    if prefer_model:
+        plan = _build_model_edit_plan(
+            value,
+            text,
+            get_ollama_settings_fn=get_ollama_settings_fn,
+            ollama_client_cls=ollama_client_cls,
+        )
+        if plan is not None:
+            _record_edit_plan_metric(
+                "plan_parsed",
+                raw=value,
+                prefer_model=True,
+                fallback_used=False,
+                plan=plan,
+                parse_ok=True,
+            )
+            return plan
+        _record_edit_plan_metric(
+            "plan_model_miss",
+            raw=value,
+            prefer_model=True,
+            fallback_used=False,
+            parse_ok=False,
+        )
+    rule_plan = _build_rule_edit_plan(value, text)
+    if rule_plan is not None:
+        _record_edit_plan_metric(
+            "plan_parsed",
+            raw=value,
+            prefer_model=prefer_model,
+            fallback_used=prefer_model,
+            plan=rule_plan,
+            parse_ok=True,
+        )
+        return rule_plan
+    _record_edit_plan_metric(
+        "plan_parse_failed",
+        raw=value,
+        prefer_model=prefer_model,
+        fallback_used=prefer_model,
+        parse_ok=False,
+    )
+    return None
+
+
+def _parse_edit_ops_with_model(
+    raw: str,
+    text: str,
+    *,
+    get_ollama_settings_fn: Callable[[], Any] | None = None,
+    ollama_client_cls: Any = None,
+) -> list[EditOp]:
+    plan = _build_model_edit_plan(
+        raw,
+        text,
+        get_ollama_settings_fn=get_ollama_settings_fn,
+        ollama_client_cls=ollama_client_cls,
+    )
+    return list(plan.operations) if plan is not None else []
+
+
+def _build_plan_note(plan: EditPlanV2) -> str:
+    base = _build_quick_edit_note(plan.operations)
+    tags = f"source={plan.source};risk={plan.risk_level};confidence={plan.confidence:.2f}"
+    if plan.ambiguities:
+        return f"{base} [{tags}] ambiguities: " + " | ".join(plan.ambiguities[:2])
+    return f"{base} [{tags}]"
+
+
+def _build_confirmation_note(plan: EditPlanV2) -> str:
+    return (
+        f"high-risk edit plan detected ({len(plan.operations)} ops). "
+        "please append '\u786e\u8ba4\u6267\u884c' to apply. "
+        f"[source={plan.source};risk={plan.risk_level}]"
+    )
 
 
 def try_quick_edit(
@@ -497,18 +1154,75 @@ def try_quick_edit(
     instruction: str,
     *,
     looks_like_modify_instruction,
-) -> tuple[str, str] | None:
+    confirm_apply: bool = False,
+    get_ollama_settings_fn: Callable[[], Any] | None = None,
+    ollama_client_cls: Any = None,
+) -> EditExecutionResult | None:
     raw = (instruction or "").strip()
     if not raw:
         return None
-    ops = _parse_edit_ops(raw)
-    if not ops and looks_like_modify_instruction(raw):
-        ops = _parse_edit_ops_with_model(raw, text)
-    if not ops:
+    likely_edit = looks_like_modify_instruction(raw) or bool(
+        re.search(r"[\u6539\u5220\u79fb\u66ff\u8c03\u6392\u5408\u62c6\u4f18\u7cbe]", raw)
+    )
+    plan = _build_edit_plan_v2(
+        raw,
+        text,
+        prefer_model=likely_edit,
+        get_ollama_settings_fn=get_ollama_settings_fn,
+        ollama_client_cls=ollama_client_cls,
+    )
+    if plan is None:
         return None
-    updated = _apply_edit_ops(text or "", ops)
+    if plan.requires_confirmation and not (confirm_apply or _has_confirmation_token(raw)):
+        _record_edit_plan_metric(
+            "apply_blocked",
+            raw=raw,
+            prefer_model=likely_edit,
+            fallback_used=plan.source != "model",
+            plan=plan,
+            executed=False,
+            blocked_reason="confirmation_required",
+        )
+        return EditExecutionResult(
+            text=(text or ""),
+            note=_build_confirmation_note(plan),
+            applied=False,
+            requires_confirmation=True,
+            confirmation_reason="high_risk_edit",
+            risk_level=plan.risk_level,
+            source=plan.source,
+            confidence=plan.confidence,
+            operations_count=len(plan.operations),
+        )
+    updated = _apply_edit_ops(text or "", plan.operations)
     if updated.strip() != (text or "").strip():
-        return updated, _build_quick_edit_note(ops)
+        _record_edit_plan_metric(
+            "apply_executed",
+            raw=raw,
+            prefer_model=likely_edit,
+            fallback_used=plan.source != "model",
+            plan=plan,
+            executed=True,
+        )
+        return EditExecutionResult(
+            text=updated,
+            note=_build_plan_note(plan),
+            applied=True,
+            requires_confirmation=False,
+            confirmation_reason="",
+            risk_level=plan.risk_level,
+            source=plan.source,
+            confidence=plan.confidence,
+            operations_count=len(plan.operations),
+        )
+    _record_edit_plan_metric(
+        "apply_no_change",
+        raw=raw,
+        prefer_model=likely_edit,
+        fallback_used=plan.source != "model",
+        plan=plan,
+        executed=False,
+    )
     return None
 
 
@@ -551,15 +1265,71 @@ def try_ai_intent_edit(
     analysis: dict | None = None,
     *,
     looks_like_modify_instruction,
-) -> tuple[str, str] | None:
+    confirm_apply: bool = False,
+    get_ollama_settings_fn: Callable[[], Any] | None = None,
+    ollama_client_cls: Any = None,
+) -> EditExecutionResult | None:
     if not _should_try_ai_edit(instruction, text, analysis, looks_like_modify_instruction=looks_like_modify_instruction):
         return None
-    ops = _parse_edit_ops_with_model(instruction, text)
-    if not ops:
+    plan = _build_edit_plan_v2(
+        instruction,
+        text,
+        prefer_model=True,
+        get_ollama_settings_fn=get_ollama_settings_fn,
+        ollama_client_cls=ollama_client_cls,
+    )
+    if plan is None:
         return None
-    updated = _apply_edit_ops(text or "", ops)
+    if plan.requires_confirmation and not (confirm_apply or _has_confirmation_token(instruction)):
+        _record_edit_plan_metric(
+            "apply_blocked",
+            raw=instruction,
+            prefer_model=True,
+            fallback_used=plan.source != "model",
+            plan=plan,
+            executed=False,
+            blocked_reason="confirmation_required",
+        )
+        return EditExecutionResult(
+            text=(text or ""),
+            note=_build_confirmation_note(plan),
+            applied=False,
+            requires_confirmation=True,
+            confirmation_reason="high_risk_edit",
+            risk_level=plan.risk_level,
+            source=plan.source,
+            confidence=plan.confidence,
+            operations_count=len(plan.operations),
+        )
+    updated = _apply_edit_ops(text or "", plan.operations)
     if updated.strip() != (text or "").strip():
-        return updated, _build_quick_edit_note(ops)
+        _record_edit_plan_metric(
+            "apply_executed",
+            raw=instruction,
+            prefer_model=True,
+            fallback_used=plan.source != "model",
+            plan=plan,
+            executed=True,
+        )
+        return EditExecutionResult(
+            text=updated,
+            note=_build_plan_note(plan),
+            applied=True,
+            requires_confirmation=False,
+            confirmation_reason="",
+            risk_level=plan.risk_level,
+            source=plan.source,
+            confidence=plan.confidence,
+            operations_count=len(plan.operations),
+        )
+    _record_edit_plan_metric(
+        "apply_no_change",
+        raw=instruction,
+        prefer_model=True,
+        fallback_used=plan.source != "model",
+        plan=plan,
+        executed=False,
+    )
     return None
 
 

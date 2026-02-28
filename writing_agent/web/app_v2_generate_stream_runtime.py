@@ -37,6 +37,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
     current_text = str(data.get("text") or "")
     selection = str(data.get("selection") or "")
     compose_mode = _normalize_compose_mode(data.get("compose_mode"))
+    confirm_apply = bool(data.get("confirm_apply") is True)
     if not raw_instruction:
         raise HTTPException(status_code=400, detail="instruction required")
     stream_token = _try_begin_doc_generation_with_wait(doc_id, mode="stream")
@@ -102,9 +103,24 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             if base_text != session.doc_text:
                 _set_doc_text(session, base_text)
             _auto_commit_version(session, "auto: before update")
-        quick_edit = _try_quick_edit(base_text, raw_instruction)
+        quick_edit = _try_quick_edit(base_text, raw_instruction, confirm_apply)
         if quick_edit:
-            updated_text, note = quick_edit
+            if quick_edit.requires_confirmation:
+                yield emit(
+                    "confirmation_required",
+                    {
+                        "note": quick_edit.note,
+                        "requires_confirmation": True,
+                        "confirmation_reason": quick_edit.confirmation_reason or "high_risk_edit",
+                        "risk_level": quick_edit.risk_level,
+                        "plan_source": quick_edit.source,
+                        "operations_count": quick_edit.operations_count,
+                        "confirmation_action": "confirm_apply",
+                    },
+                )
+                return
+            updated_text = quick_edit.text
+            note = quick_edit.note
             updated_text = _postprocess_output_text(
                 session,
                 updated_text,
@@ -119,9 +135,24 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             yield emit("final", {"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)})
             return
         analysis_quick = _run_message_analysis(session, raw_instruction, quick=True)
-        ai_edit = _try_ai_intent_edit(base_text, raw_instruction, analysis_quick)
+        ai_edit = _try_ai_intent_edit(base_text, raw_instruction, analysis_quick, confirm_apply)
         if ai_edit:
-            updated_text, note = ai_edit
+            if ai_edit.requires_confirmation:
+                yield emit(
+                    "confirmation_required",
+                    {
+                        "note": ai_edit.note,
+                        "requires_confirmation": True,
+                        "confirmation_reason": ai_edit.confirmation_reason or "high_risk_edit",
+                        "risk_level": ai_edit.risk_level,
+                        "plan_source": ai_edit.source,
+                        "operations_count": ai_edit.operations_count,
+                        "confirmation_action": "confirm_apply",
+                    },
+                )
+                return
+            updated_text = ai_edit.text
+            note = ai_edit.note
             updated_text = _postprocess_output_text(
                 session,
                 updated_text,
