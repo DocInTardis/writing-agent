@@ -108,6 +108,21 @@ Behavior:
 - Active sweep after writes (`put`)
 - Oldest-entry eviction when over capacity
 
+## Edit Intent Parser Settings
+
+Edit instructions now use schema-first plan parsing with rule fallback.
+
+- `WRITING_AGENT_EDIT_PLAN_ENABLE`: enable schema parser path (default `1`)
+- `WRITING_AGENT_EDIT_PLAN_MODEL`: optional dedicated parser model (default fallback to revise/default model)
+- `WRITING_AGENT_EDIT_PLAN_TIMEOUT_S`: parser model timeout in seconds (default `20`)
+- `WRITING_AGENT_EDIT_REQUIRE_CONFIRM_HIGH`: require explicit `确认执行` for high-risk plans (default `1`)
+- `WRITING_AGENT_EDIT_PLAN_METRICS_ENABLE`: write parser/apply metrics to local file only (default `1`)
+- `WRITING_AGENT_EDIT_PLAN_METRICS_PATH`: local metrics JSONL path (default `.data/metrics/edit_plan_events.jsonl`)
+- `WRITING_AGENT_EDIT_PLAN_METRICS_MAX_BYTES`: max local metrics file size before trim (default `2097152`)
+
+High-risk confirmation uses backend response fields (`requires_confirmation`, `confirmation_reason`, `confirmation_action`) so frontend can render explicit confirm/cancel buttons without parsing note text.
+Parser metrics are local silent logs only and are not exposed in user-facing UI/API.
+
 ## Documentation
 
 - Documentation index: `docs/INDEX.md`
