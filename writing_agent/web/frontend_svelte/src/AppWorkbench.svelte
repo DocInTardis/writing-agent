@@ -68,6 +68,16 @@
   let progressStart = 0
   let progressEvents: number[] = []
   let sectionFailures: { section: string; reason: string }[] = []
+  type PendingGenerateConfirmation = {
+    requestPayload: Record<string, unknown>
+    note: string
+    reason: string
+    riskLevel: string
+    planSource: string
+    operationsCount: number
+  }
+  let pendingGenerateConfirmation: PendingGenerateConfirmation | null = null
+  let confirmDialogBusy = false
   let leftWidth = 46
   let resizing = false
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -2568,6 +2578,110 @@
     })
   }
 
+  function clearPendingGenerateConfirmation() {
+    pendingGenerateConfirmation = null
+    confirmDialogBusy = false
+  }
+
+  function openPendingGenerateConfirmation(
+    requestPayload: Record<string, unknown>,
+    data: Record<string, unknown>,
+    opts?: { fromStream?: boolean }
+  ) {
+    pendingGenerateConfirmation = {
+      requestPayload: { ...requestPayload },
+      note: String(data.note || ''),
+      reason: String(data.confirmation_reason || 'high_risk_edit'),
+      riskLevel: String(data.risk_level || 'high'),
+      planSource: String(data.plan_source || 'rules'),
+      operationsCount: Number(data.operations_count || 0)
+    }
+    confirmDialogBusy = false
+    docStatus.set('待确认：检测到高风险编辑')
+    flowStatus.set('待确认')
+    const from = opts?.fromStream ? '流式生成' : '非流式生成'
+    const reason = pendingGenerateConfirmation.note || `检测到高风险编辑，来源 ${from}。`
+    appendChat('system', reason)
+    pushThought('待确认', reason, formatElapsed())
+    pushToast('检测到高风险编辑，请确认后执行。', 'info')
+  }
+
+  async function runNonStreamGenerate(
+    requestPayload: Record<string, unknown>,
+    opts?: { completionMsg?: string; fromStream?: boolean }
+  ): Promise<'applied' | 'pending'> {
+    const resp = await fetch(`/api/doc/${$docId}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestPayload)
+    })
+    if (!resp.ok) {
+      const msg = await resp.text()
+      throw new Error(`HTTP ${resp.status}: ${msg || resp.statusText}`)
+    }
+    const data = (await resp.json()) as Record<string, unknown>
+    if (Boolean(data.requires_confirmation)) {
+      openPendingGenerateConfirmation(requestPayload, data, { fromStream: opts?.fromStream })
+      return 'pending'
+    }
+    const txt = String(data.text || '')
+    if (!sawSectionDelta) {
+      const finalDoc =
+        data.doc_ir && typeof data.doc_ir === 'object' ? (data.doc_ir as Record<string, unknown>) : null
+      void typewriterSetText(txt, { finalDocIr: finalDoc })
+    } else {
+      const finalDoc =
+        data.doc_ir && typeof data.doc_ir === 'object' ? (data.doc_ir as Record<string, unknown>) : null
+      finalizeStreamText(txt, finalDoc)
+    }
+    docStatus.set('完成')
+    flowStatus.set('完成')
+    resumeState = null
+    const doneMsg = String(opts?.completionMsg || '已完成生成。')
+    appendChat('system', doneMsg)
+    pushThought('完成', doneMsg, formatElapsed())
+    pushToast('生成完成（非流式）', 'ok')
+    saveDoc().catch(() => {})
+    clearPendingGenerateConfirmation()
+    return 'applied'
+  }
+
+  async function confirmPendingGenerate() {
+    if (!pendingGenerateConfirmation || !$docId || $generating) return
+    confirmDialogBusy = true
+    generating.set(true)
+    docStatus.set('执行高风险编辑中…')
+    try {
+      const payload: Record<string, unknown> = {
+        ...pendingGenerateConfirmation.requestPayload,
+        confirm_apply: true
+      }
+      const status = await runNonStreamGenerate(payload, {
+        completionMsg: '已完成高风险编辑（确认执行）。'
+      })
+      if (status === 'pending') {
+        pushToast('服务端仍要求确认，请检查风险策略配置。', 'info')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '确认执行失败'
+      docStatus.set(`生成失败: ${msg}`)
+      appendChat('system', msg)
+      pushThought('错误', String(msg), formatElapsed())
+      pushToast(String(msg), 'bad')
+    } finally {
+      confirmDialogBusy = false
+      generating.set(false)
+    }
+  }
+
+  function cancelPendingGenerate() {
+    if (!pendingGenerateConfirmation) return
+    clearPendingGenerateConfirmation()
+    docStatus.set('已取消高风险编辑')
+    flowStatus.set('已停止')
+    pushToast('已取消执行。', 'info')
+  }
+
   function looksLikeImageFile(file: File) {
     const name = String(file?.name || '').toLowerCase()
     return String(file?.type || '').startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(name)
@@ -2683,6 +2797,7 @@
       pushToast(reason, 'info')
       return
     }
+    clearPendingGenerateConfirmation()
     if (opts?.fromQueue) {
       appendChat('system', '正在执行排队指令…')
     } else if (opts?.fromResume) {
@@ -2912,6 +3027,11 @@
             }
             return
           }
+          if (event === 'confirmation_required') {
+            sawFinal = true
+            openPendingGenerateConfirmation(generatePayload, data as Record<string, unknown>, { fromStream: true })
+            return
+          }
           if (event === 'final') {
             const txt = String(data.text || '')
             if (!sawSectionDelta) {
@@ -2969,33 +3089,13 @@
           pushThought('中止', String(reason), formatElapsed())
           pushToast(String(reason), 'info')
           try {
-            const resp = await fetch(`/api/doc/${$docId}/generate`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(generatePayload)
+            const status = await runNonStreamGenerate(generatePayload, {
+              completionMsg: '已完成生成（非流式兜底）。',
+              fromStream: true
             })
-            if (!resp.ok) {
-              const msg = await resp.text()
-              throw new Error(`HTTP ${resp.status}: ${msg || resp.statusText}`)
+            if (status === 'applied' || status === 'pending') {
+              sawFinal = true
             }
-            const data = await resp.json()
-            const txt = String(data.text || '')
-            if (!sawSectionDelta) {
-              const finalDoc =
-                data.doc_ir && typeof data.doc_ir === 'object' ? (data.doc_ir as Record<string, unknown>) : null
-              void typewriterSetText(txt, { finalDocIr: finalDoc })
-            } else {
-              const finalDoc =
-                data.doc_ir && typeof data.doc_ir === 'object' ? (data.doc_ir as Record<string, unknown>) : null
-              finalizeStreamText(txt, finalDoc)
-            }
-            docStatus.set('完成')
-            flowStatus.set('完成')
-            resumeState = null
-            appendChat('system', '已完成生成（非流式兜底）。')
-            pushThought('完成', '非流式生成完成', formatElapsed())
-            pushToast('生成完成（非流式）', 'ok')
-            saveDoc().catch(() => {})
           } catch (err: any) {
             const msg = err?.message || '非流式生成失败'
             docStatus.set(`生成失败: ${msg}`)
@@ -4009,6 +4109,27 @@
     bind:this={uploadImageInput}
     on:change={handleInlineImageSelect}
   />
+
+  {#if pendingGenerateConfirmation}
+    <div class="confirm-overlay" role="dialog" aria-modal="true" aria-label="高风险编辑确认">
+      <section class="confirm-dialog">
+        <div class="panel-title">检测到高风险编辑</div>
+        <div class="panel-sub">
+          风险等级 {pendingGenerateConfirmation.riskLevel} · 计划来源 {pendingGenerateConfirmation.planSource}
+          · 操作数 {pendingGenerateConfirmation.operationsCount}
+        </div>
+        <div class="confirm-note">
+          {pendingGenerateConfirmation.note || '该请求会执行高风险文本改动，请确认是否继续。'}
+        </div>
+        <div class="confirm-actions">
+          <button class="btn ghost" on:click={cancelPendingGenerate} disabled={confirmDialogBusy}>取消</button>
+          <button class="btn primary danger" on:click={confirmPendingGenerate} disabled={confirmDialogBusy}>
+            {confirmDialogBusy ? '执行中...' : '确认执行'}
+          </button>
+        </div>
+      </section>
+    </div>
+  {/if}
 
 {#if $generating}
   <ProgressBar indeterminate={true} />
@@ -5075,6 +5196,48 @@
 
   .btn.ghost {
     background: rgba(15, 23, 42, 0.06);
+  }
+
+  .btn.primary.danger {
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+  }
+
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(15, 23, 42, 0.38);
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+
+  .confirm-dialog {
+    width: min(560px, calc(100vw - 32px));
+    border-radius: 16px;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 26px 48px rgba(15, 23, 42, 0.3);
+    padding: 16px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .confirm-note {
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: rgba(248, 250, 252, 0.92);
+    color: #334155;
+    padding: 10px 12px;
+    line-height: 1.55;
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   .btn:hover,
