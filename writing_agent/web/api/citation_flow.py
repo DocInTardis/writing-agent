@@ -21,12 +21,28 @@ async def save_citations(doc_id: str, request: Request) -> dict:
     return await service.save_citations(doc_id, request)
 
 
+async def resolve_citation_url(doc_id: str, request: Request) -> dict:
+    return await service.resolve_url(doc_id, request)
+
+
 async def verify_citations(doc_id: str, request: Request) -> dict:
     return await service.verify_citations(doc_id, request)
 
 
 def metrics_citation_verify() -> dict:
     return service.metrics_citation_verify()
+
+
+def metrics_citation_resolve_url(limit: int = 60) -> dict:
+    return service.metrics_citation_resolve_url(limit=limit)
+
+
+def metrics_citation_resolve_alerts_config(request: Request) -> dict:
+    return service.metrics_citation_resolve_alerts_config(request)
+
+
+async def metrics_citation_resolve_alerts_config_save(request: Request) -> dict:
+    return await service.metrics_citation_resolve_alerts_config_save(request)
 
 
 def metrics_citation_verify_alerts_config(request: Request) -> dict:
@@ -59,6 +75,11 @@ async def save_citations_flow(doc_id: str, request: Request) -> dict:
     return await save_citations(doc_id, request)
 
 
+@router.post("/api/doc/{doc_id}/citations/resolve-url")
+async def resolve_citation_url_flow(doc_id: str, request: Request) -> dict:
+    return await resolve_citation_url(doc_id, request)
+
+
 @router.post("/api/doc/{doc_id}/citations/verify")
 async def verify_citations_flow(doc_id: str, request: Request) -> dict:
     return await verify_citations(doc_id, request)
@@ -67,6 +88,21 @@ async def verify_citations_flow(doc_id: str, request: Request) -> dict:
 @router.get("/api/metrics/citation_verify")
 def metrics_citation_verify_flow() -> dict:
     return metrics_citation_verify()
+
+
+@router.get("/api/metrics/citation_resolve_url")
+def metrics_citation_resolve_url_flow(limit: int = 60) -> dict:
+    return metrics_citation_resolve_url(limit=limit)
+
+
+@router.get("/api/metrics/citation_resolve_url/alerts/config")
+def metrics_citation_resolve_alerts_config_flow(request: Request) -> dict:
+    return metrics_citation_resolve_alerts_config(request)
+
+
+@router.post("/api/metrics/citation_resolve_url/alerts/config")
+async def metrics_citation_resolve_alerts_config_save_flow(request: Request) -> dict:
+    return await metrics_citation_resolve_alerts_config_save(request)
 
 
 @router.get("/api/metrics/citation_verify/alerts/config")

@@ -10,6 +10,8 @@ Protected endpoints:
 - `POST /api/metrics/citation_verify/alerts/config` requires `alerts.write`
 - `GET /api/metrics/citation_verify/alerts/events` requires `alerts.read`
 - `GET /api/metrics/citation_verify/alerts/event/{event_id}` requires `alerts.read`
+- `GET /api/metrics/citation_resolve_url/alerts/config` requires `alerts.read`
+- `POST /api/metrics/citation_resolve_url/alerts/config` requires `alerts.write`
 
 ## Policy
 
@@ -54,8 +56,10 @@ If no RBAC principal token and no admin key is configured, endpoints remain open
 
 Role separation coverage:
 
-- `tests/test_citation_verify_and_delete.py::test_citation_verify_alert_ops_rbac_role_separation`
+- `tests/test_citation_verify_alert_events_rbac.py::test_citation_verify_alert_ops_rbac_role_separation`
+- `tests/test_citation_resolve_url.py::test_resolve_url_alerts_config_ops_rbac_role_separation`
 
 Legacy compatibility coverage:
 
-- `tests/test_citation_verify_and_delete.py::test_citation_verify_alert_admin_key_guard_on_config_and_events`
+- `tests/test_citation_verify_alert_events_rbac.py::test_citation_verify_alert_admin_key_guard_on_config_and_events`
+- `tests/test_citation_resolve_url.py::test_resolve_url_alerts_config_admin_key_guard`

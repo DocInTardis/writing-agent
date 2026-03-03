@@ -5,19 +5,24 @@
     POLL_MS,
     cacheHitRate,
     clampAlertConfig,
+    clampResolveAlertConfig,
     formatAlertMetric,
     formatRate,
     formatTime,
     normalizeEventContextPayload,
     normalizeMetricsPayload,
+    normalizeResolveMetricsPayload,
     type AlertConfigForm,
     type MetricsEventContext,
-    type MetricsView
+    type MetricsView,
+    type ResolveAlertConfigForm,
+    type ResolveMetricsView
   } from './performanceMetricsUtils'
 
   export let visible = false
 
   let metrics: MetricsView | null = null
+  let resolveMetrics: ResolveMetricsView | null = null
   let loading = false
   let refreshing = false
   let errorMsg = ''
@@ -29,6 +34,10 @@
   let alertConfigDirty = false
   let alertConfigMsg = ''
   let alertConfigMsgKind: 'ok' | 'bad' | '' = ''
+  let resolveSavingAlertConfig = false
+  let resolveAlertConfigDirty = false
+  let resolveAlertConfigMsg = ''
+  let resolveAlertConfigMsgKind: 'ok' | 'bad' | '' = ''
   let alertAdminKey = ''
 
   let eventContextLoading = false
@@ -42,6 +51,18 @@
     p95_ms: 4500,
     error_rate_per_run: 0.3,
     cache_delta_hit_rate: 0.35
+  }
+
+  let resolveAlertConfigForm: ResolveAlertConfigForm = {
+    enabled: true,
+    min_runs: 8,
+    failure_rate: 0.35,
+    fallback_rate: 0.55,
+    p95_ms: 4500,
+    low_confidence_rate: 0.4,
+    notify_enabled: true,
+    notify_cooldown_s: 300,
+    notify_timeout_s: 4
   }
 
   if (typeof window !== 'undefined') {
@@ -72,6 +93,42 @@
       error_rate_per_run: next.alerts.thresholds.error_rate_per_run,
       cache_delta_hit_rate: next.alerts.thresholds.cache_delta_hit_rate
     })
+  }
+
+  function applyResolveAlertConfigFromMetrics(next: ResolveMetricsView): void {
+    if (resolveAlertConfigDirty || resolveSavingAlertConfig) return
+    resolveAlertConfigForm = clampResolveAlertConfig({
+      enabled: next.alerts.enabled,
+      min_runs: next.alerts.min_runs,
+      failure_rate: next.alerts.thresholds.failure_rate,
+      fallback_rate: next.alerts.thresholds.fallback_rate,
+      p95_ms: next.alerts.thresholds.p95_ms,
+      low_confidence_rate: next.alerts.thresholds.low_confidence_rate,
+      notify_enabled: next.alerts.notification.enabled,
+      notify_cooldown_s: next.alerts.notification.cooldown_s,
+      notify_timeout_s: next.alerts.notification.timeout_s
+    })
+  }
+
+  function topCountEntries(input: Record<string, number>, limit = 6): Array<{ key: string; count: number }> {
+    return Object.entries(input || {})
+      .map(([key, value]) => ({ key: String(key || '').trim() || '_unknown', count: Number(value || 0) }))
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
+      .slice(0, Math.max(1, Math.round(limit)))
+  }
+
+  function resolveRowStatus(row: ResolveMetricsView['recent'][number]): 'ok' | 'warn' | 'bad' {
+    if (!row.ok) return 'bad'
+    if (row.metadata_only || row.low_confidence) return 'warn'
+    return 'ok'
+  }
+
+  function resolveRowLabel(row: ResolveMetricsView['recent'][number]): string {
+    if (!row.ok) return 'failed'
+    if (row.metadata_only) return 'metadata_only'
+    if (row.low_confidence) return 'low_conf'
+    return 'success'
   }
 
   async function saveAlertConfig(): Promise<void> {
@@ -143,6 +200,83 @@
     }
   }
 
+  async function saveResolveAlertConfig(): Promise<void> {
+    if (!resolveMetrics) return
+    resolveSavingAlertConfig = true
+    resolveAlertConfigMsg = ''
+    resolveAlertConfigMsgKind = ''
+    try {
+      const payload = clampResolveAlertConfig(resolveAlertConfigForm)
+      resolveAlertConfigForm = payload
+      const resp = await fetch('/api/metrics/citation_resolve_url/alerts/config', {
+        method: 'POST',
+        headers: buildAdminHeaders(true),
+        body: JSON.stringify({ config: payload })
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      if (Number(data?.ok || 0) !== 1) throw new Error('Failed to save resolve alert config')
+      const saved = data?.config && typeof data.config === 'object' ? (data.config as Record<string, unknown>) : {}
+      resolveAlertConfigForm = clampResolveAlertConfig({
+        enabled: saved.enabled,
+        min_runs: saved.min_runs,
+        failure_rate: saved.failure_rate,
+        fallback_rate: saved.fallback_rate,
+        p95_ms: saved.p95_ms,
+        low_confidence_rate: saved.low_confidence_rate,
+        notify_enabled: saved.notify_enabled,
+        notify_cooldown_s: saved.notify_cooldown_s,
+        notify_timeout_s: saved.notify_timeout_s
+      })
+      resolveAlertConfigDirty = false
+      resolveAlertConfigMsg = 'Resolve alert config saved'
+      resolveAlertConfigMsgKind = 'ok'
+      await loadMetrics(true)
+    } catch (err) {
+      resolveAlertConfigMsg = err instanceof Error ? err.message : 'Failed to save resolve alert config'
+      resolveAlertConfigMsgKind = 'bad'
+    } finally {
+      resolveSavingAlertConfig = false
+    }
+  }
+
+  async function resetResolveAlertConfig(): Promise<void> {
+    resolveSavingAlertConfig = true
+    resolveAlertConfigMsg = ''
+    resolveAlertConfigMsgKind = ''
+    try {
+      const resp = await fetch('/api/metrics/citation_resolve_url/alerts/config', {
+        method: 'POST',
+        headers: buildAdminHeaders(true),
+        body: JSON.stringify({ reset: true })
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      if (Number(data?.ok || 0) !== 1) throw new Error('Failed to reset resolve alert config')
+      const saved = data?.config && typeof data.config === 'object' ? (data.config as Record<string, unknown>) : {}
+      resolveAlertConfigForm = clampResolveAlertConfig({
+        enabled: saved.enabled,
+        min_runs: saved.min_runs,
+        failure_rate: saved.failure_rate,
+        fallback_rate: saved.fallback_rate,
+        p95_ms: saved.p95_ms,
+        low_confidence_rate: saved.low_confidence_rate,
+        notify_enabled: saved.notify_enabled,
+        notify_cooldown_s: saved.notify_cooldown_s,
+        notify_timeout_s: saved.notify_timeout_s
+      })
+      resolveAlertConfigDirty = false
+      resolveAlertConfigMsg = 'Resolve alert config reset to defaults'
+      resolveAlertConfigMsgKind = 'ok'
+      await loadMetrics(true)
+    } catch (err) {
+      resolveAlertConfigMsg = err instanceof Error ? err.message : 'Failed to reset resolve alert config'
+      resolveAlertConfigMsgKind = 'bad'
+    } finally {
+      resolveSavingAlertConfig = false
+    }
+  }
+
   async function loadEventContext(eventId: string): Promise<void> {
     const id = String(eventId || '').trim()
     if (!id) return
@@ -174,14 +308,31 @@
 
     errorMsg = ''
     try {
-      const resp = await fetch('/api/metrics/citation_verify')
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
-      metrics = normalizeMetricsPayload(data)
+      const [verifyResult, resolveResult] = await Promise.allSettled([
+        fetch('/api/metrics/citation_verify'),
+        fetch('/api/metrics/citation_resolve_url?limit=60')
+      ])
+      if (verifyResult.status !== 'fulfilled') {
+        throw (verifyResult.reason instanceof Error ? verifyResult.reason : new Error('Failed to load verify metrics'))
+      }
+      const verifyResp = verifyResult.value
+      if (!verifyResp.ok) throw new Error(`HTTP ${verifyResp.status}`)
+      const verifyData = await verifyResp.json()
+      metrics = normalizeMetricsPayload(verifyData)
       if (metrics) applyAlertConfigFromMetrics(metrics)
+
+      if (resolveResult.status === 'fulfilled' && resolveResult.value.ok) {
+        const resolveData = await resolveResult.value.json()
+        resolveMetrics = normalizeResolveMetricsPayload(resolveData)
+        if (resolveMetrics) applyResolveAlertConfigFromMetrics(resolveMetrics)
+      } else {
+        resolveMetrics = normalizeResolveMetricsPayload({})
+        if (resolveMetrics) applyResolveAlertConfigFromMetrics(resolveMetrics)
+      }
       updatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     } catch (err) {
       errorMsg = err instanceof Error ? err.message : 'Failed to load performance metrics'
+      resolveMetrics = null
     } finally {
       loading = false
       refreshing = false
@@ -236,7 +387,7 @@
       <div class="perf-header">
         <div>
           <h2>核验性能观测</h2>
-          <div class="perf-sub">Window metrics + recent request details</div>
+          <div class="perf-sub">Verify + Resolve URL metrics with recent request details</div>
         </div>
         <div class="perf-actions">
           <button class="btn-refresh" on:click={() => loadMetrics(true)} disabled={loading || refreshing}>
@@ -514,6 +665,311 @@
               set {metrics.cache.set} | evicted {metrics.cache.evicted} | expired {metrics.cache.expired}
             </div>
           </div>
+
+          {#if resolveMetrics}
+            <div class="perf-resolve">
+              <div class="title">Resolve URL ({resolveMetrics.runs}/{resolveMetrics.max_runs})</div>
+              <div class="resolve-cards">
+                <div class="resolve-card">
+                  <div class="label">成功率 / fallback</div>
+                  <div class="value">{formatRate(resolveMetrics.success_rate)} / {formatRate(resolveMetrics.fallback_rate)}</div>
+                  <div class="meta">
+                    req {resolveMetrics.totals.requests} · success {resolveMetrics.totals.success} · failed {resolveMetrics.totals.failed}
+                  </div>
+                </div>
+                <div class="resolve-card">
+                  <div class="label">延迟</div>
+                  <div class="value">{resolveMetrics.latency_ms.p50.toFixed(1)} / {resolveMetrics.latency_ms.p95.toFixed(1)} ms</div>
+                  <div class="meta">avg {resolveMetrics.latency_ms.avg.toFixed(1)} · max {resolveMetrics.latency_ms.max.toFixed(1)}</div>
+                </div>
+                <div class="resolve-card">
+                  <div class="label">置信度</div>
+                  <div class="value">{formatRate(resolveMetrics.confidence.p50)} / {formatRate(resolveMetrics.confidence.p95)}</div>
+                  <div class="meta">
+                    avg {formatRate(resolveMetrics.confidence.avg)} · low_conf {resolveMetrics.totals.low_confidence}
+                  </div>
+                </div>
+                <div class="resolve-card">
+                  <div class="label">metadata-only</div>
+                  <div class="value">{resolveMetrics.totals.metadata_only}</div>
+                  <div class="meta">window {resolveMetrics.window_s.toFixed(0)}s</div>
+                </div>
+              </div>
+              <div class="resolve-map-row">
+                <div class="resolve-map">
+                  <span class="map-label">resolver</span>
+                  {#if topCountEntries(resolveMetrics.resolvers, 6).length === 0}
+                    <span class="map-empty">none</span>
+                  {:else}
+                    {#each topCountEntries(resolveMetrics.resolvers, 6) as row (`resolver-${row.key}`)}
+                      <span class="map-chip">{row.key}:{row.count}</span>
+                    {/each}
+                  {/if}
+                </div>
+                <div class="resolve-map">
+                  <span class="map-label">provider</span>
+                  {#if topCountEntries(resolveMetrics.providers, 6).length === 0}
+                    <span class="map-empty">none</span>
+                  {:else}
+                    {#each topCountEntries(resolveMetrics.providers, 6) as row (`provider-${row.key}`)}
+                      <span class="map-chip">{row.key}:{row.count}</span>
+                    {/each}
+                  {/if}
+                </div>
+              </div>
+              <div class={"perf-alert-summary " + (resolveMetrics.alerts.enabled ? resolveMetrics.alerts.severity : 'ok')}>
+                <span class="alerts-tag">Resolve Alerts</span>
+                {#if resolveMetrics.alerts.enabled}
+                  <span>
+                    severity {resolveMetrics.alerts.severity.toUpperCase()} | triggered {resolveMetrics.alerts.triggered} |
+                    runs {resolveMetrics.alerts.runs}/{resolveMetrics.alerts.min_runs}
+                  </span>
+                {:else}
+                  <span>alerts disabled</span>
+                {/if}
+                {#if resolveMetrics.alerts.warmup && resolveMetrics.alerts.enabled}
+                  <span class="alerts-warmup">warmup: alerts suppressed until enough runs</span>
+                {/if}
+              </div>
+              <div class={"perf-notify-summary " + (resolveMetrics.alerts.notification.sent ? 'sent' : 'idle')}>
+                <span class="notify-tag">Resolve Notify</span>
+                <span>
+                  status {resolveMetrics.alerts.notification.status} | event {resolveMetrics.alerts.notification.event_type} |
+                  channels
+                  {#if resolveMetrics.alerts.notification.channels.length > 0}
+                    {resolveMetrics.alerts.notification.channels.join(',')}
+                  {:else}
+                    none
+                  {/if}
+                </span>
+                {#if resolveMetrics.alerts.notification.suppressed > 0}
+                  <span>suppressed {resolveMetrics.alerts.notification.suppressed}</span>
+                {/if}
+                {#if resolveMetrics.alerts.notification.dedupe_hit}
+                  <span>dedupe-hit</span>
+                {/if}
+                {#if resolveMetrics.alerts.notification.event_id}
+                  <span>event {resolveMetrics.alerts.notification.event_id.slice(0, 8)}</span>
+                {/if}
+                {#if resolveMetrics.alerts.notification.signature}
+                  <span class="notify-signature">{resolveMetrics.alerts.notification.signature}</span>
+                {/if}
+                {#if resolveMetrics.alerts.notification.last_error}
+                  <span class="notify-error">{resolveMetrics.alerts.notification.last_error}</span>
+                {/if}
+              </div>
+              <div class="perf-alert-config">
+                <div class="title">Resolve Alert Config</div>
+                <div class="line">uses the same admin key above</div>
+                <div class="alert-config-grid resolve">
+                  <label class="alert-field checkbox">
+                    <input
+                      type="checkbox"
+                      bind:checked={resolveAlertConfigForm.enabled}
+                      on:change={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                    <span>enabled</span>
+                  </label>
+                  <label class="alert-field checkbox">
+                    <input
+                      type="checkbox"
+                      bind:checked={resolveAlertConfigForm.notify_enabled}
+                      on:change={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                    <span>notify enabled</span>
+                  </label>
+                  <label class="alert-field">
+                    <span>min runs</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="500"
+                      bind:value={resolveAlertConfigForm.min_runs}
+                      on:input={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                  </label>
+                  <label class="alert-field">
+                    <span>failure rate &gt;=</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      bind:value={resolveAlertConfigForm.failure_rate}
+                      on:input={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                  </label>
+                  <label class="alert-field">
+                    <span>fallback rate &gt;=</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      bind:value={resolveAlertConfigForm.fallback_rate}
+                      on:input={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                  </label>
+                  <label class="alert-field">
+                    <span>p95 ms &gt;=</span>
+                    <input
+                      type="number"
+                      min="100"
+                      max="60000"
+                      bind:value={resolveAlertConfigForm.p95_ms}
+                      on:input={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                  </label>
+                  <label class="alert-field">
+                    <span>low conf rate &gt;=</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      bind:value={resolveAlertConfigForm.low_confidence_rate}
+                      on:input={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                  </label>
+                  <label class="alert-field">
+                    <span>notify cooldown s</span>
+                    <input
+                      type="number"
+                      min="10"
+                      max="86400"
+                      bind:value={resolveAlertConfigForm.notify_cooldown_s}
+                      on:input={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                  </label>
+                  <label class="alert-field">
+                    <span>notify timeout s</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      step="0.5"
+                      bind:value={resolveAlertConfigForm.notify_timeout_s}
+                      on:input={() => {
+                        resolveAlertConfigDirty = true
+                        resolveAlertConfigMsg = ''
+                        resolveAlertConfigMsgKind = ''
+                      }}
+                    />
+                  </label>
+                </div>
+                <div class="alert-config-actions">
+                  <button
+                    class="btn-alert-save"
+                    on:click={saveResolveAlertConfig}
+                    disabled={resolveSavingAlertConfig || !resolveAlertConfigDirty}
+                  >
+                    {#if resolveSavingAlertConfig}Saving...{:else}Save resolve config{/if}
+                  </button>
+                  <button class="btn-alert-reset" on:click={resetResolveAlertConfig} disabled={resolveSavingAlertConfig}>
+                    Restore defaults
+                  </button>
+                  {#if resolveAlertConfigMsg}
+                    <span class={"alert-config-msg " + (resolveAlertConfigMsgKind || 'ok')}>{resolveAlertConfigMsg}</span>
+                  {/if}
+                </div>
+              </div>
+              {#if resolveMetrics.alerts.notification.events_recent.length > 0}
+                <div class="perf-alert-events">
+                  <div class="title">
+                    Resolve Alert Events ({resolveMetrics.alerts.notification.events_recent.length}/{resolveMetrics.alerts.notification.events_total})
+                  </div>
+                  <div class="alert-event-list">
+                    {#each resolveMetrics.alerts.notification.events_recent.slice().reverse() as ev}
+                      <div class={"alert-event-item " + ev.severity}>
+                        <span class="event-time">{formatTime(ev.ts)}</span>
+                        <span class="event-type">{ev.event_type}</span>
+                        <span class="event-status">{ev.status}</span>
+                        <span>sent {ev.sent ? 'yes' : 'no'}</span>
+                        {#if ev.dedupe_hit}
+                          <span>dedupe</span>
+                        {/if}
+                        {#if ev.triggered_rules.length > 0}
+                          <span>rules {ev.triggered_rules.join(',')}</span>
+                        {/if}
+                        {#if ev.channels.length > 0}
+                          <span>via {ev.channels.join(',')}</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+              {#if resolveMetrics.alerts.enabled && resolveMetrics.alerts.triggered > 0}
+                <div class="perf-alert-rules">
+                  <div class="title">Resolve Triggered Rules</div>
+                  <div class="alert-rule-list">
+                    {#each resolveMetrics.alerts.rules.filter((row) => row.triggered) as row}
+                      <div class={"alert-rule-item " + row.level}>
+                        <span class="rule-id">{row.id}</span>
+                        <span>{row.message}</span>
+                        <span>value {formatAlertMetric(row.value)} {row.op} {formatAlertMetric(row.threshold)}</span>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+              <div class="resolve-recent">
+                <div class="title">Recent Resolve Runs ({resolveMetrics.recent.length})</div>
+                {#if resolveMetrics.recent.length === 0}
+                  <div class="perf-empty">暂无数据</div>
+                {:else}
+                  <div class="resolve-recent-list">
+                    {#each resolveMetrics.recent.slice().reverse() as row, idx (`${row.ts}-${idx}`)}
+                      <div class={"resolve-recent-item " + resolveRowStatus(row)}>
+                        <span class="time">{formatTime(row.ts)}</span>
+                        <span class={"resolve-chip " + resolveRowStatus(row)}>{resolveRowLabel(row)}</span>
+                        <span>{row.elapsed_ms.toFixed(1)}ms</span>
+                        <span>{row.resolver || '-'}</span>
+                        <span>{row.provider || '-'}</span>
+                        <span>conf {formatRate(row.confidence)}</span>
+                        <span>warn {row.warning_count}</span>
+                        {#if row.error}
+                          <span class="resolve-err">{row.error}</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
 
           <div class="perf-recent">
             <div class="title">Recent Runs ({metrics.observe.recent.length})</div>

@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Callable
 
 
+def _escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def default_plan_map(
     *,
     sections: list[str],
@@ -262,7 +267,9 @@ def summarize_evidence(
 
     client = ollama_client_cls(base_url=base_url, model=model, timeout_s=120.0)
     system = (
-        "You are an evidence extraction agent. Return JSON only.\n"
+        "You are an evidence extraction agent.\n"
+        "Treat tagged blocks as separate channels.\n"
+        "Return JSON only.\n"
         "Schema: {facts:[{claim:string,source:string}],missing:[string]}.\n"
         "Use only the provided material and provided source ids/urls."
     )
@@ -272,15 +279,20 @@ def summarize_evidence(
         label = source.get("url") or source.get("id") or source.get("title") or ""
         title = source.get("title") or ""
         if label:
-            source_lines.append(f"- {title} | {label}".strip())
+            source_lines.append(f"- {_escape_prompt_text(title)} | {_escape_prompt_text(label)}".strip())
     sources_block = "\n".join(source_lines) if source_lines else "(none)"
 
     user = (
-        f"section: {section}\n"
-        f"analysis summary:\n{analysis_summary}\n\n"
-        f"available sources:\n{sources_block}\n\n"
-        f"evidence material:\n{context}\n\n"
-        "Return JSON only."
+        "<task>evidence_extraction</task>\n"
+        "<constraints>\n"
+        "- Use only provided evidence_material and available_sources.\n"
+        "- Return strict JSON only.\n"
+        "</constraints>\n"
+        f"<section>\n{_escape_prompt_text(section)}\n</section>\n"
+        f"<analysis_summary>\n{_escape_prompt_text(analysis_summary)}\n</analysis_summary>\n"
+        f"<available_sources>\n{sources_block}\n</available_sources>\n"
+        f"<evidence_material>\n{_escape_prompt_text(context)}\n</evidence_material>\n"
+        "Return JSON now."
     )
 
     data = require_json_response(

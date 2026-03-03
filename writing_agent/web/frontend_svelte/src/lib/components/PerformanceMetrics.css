@@ -327,6 +327,10 @@
     gap: 8px;
   }
 
+  .alert-config-grid.resolve {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .alert-field {
     display: grid;
     gap: 4px;
@@ -497,6 +501,7 @@
   }
 
   .perf-cache,
+  .perf-resolve,
   .perf-recent,
   .perf-trend {
     border: 1px solid rgba(100, 116, 139, 0.22);
@@ -505,6 +510,163 @@
     padding: 10px 12px;
     display: grid;
     gap: 4px;
+  }
+
+  .resolve-cards {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 2px;
+  }
+
+  .resolve-card {
+    border-radius: 8px;
+    border: 1px solid rgba(100, 116, 139, 0.2);
+    background: rgba(248, 250, 252, 0.86);
+    padding: 8px 9px;
+    display: grid;
+    gap: 3px;
+  }
+
+  .resolve-card .label {
+    font-size: 11px;
+    color: rgba(51, 65, 85, 0.72);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .resolve-card .value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .resolve-card .meta {
+    font-size: 11px;
+    color: rgba(30, 41, 59, 0.74);
+  }
+
+  .resolve-map-row {
+    margin-top: 6px;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .resolve-map {
+    border: 1px dashed rgba(100, 116, 139, 0.34);
+    border-radius: 8px;
+    background: rgba(248, 250, 252, 0.8);
+    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 34px;
+  }
+
+  .resolve-map .map-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1e3a5f;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+  }
+
+  .resolve-map .map-chip {
+    border-radius: 999px;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: rgba(239, 246, 255, 0.9);
+    color: #1d4ed8;
+    font-size: 11px;
+    padding: 1px 8px;
+  }
+
+  .resolve-map .map-empty {
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  .resolve-recent {
+    margin-top: 6px;
+    display: grid;
+    gap: 4px;
+  }
+
+  .resolve-recent-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .resolve-recent-item {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 90px 98px 78px 120px 110px 98px 72px minmax(120px, 1fr);
+    align-items: center;
+    font-size: 12px;
+    color: #1f2937;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: rgba(248, 250, 252, 0.86);
+  }
+
+  .resolve-recent-item.ok {
+    border-color: rgba(22, 163, 74, 0.24);
+    background: rgba(236, 253, 245, 0.78);
+  }
+
+  .resolve-recent-item.warn {
+    border-color: rgba(217, 119, 6, 0.28);
+    background: rgba(255, 247, 237, 0.84);
+  }
+
+  .resolve-recent-item.bad {
+    border-color: rgba(220, 38, 38, 0.3);
+    background: rgba(254, 242, 242, 0.88);
+  }
+
+  .resolve-recent-item .time {
+    font-variant-numeric: tabular-nums;
+    color: #475569;
+  }
+
+  .resolve-chip {
+    border-radius: 999px;
+    border: 1px solid transparent;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+    width: fit-content;
+  }
+
+  .resolve-chip.ok {
+    border-color: rgba(22, 163, 74, 0.3);
+    background: rgba(187, 247, 208, 0.48);
+    color: #166534;
+  }
+
+  .resolve-chip.warn {
+    border-color: rgba(217, 119, 6, 0.35);
+    background: rgba(254, 215, 170, 0.52);
+    color: #9a3412;
+  }
+
+  .resolve-chip.bad {
+    border-color: rgba(220, 38, 38, 0.36);
+    background: rgba(254, 202, 202, 0.56);
+    color: #991b1b;
+  }
+
+  .resolve-err {
+    color: #b91c1c;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .title {
@@ -605,7 +767,19 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .resolve-cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .resolve-map-row {
+      grid-template-columns: 1fr;
+    }
+
     .alert-config-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .alert-config-grid.resolve {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
@@ -631,7 +805,20 @@
       gap: 4px 8px;
     }
 
+    .resolve-cards {
+      grid-template-columns: 1fr;
+    }
+
+    .resolve-recent-item {
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 8px;
+    }
+
     .alert-config-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .alert-config-grid.resolve {
       grid-template-columns: 1fr;
     }
   }

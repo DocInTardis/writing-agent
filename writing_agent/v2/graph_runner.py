@@ -45,6 +45,11 @@ class GenerateConfig:
     max_total_chars: int = 0
 
 
+def _escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _target_total_chars(config: GenerateConfig) -> int:
     if config.max_total_chars and config.max_total_chars > 0:
         return max(config.min_total_chars or 0, config.max_total_chars)
@@ -135,9 +140,13 @@ def _require_json_response(
     max_retries: int = 2,
 ) -> dict:
     last_err: Exception | None = None
+    base_system = str(system or "")
+    base_user = str(user or "")
+    attempt_system = base_system
+    attempt_user = base_user
     for attempt in range(1, max_retries + 1):
         try:
-            raw = client.chat(system=system, user=user, temperature=temperature)
+            raw = client.chat(system=attempt_system, user=attempt_user, temperature=temperature)
             raw_json = _extract_json_block(raw)
             if not raw_json:
                 raise ValueError(f"{stage}: empty json block")
@@ -147,11 +156,17 @@ def _require_json_response(
             return data
         except Exception as exc:
             last_err = exc
-            system = (
-                system
-                + "\n\nYour previous output was not valid JSON. Return exactly one JSON object with no markdown."
+            attempt_system = (
+                base_system
+                + "\n\nReturn strict JSON only. Do not output markdown fences or commentary."
             )
-            user = "Return only a JSON object."
+            attempt_user = (
+                f"{base_user}\n"
+                "<retry_reason>\n"
+                "Previous output was invalid JSON. Keep original task/context and retry.\n"
+                "</retry_reason>\n"
+                "Return exactly one JSON object."
+            )
             time.sleep(0.4 * attempt)
             continue
     raise ValueError(f"{stage}: json parse failed: {last_err}")
@@ -514,16 +529,25 @@ def _plan_sections_list_with_model(
 ) -> list[str]:
     client = OllamaClient(base_url=base_url, model=model, timeout_s=_plan_timeout_s())
     catalog = section_catalog_text()
-    system = """You are a Chinese academic writing structure planner. Output JSON only; no markdown.
-Schema: {"sections":[string]}.
-Rules: at most 16 sections, no duplicates, no empty titles; do not include abstract/keywords/acknowledgement unless explicitly requested. Typical size is 4-12 sections.
-Example: {"sections":["Introduction","Related Work","Method","Experiments","Conclusion","References"]}
-"""
+    system = (
+        "You are a Chinese academic writing structure planner.\n"
+        "Return strict JSON only; no markdown.\n"
+        'Schema: {"sections":[string]}.\n'
+        "Rules: at most 16 sections, no duplicates, no empty titles; "
+        "do not include abstract/keywords/acknowledgement unless explicitly requested. Typical size is 4-12 sections.\n"
+        'Example: {"sections":["Introduction","Related Work","Method","Experiments","Conclusion","References"]}'
+    )
     user = (
-        f"\u62a5\u544a\u6807\u9898\uff1a{title}\n"
-        f"\u7528\u6237\u9700\u6c42\uff1a\n{instruction}\n\n"
-        f"\u53ef\u9009\u7ae0\u8282\u5e93\uff08\u6309\u9700\u6311\u9009\uff0c\u4e0d\u5fc5\u5168\u90e8\u4f7f\u7528\uff09\uff1a\n{catalog}\n\n"
-        "\u8bf7\u7ed9\u51fa\u7ae0\u8282\u5217\u8868JSON\u3002"
+        "<task>plan_sections_list</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return strict JSON only.\n"
+        "- Use only the provided section catalog where possible.\n"
+        "</constraints>\n"
+        f"<report_title>\n{_escape_prompt_text(title)}\n</report_title>\n"
+        f"<user_requirement>\n{_escape_prompt_text(instruction)}\n</user_requirement>\n"
+        f"<section_catalog>\n{_escape_prompt_text(catalog)}\n</section_catalog>\n"
+        "Return section list JSON now."
     )
     data = _require_json_response(
         client=client,

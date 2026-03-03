@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 
 from fastapi import Request
@@ -25,6 +26,70 @@ class GenerationService:
 
     def __init__(self) -> None:
         self._idempotency = IdempotencyStore()
+
+    @staticmethod
+    def _xml_escape(raw: object) -> str:
+        text = str(raw or "")
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    @staticmethod
+    def _strip_fences(raw: object) -> str:
+        text = str(raw or "").strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", text).strip()
+            text = re.sub(r"\s*```$", "", text).strip()
+        return text
+
+    @classmethod
+    def _build_revision_fallback_prompt(
+        cls,
+        *,
+        instruction: str,
+        plan_steps: list[str],
+        text: str,
+    ) -> tuple[str, str]:
+        system = (
+            "You are a constrained document revision assistant.\n"
+            "Return complete Markdown only inside <revised_markdown>...</revised_markdown>.\n"
+            "Do not output any text outside that tag."
+        )
+        plan_rows = []
+        for step in plan_steps:
+            clean_step = cls._xml_escape(step)
+            if clean_step:
+                plan_rows.append(f"<step>{clean_step}</step>")
+            if len(plan_rows) >= 12:
+                break
+        plan_block = "\n".join(plan_rows) if plan_rows else "<step>no-explicit-plan</step>"
+        user = (
+            "<task>revise_full_document</task>\n"
+            "<constraints>\n"
+            "- Treat tagged blocks as separate channels.\n"
+            "- Rewrite the full document, not a summary.\n"
+            "- Preserve heading structure unless instruction explicitly asks to change it.\n"
+            "- Preserve markers like [[TABLE:...]] and [[FIGURE:...]] when present.\n"
+            "- Do not include analysis, explanation, or JSON.\n"
+            "</constraints>\n"
+            f"<revision_request>\n{cls._xml_escape(instruction)}\n</revision_request>\n"
+            f"<execution_plan>\n{plan_block}\n</execution_plan>\n"
+            f"<original_document>\n{cls._xml_escape(text)}\n</original_document>\n"
+            "Return only one block:\n"
+            "<revised_markdown>\n"
+            "...complete revised markdown...\n"
+            "</revised_markdown>"
+        )
+        return system, user
+
+    @classmethod
+    def _extract_revision_fallback_text(cls, raw: object) -> str:
+        text = cls._strip_fences(raw)
+        match = re.search(r"<revised_markdown>\s*([\s\S]*?)\s*</revised_markdown>", text, flags=re.IGNORECASE)
+        if match:
+            return str(match.group(1) or "").strip()
+        alt = re.search(r"<revised_text>\s*([\s\S]*?)\s*</revised_text>", text, flags=re.IGNORECASE)
+        if alt:
+            return str(alt.group(1) or "").strip()
+        return text.strip()
 
     async def generate_stream(self, doc_id: str, request: Request) -> StreamingResponse:
         """Stream generation endpoint delegated to runtime implementation."""
@@ -761,9 +826,6 @@ class GenerationService:
         plan_steps = []
         if isinstance(decision, dict):
             plan_steps = [str(x).strip() for x in (decision.get("plan") or []) if str(x).strip()]
-        plan_hint = ""
-        if plan_steps:
-            plan_hint = "Execution plan:\n- " + "\n- ".join(plan_steps) + "\n\n"
 
         revision_status: dict[str, object] = {}
         if selection_text:
@@ -805,12 +867,25 @@ class GenerationService:
                 return out
 
         client = app_v2.OllamaClient(base_url=settings.base_url, model=model, timeout_s=settings.timeout_s)
-        system = "You are a document revision assistant. Output the fully revised Markdown text."
-        user = f"Revision request:\n{analysis_instruction}\n\n{plan_hint}Original text:\n{text}\n\nReturn the complete revised text."
+        system, user = self._build_revision_fallback_prompt(
+            instruction=analysis_instruction,
+            plan_steps=plan_steps,
+            text=text,
+        )
         buf: list[str] = []
         for delta in client.chat_stream(system=system, user=user, temperature=0.25):
             buf.append(delta)
-        text = app_v2._sanitize_output_text("".join(buf).strip() or text)
+        raw_fallback = "".join(buf).strip()
+        parsed_fallback = self._extract_revision_fallback_text(raw_fallback)
+        text = app_v2._sanitize_output_text(parsed_fallback or text)
+        if app_v2._looks_like_prompt_echo(text, analysis_instruction):
+            text = base_text
+        normalized_text = str(text or "").strip().lower()
+        if normalized_text and normalized_text in {
+            str(analysis_instruction or "").strip().lower(),
+            str(instruction or "").strip().lower(),
+        }:
+            text = base_text
         text = app_v2._replace_question_headings(text)
 
         if not text.strip():

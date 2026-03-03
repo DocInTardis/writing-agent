@@ -1,6 +1,6 @@
 # Writing Agent Operations Runbook
 
-This runbook covers operational monitoring and alert handling for the `citation_verify` path.
+This runbook covers operational monitoring and alert handling for the `citation_verify` and `citation_resolve_url` paths.
 
 ## 1. Scope
 
@@ -11,6 +11,8 @@ Operational endpoints:
 - alert events: `/api/metrics/citation_verify/alerts/events`
 - alert detail: `/api/metrics/citation_verify/alerts/event/{event_id}`
 - trend points: `/api/metrics/citation_verify/trends`
+- metrics: `/api/metrics/citation_resolve_url`
+- alert config: `/api/metrics/citation_resolve_url/alerts/config`
 
 ## 2. On-Call SLO (Initial Targets)
 
@@ -26,6 +28,7 @@ These are initial operational targets and must be tuned with production evidence
 Persisted alert configuration file:
 
 - `.data/citation_verify_alerts_config.json`
+- `.data/citation_resolve_alerts_config.json`
 
 Default checks:
 
@@ -38,6 +41,7 @@ Notification channels:
 
 - `log` (default)
 - `webhook` (enabled with `WRITING_AGENT_CITATION_VERIFY_ALERT_WEBHOOK_URL`)
+- `webhook` (resolve path: `WRITING_AGENT_CITATION_RESOLVE_ALERT_WEBHOOK_URL`)
 
 ## 4. Common Commands
 
@@ -53,6 +57,17 @@ curl -H "X-Admin-Key: <token>" "http://127.0.0.1:8000/api/metrics/citation_verif
 
 # 4) Event detail with trend context
 curl -H "X-Admin-Key: <token>" "http://127.0.0.1:8000/api/metrics/citation_verify/alerts/event/<event_id>?context=12"
+
+# 5) Resolve URL metrics snapshot
+curl http://127.0.0.1:8000/api/metrics/citation_resolve_url
+
+# 6) Resolve alert configuration
+curl -H "X-Admin-Key: <token>" http://127.0.0.1:8000/api/metrics/citation_resolve_url/alerts/config
+
+# 7) Update resolve alert configuration
+curl -X POST -H "Content-Type: application/json" -H "X-Admin-Key: <token>" \
+  -d "{\"config\":{\"enabled\":true,\"min_runs\":8,\"failure_rate\":0.35,\"fallback_rate\":0.55,\"p95_ms\":4500,\"low_confidence_rate\":0.4,\"notify_enabled\":true,\"notify_cooldown_s\":300,\"notify_timeout_s\":4}}" \
+  http://127.0.0.1:8000/api/metrics/citation_resolve_url/alerts/config
 ```
 
 Validate incident routing and on-call roster before release:

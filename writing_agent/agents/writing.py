@@ -12,6 +12,11 @@ from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
 from writing_agent.models import DraftDocument, OutlineNode, Paragraph, ReportRequest, SectionDraft
 
 
+def _escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 @dataclass(frozen=True)
 class WriteResult:
     draft: DraftDocument
@@ -146,6 +151,25 @@ class WritingAgent:
             '\n"根据研究表明，XX方法可以提升性能 [@zhang2020]。"'
             "\n确保至少在2-3处添加引用标记，以增强论证可信度。"
         )
+        system = (
+            "You are an academic section-writing assistant.\n"
+            "Write focused section paragraphs in Markdown plain text only.\n"
+            "Do not output headings, JSON, code fences, or commentary."
+        )
+        user = (
+            "<task>write_section_paragraphs</task>\n"
+            "<constraints>\n"
+            "- Keep paragraphs coherent and evidence-aware.\n"
+            "- Do not fabricate facts; use [待补充] when evidence is missing.\n"
+            "- Citation keys must come from provided allowed list.\n"
+            "</constraints>\n"
+            f"<report_topic>{_escape_prompt_text(req.topic)}</report_topic>\n"
+            f"<section_title>{_escape_prompt_text(title)}</section_title>\n"
+            f"<section_notes>{_escape_prompt_text(notes)}</section_notes>\n"
+            f"<writing_style>{_escape_prompt_text(req.writing_style)}</writing_style>\n"
+            f"<citation_rule>{_escape_prompt_text(cite_rule)}</citation_rule>\n"
+        )
+
         try:
             text = client.chat(system=system, user=user, temperature=0.3).strip()
         except OllamaError:
@@ -171,6 +195,21 @@ class WritingAgent:
             "要求：保留原意；增强逻辑与表达；避免编造事实；缺失数据用“[待补充]”；如需引用用 [@key]（若用户未给 key 则不添加）。"
         )
         user = f"请润色以下段落（输出润色后的段落文本即可）：\n\n{paragraph}"
+        system = (
+            "You are a paragraph revision assistant.\n"
+            "Preserve meaning while improving clarity and flow.\n"
+            "Return only revised paragraph text."
+        )
+        user = (
+            "<task>rewrite_paragraph</task>\n"
+            "<constraints>\n"
+            "- Keep original intent and factual consistency.\n"
+            "- Do not invent facts; use [待补充] only when needed.\n"
+            "</constraints>\n"
+            f"<writing_style>{_escape_prompt_text(req.writing_style)}</writing_style>\n"
+            f"<original_paragraph>{_escape_prompt_text(paragraph)}</original_paragraph>\n"
+        )
+
         try:
             out = client.chat(system=system, user=user, temperature=0.2).strip()
         except OllamaError:

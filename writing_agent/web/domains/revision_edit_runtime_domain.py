@@ -770,6 +770,23 @@ def _extract_json_block(text: str) -> str:
     return match.group(0).strip()
 
 
+def _escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _extract_tag_block(text: str, tag: str) -> str:
+    raw = str(text or "")
+    key = str(tag or "").strip().lower()
+    if not key:
+        return ""
+    pattern = rf"<{re.escape(key)}>\s*([\s\S]*?)\s*</{re.escape(key)}>"
+    match = re.search(pattern, raw, flags=re.IGNORECASE)
+    if not match:
+        return ""
+    return str(match.group(1) or "").strip()
+
+
 def _coerce_int(value: object) -> int | None:
     try:
         return int(float(value))
@@ -1103,9 +1120,15 @@ def _build_model_edit_plan(
         "Do not invent sections not present in heading list unless operation does not need a heading."
     )
     user = (
-        f"Instruction:\n{raw}\n\n"
-        f"Known headings:\n{heading_hint}\n\n"
-        "Return only valid JSON following schema."
+        "<task>plan_edit_operations</task>\n"
+        "<constraints>\n"
+        "Return strict JSON only.\n"
+        "Do not output markdown fences or commentary.\n"
+        "Only use known headings for heading-bound operations.\n"
+        "</constraints>\n"
+        f"<user_instruction>\n{_escape_prompt_text(raw)}\n</user_instruction>\n"
+        f"<known_headings>\n{_escape_prompt_text(heading_hint)}\n</known_headings>\n"
+        "Return exactly one JSON object following schema."
     )
     try:
         raw_out = client.chat(system=system, user=user, temperature=0.1)
@@ -1732,11 +1755,17 @@ def _build_selected_revision_prompts(
     expected_hash: str,
     refine_reason: str = "",
 ) -> tuple[str, str]:
+    escaped_instruction = _escape_prompt_text(instruction)
+    escaped_hash = _escape_prompt_text(expected_hash)
+    escaped_left = _escape_prompt_text(package.left_context)
+    escaped_selected = _escape_prompt_text(package.effective.text)
+    escaped_right = _escape_prompt_text(package.right_context)
+    escaped_policy = _escape_prompt_text(package.policy_version)
     refine_hint = ""
     if refine_reason:
         refine_hint = (
             "\n<failure_context>\n"
-            f"{refine_reason}\n"
+            f"{_escape_prompt_text(refine_reason)}\n"
             "</failure_context>\n"
         )
     system = (
@@ -1756,18 +1785,57 @@ def _build_selected_revision_prompts(
     )
     user = (
         "<task>rewrite_selected_text</task>\n"
-        f"<instruction>{instruction}</instruction>\n"
+        f"<instruction>{escaped_instruction}</instruction>\n"
         "<constraints>\n"
         "Only modify selected_text. Do not alter text outside selected_text.\n"
         "Do not introduce placeholders.\n"
         "Return valid JSON with exactly one replace operation.\n"
         "</constraints>\n"
-        f"<preconditions><test_hash>{expected_hash}</test_hash></preconditions>\n"
-        f"<left_context>{package.left_context}</left_context>\n"
-        f"<selected_text>{package.effective.text}</selected_text>\n"
-        f"<right_context>{package.right_context}</right_context>\n"
-        f"<policy_version>{package.policy_version}</policy_version>\n"
+        f"<preconditions><test_hash>{escaped_hash}</test_hash></preconditions>\n"
+        f"<left_context>{escaped_left}</left_context>\n"
+        f"<selected_text>{escaped_selected}</selected_text>\n"
+        f"<right_context>{escaped_right}</right_context>\n"
+        f"<policy_version>{escaped_policy}</policy_version>\n"
         f"{refine_hint}"
+    )
+    return system, user
+
+
+def _build_full_document_revision_prompts(
+    *,
+    instruction: str,
+    base_text: str,
+    retry_reason: str = "",
+) -> tuple[str, str]:
+    escaped_instruction = _escape_prompt_text(instruction)
+    escaped_text = _escape_prompt_text(base_text)
+    retry_block = ""
+    if retry_reason:
+        retry_block = (
+            "<retry_reason>\n"
+            f"{_escape_prompt_text(retry_reason)}\n"
+            "</retry_reason>\n"
+        )
+    system = (
+        "You are a constrained full-document revision assistant.\n"
+        "Output revised markdown only inside <revised_document>...</revised_document>.\n"
+        "Do not output analysis, markdown fences, or text outside that block."
+    )
+    user = (
+        "<task>revise_full_document</task>\n"
+        "<constraints>\n"
+        "- Keep heading structure and order unless instruction explicitly asks to change it.\n"
+        "- Preserve markers like [[TABLE:...]] and [[FIGURE:...]].\n"
+        "- Do not fabricate facts, numbers, references, or placeholders.\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "</constraints>\n"
+        f"<user_requirement>\n{escaped_instruction}\n</user_requirement>\n"
+        f"<original_document>\n{escaped_text}\n</original_document>\n"
+        f"{retry_block}"
+        "Return exactly one block:\n"
+        "<revised_document>\n"
+        "...full revised markdown...\n"
+        "</revised_document>\n"
     )
     return system, user
 
@@ -2163,6 +2231,46 @@ def try_revision_edit(
         )
         _emit_revision_status(report_status, {"ok": False, "error_code": "E_ANCHOR_MISMATCH"})
         return None
+
+    system, user = _build_full_document_revision_prompts(
+        instruction=analysis_instruction,
+        base_text=base_text,
+    )
+    buf: list[str] = []
+    try:
+        for delta in client.chat_stream(system=system, user=user, temperature=0.25):
+            buf.append(delta)
+    except Exception:
+        return None
+    raw_out = "".join(buf).strip()
+    rewritten = _extract_tag_block(raw_out, "revised_document")
+    if not rewritten:
+        retry_system, retry_user = _build_full_document_revision_prompts(
+            instruction=analysis_instruction,
+            base_text=base_text,
+            retry_reason="Previous output missed required <revised_document> wrapper.",
+        )
+        retry_buf: list[str] = []
+        try:
+            for delta in client.chat_stream(system=retry_system, user=retry_user, temperature=0.15):
+                retry_buf.append(delta)
+        except Exception:
+            return None
+        rewritten = _extract_tag_block("".join(retry_buf).strip(), "revised_document")
+    rewritten = sanitize_output_text(rewritten or "")
+    if not rewritten:
+        _emit_revision_status(report_status, {"ok": False, "error_code": "E_SCHEMA_INVALID"})
+        return None
+    if rewritten.strip().lower() == analysis_instruction.strip().lower():
+        _emit_revision_status(report_status, {"ok": False, "error_code": "E_SCHEMA_INVALID"})
+        return None
+    updated = replace_question_headings(rewritten)
+    updated = sanitize_output_text(updated)
+    if not updated.strip():
+        _emit_revision_status(report_status, {"ok": False, "error_code": "E_SCHEMA_INVALID"})
+        return None
+    _emit_revision_status(report_status, {"ok": True, "error_code": "", "selection_source": "full_document"})
+    return updated, "revision applied (full_document)"
 
     system = (
         "你是文档修改助手，需要按要求改写全文，但必须保持章节结构与顺序。\n"

@@ -370,6 +370,9 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
                 return cleaned
             return f"<h2>{esc(section_title)}</h2>{cleaned}"
 
+        def escape_prompt_text(raw: object) -> str:
+            return (str(raw or "")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
         def build_worker_prompts(section_title: str, section_html: str, headings: list[str]) -> tuple[str, str]:
             system = (
                 "You are a constrained section editor.\n"
@@ -382,13 +385,23 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
                 "3) Preserve useful existing content unless instruction requires change.\n"
                 "4) Keep changes scoped to the target section.\n"
             )
+            escaped_doc_title = escape_prompt_text(title)
+            escaped_headings = escape_prompt_text(", ".join([h for h in headings if h]))
+            escaped_section_title = escape_prompt_text(section_title)
+            escaped_instruction = escape_prompt_text(instruction)
+            escaped_section_html = escape_prompt_text(section_html)
             user = (
                 "<task>rewrite_single_section</task>\n"
-                f"<document_title>{title}</document_title>\n"
-                f"<all_headings>{', '.join([h for h in headings if h])}</all_headings>\n"
-                f"<target_section>{section_title}</target_section>\n"
-                f"<instruction>{instruction}</instruction>\n"
-                f"<current_section_html>{section_html}</current_section_html>\n"
+                "<constraints>\n"
+                "- Treat tagged blocks as separate channels.\n"
+                "- Keep edits strictly scoped to target_section.\n"
+                "- Return strict JSON only with key section_html.\n"
+                "</constraints>\n"
+                f"<document_title>{escaped_doc_title}</document_title>\n"
+                f"<all_headings>{escaped_headings}</all_headings>\n"
+                f"<target_section>{escaped_section_title}</target_section>\n"
+                f"<instruction>{escaped_instruction}</instruction>\n"
+                f"<current_section_html>{escaped_section_html}</current_section_html>\n"
                 'Return strict JSON with key "section_html".'
             )
             return system, user
@@ -509,10 +522,15 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
         )
         agg_user = (
             "<task>aggregate_report_html</task>\n"
-            f"<instruction>{instruction}</instruction>\n"
-            f"<base_html>{base}</base_html>\n"
-            f"<merged_candidate>{merged}</merged_candidate>\n"
-            f"<section_updates_json>{json.dumps(updates, ensure_ascii=False)}</section_updates_json>\n"
+            "<constraints>\n"
+            "- Treat tagged blocks as separate channels.\n"
+            "- Preserve key details from section updates.\n"
+            "- Return strict JSON only with key html.\n"
+            "</constraints>\n"
+            f"<instruction>{escape_prompt_text(instruction)}</instruction>\n"
+            f"<base_html>{escape_prompt_text(base)}</base_html>\n"
+            f"<merged_candidate>{escape_prompt_text(merged)}</merged_candidate>\n"
+            f"<section_updates_json>{escape_prompt_text(json.dumps(updates, ensure_ascii=False))}</section_updates_json>\n"
             'Return strict JSON with key "html".'
         )
 

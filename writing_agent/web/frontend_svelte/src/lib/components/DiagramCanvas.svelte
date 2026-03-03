@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
+  import { sanitizeDiagramPrompt } from '../utils/ai_payload'
 
   export let open = false
   export let docId = ''
@@ -87,7 +88,7 @@
   }
 
   function useTemplate(text: string) {
-    prompt = text
+    prompt = sanitizeDiagramPrompt(text)
   }
 
   function normalizeKind(raw: unknown): Kind {
@@ -146,7 +147,7 @@
   }
 
   async function generateDiagram(customPrompt?: string) {
-    const finalPrompt = String(customPrompt || prompt || '').trim()
+    const finalPrompt = sanitizeDiagramPrompt(customPrompt || prompt || '')
     if (!docId) {
       error = '文档未加载'
       return
@@ -173,7 +174,7 @@
   }
 
   async function optimizeCurrent() {
-    const ask = optimizeInput.trim()
+    const ask = sanitizeDiagramPrompt(optimizeInput)
     if (!ask) return
     if (!spec) {
       await generateDiagram(ask)
@@ -203,7 +204,7 @@
 
   function restoreHistory(item: { kind: Kind; prompt: string; spec: Record<string, unknown>; svg: string }) {
     kind = item.kind
-    prompt = item.prompt
+    prompt = sanitizeDiagramPrompt(item.prompt)
     spec = item.spec
     svg = item.svg
     specText = stringifySafe(item.spec)

@@ -56,6 +56,11 @@ def extract_sections_from_text(text: str) -> dict[str, str]:
     return sections
 
 
+def _escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def build_aggregate_brief(
     title: str,
     instruction: str,
@@ -125,10 +130,16 @@ def aggregate_fix_stream_iter_compressed(
         f"Required section order: {'; '.join(required)}. Suggested transitions: {transition_hint}."
     )
     user = (
-        f"title: {title}\n"
-        f"instruction: {instruction}\n\n"
-        f"compressed input:\n{brief}\n\n"
-        "Output now."
+        "<task>aggregate_conclusion_and_transitions</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return plain text only.\n"
+        "- Output only the required sections requested by system prompt.\n"
+        "</constraints>\n"
+        f"<title>\n{_escape_prompt_text(title)}\n</title>\n"
+        f"<instruction>\n{_escape_prompt_text(instruction)}\n</instruction>\n"
+        f"<compressed_input>\n{_escape_prompt_text(brief)}\n</compressed_input>\n"
+        "Return output now."
     )
     for delta in client.chat_stream(system=system, user=user, temperature=0.2):
         yield delta
@@ -263,10 +274,16 @@ def aggregate_fix_stream(
         "Preserve [[TABLE:...]] and [[FIGURE:...]] markers with valid JSON payloads."
     )
     user = (
-        f"title: {title}\n"
-        f"instruction: {instruction}\n\n"
-        f"draft:\n{draft}\n\n"
-        "Return final revised draft now."
+        "<task>aggregate_full_draft</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return plain text only.\n"
+        "- Keep complete heading structure and preserve markers.\n"
+        "</constraints>\n"
+        f"<title>\n{_escape_prompt_text(title)}\n</title>\n"
+        f"<instruction>\n{_escape_prompt_text(instruction)}\n</instruction>\n"
+        f"<draft>\n{_escape_prompt_text(draft)}\n</draft>\n"
+        "Return final revised draft."
     )
 
     buf: list[str] = []
@@ -303,10 +320,16 @@ def aggregate_fix_stream_iter(
         f"Output length should be >= 95% of draft length ({draft_len})."
     )
     user = (
-        f"title: {title}\n"
-        f"instruction: {instruction}\n\n"
-        f"draft:\n{draft}\n\n"
-        "Return revised draft now."
+        "<task>aggregate_full_draft</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return plain text only.\n"
+        "- Keep complete heading structure and preserve markers.\n"
+        "</constraints>\n"
+        f"<title>\n{_escape_prompt_text(title)}\n</title>\n"
+        f"<instruction>\n{_escape_prompt_text(instruction)}\n</instruction>\n"
+        f"<draft>\n{_escape_prompt_text(draft)}\n</draft>\n"
+        "Return revised draft."
     )
 
     for delta in client.chat_stream(system=system, user=user, temperature=0.2):
@@ -342,12 +365,19 @@ def repair_stream_iter(
         f"Output length should be >= 95% of draft length ({draft_len}).\n"
         "Preserve table/figure markers and avoid unsupported factual claims."
     )
+    problem_lines = "\n".join(f"- {_escape_prompt_text(item)}" for item in problems) or "- no-problem-provided"
     user = (
-        f"title: {title}\n"
-        f"instruction: {instruction}\n\n"
-        f"problems:\n- " + "\n- ".join(problems) + "\n\n"
-        f"draft:\n{draft}\n\n"
-        "Return repaired final draft now."
+        "<task>repair_draft</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return plain text only.\n"
+        "- Resolve listed problems while preserving heading structure and markers.\n"
+        "</constraints>\n"
+        f"<title>\n{_escape_prompt_text(title)}\n</title>\n"
+        f"<instruction>\n{_escape_prompt_text(instruction)}\n</instruction>\n"
+        f"<problems>\n{problem_lines}\n</problems>\n"
+        f"<draft>\n{_escape_prompt_text(draft)}\n</draft>\n"
+        "Return repaired final draft."
     )
 
     for delta in client.chat_stream(system=system, user=user, temperature=0.2):
@@ -383,12 +413,19 @@ def repair_stream(
         f"Output length should be >= 85% of draft length ({draft_len}).\n"
         "Preserve table/figure markers and avoid unsupported factual claims."
     )
+    problem_lines = "\n".join(f"- {_escape_prompt_text(item)}" for item in problems) or "- no-problem-provided"
     user = (
-        f"title: {title}\n"
-        f"instruction: {instruction}\n\n"
-        f"problems:\n- " + "\n- ".join(problems) + "\n\n"
-        f"draft:\n{draft}\n\n"
-        "Return repaired final draft now."
+        "<task>repair_draft</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return plain text only.\n"
+        "- Resolve listed problems while preserving heading structure and markers.\n"
+        "</constraints>\n"
+        f"<title>\n{_escape_prompt_text(title)}\n</title>\n"
+        f"<instruction>\n{_escape_prompt_text(instruction)}\n</instruction>\n"
+        f"<problems>\n{problem_lines}\n</problems>\n"
+        f"<draft>\n{_escape_prompt_text(draft)}\n</draft>\n"
+        "Return repaired final draft."
     )
 
     buf: list[str] = []

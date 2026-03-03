@@ -373,3 +373,199 @@ This is the clarification-question analysis chain (not the final rewrite chain).
 - Tagged segmentation improves instruction/data separation.
 - Strict schema + retry improves structured reliability.
 - Normalization prevents malformed or oversized outputs from polluting template-flow follow-up logic.
+
+## 18. Graph runtime prompt hardening (2026-03-03)
+
+Scope: active v2 graph runtime paths used by generation/revision flows (not legacy `/studio`).
+
+1. JSON retry now keeps original task context:
+- File: `writing_agent/v2/graph_runner.py` (`_require_json_response`).
+- Before: invalid JSON retry replaced user payload with a generic sentence (`Return only a JSON object.`), dropping all prior context.
+- Risk: retry call had almost no context, so model could output weak or irrelevant JSON.
+- After: retry keeps original prompt, adds `<retry_reason>` tag, and enforces strict-JSON system reminder.
+
+2. Section continuation prompt now uses tagged channels:
+- File: `writing_agent/v2/graph_section_draft_domain.py` (`_build_continue_prompt`).
+- Added explicit blocks: `<task>`, `<constraints>`, `<title>`, `<section_title>`, `<section_id>`, `<parent_section>`, `<analysis_summary>`, `<user_instruction>`, `<plan_hint>`, `<evidence_summary>`, `<allowed_urls>`, `<current_section_draft>`, `<target>`.
+- Added XML escaping for user/content fields (`&`, `<`, `>`), reducing boundary confusion/injection risk.
+
+3. Section continuation retry now keeps structure:
+- File: `writing_agent/v2/graph_section_draft_domain.py` (`ensure_section_minimums_stream`).
+- Retry appends `<retry_reason>` and `<latest_draft>` instead of free-form concatenation.
+
+4. Evidence summarization prompt now uses tagged channels:
+- File: `writing_agent/v2/graph_reference_domain.py` (`summarize_evidence`).
+- Added explicit blocks: `<task>`, `<constraints>`, `<section>`, `<analysis_summary>`, `<available_sources>`, `<evidence_material>`.
+- Added XML escaping for section/summary/context/source fields.
+
+5. Plan-section list prompt now uses tagged channels:
+- File: `writing_agent/v2/graph_runner.py` (`_plan_sections_list_with_model`).
+- Added explicit blocks: `<task>`, `<constraints>`, `<report_title>`, `<user_requirement>`, `<section_catalog>`.
+
+Regression coverage added:
+
+1. `tests/unit/test_graph_runner_prompt_constraints.py`
+- retry keeps original context + retry_reason;
+- plan-sections prompt uses tagged channels + escaping;
+- retry exhaustion raises expected error.
+2. `tests/unit/test_graph_section_prompt_constraints.py`
+- section continuation prompt uses tagged channels + escaping.
+3. `tests/unit/test_graph_reference_prompt_constraints.py`
+- evidence summarization prompt uses tagged channels + escaping.
+
+## 19. PromptBuilder contract hardening (2026-03-03)
+
+Scope: centralized prompt-construction layer in `writing_agent/v2/prompts.py` and writer runtime source-injection path.
+
+1. `PromptBuilder` user prompts are now fully tag-channeled:
+- planner: `<task>/<constraints>/<report_title>/<total_chars>/<section_candidates>/<user_requirement>`
+- analysis: `<task>/<constraints>/<user_requirement>/<existing_text_excerpt>`
+- writer: `<task>/<constraints>/<section_id>/<section_title>/<document_title>/<analysis_summary>/<plan_hint>/<previous_content>/<retrieved_context>`
+- reference: `<task>/<constraints>/<sources>`
+- revision: `<task>/<constraints>/<original_text>/<user_feedback>`
+
+2. Unified escaping:
+- Added centralized escape helper in prompts module (`&`, `<`, `>`).
+- All user/content fields inserted into tagged channels are escaped before interpolation.
+
+3. Runtime source injection hardening:
+- File: `writing_agent/v2/graph_runner_runtime.py`.
+- Writer path for citation candidates now appends `<available_sources>...</available_sources>` instead of free-form prose tail.
+- Source title/url values are escaped before insertion.
+
+4. Why this matters:
+- Prevents context loss and boundary confusion when user text contains tag-like fragments.
+- Reduces the chance that late-stage prompt concatenation reintroduces unconstrained channels.
+- Makes prompt contracts auditable and easier to guard with unit tests.
+
+Regression coverage added:
+
+1. `tests/unit/test_prompt_builder_constraints.py`
+- validates all 5 prompt builders use tagged channels and escape risky content.
+2. `tests/unit/test_graph_runner_runtime_available_sources_tags.py`
+- validates writer runtime appends escaped `<available_sources>` block when references are provided.
+
+## 20. Frontend AI payload guardrails (2026-03-03)
+
+Scope: Svelte request assembly path used by `/generate`, `/generate/stream`, section retry, and `/diagram/generate`.
+
+1. Added centralized frontend sanitizer utility:
+- File: `writing_agent/web/frontend_svelte/src/lib/utils/ai_payload.ts`.
+- Normalizes newline/control characters, trims text, and applies bounded length caps to avoid oversized or malformed payload fields.
+- Provides guarded helpers:
+  - `sanitizeAiInputText`
+  - `sanitizeAiSelectionPayload`
+  - `sanitizeAiStringList`
+  - `normalizeContextPolicy`
+  - `buildGenerateRequestPayload`
+  - `sanitizeDiagramPrompt`
+
+2. Generate payload now goes through one guarded builder:
+- File: `AppWorkbench.svelte`.
+- `/generate` and `/generate/stream` now share `buildGenerateRequestPayload(...)` output.
+- Included protections:
+  - instruction/document text normalization
+  - selection payload sanitization (`start/end/text`)
+  - bounded `resume_sections`/`cursor_anchor`
+  - default `context_policy(dynamic_v1)` attached when `selection` exists
+
+3. Diagram prompt path now sanitized before request:
+- File: `DiagramCanvas.svelte`.
+- Applied `sanitizeDiagramPrompt(...)` for:
+  - free-input prompt
+  - template prompt fill
+  - optimize prompt
+  - history restore prompt
+
+4. Regression guard coverage:
+- `tests/test_frontend_ai_payload_constraints.py`
+  - verifies sanitizer utility presence and core guard functions
+  - verifies AppWorkbench and DiagramCanvas are wired to sanitizer/guarded payload builder
+
+## 21. Revision-domain contract hardening (2026-03-04)
+
+Scope: `writing_agent/web/domains/revision_edit_runtime_domain.py` (selected-text revise + full-document fallback path).
+
+1. Edit-plan prompt now uses tagged channels and escaping:
+- model edit-plan user prompt changed from free-form concatenation to:
+  - `<task>plan_edit_operations</task>`
+  - `<constraints>...</constraints>`
+  - `<user_instruction>...</user_instruction>`
+  - `<known_headings>...</known_headings>`
+- instruction/heading payload now escapes `&`, `<`, `>`.
+
+2. Selected revision prompt escaping:
+- `rewrite_selected_text` prompt keeps tagged channels, and now escapes:
+  - `instruction`
+  - `left_context`
+  - `selected_text`
+  - `right_context`
+  - `policy_version`
+  - refine failure reason
+- mitigates tag-boundary confusion when user text includes tag-like fragments.
+
+3. Full-document fallback now uses wrapped strict contract:
+- Added tagged prompt contract:
+  - `<task>revise_full_document</task>`
+  - `<constraints>...</constraints>`
+  - `<user_requirement>...</user_requirement>`
+  - `<original_document>...</original_document>`
+- requires output block `<revised_document>...</revised_document>`.
+- if wrapper missing, runs exactly one retry with `<retry_reason>`.
+- still fail-closed on missing/invalid rewritten payload.
+
+4. Regression coverage added:
+- `tests/unit/test_revision_edit_prompt_constraints.py`
+  - edit-plan prompt tagged + escaped
+  - selected revision prompt escapes tag-like instruction
+  - full-document fallback enforces wrapped output and one-shot retry
+
+## 22. Legacy-path prompt hardening sweep (2026-03-04)
+
+Scope: active legacy/runtime endpoints that still called model chat directly.
+
+1. `writing_agent/agents/outline.py`
+- Added `_escape_prompt_text` and migrated user prompt to tagged channels:
+  - `<task>generate_outline_markdown</task>`
+  - `<constraints>...</constraints>`
+  - `<report_topic> / <report_type> / <word_count_hint> / <writing_style> / <section_catalog>`
+- All interpolated fields are escaped (`&`, `<`, `>`).
+
+2. `writing_agent/agents/writing.py`
+- Added `_escape_prompt_text`.
+- Section drafting prompt now tagged and escaped:
+  - `<task>write_section_paragraphs</task>`
+  - `<constraints>...</constraints>`
+  - `<report_topic> / <section_title> / <section_notes> / <writing_style> / <citation_rule>`
+- Paragraph rewrite prompt now tagged and escaped:
+  - `<task>rewrite_paragraph</task>`
+  - `<constraints>...</constraints>`
+  - `<writing_style> / <original_paragraph>`
+
+3. `writing_agent/agents/document_edit.py`
+- `apply_instruction_to_html` user prompt added explicit `<constraints>` block.
+- Existing tag blocks (`instruction/selection_text/document_html`) remain escaped.
+
+4. `writing_agent/agents/diagram_agent.py`
+- Replaced free-form prompt with strict tagged JSON contract:
+  - `<task>diagram_spec_generation</task>`
+  - `<constraints>...</constraints>`
+  - `<requested_type> / <user_request>`
+- Added one-shot retry with `<retry_reason>` when model output is not valid JSON.
+- Added robust JSON extraction (supports fenced output and JSON substring fallback).
+
+5. `writing_agent/web/app.py` (multi-agent section rewrite + aggregator)
+- Worker prompt (`rewrite_single_section`) and aggregator prompt (`aggregate_report_html`) now:
+  - include explicit `<constraints>` block
+  - escape `instruction`, headings, section html, and merged/base html payloads before interpolation
+- Keeps existing strict-JSON retry semantics and fail-closed fallback behavior.
+
+6. Contract guard + regression tests updated:
+- Static guard extended: `tests/test_prompt_contract_guard.py`
+  - now covers `outline.py`, `writing.py`, `document_edit.py`, `diagram_agent.py`, `web/app.py`.
+- Added repository-level chat-call guard: `tests/test_chat_call_prompt_constraints_guard.py`
+  - scans `.chat/.chat_stream` call sites and enforces `<task> + <constraints>` markers for non-adapter business paths.
+- New/updated runtime tests:
+  - `tests/unit/test_outline_writing_prompt_constraints.py`
+  - `tests/unit/test_document_edit_agent_constraints.py`
+  - `tests/unit/test_diagram_agent_prompt_constraints.py`

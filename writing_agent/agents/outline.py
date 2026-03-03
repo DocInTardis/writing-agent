@@ -12,6 +12,11 @@ from writing_agent.models import OutlineNode, ReportRequest
 from writing_agent.sections_catalog import section_catalog_text
 
 
+def _escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 class OutlineAgent:
     def generate_outline_markdown(self, req: ReportRequest, template: str) -> str:
         md = self._generate_outline_markdown_llm(req=req)
@@ -120,6 +125,26 @@ class OutlineAgent:
             f"\n可选章节库（按需挑选，不必全部使用）：\n{catalog}\n"
             "\n请给出一份完整大纲，包含“引言/背景、方法/过程、结果/分析、结论、参考文献”等必要章节（按类型自适配）。"
         )
+        system = (
+            "You are an academic outline assistant.\n"
+            "Output Markdown headings only (#/##/###) plus optional short bullet notes.\n"
+            "Do not output JSON, code fences, tables, or text outside markdown outline."
+        )
+        user = (
+            "<task>generate_outline_markdown</task>\n"
+            "<constraints>\n"
+            "- Keep output as editable markdown outline only.\n"
+            "- Use heading levels within the provided limit.\n"
+            "- Keep claims conservative; when uncertain mark as [待补充].\n"
+            "</constraints>\n"
+            f"<report_topic>{_escape_prompt_text(req.topic)}</report_topic>\n"
+            f"<report_type>{_escape_prompt_text(req.report_type)}</report_type>\n"
+            f"<heading_level_limit>{int(req.formatting.heading_levels)}</heading_level_limit>\n"
+            f"<word_count_hint>{_escape_prompt_text(req.formatting.word_count or '未指定')}</word_count_hint>\n"
+            f"<writing_style>{_escape_prompt_text(req.writing_style)}</writing_style>\n"
+            f"<section_catalog>\n{_escape_prompt_text(catalog)}\n</section_catalog>\n"
+        )
+
         try:
             text = client.chat(system=system, user=user, temperature=0.2)
         except OllamaError:

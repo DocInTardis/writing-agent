@@ -147,6 +147,298 @@ def _extract_json_payload(raw: str):
         return None
 
 
+_ALLOWED_DIAGRAM_TYPES = {"flow", "er", "sequence", "timeline", "bar", "line", "pie"}
+
+
+def _normalize_diagram_kind(kind: str) -> str:
+    value = str(kind or "flow").strip().lower()
+    if value == "flowchart":
+        value = "flow"
+    return value if value in _ALLOWED_DIAGRAM_TYPES else "flow"
+
+
+def _escape_tag_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _clean_text(raw: object, *, max_chars: int = 48) -> str:
+    text = str(raw or "").strip()
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip()
+    return text
+
+
+def _to_float(value: object) -> float | None:
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _normalize_diagram_spec_payload(spec: object, *, kind: str) -> dict | None:
+    if not isinstance(spec, dict):
+        return None
+    type_raw = str(spec.get("type") or kind or "flow").strip().lower()
+    if type_raw == "flowchart":
+        type_raw = "flow"
+    if type_raw not in _ALLOWED_DIAGRAM_TYPES:
+        return None
+
+    payload = spec.get("data")
+    if not isinstance(payload, dict):
+        return None
+
+    caption = _clean_text(spec.get("caption") or kind or "diagram", max_chars=60) or "diagram"
+
+    if type_raw == "flow":
+        nodes_out: list[dict[str, str]] = []
+        edges_out: list[dict[str, str]] = []
+        nodes = payload.get("nodes")
+        if isinstance(nodes, list):
+            seen_ids: set[str] = set()
+            for item in nodes:
+                if not isinstance(item, dict):
+                    continue
+                node_id = _clean_text(item.get("id") or item.get("name"), max_chars=24)
+                node_text = _clean_text(item.get("text") or node_id, max_chars=48)
+                if not node_id or not node_text or node_id in seen_ids:
+                    continue
+                seen_ids.add(node_id)
+                nodes_out.append({"id": node_id, "text": node_text})
+                if len(nodes_out) >= 24:
+                    break
+        if len(nodes_out) < 2:
+            return None
+
+        node_ids = {item["id"] for item in nodes_out}
+        edges = payload.get("edges")
+        if isinstance(edges, list):
+            for item in edges:
+                if not isinstance(item, dict):
+                    continue
+                src = _clean_text(item.get("src"), max_chars=24)
+                dst = _clean_text(item.get("dst"), max_chars=24)
+                if not src or not dst or src not in node_ids or dst not in node_ids:
+                    continue
+                label = _clean_text(item.get("label"), max_chars=48)
+                edges_out.append({"src": src, "dst": dst, "label": label})
+                if len(edges_out) >= 40:
+                    break
+        if not edges_out:
+            for idx in range(len(nodes_out) - 1):
+                edges_out.append(
+                    {
+                        "src": nodes_out[idx]["id"],
+                        "dst": nodes_out[idx + 1]["id"],
+                        "label": "",
+                    }
+                )
+        return {"type": type_raw, "caption": caption, "data": {"nodes": nodes_out, "edges": edges_out}}
+
+    if type_raw == "er":
+        entities_out: list[dict[str, object]] = []
+        relations_out: list[dict[str, str]] = []
+
+        entities = payload.get("entities")
+        if isinstance(entities, list):
+            seen_names: set[str] = set()
+            for item in entities:
+                if not isinstance(item, dict):
+                    continue
+                name = _clean_text(item.get("name"), max_chars=24)
+                if not name or name in seen_names:
+                    continue
+                seen_names.add(name)
+                attrs_raw = item.get("attributes")
+                attrs: list[str] = []
+                if isinstance(attrs_raw, list):
+                    for attr in attrs_raw:
+                        txt = _clean_text(attr, max_chars=24)
+                        if txt:
+                            attrs.append(txt)
+                        if len(attrs) >= 10:
+                            break
+                entities_out.append({"name": name, "attributes": attrs or ["attr"]})
+                if len(entities_out) >= 20:
+                    break
+        if len(entities_out) < 2:
+            return None
+
+        entity_names = {item["name"] for item in entities_out}
+        relations = payload.get("relations")
+        if isinstance(relations, list):
+            for item in relations:
+                if not isinstance(item, dict):
+                    continue
+                left = _clean_text(item.get("left"), max_chars=24)
+                right = _clean_text(item.get("right"), max_chars=24)
+                if not left or not right or left not in entity_names or right not in entity_names:
+                    continue
+                relations_out.append(
+                    {
+                        "left": left,
+                        "right": right,
+                        "label": _clean_text(item.get("label"), max_chars=24),
+                        "cardinality": _clean_text(item.get("cardinality"), max_chars=24),
+                    }
+                )
+                if len(relations_out) >= 24:
+                    break
+        if not relations_out:
+            relations_out.append(
+                {
+                    "left": entities_out[0]["name"],
+                    "right": entities_out[1]["name"],
+                    "label": "rel",
+                    "cardinality": "",
+                }
+            )
+        return {"type": type_raw, "caption": caption, "data": {"entities": entities_out, "relations": relations_out}}
+
+    if type_raw == "sequence":
+        participants_out: list[str] = []
+        participants = payload.get("participants")
+        if isinstance(participants, list):
+            seen: set[str] = set()
+            for item in participants:
+                name = _clean_text(item, max_chars=24)
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                participants_out.append(name)
+                if len(participants_out) >= 10:
+                    break
+        if len(participants_out) < 2:
+            return None
+
+        participant_set = set(participants_out)
+        messages_out: list[dict[str, str]] = []
+        messages = payload.get("messages")
+        if isinstance(messages, list):
+            for item in messages:
+                if not isinstance(item, dict):
+                    continue
+                frm = _clean_text(item.get("from"), max_chars=24)
+                to = _clean_text(item.get("to"), max_chars=24)
+                if not frm or not to or frm not in participant_set or to not in participant_set:
+                    continue
+                text = _clean_text(item.get("text"), max_chars=60) or "message"
+                messages_out.append({"from": frm, "to": to, "text": text})
+                if len(messages_out) >= 32:
+                    break
+        if not messages_out:
+            for idx in range(len(participants_out) - 1):
+                messages_out.append(
+                    {
+                        "from": participants_out[idx],
+                        "to": participants_out[idx + 1],
+                        "text": "message",
+                    }
+                )
+        return {
+            "type": type_raw,
+            "caption": caption,
+            "data": {"participants": participants_out, "messages": messages_out},
+        }
+
+    if type_raw == "timeline":
+        events_out: list[dict[str, str]] = []
+        events = payload.get("events")
+        if isinstance(events, list):
+            for item in events:
+                if not isinstance(item, dict):
+                    continue
+                t = _clean_text(item.get("time"), max_chars=24)
+                label = _clean_text(item.get("label"), max_chars=60)
+                if not t or not label:
+                    continue
+                events_out.append({"time": t, "label": label})
+                if len(events_out) >= 16:
+                    break
+        if len(events_out) < 2:
+            return None
+        return {"type": type_raw, "caption": caption, "data": {"events": events_out}}
+
+    if type_raw == "bar":
+        labels_raw = payload.get("labels")
+        values_raw = payload.get("values")
+        labels: list[str] = []
+        values: list[float] = []
+        if isinstance(labels_raw, list):
+            labels = [_clean_text(item, max_chars=24) for item in labels_raw]
+            labels = [item for item in labels if item][:12]
+        if isinstance(values_raw, list):
+            for item in values_raw[:12]:
+                value = _to_float(item)
+                if value is None:
+                    continue
+                values.append(value)
+        count = min(len(labels), len(values))
+        if count < 2:
+            return None
+        return {"type": type_raw, "caption": caption, "data": {"labels": labels[:count], "values": values[:count]}}
+
+    if type_raw == "line":
+        labels_raw = payload.get("labels")
+        labels: list[str] = []
+        if isinstance(labels_raw, list):
+            labels = [_clean_text(item, max_chars=24) for item in labels_raw]
+            labels = [item for item in labels if item][:24]
+
+        series_out: list[dict[str, object]] = []
+        series = payload.get("series")
+        if isinstance(series, list):
+            for item in series:
+                if not isinstance(item, dict):
+                    continue
+                name = _clean_text(item.get("name"), max_chars=24) or "S"
+                raw_values = item.get("values")
+                if not isinstance(raw_values, list):
+                    continue
+                values: list[float] = []
+                for raw_value in raw_values[:24]:
+                    number = _to_float(raw_value)
+                    if number is None:
+                        continue
+                    values.append(number)
+                if len(values) < 2:
+                    continue
+                series_out.append({"name": name, "values": values})
+                if len(series_out) >= 8:
+                    break
+        if not series_out:
+            return None
+        if not labels:
+            labels = [f"T{i + 1}" for i in range(len(series_out[0]["values"]))]
+        target_len = min(len(labels), min(len(item["values"]) for item in series_out))
+        if target_len < 2:
+            return None
+        labels = labels[:target_len]
+        normalized_series = [
+            {"name": item["name"], "values": item["values"][:target_len]}
+            for item in series_out
+        ]
+        return {"type": type_raw, "caption": caption, "data": {"labels": labels, "series": normalized_series}}
+
+    segments = payload.get("segments")
+    segments_out: list[dict[str, object]] = []
+    if isinstance(segments, list):
+        for item in segments:
+            if not isinstance(item, dict):
+                continue
+            label = _clean_text(item.get("label"), max_chars=24)
+            value = _to_float(item.get("value"))
+            if not label or value is None:
+                continue
+            segments_out.append({"label": label, "value": value})
+            if len(segments_out) >= 20:
+                break
+    if len(segments_out) < 2:
+        return None
+    return {"type": type_raw, "caption": caption, "data": {"segments": segments_out}}
+
+
 def _diagram_spec_from_llm(prompt: str, kind: str) -> dict | None:
     app_v2 = _app_v2()
     settings = app_v2.get_ollama_settings()
@@ -156,30 +448,38 @@ def _diagram_spec_from_llm(prompt: str, kind: str) -> dict | None:
     if not client.is_running():
         return None
 
-    kind = kind or "flow"
-    system = "You are a diagram JSON generator. Output JSON only."
+    kind = _normalize_diagram_kind(kind)
+    system = (
+        "You are a constrained diagram JSON generator.\n"
+        "Return strict JSON only (no markdown, no explanations).\n"
+        "Schema: {\"type\":string,\"caption\":string,\"data\":object}."
+    )
+    escaped_prompt = _escape_tag_text(prompt)
     user = (
-        "Convert the user request to JSON.\n"
-        "Output format: {\"type\":...,\"caption\":...,\"data\":...}.\n"
-        "type must be one of flow/er/sequence/timeline/bar/line/pie.\n"
-        "flow.data: nodes[{id,text}], edges[{src,dst,label}]\n"
-        "er.data: entities[{name,attributes}], relations[{left,right,label,cardinality}]\n"
-        "sequence.data: participants[], messages[{from,to,text}]\n"
-        "timeline.data: events[{time,label}]\n"
-        "bar.data: labels[], values[]\n"
-        "line.data: labels[], series[{name,values[]}]\n"
-        "pie.data: segments[{label,value}]\n"
-        f"User type: {kind}\n"
-        f"User request: {prompt}\n"
+        "<task>diagram_spec_generation</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return strict JSON only.\n"
+        "- Keep only keys: type, caption, data.\n"
+        "- type must be one of: flow, er, sequence, timeline, bar, line, pie.\n"
+        "- flow.data: nodes[{id,text}], edges[{src,dst,label}]\n"
+        "- er.data: entities[{name,attributes}], relations[{left,right,label,cardinality}]\n"
+        "- sequence.data: participants[], messages[{from,to,text}]\n"
+        "- timeline.data: events[{time,label}]\n"
+        "- bar.data: labels[], values[]\n"
+        "- line.data: labels[], series[{name,values[]}]\n"
+        "- pie.data: segments[{label,value}]\n"
+        "</constraints>\n"
+        f"<requested_type>{kind}</requested_type>\n"
+        f"<user_request>{escaped_prompt}</user_request>\n"
+        "Return strict JSON now."
     )
     try:
         raw = client.chat(system=system, user=user, temperature=0.2)
     except Exception:
         return None
     data = _extract_json_payload(raw)
-    if not data:
-        return None
-    return data
+    return _normalize_diagram_spec_payload(data, kind=kind)
 
 
 def _diagram_spec_fallback(prompt: str, kind: str) -> dict:
@@ -304,17 +604,12 @@ def _diagram_spec_fallback(prompt: str, kind: str) -> dict:
 
 def _diagram_spec_from_prompt(prompt: str, kind: str) -> dict:
     prompt = str(prompt or "").strip()
-    kind = str(kind or "flow").strip().lower()
+    kind = _normalize_diagram_kind(kind)
     spec = _diagram_spec_from_llm(prompt, kind)
     if not spec:
         return _diagram_spec_fallback(prompt, kind)
-    if "type" not in spec:
-        spec["type"] = kind
-    if "caption" not in spec:
-        spec["caption"] = prompt[:20] if prompt else "diagram"
-    if "data" not in spec:
-        spec["data"] = {}
-    return spec
+    normalized = _normalize_diagram_spec_payload(spec, kind=kind)
+    return normalized if normalized else _diagram_spec_fallback(prompt, kind)
 
 
 async def diagram_generate(doc_id: str, request: Request) -> dict:

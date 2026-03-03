@@ -17,6 +17,11 @@ REF_HEADING_RE = re.compile(r"^\s*(参考文献|references|bibliography)\s*$", r
 REF_LINE_RE = re.compile(r"^\s*\[\d+\]\s+")
 
 
+def _escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def strip_reference_like_lines(text: str) -> str:
     if not text:
         return ""
@@ -536,21 +541,36 @@ def _build_continue_prompt(
     )
     if evidence_summary:
         system += "Use only evidence provided and avoid unsupported URLs.\n"
-    user = f"title: {title}\nsection: {section}\nsection_id: {section_id}\n"
+    escaped_urls = [str(u or "").strip() for u in allowed_urls if str(u or "").strip()]
+    urls_block = "\n".join(f"- {_escape_prompt_text(u)}" for u in escaped_urls) if escaped_urls else "- (none)"
+    user = (
+        "<task>continue_section_draft</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return NDJSON only.\n"
+        "- Keep section_id unchanged.\n"
+        "- Only output incremental blocks; do not rewrite existing draft blocks.\n"
+        "</constraints>\n"
+        f"<title>\n{_escape_prompt_text(title)}\n</title>\n"
+        f"<section_title>\n{_escape_prompt_text(section)}\n</section_title>\n"
+        f"<section_id>\n{_escape_prompt_text(section_id)}\n</section_id>\n"
+    )
     if parent_section:
-        user += f"parent_section: {parent_section}\n"
+        user += f"<parent_section>\n{_escape_prompt_text(parent_section)}\n</parent_section>\n"
     if analysis_summary:
-        user += f"\nanalysis summary:\n{analysis_summary}\n\n"
+        user += f"<analysis_summary>\n{_escape_prompt_text(analysis_summary)}\n</analysis_summary>\n"
     else:
-        user += f"\nuser instruction:\n{instruction}\n\n"
+        user += f"<user_instruction>\n{_escape_prompt_text(instruction)}\n</user_instruction>\n"
     if plan_hint:
-        user += f"plan hint:\n{plan_hint}\n\n"
+        user += f"<plan_hint>\n{_escape_prompt_text(plan_hint)}\n</plan_hint>\n"
     if evidence_summary:
-        user += f"evidence summary:\n{evidence_summary}\n\n"
-    if allowed_urls:
-        user += "allowed urls:\n" + "\n".join([f"- {u}" for u in allowed_urls]) + "\n\n"
-    user += f"current section draft:\n{txt}\n\n"
-    user += f"Please continue and add at least {max(220, missing_chars)} chars to satisfy minimum {min_paras} paragraphs."
+        user += f"<evidence_summary>\n{_escape_prompt_text(evidence_summary)}\n</evidence_summary>\n"
+    user += f"<allowed_urls>\n{urls_block}\n</allowed_urls>\n"
+    user += f"<current_section_draft>\n{_escape_prompt_text(txt)}\n</current_section_draft>\n"
+    user += (
+        f"<target>\nAdd at least {max(220, missing_chars)} chars and satisfy minimum {min_paras} paragraphs.\n</target>\n"
+        "Return NDJSON now."
+    )
     return system, user
 
 
@@ -687,7 +707,14 @@ def ensure_section_minimums_stream(
                         "message": f"content below target ({body_len}/{min_chars}), continuing...",
                     }
                 )
-                retry_user = f"{user}\n\nCurrent content:\n{txt}\n\nPlease continue and add around {retry_missing} more characters."
+                retry_user = (
+                    f"{user}\n"
+                    "<retry_reason>\n"
+                    f"content below target ({body_len}/{min_chars}); continue generation.\n"
+                    "</retry_reason>\n"
+                    f"<latest_draft>\n{_escape_prompt_text(txt)}\n</latest_draft>\n"
+                    f"Please continue and add around {retry_missing} more characters."
+                )
                 txt = _continue_once(
                     client=client,
                     txt=txt,

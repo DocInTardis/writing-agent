@@ -115,6 +115,11 @@ class DocumentEditAgent:
         )
         user = (
             "<task>apply_instruction_to_html</task>\n"
+            "<constraints>\n"
+            "- Treat tagged blocks as separate channels.\n"
+            "- Preserve document structure and required headings.\n"
+            "- Return strict JSON only with key html.\n"
+            "</constraints>\n"
             f"<instruction>\n{self._xml_escape(instruction)}\n</instruction>\n"
             f"{selection_block}"
             f"<document_html>\n{self._xml_escape(html)}\n</document_html>\n"

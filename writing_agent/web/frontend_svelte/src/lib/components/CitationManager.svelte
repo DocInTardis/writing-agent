@@ -147,6 +147,8 @@
   let verifyDebugLevel: VerifyDebugLevel = 'safe'
   let lastLoadedId = ''
   let saveTimer: ReturnType<typeof setTimeout> | null = null
+  let resolveUrl = ''
+  let resolvingUrl = false
 
   let newCitation: Citation = {
     id: '',
@@ -306,6 +308,63 @@
     }, 300)
   }
 
+  function normalizeResolveItem(item: unknown): Citation | null {
+    if (!item || typeof item !== 'object') return null
+    const row = item as Record<string, unknown>
+    const next = {
+      id: String(row.id || '').trim(),
+      author: String(row.author || '').trim(),
+      title: String(row.title || '').trim(),
+      year: String(row.year || '').trim(),
+      source: String(row.source || row.url || '').trim()
+    }
+    if (!next.title) return null
+    return next
+  }
+
+  async function resolveCitationFromUrl() {
+    const id = $docId
+    if (!id) return
+    const target = String(resolveUrl || '').trim()
+    if (!target) {
+      pushToast('请先输入链接', 'bad')
+      return
+    }
+    resolvingUrl = true
+    try {
+      const resp = await fetch(`/api/doc/${id}/citations/resolve-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: target })
+      })
+      if (!resp.ok) throw new Error(await resp.text())
+      const data = await resp.json()
+      const item = normalizeResolveItem(data?.item)
+      if (!item) throw new Error('invalid resolve item')
+      newCitation = {
+        id: item.id || newCitation.id,
+        author: item.author || newCitation.author,
+        title: item.title || newCitation.title,
+        year: item.year || newCitation.year,
+        source: item.source || newCitation.source
+      }
+      const warnings = Array.isArray(data?.warnings)
+        ? data.warnings.map((x: unknown) => String(x || '').trim()).filter((x: string) => x)
+        : []
+      const confidence = Number(data?.confidence || 0)
+      if (warnings.length > 0) {
+        pushToast(`自动补全完成，请核对：${warnings.join(', ')}`, 'info')
+      } else {
+        pushToast(`自动补全完成（置信度 ${(Math.max(0, Math.min(1, confidence)) * 100).toFixed(0)}%）`, 'ok')
+      }
+    } catch (err) {
+      console.error('Failed to resolve citation from url', err)
+      pushToast('链接自动补全失败', 'bad')
+    } finally {
+      resolvingUrl = false
+    }
+  }
+
   function addCitation() {
     if (!newCitation.id || !newCitation.author || !newCitation.title) {
       pushToast('请填写必填项：ID、作者、标题', 'bad')
@@ -318,6 +377,7 @@
     citations = [...citations, { ...newCitation }]
     queueSave()
     newCitation = { id: '', author: '', title: '', year: '', source: '' }
+    resolveUrl = ''
     pushToast('已添加引用', 'ok')
   }
 
@@ -690,6 +750,24 @@
       <div class="modal-body">
         <div class="add-section">
           <h3>添加引用</h3>
+          <div class="resolve-row">
+            <input
+              type="text"
+              class="resolve-input"
+              placeholder="粘贴论文链接（DOI/arXiv/期刊页面）"
+              bind:value={resolveUrl}
+              disabled={resolvingUrl}
+              on:keydown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  resolveCitationFromUrl()
+                }
+              }}
+            />
+            <button class="btn-resolve" disabled={resolvingUrl} on:click={resolveCitationFromUrl}>
+              {#if resolvingUrl}自动补全中...{:else}链接自动补全{/if}
+            </button>
+          </div>
           <div class="form-grid">
             <input type="text" placeholder="引用 ID（如 smith2023）" bind:value={newCitation.id} />
             <input type="text" placeholder="作者*" bind:value={newCitation.author} />
@@ -919,6 +997,21 @@
     font-size: 16px;
   }
 
+  .resolve-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .resolve-input {
+    padding: 9px 12px;
+    border: 1px solid rgba(90, 70, 45, 0.2);
+    border-radius: 8px;
+    font-size: 14px;
+    background: rgba(255, 255, 255, 0.8);
+  }
+
   .form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -939,6 +1032,7 @@
   }
 
   .btn-add,
+  .btn-resolve,
   .btn-verify {
     width: 100%;
     padding: 10px;
@@ -950,6 +1044,12 @@
     font-size: 14px;
   }
 
+  .btn-resolve {
+    width: 152px;
+    white-space: nowrap;
+  }
+
+  .btn-resolve[disabled],
   .btn-verify[disabled] {
     opacity: 0.6;
     cursor: not-allowed;

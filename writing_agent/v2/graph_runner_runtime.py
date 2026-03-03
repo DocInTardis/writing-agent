@@ -7,6 +7,12 @@ from __future__ import annotations
 
 from writing_agent.v2.graph_runner import *  # noqa: F401,F403
 
+
+def _runtime_escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def run_generate_graph(
     *,
     instruction: str,
@@ -831,9 +837,16 @@ def _generate_section_stream(
         system += f"{fig_hint}"
     if ref_items:
         system += "\nUse bracket citations like [1]; citation numbers must come from the available source list.\n"
-        user += "\nAvailable sources (cite by number):\n" + "\n".join(
-            [f"[{i+1}] {str(s.get('title') or s.get('url') or s.get('id') or '').strip()} {str(s.get('url') or '').strip()}".strip() for i, s in enumerate(ref_items[:12])]
-        ) + "\n\n"
+        source_lines = [
+            f"[{i+1}] {_runtime_escape_prompt_text(str(s.get('title') or s.get('url') or s.get('id') or '').strip())} "
+            f"{_runtime_escape_prompt_text(str(s.get('url') or '').strip())}".strip()
+            for i, s in enumerate(ref_items[:12])
+        ]
+        user += (
+            "\n<available_sources>\n"
+            + ("\n".join(source_lines) if source_lines else "(none)")
+            + "\n</available_sources>\n\n"
+        )
     num_predict = _predict_num_tokens(min_chars=min_chars, max_chars=max_chars, is_reference=is_reference)
     deadline = time.time() + _section_timeout_s()
     txt = _stream_structured_blocks(

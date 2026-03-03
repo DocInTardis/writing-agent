@@ -275,18 +275,31 @@ def _fallback_prompt_sections(session) -> list[str]:
     if getattr(session, "template_required_h2", None):
         return [str(t or "").strip() for t in (session.template_required_h2 or []) if str(t or "").strip()]
     return []
+
+
+def _escape_fallback_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _build_fallback_prompt(session, *, instruction: str, length_hint: str) -> tuple[str, str]:
     sections = _fallback_prompt_sections(session)
-    section_hint = ""
-    if sections:
-        section_hint = "Required H2 order (##):\n" + "\n".join(sections) + "\n"
+    escaped_sections = [_escape_fallback_prompt_text(item) for item in sections if str(item or "").strip()]
+    section_hint = "\n".join(escaped_sections)
+    escaped_length_hint = _escape_fallback_prompt_text(length_hint)
+    escaped_instruction = _escape_fallback_prompt_text(instruction)
     prompt = (
-        "You are a writing assistant. Generate a formal Chinese Markdown document.\n"
-        "Keep the structure clear and avoid placeholders or meta instructions.\n"
-        f"{section_hint}"
-        f"{length_hint}"
-        "User requirement:\n"
-        f"{instruction}\n"
+        "<task>full_document_generation</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Generate a formal Chinese Markdown document.\n"
+        "- Keep structure clear, avoid placeholders or meta instructions.\n"
+        "- Output Markdown only; no commentary.\n"
+        "</constraints>\n"
+        f"<required_h2_order>\n{section_hint}\n</required_h2_order>\n"
+        f"<length_hint>\n{escaped_length_hint}\n</length_hint>\n"
+        f"<user_requirement>\n{escaped_instruction}\n</user_requirement>\n"
+        "Return the complete Markdown document."
     )
     system = "You are a professional writer. Output Markdown only."
     return system, prompt

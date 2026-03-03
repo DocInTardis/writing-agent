@@ -134,12 +134,126 @@ export interface MetricsView {
   trend: MetricsTrend
 }
 
+export interface ResolveRecentRun {
+  ts: number
+  ok: boolean
+  elapsed_ms: number
+  resolver: string
+  provider: string
+  confidence: number
+  warning_count: number
+  metadata_only: boolean
+  low_confidence: boolean
+  error: string
+}
+
+export interface ResolveAlertRule {
+  id: string
+  level: AlertLevel
+  triggered: boolean
+  value: number
+  threshold: number
+  op: string
+  message: string
+}
+
+export interface ResolveNotifyEvent {
+  id: string
+  ts: number
+  severity: AlertSeverity
+  event_type: string
+  status: string
+  sent: boolean
+  dedupe_hit: boolean
+  triggered_rules: string[]
+  channels: string[]
+}
+
+export interface ResolveAlertsView {
+  enabled: boolean
+  severity: AlertSeverity
+  triggered: number
+  runs: number
+  min_runs: number
+  warmup: boolean
+  thresholds: {
+    failure_rate: number
+    fallback_rate: number
+    p95_ms: number
+    low_confidence_rate: number
+  }
+  rules: ResolveAlertRule[]
+  triggered_rules: string[]
+  notification: {
+    enabled: boolean
+    webhook_configured: boolean
+    sent: boolean
+    channels: string[]
+    signature: string
+    dedupe_hit: boolean
+    event_type: string
+    status: string
+    cooldown_s: number
+    timeout_s: number
+    last_sent_at: number
+    suppressed: number
+    last_error: string
+    event_id: string
+    events_total: number
+    events_recent: ResolveNotifyEvent[]
+  }
+}
+
+export interface ResolveMetricsView {
+  window_s: number
+  max_runs: number
+  runs: number
+  success_rate: number
+  failure_rate: number
+  fallback_rate: number
+  low_confidence_rate: number
+  totals: {
+    requests: number
+    success: number
+    failed: number
+    metadata_only: number
+    low_confidence: number
+  }
+  latency_ms: {
+    avg: number
+    p50: number
+    p95: number
+    max: number
+  }
+  confidence: {
+    avg: number
+    p50: number
+    p95: number
+  }
+  providers: Record<string, number>
+  resolvers: Record<string, number>
+  recent: ResolveRecentRun[]
+  alerts: ResolveAlertsView
+}
+
 export interface AlertConfigForm {
   enabled: boolean
   min_runs: number
   p95_ms: number
   error_rate_per_run: number
   cache_delta_hit_rate: number
+}
+
+export interface ResolveAlertConfigForm {
+  enabled: boolean
+  min_runs: number
+  failure_rate: number
+  fallback_rate: number
+  p95_ms: number
+  low_confidence_rate: number
+  notify_enabled: boolean
+  notify_cooldown_s: number
+  notify_timeout_s: number
 }
 
 type UnknownRecord = Record<string, unknown>
@@ -203,6 +317,30 @@ export function clampAlertConfig(input: {
   }
 }
 
+export function clampResolveAlertConfig(input: {
+  enabled: unknown
+  min_runs: unknown
+  failure_rate: unknown
+  fallback_rate: unknown
+  p95_ms: unknown
+  low_confidence_rate: unknown
+  notify_enabled: unknown
+  notify_cooldown_s: unknown
+  notify_timeout_s: unknown
+}): ResolveAlertConfigForm {
+  return {
+    enabled: Boolean(input.enabled),
+    min_runs: Math.max(1, Math.min(500, toSafeInt(input.min_runs) || 8)),
+    failure_rate: Math.max(0, Math.min(1, toSafeFloat(input.failure_rate) || 0)),
+    fallback_rate: Math.max(0, Math.min(1, toSafeFloat(input.fallback_rate) || 0)),
+    p95_ms: Math.max(100, Math.min(60000, toSafeInt(input.p95_ms) || 4500)),
+    low_confidence_rate: Math.max(0, Math.min(1, toSafeFloat(input.low_confidence_rate) || 0)),
+    notify_enabled: Boolean(input.notify_enabled),
+    notify_cooldown_s: Math.max(10, Math.min(86400, toSafeInt(input.notify_cooldown_s) || 300)),
+    notify_timeout_s: Math.max(1, Math.min(30, toSafeFloat(input.notify_timeout_s) || 4))
+  }
+}
+
 function normalizeObserveCacheDelta(raw: unknown): ObserveCacheDelta {
   const row = raw && typeof raw === 'object' ? (raw as UnknownRecord) : {}
   return {
@@ -261,6 +399,153 @@ export function normalizeEventContextPayload(data: unknown, eventId: string): Me
     before: toSafeInt(ctxRaw.before),
     after: toSafeInt(ctxRaw.after),
     points: pointsRaw.map((row) => normalizeTrendPoint(row)).filter((row) => row.id.length > 0)
+  }
+}
+
+function normalizeStringIntMap(raw: unknown): Record<string, number> {
+  const row = raw && typeof raw === 'object' ? (raw as UnknownRecord) : {}
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(row)) {
+    const key = String(k || '').trim()
+    if (!key) continue
+    out[key] = toSafeInt(v)
+  }
+  return out
+}
+
+export function normalizeResolveMetricsPayload(data: unknown): ResolveMetricsView {
+  const payload = data && typeof data === 'object' ? (data as UnknownRecord) : {}
+  const totalsRaw = payload.totals && typeof payload.totals === 'object' ? (payload.totals as UnknownRecord) : {}
+  const latencyRaw = payload.latency_ms && typeof payload.latency_ms === 'object' ? (payload.latency_ms as UnknownRecord) : {}
+  const confidenceRaw =
+    payload.confidence && typeof payload.confidence === 'object' ? (payload.confidence as UnknownRecord) : {}
+  const alertsRaw = payload.alerts && typeof payload.alerts === 'object' ? (payload.alerts as UnknownRecord) : {}
+  const alertThresholdsRaw =
+    alertsRaw.thresholds && typeof alertsRaw.thresholds === 'object' ? (alertsRaw.thresholds as UnknownRecord) : {}
+  const alertRulesRaw = Array.isArray(alertsRaw.rules) ? alertsRaw.rules : []
+  const alertTriggeredRaw = Array.isArray(alertsRaw.triggered_rules) ? alertsRaw.triggered_rules : []
+  const alertNotificationRaw =
+    alertsRaw.notification && typeof alertsRaw.notification === 'object'
+      ? (alertsRaw.notification as UnknownRecord)
+      : {}
+  const recentRaw = Array.isArray(payload.recent) ? payload.recent : []
+  return {
+    window_s: toSafeFloat(payload.window_s),
+    max_runs: toSafeInt(payload.max_runs),
+    runs: toSafeInt(payload.runs),
+    success_rate: toSafeRate(payload.success_rate),
+    failure_rate: toSafeRate(payload.failure_rate),
+    fallback_rate: toSafeRate(payload.fallback_rate),
+    low_confidence_rate: toSafeRate(payload.low_confidence_rate),
+    totals: {
+      requests: toSafeInt(totalsRaw.requests),
+      success: toSafeInt(totalsRaw.success),
+      failed: toSafeInt(totalsRaw.failed),
+      metadata_only: toSafeInt(totalsRaw.metadata_only),
+      low_confidence: toSafeInt(totalsRaw.low_confidence)
+    },
+    latency_ms: {
+      avg: toSafeFloat(latencyRaw.avg),
+      p50: toSafeFloat(latencyRaw.p50),
+      p95: toSafeFloat(latencyRaw.p95),
+      max: toSafeFloat(latencyRaw.max)
+    },
+    confidence: {
+      avg: toSafeRate(confidenceRaw.avg),
+      p50: toSafeRate(confidenceRaw.p50),
+      p95: toSafeRate(confidenceRaw.p95)
+    },
+    providers: normalizeStringIntMap(payload.providers),
+    resolvers: normalizeStringIntMap(payload.resolvers),
+    recent: recentRaw
+      .filter((row) => row && typeof row === 'object')
+      .map((row) => {
+        const item = row as UnknownRecord
+        return {
+          ts: toSafeFloat(item.ts),
+          ok: Boolean(item.ok),
+          elapsed_ms: toSafeFloat(item.elapsed_ms),
+          resolver: String(item.resolver || '').trim(),
+          provider: String(item.provider || '').trim(),
+          confidence: toSafeRate(item.confidence),
+          warning_count: toSafeInt(item.warning_count),
+          metadata_only: Boolean(item.metadata_only),
+          low_confidence: Boolean(item.low_confidence),
+          error: String(item.error || '').trim()
+        }
+      }),
+    alerts: {
+      enabled: Boolean(alertsRaw.enabled),
+      severity: normalizeAlertSeverity(alertsRaw.severity),
+      triggered: toSafeInt(alertsRaw.triggered),
+      runs: toSafeInt(alertsRaw.runs),
+      min_runs: toSafeInt(alertsRaw.min_runs),
+      warmup: Boolean(alertsRaw.warmup),
+      thresholds: {
+        failure_rate: toSafeRate(alertThresholdsRaw.failure_rate),
+        fallback_rate: toSafeRate(alertThresholdsRaw.fallback_rate),
+        p95_ms: Math.max(100, Math.min(60000, toSafeFloat(alertThresholdsRaw.p95_ms) || 4500)),
+        low_confidence_rate: toSafeRate(alertThresholdsRaw.low_confidence_rate)
+      },
+      rules: alertRulesRaw
+        .filter((row) => row && typeof row === 'object')
+        .map((row) => {
+          const x = row as UnknownRecord
+          return {
+            id: String(x.id || '').trim(),
+            level: normalizeAlertLevel(x.level),
+            triggered: Boolean(x.triggered),
+            value: toSafeFloat(x.value),
+            threshold: toSafeFloat(x.threshold),
+            op: String(x.op || '').trim(),
+            message: String(x.message || '').trim()
+          }
+        })
+        .filter((row) => row.id.length > 0),
+      triggered_rules: alertTriggeredRaw.map((row) => String(row || '').trim()).filter((row) => row.length > 0),
+      notification: {
+        enabled: Boolean(alertNotificationRaw.enabled),
+        webhook_configured: Boolean(alertNotificationRaw.webhook_configured),
+        sent: Boolean(alertNotificationRaw.sent),
+        channels: Array.isArray(alertNotificationRaw.channels)
+          ? alertNotificationRaw.channels.map((row) => String(row || '').trim()).filter((row) => row.length > 0)
+          : [],
+        signature: String(alertNotificationRaw.signature || '').trim(),
+        dedupe_hit: Boolean(alertNotificationRaw.dedupe_hit),
+        event_type: String(alertNotificationRaw.event_type || '').trim() || 'none',
+        status: String(alertNotificationRaw.status || '').trim() || 'unknown',
+        cooldown_s: toSafeFloat(alertNotificationRaw.cooldown_s),
+        timeout_s: toSafeFloat(alertNotificationRaw.timeout_s),
+        last_sent_at: toSafeFloat(alertNotificationRaw.last_sent_at),
+        suppressed: toSafeInt(alertNotificationRaw.suppressed),
+        last_error: String(alertNotificationRaw.last_error || '').trim(),
+        event_id: String(alertNotificationRaw.event_id || '').trim(),
+        events_total: toSafeInt(alertNotificationRaw.events_total),
+        events_recent: Array.isArray(alertNotificationRaw.events_recent)
+          ? alertNotificationRaw.events_recent
+              .filter((row) => row && typeof row === 'object')
+              .map((row) => {
+                const item = row as UnknownRecord
+                return {
+                  id: String(item.id || '').trim(),
+                  ts: toSafeFloat(item.ts),
+                  severity: normalizeAlertSeverity(item.severity),
+                  event_type: String(item.event_type || '').trim() || 'none',
+                  status: String(item.status || '').trim() || 'unknown',
+                  sent: Boolean(item.sent),
+                  dedupe_hit: Boolean(item.dedupe_hit),
+                  triggered_rules: Array.isArray(item.triggered_rules)
+                    ? item.triggered_rules.map((x) => String(x || '').trim()).filter((x) => x.length > 0)
+                    : [],
+                  channels: Array.isArray(item.channels)
+                    ? item.channels.map((x) => String(x || '').trim()).filter((x) => x.length > 0)
+                    : []
+                }
+              })
+              .filter((row) => row.id.length > 0)
+          : []
+      }
+    }
   }
 }
 
