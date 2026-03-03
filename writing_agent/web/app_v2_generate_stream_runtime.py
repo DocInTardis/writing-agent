@@ -5,6 +5,8 @@ This module belongs to `writing_agent.web` in the writing-agent codebase.
 
 from __future__ import annotations
 
+from writing_agent.web.domains import route_graph_metrics_domain
+
 
 _BIND_SKIP_NAMES = {
     "__builtins__",
@@ -35,8 +37,16 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
     data = await request.json()
     raw_instruction = str(data.get("instruction") or "").strip()
     current_text = str(data.get("text") or "")
-    selection = str(data.get("selection") or "")
+    selection_payload = data.get("selection")
+    selection_text = (
+        str(selection_payload.get("text") or "")
+        if isinstance(selection_payload, dict)
+        else str(selection_payload or "")
+    )
+    context_policy = data.get("context_policy")
     compose_mode = _normalize_compose_mode(data.get("compose_mode"))
+    resume_sections = _normalize_resume_sections(data.get("resume_sections"))
+    cursor_anchor = str(data.get("cursor_anchor") or "").strip()
     confirm_apply = bool(data.get("confirm_apply") is True)
     if not raw_instruction:
         raise HTTPException(status_code=400, detail="instruction required")
@@ -47,13 +57,13 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         _touch_doc_generation(doc_id, stream_token)
         return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
     def iter_events():
-        base_text = current_text or session.doc_text or ""
+        base_text = "" if compose_mode == "overwrite" else (current_text or session.doc_text or "")
         format_only = _try_handle_format_only_request(
             session=session,
             instruction=raw_instruction,
             base_text=base_text,
             compose_mode=compose_mode,
-            selection=selection,
+            selection=selection_text,
         )
         if format_only is not None:
             yield emit("final", format_only)
@@ -98,12 +108,20 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         target_chars = _resolve_target_chars(fmt, prefs)
         if target_chars <= 0:
             target_chars = _extract_target_chars_from_instruction(raw_instruction)
-        base_text = current_text or session.doc_text or ""
+        base_text = "" if compose_mode == "overwrite" else (current_text or session.doc_text or "")
+        has_existing = bool(str(session.doc_text or "").strip())
+        compose_instruction = _apply_compose_mode_instruction(raw_instruction, compose_mode, has_existing=has_existing)
+        if resume_sections:
+            compose_instruction = _apply_resume_sections_instruction(
+                compose_instruction,
+                resume_sections,
+                cursor_anchor=cursor_anchor,
+            )
         if base_text.strip():
             if base_text != session.doc_text:
                 _set_doc_text(session, base_text)
             _auto_commit_version(session, "auto: before update")
-        quick_edit = _try_quick_edit(base_text, raw_instruction, confirm_apply)
+        quick_edit = None if resume_sections else _try_quick_edit(base_text, raw_instruction, confirm_apply)
         if quick_edit:
             if quick_edit.requires_confirmation:
                 yield emit(
@@ -134,8 +152,8 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             yield emit("delta", {"delta": note})
             yield emit("final", {"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)})
             return
-        analysis_quick = _run_message_analysis(session, raw_instruction, quick=True)
-        ai_edit = _try_ai_intent_edit(base_text, raw_instruction, analysis_quick, confirm_apply)
+        analysis_quick = _run_message_analysis(session, compose_instruction, quick=True)
+        ai_edit = None if resume_sections else _try_ai_intent_edit(base_text, raw_instruction, analysis_quick, confirm_apply)
         if ai_edit:
             if ai_edit.requires_confirmation:
                 yield emit(
@@ -169,12 +187,20 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         if _should_route_to_revision(raw_instruction, base_text, analysis_quick):
             summary = "Detected revision instruction and switched to quick edit flow."
             yield emit("analysis", {"summary": summary, "steps": ["locate target scope", "apply rewrite", "validate structure"], "missing": []})
+            revision_status: dict[str, object] = {}
+
+            def _capture_revision_status(payload: dict[str, object]) -> None:
+                if isinstance(payload, dict):
+                    revision_status.update(payload)
+
             revised = _try_revision_edit(
                 session=session,
                 instruction=raw_instruction,
                 text=base_text,
-                selection=selection,
+                selection=selection_payload,
                 analysis=analysis_quick,
+                context_policy=context_policy,
+                report_status=_capture_revision_status,
             )
             if revised:
                 updated_text, note = revised
@@ -189,14 +215,19 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                 _auto_commit_version(session, "auto: after update")
                 store.put(session)
                 yield emit("delta", {"delta": note})
-                yield emit("final", {"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)})
+                payload = {"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)}
+                if revision_status:
+                    payload["revision_meta"] = revision_status
+                yield emit("final", payload)
                 return
+            if revision_status:
+                yield emit("revision_status", revision_status)
             yield emit("delta", {"delta": "fast revise failed, fallback to full generation."})
         if _should_use_fast_generate(raw_instruction, target_chars, session.generation_prefs or {}):
             fast_done = False
             try:
                 instruction = _augment_instruction(
-                    raw_instruction,
+                    compose_instruction,
                     formatting=session.formatting or {},
                     generation_prefs=session.generation_prefs or {},
                 )
@@ -244,9 +275,9 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                 return
         analysis_timeout = float(os.environ.get("WRITING_AGENT_ANALYSIS_MAX_S", "20"))
         analysis_iter = _run_with_heartbeat(
-            lambda: _run_message_analysis(session, raw_instruction),
+            lambda: _run_message_analysis(session, compose_instruction),
             analysis_timeout,
-            _normalize_analysis({}, raw_instruction),
+            _normalize_analysis({}, compose_instruction),
             label="analysis in progress",
         )
         if isinstance(analysis_iter, tuple):
@@ -261,8 +292,8 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             except StopIteration as e:
                 analysis = e.value
         if analysis is None:
-            analysis = _normalize_analysis({}, raw_instruction)
-        analysis_instruction = _compose_analysis_input(raw_instruction, analysis)
+            analysis = _normalize_analysis({}, compose_instruction)
+        analysis_instruction = _compose_analysis_input(compose_instruction, analysis)
         instruction = _augment_instruction(
             analysis_instruction,
             formatting=session.formatting or {},
@@ -302,6 +333,44 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             )
         final_text: str | None = None
         problems: list[str] = []
+        graph_meta: dict | None = None
+        use_route_graph = False
+
+        def _route_elapsed_ms() -> float:
+            return max(0.0, (time.time() - start_ts) * 1000.0)
+
+        def _record_route_metric(
+            event: str,
+            *,
+            path: str,
+            fallback_triggered: bool | None = None,
+            fallback_recovered: bool | None = None,
+            error_code: str = "",
+        ) -> None:
+            route_id = ""
+            route_entry = ""
+            engine = ""
+            if isinstance(graph_meta, dict):
+                route_id = str(graph_meta.get("route_id") or "")
+                route_entry = str(graph_meta.get("route_entry") or "")
+                engine = str(graph_meta.get("engine") or "")
+            route_graph_metrics_domain.record_route_graph_metric(
+                event,
+                phase="generate_stream",
+                path=path,
+                route_id=route_id,
+                route_entry=route_entry,
+                engine=engine,
+                fallback_triggered=fallback_triggered,
+                fallback_recovered=fallback_recovered,
+                error_code=error_code,
+                elapsed_ms=_route_elapsed_ms(),
+                extra={
+                    "compose_mode": str(compose_mode or "").strip(),
+                    "resume_sections_count": int(len(resume_sections or [])),
+                },
+            )
+
         overall_default_s, stall_default_s = _recommended_stream_timeouts()
         stall_s = float(os.environ.get("WRITING_AGENT_STREAM_EVENT_TIMEOUT_S", str(int(stall_default_s))))
         stall_s = max(stall_s, stall_default_s)
@@ -331,43 +400,112 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         max_gap_s = 0.0
         try:
             expand_outline = bool((session.generation_prefs or {}).get("expand_outline", False))
-            gen = run_generate_graph(
-                instruction=instruction,
-                current_text=current_text,
-                required_h2=list(session.template_required_h2 or []),
-                required_outline=list(session.template_outline or []),
-                expand_outline=expand_outline,
-                config=cfg,
-            )
-            last_section_at: float | None = None
-            last_event_at = start_ts
-            for ev in _iter_with_timeout(gen, per_event=stall_s, overall=overall_s):
-                now = time.time()
-                gap = now - last_event_at
-                if gap > max_gap_s:
-                    max_gap_s = gap
-                last_event_at = now
-                if ev.get("event") == "final":
-                    final_text = _postprocess_output_text(
-                        session,
-                        str(ev.get("text") or ""),
-                        raw_instruction,
-                        current_text=current_text,
-                    )
-                    problems = list(ev.get("problems") or [])
-                    payload = dict(ev)
-                    payload["text"] = final_text
-                    payload["doc_ir"] = _safe_doc_ir_payload(final_text)
-                    yield emit(payload.get("event", "message"), payload)
-                    _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
-                    break
-                yield emit(ev.get("event", "message"), ev)
-                if ev.get("event") == "section" and ev.get("phase") == "delta":
-                    last_section_at = time.time()
-                if section_stall_s > 0:
-                    if last_section_at is not None and time.time() - last_section_at > section_stall_s:
-                        raise TimeoutError("section stalled")
+            required_h2 = list(resume_sections) if resume_sections else list(session.template_required_h2 or [])
+            required_outline = [] if resume_sections else list(session.template_outline or [])
+            graph_current_text = "" if compose_mode == "overwrite" else (current_text or session.doc_text or "")
+            use_route_graph = str(os.environ.get("WRITING_AGENT_USE_ROUTE_GRAPH", "0")).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if use_route_graph and "run_generate_graph_dual_engine" in globals():
+                if route_graph_metrics_domain.should_inject_route_graph_failure(phase="generate_stream"):
+                    raise RuntimeError("E_INJECTED_ROUTE_GRAPH_FAILURE")
+                out = run_generate_graph_dual_engine(
+                    instruction=instruction,
+                    current_text=graph_current_text,
+                    required_h2=required_h2,
+                    required_outline=required_outline,
+                    expand_outline=expand_outline,
+                    config=cfg,
+                    compose_mode=compose_mode,
+                    resume_sections=resume_sections,
+                    format_only=False,
+                )
+                if isinstance(out, dict):
+                    candidate = str(out.get("text") or "")
+                    if candidate.strip():
+                        graph_meta = {
+                            "path": "route_graph",
+                            "trace_id": str(out.get("trace_id") or ""),
+                            "engine": str(out.get("engine") or ""),
+                            "route_id": str(out.get("route_id") or ""),
+                            "route_entry": str(out.get("route_entry") or ""),
+                        }
+                        final_text = _postprocess_output_text(
+                            session,
+                            candidate,
+                            raw_instruction,
+                            current_text=graph_current_text,
+                        )
+                        problems = list(out.get("problems") or [])
+                        payload = {
+                            "text": final_text,
+                            "problems": problems,
+                            "doc_ir": _safe_doc_ir_payload(final_text),
+                        }
+                        if graph_meta:
+                            payload["graph_meta"] = graph_meta
+                        yield emit("final", payload)
+                        _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
+                        _record_route_metric(
+                            "route_graph_success",
+                            path="route_graph",
+                            fallback_triggered=False,
+                            fallback_recovered=False,
+                        )
+            else:
+                gen = run_generate_graph(
+                    instruction=instruction,
+                    current_text=graph_current_text,
+                    required_h2=required_h2,
+                    required_outline=required_outline,
+                    expand_outline=expand_outline,
+                    config=cfg,
+                )
+                last_section_at: float | None = None
+                last_event_at = start_ts
+                for ev in _iter_with_timeout(gen, per_event=stall_s, overall=overall_s):
+                    now = time.time()
+                    gap = now - last_event_at
+                    if gap > max_gap_s:
+                        max_gap_s = gap
+                    last_event_at = now
+                    if ev.get("event") == "final":
+                        final_text = _postprocess_output_text(
+                            session,
+                            str(ev.get("text") or ""),
+                            raw_instruction,
+                            current_text=graph_current_text,
+                        )
+                        problems = list(ev.get("problems") or [])
+                        payload = dict(ev)
+                        payload["text"] = final_text
+                        payload["doc_ir"] = _safe_doc_ir_payload(final_text)
+                        yield emit(payload.get("event", "message"), payload)
+                        _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
+                        _record_route_metric(
+                            "legacy_graph_success",
+                            path="legacy_graph",
+                            fallback_triggered=False,
+                            fallback_recovered=False,
+                        )
+                        break
+                    yield emit(ev.get("event", "message"), ev)
+                    if ev.get("event") == "section" and ev.get("phase") == "delta":
+                        last_section_at = time.time()
+                    if section_stall_s > 0:
+                        if last_section_at is not None and time.time() - last_section_at > section_stall_s:
+                            raise TimeoutError("section stalled")
         except Exception as e:
+            _record_route_metric(
+                "graph_failed",
+                path="route_graph" if use_route_graph else "legacy_graph",
+                fallback_triggered=True,
+                fallback_recovered=False,
+                error_code=route_graph_metrics_domain.extract_error_code(e, default="E_GRAPH_FAILED"),
+            )
             try:
                 log_path = Path(".data/logs/graph_error.log")
                 log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -411,9 +549,29 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         {"text": final_text, "problems": quality_issues, "doc_ir": _safe_doc_ir_payload(final_text)},
                     )
                     _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
+                    _record_route_metric(
+                        "fallback_recovered",
+                        path="single_pass_stream",
+                        fallback_triggered=True,
+                        fallback_recovered=True,
+                    )
             except Exception as ee:
+                _record_route_metric(
+                    "fallback_failed",
+                    path="single_pass_stream",
+                    fallback_triggered=True,
+                    fallback_recovered=False,
+                    error_code=route_graph_metrics_domain.extract_error_code(ee, default="E_FALLBACK_FAILED"),
+                )
                 yield emit("error", {"message": f"generation failed: {e}; fallback failed: {ee}"})
         if final_text is None or len(final_text.strip()) < 20:
+            _record_route_metric(
+                "graph_insufficient",
+                path="route_graph" if use_route_graph else "legacy_graph",
+                fallback_triggered=True,
+                fallback_recovered=False,
+                error_code="E_TEXT_INSUFFICIENT",
+            )
             # Fallback: single-pass generation to avoid empty output on stream failures.
             try:
                 final_text = None
@@ -450,8 +608,21 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         {"text": final_text, "problems": quality_issues, "doc_ir": _safe_doc_ir_payload(final_text)},
                     )
                     _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
+                    _record_route_metric(
+                        "fallback_recovered",
+                        path="single_pass_stream",
+                        fallback_triggered=True,
+                        fallback_recovered=True,
+                    )
             except Exception as e:
-                yield emit("error", {"message": f"生成失败：未得到正文且兜底失败：{e}"})
+                _record_route_metric(
+                    "fallback_failed",
+                    path="single_pass_stream",
+                    fallback_triggered=True,
+                    fallback_recovered=False,
+                    error_code=route_graph_metrics_domain.extract_error_code(e, default="E_FALLBACK_FAILED"),
+                )
+                yield emit("error", {"message": f"generation failed and fallback failed: {e}"})
                 return
         # Persist final text so refresh/reconnect keeps latest generated content.
         if final_text is not None:
@@ -468,3 +639,4 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+

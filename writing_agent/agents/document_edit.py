@@ -1,14 +1,13 @@
-"""Document Edit module.
-
-This module belongs to `writing_agent.agents` in the writing-agent codebase.
-"""
+"""Document editing agent with constrained model output protocol."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import re
 
-from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
 from writing_agent.agents.report_policy import ReportPolicy, extract_template_headings
+from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
 from writing_agent.web.html_sanitize import sanitize_html
 
 
@@ -19,8 +18,63 @@ class EditResult:
 
 
 class DocumentEditAgent:
+    """Apply natural-language editing instructions to an HTML document."""
+
     def __init__(self) -> None:
         self._policy = ReportPolicy(min_section_paragraphs=2, min_total_chars=1200)
+
+    @staticmethod
+    def _xml_escape(raw: str) -> str:
+        s = str(raw or "")
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    @staticmethod
+    def _extract_json_dict(raw: str) -> dict | None:
+        if not raw:
+            return None
+        text = str(raw or "").strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", text).strip()
+            text = re.sub(r"\s*```$", "", text).strip()
+        try:
+            payload = json.loads(text)
+            return payload if isinstance(payload, dict) else None
+        except Exception:
+            pass
+        m = re.search(r"\{[\s\S]*\}", text)
+        if not m:
+            return None
+        try:
+            payload = json.loads(m.group(0))
+            return payload if isinstance(payload, dict) else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _extract_html_from_payload(payload: dict) -> str:
+        for key in ("html", "output_html", "result_html", "result"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        return ""
+
+    @staticmethod
+    def _extract_assistant_from_payload(payload: dict) -> str:
+        for key in ("assistant", "assistant_note", "note", "message"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    def _parse_model_response(self, raw: str) -> tuple[str, str, bool]:
+        payload = self._extract_json_dict(raw)
+        if not isinstance(payload, dict):
+            return "", "", False
+        html = self._extract_html_from_payload(payload).strip()
+        assistant = self._extract_assistant_from_payload(payload)
+        if not html:
+            return "", assistant, False
+        return html, assistant, True
 
     def build_prompts(
         self,
@@ -31,37 +85,41 @@ class DocumentEditAgent:
         template_html: str | None = None,
     ) -> tuple[str, str, list[str] | None]:
         required_headings = extract_template_headings(template_html or "") if (template_html or "").strip() else None
-
-        sel = (selection or "").strip()
-        selection_hint = ""
-        if sel:
-            selection_hint = f"\n用户选中内容（优先针对这段修改）：\n{sel}\n"
-
-        section_rule = "必须包含这些章节：引言、方法、结果、结论、参考文献。"
+        section_rule = "Must keep a complete report structure with clear section headings."
         if required_headings:
-            section_rule = f"必须包含这些章节（按模板）：{', '.join(required_headings)}。"
+            section_rule = f"Must preserve these section headings: {', '.join(required_headings)}."
+
+        selection_text = str(selection or "").strip()
+        selection_block = (
+            f"<selection_text>\n{self._xml_escape(selection_text)}\n</selection_text>\n"
+            if selection_text
+            else "<selection_text>\n\n</selection_text>\n"
+        )
+        scope_rule = (
+            "If selection_text is non-empty, prioritize local edits around the selection and avoid unrelated rewrites."
+        )
 
         system = (
-            "你是一个“文档编辑 Agent”。你会收到当前文档 HTML，以及用户的自然语言修改要求。"
-            "你的任务是把要求直接应用到文档上，并输出“修改后的 HTML”。\n"
-            "强制规范（必须遵守）：\n"
-            f"1) 输出必须是完整报告，而不是一句话；{section_rule}\n"
-            "2) 每个章节至少 2 段（<p>），段落要有具体说明；缺失信息用 [待补充]，不要编造数据或引用。\n"
-            "3) 只输出 HTML（不要 Markdown、不要代码块、不要解释）。\n"
-            "4) 禁止输出 <script>、事件处理属性（on*）或任何危险内容。\n"
-            "5) 优先使用 h1-h3 + p/ul/ol/li；允许使用 table（表格）与 svg（内嵌图表）；不要删除已有有用内容。\n"
-            "6) 你需要自己判断何时插入表格/图片：\n"
-            "   - 对比、指标、清单、实验结果等结构化信息：用 <table class=\"tbl\"> 展示。\n"
-            "   - 需要可视化流程/架构/实体关系：在合适位置插入标记 [[FLOW: ...]] 或 [[ER: ...]]（系统会自动渲染为图）。\n"
-            "   - 需要图片但无法给出真实图片：插入 [[IMG: 图注/用途]] 作为图片占位（用户后续上传替换）。\n"
+            "You are a controlled HTML document editor.\n"
+            "You MUST return strict JSON only (no markdown fences).\n"
+            "JSON schema:\n"
+            '{"html":"<full_document_html>",'
+            '"assistant":"short note about applied changes",'
+            '"meta":{"scope":"selection|document","preserved_structure":true}}\n'
+            "Rules:\n"
+            "1) Output a complete HTML document body content, not plain text.\n"
+            "2) Do not output <script> tags or on* event handlers.\n"
+            f"3) {section_rule}\n"
+            f"4) {scope_rule}\n"
+            "5) Keep existing useful content unless instruction requires changes.\n"
         )
         user = (
-            f"当前HTML：\n{html}\n\n"
-            f"用户要求：\n{instruction}\n"
-            f"{selection_hint}\n"
-            "请直接给出修改后的 HTML。"
+            "<task>apply_instruction_to_html</task>\n"
+            f"<instruction>\n{self._xml_escape(instruction)}\n</instruction>\n"
+            f"{selection_block}"
+            f"<document_html>\n{self._xml_escape(html)}\n</document_html>\n"
+            'Return strict JSON only with key "html".'
         )
-
         return system, user, required_headings
 
     def apply_instruction(
@@ -70,15 +128,15 @@ class DocumentEditAgent:
         instruction: str,
         selection: str | None = None,
         template_html: str | None = None,
-        title: str = "报告",
+        title: str = "Report",
     ) -> EditResult:
         settings = get_ollama_settings()
         if not settings.enabled:
-            raise OllamaError("未启用Ollama（WRITING_AGENT_USE_OLLAMA=0）")
+            raise OllamaError("Ollama is disabled")
 
         client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
         if not client.is_running():
-            raise OllamaError("Ollama 未运行")
+            raise OllamaError("Ollama is not running")
 
         system, user, required_headings = self.build_prompts(
             html=html,
@@ -87,26 +145,56 @@ class DocumentEditAgent:
             template_html=template_html,
         )
 
-        edited = client.chat(system=system, user=user, temperature=0.2)
+        raw = client.chat(system=system, user=user, temperature=0.2)
+        edited, assistant, parsed_ok = self._parse_model_response(raw)
+
+        if not parsed_ok:
+            retry_user = (
+                f"{user}\n"
+                "<retry_reason>\n"
+                'Your previous response was invalid. Return strict JSON only: {"html":"...","assistant":"..."}.\n'
+                "</retry_reason>"
+            )
+            retry_raw = client.chat(system=system, user=retry_user, temperature=0.1)
+            retry_html, retry_assistant, retry_ok = self._parse_model_response(retry_raw)
+            if retry_ok:
+                edited = retry_html
+                assistant = retry_assistant or assistant
+                parsed_ok = True
+
+        selection_text = str(selection or "").strip()
+        if not parsed_ok and selection_text:
+            # For selection-scoped edits we prefer no-op over unconstrained fallback.
+            safe_original = sanitize_html(html)
+            enforced = self._policy.enforce(safe_original, title=title, required_headings=required_headings)
+            note = "Constrained selection edit failed; document kept unchanged."
+            return EditResult(html=enforced.html, assistant=note)
+
+        if not parsed_ok:
+            # Keep backward compatibility for full-document edits: best-effort fallback.
+            edited = str(raw or "")
+
         cleaned = sanitize_html(edited)
         enforced = self._policy.enforce(cleaned, title=title, required_headings=required_headings)
         if not enforced.html.strip():
-            raise OllamaError("模型返回为空")
-        assistant = "已应用修改到左侧文档。"
+            raise OllamaError("Model returned empty content")
+
+        assistant_msg = assistant or "Applied requested changes to the document."
         if enforced.fixes:
-            assistant += "（已自动补齐结构）"
-        return EditResult(html=enforced.html, assistant=assistant)
+            assistant_msg += " (Structure auto-repaired)"
+        return EditResult(html=enforced.html, assistant=assistant_msg)
 
     def bootstrap(self, topic: str | None = None, template_html: str | None = None) -> str:
-        t = (topic or "").strip() or "自动生成文档"
+        title = (topic or "").strip() or "Auto-generated document"
         base = (template_html or "").strip()
         if base:
-            base = base.replace("{{TITLE}}", t).replace("[TITLE]", t)
+            base = base.replace("{{TITLE}}", title).replace("[TITLE]", title)
             if "<h1" not in base.lower():
-                base = f"<h1>{t}</h1>" + base
+                base = f"<h1>{title}</h1>" + base
             raw = base
         else:
-            raw = f"<h1>{t}</h1>"
+            raw = f"<h1>{title}</h1>"
+
         required_headings = extract_template_headings(base) if base else None
-        enforced = self._policy.enforce(raw, title=t, required_headings=required_headings)
+        enforced = self._policy.enforce(raw, title=title, required_headings=required_headings)
         return sanitize_html(enforced.html)

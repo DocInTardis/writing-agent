@@ -1,50 +1,53 @@
-"""生成服务模块（Generation Service）。
+"""鐢熸垚鏈嶅姟妯″潡锛圙eneration Service锛夈€?
 
-职责定位（可类比 Java 的 Service 层）：
-1. 解析并标准化请求参数。
-2. 执行幂等控制与文档级并发锁控制。
-3. 先尝试低延迟快捷路径，再进入完整图生成流程。
-4. 对生成结果做后处理并持久化会话状态。
+鑱岃矗瀹氫綅锛堝彲绫绘瘮 Java 鐨?Service 灞傦級锛?
+1. 瑙ｆ瀽骞舵爣鍑嗗寲璇锋眰鍙傛暟銆?
+2. 鎵ц骞傜瓑鎺у埗涓庢枃妗ｇ骇骞跺彂閿佹帶鍒躲€?
+3. 鍏堝皾璇曚綆寤惰繜蹇嵎璺緞锛屽啀杩涘叆瀹屾暣鍥剧敓鎴愭祦绋嬨€?
+4. 瀵圭敓鎴愮粨鏋滃仛鍚庡鐞嗗苟鎸佷箙鍖栦細璇濈姸鎬併€?
 """
 
 from __future__ import annotations
 
+import time
+
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 
+from writing_agent.web.domains import route_graph_metrics_domain
 from writing_agent.web.idempotency import IdempotencyStore, make_idempotency_key
 
 from .base import app_v2_module
 
 
 class GenerationService:
-    """文档生成与流式生成的服务封装。"""
+    """Service wrapper for generate and generate_stream endpoints."""
 
     def __init__(self) -> None:
         self._idempotency = IdempotencyStore()
 
     async def generate_stream(self, doc_id: str, request: Request) -> StreamingResponse:
-        """流式生成接口：目前直接代理到历史 runtime 实现。"""
+        """Stream generation endpoint delegated to runtime implementation."""
         app_v2 = app_v2_module()
         return await app_v2.api_generate_stream(doc_id, request)
 
     async def generate(self, doc_id: str, request: Request) -> dict:
         """
-        同步生成主流程（非 SSE）：
-        1. 读取会话并解析请求。
-        2. 做幂等命中检查（避免重复提交重复计算）。
-        3. 获取文档级生成锁（避免同一文档并发写入）。
-        4. 先走快捷路径（格式修复/快速改写/快速生成）。
-        5. 快捷路径未命中时，进入完整 graph 生成 + fallback。
-        6. 后处理并落库，最终释放锁。
+        鍚屾鐢熸垚涓绘祦绋嬶紙闈?SSE锛夛細
+        1. 璇诲彇浼氳瘽骞惰В鏋愯姹傘€?
+        2. 鍋氬箓绛夊懡涓鏌ワ紙閬垮厤閲嶅鎻愪氦閲嶅璁＄畻锛夈€?
+        3. 鑾峰彇鏂囨。绾х敓鎴愰攣锛堥伩鍏嶅悓涓€鏂囨。骞跺彂鍐欏叆锛夈€?
+        4. 鍏堣蛋蹇嵎璺緞锛堟牸寮忎慨澶?蹇€熸敼鍐?蹇€熺敓鎴愶級銆?
+        5. 蹇嵎璺緞鏈懡涓椂锛岃繘鍏ュ畬鏁?graph 鐢熸垚 + fallback銆?
+        6. 鍚庡鐞嗗苟钀藉簱锛屾渶缁堥噴鏀鹃攣銆?
         """
         app_v2 = app_v2_module()
-        # 阶段1：会话存在性校验。
+        # 闃舵1锛氫細璇濆瓨鍦ㄦ€ф牎楠屻€?
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
 
-        # 阶段2：请求标准化 + 幂等控制。
+        # 闃舵2锛氳姹傛爣鍑嗗寲 + 骞傜瓑鎺у埗銆?
         data = await request.json()
         req = self._parse_generate_payload(app_v2, data)
         idempotency_key = self._resolve_idempotency_key(doc_id=doc_id, request=request, payload=data)
@@ -55,13 +58,13 @@ class GenerationService:
         if not req["raw_instruction"]:
             raise app_v2.HTTPException(status_code=400, detail="instruction required")
 
-        # 阶段3：文档级并发锁（防止同一文档并发生成导致状态覆盖）。
+        # 闃舵3锛氭枃妗ｇ骇骞跺彂閿侊紙闃叉鍚屼竴鏂囨。骞跺彂鐢熸垚瀵艰嚧鐘舵€佽鐩栵級銆?
         token = app_v2._try_begin_doc_generation_with_wait(doc_id, mode="generate")
         if not token:
             raise app_v2.HTTPException(status_code=409, detail=app_v2._generation_busy_message(doc_id))
 
         try:
-            # 阶段4：构造最终指令（组合模式/续写章节/锚点等）。
+            # 闃舵4锛氭瀯閫犳渶缁堟寚浠わ紙缁勫悎妯″紡/缁啓绔犺妭/閿氱偣绛夛級銆?
             compose_instruction = self._build_generation_instruction(
                 app_v2=app_v2,
                 session=session,
@@ -70,31 +73,35 @@ class GenerationService:
                 resume_sections=req["resume_sections"],
                 cursor_anchor=req["cursor_anchor"],
             )
-            # overwrite 模式下不带历史正文；其他模式优先取请求中的 text，其次会话正文。
+            # overwrite 妯″紡涓嬩笉甯﹀巻鍙叉鏂囷紱鍏朵粬妯″紡浼樺厛鍙栬姹備腑鐨?text锛屽叾娆′細璇濇鏂囥€?
             base_text = "" if req["compose_mode"] == "overwrite" else (req["current_text"] or session.doc_text or "")
 
-            # 阶段5：先尝试低延迟快捷路径，命中则直接返回。
-            shortcut = self._try_shortcuts(
+            # 闃舵5锛氬厛灏濊瘯浣庡欢杩熷揩鎹疯矾寰勶紝鍛戒腑鍒欑洿鎺ヨ繑鍥炪€?
+            shortcut, revision_meta = self._try_shortcuts(
                 app_v2=app_v2,
                 session=session,
                 raw_instruction=req["raw_instruction"],
                 compose_instruction=compose_instruction,
                 compose_mode=req["compose_mode"],
                 resume_sections=req["resume_sections"],
-                selection=req["selection"],
+                selection_text=req["selection_text"],
+                selection_payload=req["selection_payload"],
+                context_policy=req["context_policy"],
                 base_text=base_text,
                 confirm_apply=req["confirm_apply"],
             )
             if shortcut is not None:
+                if revision_meta and "revision_meta" not in shortcut:
+                    shortcut["revision_meta"] = revision_meta
                 self._save_idempotent_result(idempotency_key, shortcut)
                 return shortcut
 
-            # 阶段6：模型可用性检查（本地推理服务不可用时直接报错）。
+            # 闃舵6锛氭ā鍨嬪彲鐢ㄦ€ф鏌ワ紙鏈湴鎺ㄧ悊鏈嶅姟涓嶅彲鐢ㄦ椂鐩存帴鎶ラ敊锛夈€?
             ok, msg = app_v2._ensure_ollama_ready()
             if not ok:
                 raise app_v2.HTTPException(status_code=400, detail=msg)
 
-            # 阶段7：准备图生成配置（分析指令、长度目标、并发参数等）。
+            # 闃舵7锛氬噯澶囧浘鐢熸垚閰嶇疆锛堝垎鏋愭寚浠ゃ€侀暱搴︾洰鏍囥€佸苟鍙戝弬鏁扮瓑锛夈€?
             analysis_instruction, cfg, target_chars = self._prepare_generation_config(
                 app_v2=app_v2,
                 session=session,
@@ -104,18 +111,19 @@ class GenerationService:
                 base_text=base_text,
             )
 
-            # 阶段8：执行 graph 生成；异常时自动降级到 single-pass 兜底。
-            final_text, problems = self._run_graph_with_fallback(
+            # 闃舵8锛氭墽琛?graph 鐢熸垚锛涘紓甯告椂鑷姩闄嶇骇鍒?single-pass 鍏滃簳銆?
+            final_text, problems, graph_meta = self._run_graph_with_fallback(
                 app_v2=app_v2,
                 session=session,
                 instruction=analysis_instruction,
                 raw_instruction=req["raw_instruction"],
+                compose_mode=req["compose_mode"],
                 resume_sections=req["resume_sections"],
                 base_text=base_text,
                 cfg=cfg,
                 target_chars=target_chars,
             )
-            # 阶段9：统一后处理（清理回声、修复结构等）并持久化。
+            # 闃舵9锛氱粺涓€鍚庡鐞嗭紙娓呯悊鍥炲０銆佷慨澶嶇粨鏋勭瓑锛夊苟鎸佷箙鍖栥€?
             final_text = app_v2._postprocess_output_text(
                 session,
                 final_text,
@@ -127,18 +135,30 @@ class GenerationService:
             app_v2._auto_commit_version(session, "auto: after update")
             app_v2.store.put(session)
             result = {"ok": 1, "text": final_text, "problems": problems, "doc_ir": app_v2._safe_doc_ir_payload(final_text)}
+            if revision_meta:
+                result["revision_meta"] = revision_meta
+            if graph_meta:
+                result["graph_meta"] = graph_meta
             self._save_idempotent_result(idempotency_key, result)
             return result
         finally:
-            # 阶段10：无论成功失败都释放文档级生成锁。
+            # 闃舵10锛氭棤璁烘垚鍔熷け璐ラ兘閲婃斁鏂囨。绾х敓鎴愰攣銆?
             app_v2._finish_doc_generation(doc_id, token)
 
     def _parse_generate_payload(self, app_v2, data: dict) -> dict:
-        """将原始请求体标准化为内部字段结构。"""
+        """Normalize external request payload into internal fields."""
+        selection_payload = data.get("selection")
+        selection_text = (
+            str(selection_payload.get("text") or "")
+            if isinstance(selection_payload, dict)
+            else str(selection_payload or "")
+        )
         return {
             "raw_instruction": str(data.get("instruction") or "").strip(),
             "current_text": str(data.get("text") or ""),
-            "selection": str(data.get("selection") or ""),
+            "selection_payload": selection_payload,
+            "selection_text": selection_text,
+            "context_policy": data.get("context_policy"),
             "compose_mode": app_v2._normalize_compose_mode(data.get("compose_mode")),
             "resume_sections": app_v2._normalize_resume_sections(data.get("resume_sections")),
             "cursor_anchor": str(data.get("cursor_anchor") or ""),
@@ -146,7 +166,7 @@ class GenerationService:
         }
 
     def _resolve_idempotency_key(self, *, doc_id: str, request: Request, payload: dict) -> str:
-        """优先使用请求头幂等键；否则根据 doc_id+route+body 生成确定性键。"""
+        """Resolve idempotency key from header or deterministic payload hash."""
         header_key = str(request.headers.get("x-idempotency-key") or "").strip()
         if header_key:
             return header_key
@@ -174,7 +194,7 @@ class GenerationService:
         resume_sections: list[str],
         cursor_anchor: str,
     ) -> str:
-        """按写作模式与续写范围，组装最终提交给模型的指令。"""
+        """Compose final instruction from compose mode and resume hints."""
         has_existing = bool(str(session.doc_text or "").strip())
         instruction = app_v2._apply_compose_mode_instruction(raw_instruction, compose_mode, has_existing=has_existing)
         if resume_sections:
@@ -194,20 +214,23 @@ class GenerationService:
         compose_instruction: str,
         compose_mode: str,
         resume_sections: list[str],
-        selection: str,
+        selection_text: str,
+        selection_payload: object,
+        context_policy: object | None,
         base_text: str,
         confirm_apply: bool,
-    ) -> dict | None:
+    ) -> tuple[dict | None, dict | None]:
         """Shortcut branches before full graph generation."""
+        revision_meta: dict | None = None
         format_only = app_v2._try_handle_format_only_request(
             session=session,
             instruction=raw_instruction,
             base_text=base_text,
             compose_mode=compose_mode,
-            selection=selection,
+            selection=selection_text,
         )
         if format_only is not None:
-            return {"ok": 1, **format_only}
+            return {"ok": 1, **format_only}, revision_meta
 
         quick_edit = None if resume_sections else app_v2._try_quick_edit(base_text, raw_instruction, confirm_apply)
         if quick_edit:
@@ -220,7 +243,7 @@ class GenerationService:
                     risk_level=quick_edit.risk_level,
                     source=quick_edit.source,
                     operations_count=quick_edit.operations_count,
-                )
+                ), revision_meta
             out = self._build_shortcut_result(
                 app_v2=app_v2,
                 session=session,
@@ -229,7 +252,7 @@ class GenerationService:
                 base_text=base_text,
             )
             out["note"] = quick_edit.note
-            return out
+            return out, revision_meta
 
         analysis_quick = app_v2._run_message_analysis(session, compose_instruction, quick=True)
         ai_edit = None if resume_sections else app_v2._try_ai_intent_edit(base_text, raw_instruction, analysis_quick, confirm_apply)
@@ -243,7 +266,7 @@ class GenerationService:
                     risk_level=ai_edit.risk_level,
                     source=ai_edit.source,
                     operations_count=ai_edit.operations_count,
-                )
+                ), revision_meta
             out = self._build_shortcut_result(
                 app_v2=app_v2,
                 session=session,
@@ -252,25 +275,38 @@ class GenerationService:
                 base_text=base_text,
             )
             out["note"] = ai_edit.note
-            return out
+            return out, revision_meta
 
         if app_v2._should_route_to_revision(raw_instruction, base_text, analysis_quick):
+            status: dict[str, object] = {}
+
+            def _capture_revision_status(payload: dict[str, object]) -> None:
+                if isinstance(payload, dict):
+                    status.update(payload)
+
             revised = app_v2._try_revision_edit(
                 session=session,
                 instruction=raw_instruction,
                 text=base_text,
-                selection=selection,
+                selection=selection_payload,
                 analysis=analysis_quick,
+                context_policy=context_policy,
+                report_status=_capture_revision_status,
             )
+            if status:
+                revision_meta = dict(status)
             if revised:
                 updated_text, _ = revised
-                return self._build_shortcut_result(
+                out = self._build_shortcut_result(
                     app_v2=app_v2,
                     session=session,
                     text=updated_text,
                     instruction=raw_instruction,
                     base_text=base_text,
                 )
+                if revision_meta:
+                    out["revision_meta"] = revision_meta
+                return out, revision_meta
 
         if app_v2._should_use_fast_generate(
             raw_instruction,
@@ -290,20 +326,21 @@ class GenerationService:
                     target_chars=app_v2._resolve_target_chars(session.formatting or {}, session.generation_prefs or {}),
                 )
                 if final_text and not app_v2._looks_like_prompt_echo(final_text, raw_instruction):
-                    return self._build_shortcut_result(
+                    out = self._build_shortcut_result(
                         app_v2=app_v2,
                         session=session,
                         text=final_text,
                         instruction=raw_instruction,
                         base_text=base_text,
                     )
+                    return out, revision_meta
             except Exception:
                 pass
 
-        return None
+        return None, revision_meta
 
     def _build_shortcut_result(self, *, app_v2, session, text: str, instruction: str, base_text: str) -> dict:
-        """统一封装快捷路径返回：后处理 + 落库 + doc_ir。"""
+        """Apply shortcut result and persist text/doc_ir into session."""
         if base_text.strip():
             # Save a rollback point only when we are about to apply a real mutation.
             if base_text != session.doc_text:
@@ -348,8 +385,8 @@ class GenerationService:
         }
 
     def _prepare_generation_config(self, *, app_v2, session, raw_instruction: str, compose_instruction: str, resume_sections: list[str], base_text: str):
-        """为 graph 路径准备分析结果与运行参数配置。"""
-        # 先做指令分析（带超时保护），避免分析阶段阻塞整体链路。
+        """Prepare analysis output and generation config for graph execution."""
+        # 鍏堝仛鎸囦护鍒嗘瀽锛堝甫瓒呮椂淇濇姢锛夛紝閬垮厤鍒嗘瀽闃舵闃诲鏁翠綋閾捐矾銆?
         analysis_timeout = float(app_v2.os.environ.get("WRITING_AGENT_ANALYSIS_MAX_S", "20"))
         analysis = app_v2._run_with_timeout(
             lambda: app_v2._run_message_analysis(session, compose_instruction),
@@ -363,14 +400,14 @@ class GenerationService:
             generation_prefs=session.generation_prefs or {},
         )
 
-        # 若未指定模板结构，则尝试从指令自动推断大纲。
+        # 鑻ユ湭鎸囧畾妯℃澘缁撴瀯锛屽垯灏濊瘯浠庢寚浠よ嚜鍔ㄦ帹鏂ぇ绾层€?
         if (not resume_sections) and (not session.template_required_h2) and (not session.template_outline):
             auto_outline = app_v2._default_outline_from_instruction(raw_instruction)
             if auto_outline:
                 session.template_required_h2 = auto_outline
                 app_v2.store.put(session)
 
-        # 目标字数存在时，给内部生成预留一定 margin，减少后续补偿生成。
+        # 鐩爣瀛楁暟瀛樺湪鏃讹紝缁欏唴閮ㄧ敓鎴愰鐣欎竴瀹?margin锛屽噺灏戝悗缁ˉ鍋跨敓鎴愩€?
         target_chars = app_v2._resolve_target_chars(session.formatting or {}, session.generation_prefs or {})
         if target_chars <= 0:
             target_chars = app_v2._extract_target_chars_from_instruction(raw_instruction)
@@ -398,70 +435,191 @@ class GenerationService:
         session,
         instruction: str,
         raw_instruction: str,
+        compose_mode: str,
         resume_sections: list[str],
         base_text: str,
         cfg,
         target_chars: int,
-    ) -> tuple[str, list[str]]:
-        """执行 graph 生成；失败或文本不足时自动 fallback 到 single-pass。"""
+    ) -> tuple[str, list[str], dict | None]:
+        """Run graph generation with single-pass fallback on failure/insufficient output."""
         required_h2 = list(resume_sections) if resume_sections else list(session.template_required_h2 or [])
         required_outline = [] if resume_sections else list(session.template_outline or [])
 
         final_text: str | None = None
         problems: list[str] = []
+        graph_meta: dict | None = None
+        started = time.time()
+        use_route_graph = False
+
+        def _elapsed_ms() -> float:
+            return max(0.0, (time.time() - started) * 1000.0)
+
+        def _record_metric(
+            event: str,
+            *,
+            path: str,
+            fallback_triggered: bool | None = None,
+            fallback_recovered: bool | None = None,
+            error_code: str = "",
+        ) -> None:
+            route_id = ""
+            route_entry = ""
+            engine = ""
+            if isinstance(graph_meta, dict):
+                route_id = str(graph_meta.get("route_id") or "")
+                route_entry = str(graph_meta.get("route_entry") or "")
+                engine = str(graph_meta.get("engine") or "")
+            route_graph_metrics_domain.record_route_graph_metric(
+                event,
+                phase="generate",
+                path=path,
+                route_id=route_id,
+                route_entry=route_entry,
+                engine=engine,
+                fallback_triggered=fallback_triggered,
+                fallback_recovered=fallback_recovered,
+                error_code=error_code,
+                elapsed_ms=_elapsed_ms(),
+                extra={
+                    "compose_mode": str(compose_mode or "").strip(),
+                    "resume_sections_count": int(len(resume_sections or [])),
+                },
+            )
+
         try:
-            # 主路径：事件流 graph 生成（支持章节/状态事件）。
             expand_outline = bool((session.generation_prefs or {}).get("expand_outline", False))
-            gen = app_v2.run_generate_graph(
-                instruction=instruction,
-                current_text=base_text,
-                required_h2=required_h2,
-                required_outline=required_outline,
-                expand_outline=expand_outline,
-                config=cfg,
-            )
-            stall_s = float(
-                app_v2.os.environ.get(
-                    "WRITING_AGENT_NONSTREAM_EVENT_TIMEOUT_S",
-                    app_v2.os.environ.get("WRITING_AGENT_STREAM_EVENT_TIMEOUT_S", "90"),
+            use_route_graph = str(app_v2.os.environ.get("WRITING_AGENT_USE_ROUTE_GRAPH", "0")).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if use_route_graph and hasattr(app_v2, "run_generate_graph_dual_engine"):
+                if route_graph_metrics_domain.should_inject_route_graph_failure(phase="generate"):
+                    raise RuntimeError("E_INJECTED_ROUTE_GRAPH_FAILURE")
+                out = app_v2.run_generate_graph_dual_engine(
+                    instruction=instruction,
+                    current_text=base_text,
+                    required_h2=required_h2,
+                    required_outline=required_outline,
+                    expand_outline=expand_outline,
+                    config=cfg,
+                    compose_mode=compose_mode,
+                    resume_sections=resume_sections,
+                    format_only=False,
                 )
-            )
-            overall_s = float(
-                app_v2.os.environ.get(
-                    "WRITING_AGENT_NONSTREAM_MAX_S",
-                    app_v2.os.environ.get("WRITING_AGENT_STREAM_MAX_S", "180"),
+                if isinstance(out, dict):
+                    final_text = str(out.get("text") or "")
+                    problems = list(out.get("problems") or [])
+                    graph_meta = {
+                        "path": "route_graph",
+                        "trace_id": str(out.get("trace_id") or ""),
+                        "engine": str(out.get("engine") or ""),
+                        "route_id": str(out.get("route_id") or ""),
+                        "route_entry": str(out.get("route_entry") or ""),
+                    }
+                    if str(final_text).strip():
+                        _record_metric(
+                            "route_graph_success",
+                            path="route_graph",
+                            fallback_triggered=False,
+                            fallback_recovered=False,
+                        )
+            else:
+                gen = app_v2.run_generate_graph(
+                    instruction=instruction,
+                    current_text=base_text,
+                    required_h2=required_h2,
+                    required_outline=required_outline,
+                    expand_outline=expand_outline,
+                    config=cfg,
                 )
-            )
-            for ev in app_v2._iter_with_timeout(gen, per_event=stall_s, overall=overall_s):
-                if ev.get("event") == "final":
-                    final_text = str(ev.get("text") or "")
-                    problems = list(ev.get("problems") or [])
-                    break
+                stall_s = float(
+                    app_v2.os.environ.get(
+                        "WRITING_AGENT_NONSTREAM_EVENT_TIMEOUT_S",
+                        app_v2.os.environ.get("WRITING_AGENT_STREAM_EVENT_TIMEOUT_S", "90"),
+                    )
+                )
+                overall_s = float(
+                    app_v2.os.environ.get(
+                        "WRITING_AGENT_NONSTREAM_MAX_S",
+                        app_v2.os.environ.get("WRITING_AGENT_STREAM_MAX_S", "180"),
+                    )
+                )
+                for ev in app_v2._iter_with_timeout(gen, per_event=stall_s, overall=overall_s):
+                    if ev.get("event") == "final":
+                        final_text = str(ev.get("text") or "")
+                        problems = list(ev.get("problems") or [])
+                        _record_metric(
+                            "legacy_graph_success",
+                            path="legacy_graph",
+                            fallback_triggered=False,
+                            fallback_recovered=False,
+                        )
+                        break
         except Exception as e:
+            _record_metric(
+                "graph_failed",
+                path="route_graph" if use_route_graph else "legacy_graph",
+                fallback_triggered=True,
+                fallback_recovered=False,
+                error_code=route_graph_metrics_domain.extract_error_code(e, default="E_GRAPH_FAILED"),
+            )
             try:
-                # 兜底1：graph 抛异常时，直接走 single-pass。
                 final_text = app_v2._single_pass_generate(
                     session,
                     instruction=instruction,
                     current_text=base_text,
                     target_chars=target_chars,
                 )
+                _record_metric(
+                    "fallback_recovered",
+                    path="single_pass",
+                    fallback_triggered=True,
+                    fallback_recovered=True,
+                )
             except Exception as ee:
+                _record_metric(
+                    "fallback_failed",
+                    path="single_pass",
+                    fallback_triggered=True,
+                    fallback_recovered=False,
+                    error_code=route_graph_metrics_domain.extract_error_code(ee, default="E_FALLBACK_FAILED"),
+                )
                 raise app_v2.HTTPException(status_code=500, detail=f"generation failed: {e}; fallback failed: {ee}") from ee
 
         if not final_text or len(str(final_text).strip()) < 20:
+            _record_metric(
+                "graph_insufficient",
+                path="route_graph" if use_route_graph else "legacy_graph",
+                fallback_triggered=True,
+                fallback_recovered=False,
+                error_code="E_TEXT_INSUFFICIENT",
+            )
             try:
-                # 兜底2：graph 没报错但正文过短时，再补一次 single-pass。
                 final_text = app_v2._single_pass_generate(
                     session,
                     instruction=instruction,
                     current_text=base_text,
                     target_chars=target_chars,
                 )
+                _record_metric(
+                    "fallback_recovered",
+                    path="single_pass",
+                    fallback_triggered=True,
+                    fallback_recovered=True,
+                )
             except Exception as e:
+                _record_metric(
+                    "fallback_failed",
+                    path="single_pass",
+                    fallback_triggered=True,
+                    fallback_recovered=False,
+                    error_code=route_graph_metrics_domain.extract_error_code(e, default="E_FALLBACK_FAILED"),
+                )
                 raise app_v2.HTTPException(status_code=500, detail=f"generation produced insufficient text: {e}") from e
 
-        return str(final_text), problems
+        return str(final_text), problems, graph_meta
 
     async def generate_section(self, doc_id: str, request: Request) -> dict:
         app_v2 = app_v2_module()
@@ -478,19 +636,48 @@ class GenerationService:
         current_text = session.doc_text or ""
         cfg = app_v2.GenerateConfig(workers=1, min_total_chars=0, max_total_chars=0)
         final_text: str | None = None
+        graph_meta: dict | None = None
         try:
-            gen = app_v2.run_generate_graph(
-                instruction=instruction,
-                current_text=current_text,
-                required_h2=[section],
-                required_outline=[],
-                expand_outline=False,
-                config=cfg,
-            )
-            for ev in gen:
-                if ev.get("event") == "final":
-                    final_text = str(ev.get("text") or "")
-                    break
+            use_route_graph = str(app_v2.os.environ.get("WRITING_AGENT_USE_ROUTE_GRAPH", "0")).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if use_route_graph and hasattr(app_v2, "run_generate_graph_dual_engine"):
+                out = app_v2.run_generate_graph_dual_engine(
+                    instruction=instruction,
+                    current_text=current_text,
+                    required_h2=[section],
+                    required_outline=[],
+                    expand_outline=False,
+                    config=cfg,
+                    compose_mode="continue",
+                    resume_sections=[section],
+                    format_only=False,
+                )
+                if isinstance(out, dict):
+                    final_text = str(out.get("text") or "")
+                    graph_meta = {
+                        "path": "route_graph",
+                        "trace_id": str(out.get("trace_id") or ""),
+                        "engine": str(out.get("engine") or ""),
+                        "route_id": str(out.get("route_id") or ""),
+                        "route_entry": str(out.get("route_entry") or ""),
+                    }
+            else:
+                gen = app_v2.run_generate_graph(
+                    instruction=instruction,
+                    current_text=current_text,
+                    required_h2=[section],
+                    required_outline=[],
+                    expand_outline=False,
+                    config=cfg,
+                )
+                for ev in gen:
+                    if ev.get("event") == "final":
+                        final_text = str(ev.get("text") or "")
+                        break
         except Exception as e:
             raise app_v2.HTTPException(status_code=500, detail=f"section generation failed: {e}")
 
@@ -507,7 +694,10 @@ class GenerationService:
         app_v2._set_doc_text(session, updated)
         app_v2.store.put(session)
         final_doc_ir = session.doc_ir if isinstance(getattr(session, "doc_ir", None), dict) else app_v2._safe_doc_ir_payload(updated)
-        return {"ok": 1, "text": updated, "doc_ir": final_doc_ir}
+        out = {"ok": 1, "text": updated, "doc_ir": final_doc_ir}
+        if graph_meta:
+            out["graph_meta"] = graph_meta
+        return out
 
     async def revise_doc(self, doc_id: str, request: Request) -> dict:
         app_v2 = app_v2_module()
@@ -517,7 +707,21 @@ class GenerationService:
 
         data = await request.json()
         instruction = str(data.get("instruction") or "").strip()
-        selection = str(data.get("selection") or "").strip()
+        raw_selection = data.get("selection")
+        selection_text = (
+            str(raw_selection.get("text") or "")
+            if isinstance(raw_selection, dict)
+            else str(raw_selection or "")
+        ).strip()
+        selection_payload: object = raw_selection
+        if not selection_text:
+            fallback_selection_text = str(data.get("selection_text") or "").strip()
+            if fallback_selection_text:
+                selection_text = fallback_selection_text
+                if not isinstance(selection_payload, dict):
+                    selection_payload = fallback_selection_text
+        context_policy = data.get("context_policy")
+        allow_unscoped_fallback = bool(data.get("allow_unscoped_fallback") is True)
         incoming_ir = data.get("doc_ir")
         if isinstance(incoming_ir, dict) and incoming_ir.get("sections") is not None:
             try:
@@ -543,13 +747,12 @@ class GenerationService:
         analysis = app_v2._run_message_analysis(session, instruction)
         analysis_instruction = str(analysis.get("rewritten_query") or instruction).strip() or instruction
         model = app_v2.os.environ.get("WRITING_AGENT_REVISE_MODEL", "").strip() or settings.model
-        client = app_v2.OllamaClient(base_url=settings.base_url, model=model, timeout_s=settings.timeout_s)
 
         decision = app_v2._revision_decision_with_model(
             base_url=settings.base_url,
             model=model,
             instruction=analysis_instruction,
-            selection=selection,
+            selection=selection_text,
             text=text,
         )
         if isinstance(decision, dict) and decision.get("should_apply") is False:
@@ -562,24 +765,53 @@ class GenerationService:
         if plan_steps:
             plan_hint = "Execution plan:\n- " + "\n- ".join(plan_steps) + "\n\n"
 
-        if selection:
-            system = "You are a document revision assistant. Output only the revised replacement snippet."
-            user = f"Selected text:\n{selection}\n\nRevision request:\n{analysis_instruction}\n\n{plan_hint}Return only the replacement content."
-            buf: list[str] = []
-            for delta in client.chat_stream(system=system, user=user, temperature=0.25):
-                buf.append(delta)
-            rewritten = app_v2._sanitize_output_text("".join(buf).strip())
-            if rewritten and selection in text:
-                text = text.replace(selection, rewritten, 1)
-            text = app_v2._replace_question_headings(text)
-        else:
-            system = "You are a document revision assistant. Output the fully revised Markdown text."
-            user = f"Revision request:\n{analysis_instruction}\n\n{plan_hint}Original text:\n{text}\n\nReturn the complete revised text."
-            buf: list[str] = []
-            for delta in client.chat_stream(system=system, user=user, temperature=0.25):
-                buf.append(delta)
-            text = app_v2._sanitize_output_text("".join(buf).strip() or text)
-            text = app_v2._replace_question_headings(text)
+        revision_status: dict[str, object] = {}
+        if selection_text:
+            def _capture_revision_status(payload: dict[str, object]) -> None:
+                if isinstance(payload, dict):
+                    revision_status.update(payload)
+
+            revised = app_v2._try_revision_edit(
+                session=session,
+                instruction=analysis_instruction,
+                text=text,
+                selection=selection_payload if selection_payload is not None else selection_text,
+                analysis=analysis,
+                context_policy=context_policy,
+                report_status=_capture_revision_status,
+            )
+            if revised:
+                text, note = revised
+                text = app_v2._replace_question_headings(text)
+                if not text.strip():
+                    raise app_v2.HTTPException(status_code=500, detail="revision produced empty text")
+                text = app_v2._postprocess_output_text(
+                    session,
+                    text,
+                    instruction,
+                    current_text=base_text,
+                    base_text=base_text,
+                )
+                app_v2._set_doc_text(session, text)
+                app_v2.store.put(session)
+                out = {"ok": 1, "text": text, "doc_ir": session.doc_ir or {}, "note": note}
+                if revision_status:
+                    out["revision_meta"] = revision_status
+                return out
+            if not allow_unscoped_fallback:
+                out = {"ok": 1, "text": text, "doc_ir": session.doc_ir or {}, "applied": False}
+                if revision_status:
+                    out["revision_meta"] = revision_status
+                return out
+
+        client = app_v2.OllamaClient(base_url=settings.base_url, model=model, timeout_s=settings.timeout_s)
+        system = "You are a document revision assistant. Output the fully revised Markdown text."
+        user = f"Revision request:\n{analysis_instruction}\n\n{plan_hint}Original text:\n{text}\n\nReturn the complete revised text."
+        buf: list[str] = []
+        for delta in client.chat_stream(system=system, user=user, temperature=0.25):
+            buf.append(delta)
+        text = app_v2._sanitize_output_text("".join(buf).strip() or text)
+        text = app_v2._replace_question_headings(text)
 
         if not text.strip():
             raise app_v2.HTTPException(status_code=500, detail="revision produced empty text")
@@ -593,5 +825,10 @@ class GenerationService:
         )
         app_v2._set_doc_text(session, text)
         app_v2.store.put(session)
-        return {"ok": 1, "text": text, "doc_ir": session.doc_ir or {}}
+        out = {"ok": 1, "text": text, "doc_ir": session.doc_ir or {}}
+        if revision_status:
+            out["revision_meta"] = revision_status
+        return out
+
+
 

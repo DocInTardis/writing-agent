@@ -105,6 +105,7 @@ from writing_agent.v2.figure_render import render_figure_svg
 from writing_agent.v2.graph_runner import (
     GenerateConfig,
     run_generate_graph,
+    run_generate_graph_dual_engine,
     _sanitize_output_text,
     _merge_sections_text,
     _generic_fill_paragraph,

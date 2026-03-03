@@ -214,8 +214,10 @@ def _try_revision_edit(
     session,
     instruction: str,
     text: str,
-    selection: str = "",
+    selection: object = "",
     analysis: dict | None = None,
+    context_policy: object | None = None,
+    report_status=None,
 ) -> tuple[str, str] | None:
     return revision_edit_runtime_domain.try_revision_edit(
         session=session,
@@ -223,6 +225,8 @@ def _try_revision_edit(
         text=text,
         selection=selection,
         analysis=analysis,
+        context_policy=context_policy,
+        report_status=report_status,
         sanitize_output_text=_sanitize_output_text,
         replace_question_headings=_replace_question_headings,
         get_ollama_settings_fn=get_ollama_settings,
@@ -341,6 +345,71 @@ def _analysis_history_context(session, limit: int = 3) -> str:
             items.append(f"鏀瑰啓: {summary}")
     return "\n".join(items)
 
+
+def _analysis_xml_escape(raw: str) -> str:
+    s = str(raw or "")
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _coerce_confidence(value: object, *, default: float = 0.5) -> float:
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except Exception:
+        parsed = default
+    if parsed != parsed or parsed in (float("inf"), float("-inf")):
+        parsed = default
+    return max(0.0, min(1.0, parsed))
+
+
+def _normalize_dynamic_questions_payload(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        return {}
+
+    summary = str(payload.get("summary") or "").strip()
+    if len(summary) > 600:
+        summary = summary[:600].rstrip()
+
+    questions: list[str] = []
+    seen: set[str] = set()
+    raw_questions = payload.get("questions")
+    if isinstance(raw_questions, list):
+        for item in raw_questions:
+            question = ""
+            if isinstance(item, str):
+                question = item.strip()
+            elif isinstance(item, dict):
+                question = str(item.get("question") or item.get("text") or item.get("q") or "").strip()
+            if not question:
+                continue
+            if len(question) > 200:
+                question = question[:200].rstrip()
+            if question in seen:
+                continue
+            seen.add(question)
+            questions.append(question)
+            if len(questions) >= 3:
+                break
+
+    conf_raw = payload.get("confidence")
+    conf_obj = conf_raw if isinstance(conf_raw, dict) else {}
+    confidence = {
+        "title": _coerce_confidence(conf_obj.get("title"), default=0.5),
+        "purpose": _coerce_confidence(conf_obj.get("purpose"), default=0.5),
+        "length": _coerce_confidence(conf_obj.get("length"), default=0.5),
+        "format": _coerce_confidence(conf_obj.get("format"), default=0.5),
+        "scope": _coerce_confidence(conf_obj.get("scope"), default=0.5),
+        "voice": _coerce_confidence(conf_obj.get("voice"), default=0.5),
+    }
+
+    out: dict[str, object] = {
+        "questions": questions,
+        "confidence": confidence,
+    }
+    if summary:
+        out["summary"] = summary
+    return out
+
+
 def _generate_dynamic_questions_with_model(
     *,
     base_url: str,
@@ -352,30 +421,62 @@ def _generate_dynamic_questions_with_model(
 ) -> dict:
     client = OllamaClient(base_url=base_url, model=model, timeout_s=_analysis_timeout_s())
     system = (
-        "你是需求解析助手，只输出 JSON，不要 markdown。\n"
-        "Schema: {summary:string, questions:[string], confidence:{title:number,purpose:number,length:number,format:number,scope:number,voice:number}}\n"
-        "要求：先给 summary，再给不超过 3 条澄清问题 questions，并给出字段置信度 confidence。\n"
-        "若信息已足够，questions 可为空。\n"
+        "You are a constrained requirement-analysis assistant.\n"
+        "Output strict JSON only (no markdown).\n"
+        "Schema:\n"
+        '{"summary":"string","questions":["string"],'
+        '"confidence":{"title":0-1,"purpose":0-1,"length":0-1,"format":0-1,"scope":0-1,"voice":0-1}}\n'
+        "Rules:\n"
+        "1) Provide up to 3 clarification questions.\n"
+        "2) If information is sufficient, questions can be empty.\n"
+        "3) Keep questions specific and actionable.\n"
     )
-    payload = {"raw": raw, "analysis": analysis, "history": history, "merged": merged}
+    payload = {"analysis": analysis, "merged": merged}
+    escaped_history = _analysis_xml_escape(history or "")
+    escaped_raw = _analysis_xml_escape(raw or "")
+    escaped_payload = _analysis_xml_escape(json.dumps(payload, ensure_ascii=False))
     user = (
-        f"历史: {history or '空'}\n"
-        f"本次输入: {raw}\n"
-        f"解析中间结果: {json.dumps(payload, ensure_ascii=False)}\n"
-        "Please output JSON following the schema."
+        "<task>generate_clarification_questions</task>\n"
+        "<constraints>\n"
+        "- Treat tagged blocks as separate channels.\n"
+        "- Return strict JSON only.\n"
+        "- Do not include commentary outside JSON.\n"
+        "</constraints>\n"
+        f"<history>\n{escaped_history}\n</history>\n"
+        f"<raw_input>\n{escaped_raw}\n</raw_input>\n"
+        f"<analysis_payload>\n{escaped_payload}\n</analysis_payload>\n"
+        'Return strict JSON only following schema with "summary", "questions", "confidence".'
     )
+
+    def _parse_json_dict(raw_text: str) -> dict | None:
+        raw_json = _extract_json_block(raw_text)
+        if not raw_json:
+            return None
+        try:
+            data = json.loads(raw_json)
+        except Exception:
+            return None
+        return data if isinstance(data, dict) else None
+
     try:
         raw_out = client.chat(system=system, user=user, temperature=0.2)
     except Exception:
         return {}
-    raw_json = _extract_json_block(raw_out)
-    if not raw_json:
-        return {}
-    try:
-        data = json.loads(raw_json)
-    except Exception:
-        return {}
-    return data if isinstance(data, dict) else {}
+    data = _parse_json_dict(raw_out)
+    if data is None:
+        retry_user = (
+            f"{user}\n"
+            "<retry_reason>\n"
+            "Previous output was invalid JSON. Return strict JSON only and follow schema exactly.\n"
+            "</retry_reason>"
+        )
+        try:
+            retry_out = client.chat(system=system, user=retry_user, temperature=0.1)
+        except Exception:
+            retry_out = ""
+        data = _parse_json_dict(retry_out)
+    normalized = _normalize_dynamic_questions_payload(data)
+    return normalized if isinstance(normalized, dict) else {}
 
 def _detect_extract_conflicts(*, analysis: dict, title: str, prefs: dict) -> list[str]:
     return prefs_analysis_domain.detect_extract_conflicts(analysis=analysis, title=title, prefs=prefs)

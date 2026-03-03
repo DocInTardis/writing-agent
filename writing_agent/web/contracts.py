@@ -35,10 +35,28 @@ class GenerateRequest(BaseModel):
     resume_sections: list[str] = Field(default_factory=list)
 
 
+class GraphMeta(BaseModel):
+    path: str = "route_graph"
+    trace_id: str = ""
+    engine: str = ""
+    route_id: str = ""
+    route_entry: str = ""
+
+
 class GenerateResponse(BaseModel):
     ok: int = 1
     text: str
     problems: list[str] = Field(default_factory=list)
+    doc_ir: dict[str, Any] = Field(default_factory=dict)
+    revision_meta: dict[str, Any] | None = None
+    graph_meta: GraphMeta | None = None
+    note: str = ""
+    requires_confirmation: bool = False
+    confirmation_reason: str = ""
+    risk_level: str = ""
+    plan_source: str = ""
+    operations_count: int = 0
+    confirmation_action: str = ""
 
 
 class JobSubmitRequest(BaseModel):

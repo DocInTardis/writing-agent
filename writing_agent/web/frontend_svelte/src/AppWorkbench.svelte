@@ -5,6 +5,7 @@
   import DiagramCanvas from './lib/components/DiagramCanvas.svelte'
   import Toast from './lib/components/Toast.svelte'
   import Settings from './lib/components/Settings.svelte'
+  import Icon from './lib/components/Icon.svelte'
   import DocList from './lib/components/DocList.svelte'
   import LoadingSkeleton from './lib/components/LoadingSkeleton.svelte'
   import ProgressBar from './lib/components/ProgressBar.svelte'
@@ -100,7 +101,36 @@
     cursor_anchor: string
     error: string
   }
+  type GraphMeta = {
+    path: 'route_graph'
+    trace_id: string
+    engine: string
+    route_id: string
+    route_entry: string
+  }
+  type WorkbenchSurface = 'chat' | 'library' | 'editor' | 'canvas'
+  type LibraryCard = {
+    id: string
+    title: string
+    summary: string
+    status: 'synced' | 'draft' | 'review'
+    status_label: string
+    kind_label: string
+    tone: 'azure' | 'gold' | 'violet' | 'teal'
+    tags: string[]
+    updated_at: number
+    size_label: string
+    action: 'editor' | 'citation' | 'metrics' | 'version' | 'assistant' | 'upload'
+  }
   let resumeState: ResumeState | null = null
+  let lastGraphMeta: GraphMeta | null = null
+  let surfaceTab: WorkbenchSurface = 'library'
+  let libraryViewMode: 'grid' | 'masonry' | 'list' = 'grid'
+  let librarySearch = ''
+  let librarySelectAll = false
+  let selectedLibraryCardId = ''
+  let filteredLibraryCards: LibraryCard[] = []
+  let hideLibraryInfo = false
   let showDocList = false
   let showCitations = false
   let showPerformanceMetrics = false
@@ -220,6 +250,7 @@
   let inlineEditLocked = false
   let inlineEditLockReason = ''
   let uploadImageInput: HTMLInputElement | null = null
+  let libraryUploadInput: HTMLInputElement | null = null
   let pendingInlineImageTargets: string[] = []
   let renderActivityAt = Date.now()
   let editorToolbarState = {
@@ -367,6 +398,197 @@
       pending_sections: normalizeStringArray(raw.pending_sections),
       cursor_anchor: String(raw.cursor_anchor || '').trim(),
       error: String(raw.error || '').trim()
+    }
+  }
+
+  function normalizeGraphMeta(raw: unknown): GraphMeta | null {
+    if (!raw || typeof raw !== 'object') return null
+    const obj = raw as Record<string, unknown>
+    const path = String(obj.path || '').trim()
+    if (path !== 'route_graph') return null
+    return {
+      path: 'route_graph',
+      trace_id: String(obj.trace_id || '').trim(),
+      engine: String(obj.engine || '').trim(),
+      route_id: String(obj.route_id || '').trim(),
+      route_entry: String(obj.route_entry || '').trim()
+    }
+  }
+
+  function summarizeGraphMeta(meta: GraphMeta) {
+    const routeId = meta.route_id || 'default'
+    const routeEntry = meta.route_entry || 'planner'
+    const engine = meta.engine || 'legacy'
+    const trace = meta.trace_id ? meta.trace_id.slice(0, 8) : '-'
+    return `route=${routeId}; entry=${routeEntry}; engine=${engine}; trace=${trace}`
+  }
+
+  function switchSurface(tab: WorkbenchSurface) {
+    surfaceTab = tab
+    if (tab === 'chat') {
+      assistantOpen = true
+      return
+    }
+    if (tab === 'canvas') {
+      canvasOpen = true
+      return
+    }
+    if (tab === 'library') {
+      showDocList = true
+    }
+  }
+
+  function guessDocTitle(text: string) {
+    const src = String(text || '')
+    const m = src.match(/^\s*#\s+(.+)$/m)
+    if (m && m[1]) return m[1].trim()
+    return 'Untitled Document'
+  }
+
+  function estimateKb(text: string) {
+    const chars = String(text || '').length
+    const bytes = chars * 2
+    return Math.max(1, Math.round(bytes / 1024))
+  }
+
+  function metaPreviewSnippet() {
+    const selected = selectedTargetPlainText()
+    if (selected) return selected.slice(0, 140)
+    return String($sourceText || '').replace(/\s+/g, ' ').trim().slice(0, 140)
+  }
+
+  function formatLibraryCardTime(ts: number) {
+    const now = Date.now()
+    const diff = Math.max(0, now - Number(ts || 0))
+    const minute = 60 * 1000
+    const hour = 60 * minute
+    const day = 24 * hour
+    if (diff < minute) return '刚刚更新'
+    if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
+    if (diff < day) return `${Math.floor(diff / hour)} 小时前`
+    return `${Math.floor(diff / day)} 天前`
+  }
+
+  function buildLibraryCards(): LibraryCard[] {
+    const now = Date.now()
+    const docTitle = guessDocTitle($sourceText)
+    const wordLabel = `${Math.max(1, Number($wordCount || 0))} 词`
+    const routeLabel = lastGraphMeta?.route_id ? `路由:${lastGraphMeta.route_id}` : '路由:default'
+    const feedbackLabel =
+      feedbackItems.length > 0 ? `满意度 ${feedbackItems[0].rating}/5` : '待收集反馈'
+    const cards: LibraryCard[] = [
+      {
+        id: 'doc-main',
+        title: docTitle,
+        summary: metaPreviewSnippet() || '当前文档正文摘要',
+        status: 'draft',
+        status_label: '草稿',
+        kind_label: '正文',
+        tone: 'azure',
+        tags: ['当前文档', routeLabel, feedbackLabel],
+        updated_at: now - 2 * 60 * 1000,
+        size_label: wordLabel,
+        action: 'editor'
+      },
+      {
+        id: 'route-context',
+        title: '路由与上下文策略',
+        summary: lastGraphMeta ? summarizeGraphMeta(lastGraphMeta) : '默认图路由生效，可用于追踪生成链路。',
+        status: 'synced',
+        status_label: '已同步',
+        kind_label: '策略',
+        tone: 'teal',
+        tags: ['图路由', '上下文窗口', '可追踪'],
+        updated_at: now - 17 * 60 * 1000,
+        size_label: '策略卡',
+        action: 'metrics'
+      },
+      {
+        id: 'citation-kit',
+        title: '引用与证据包',
+        summary: '维护引用、脚注与来源一致性，导出前建议先核验。',
+        status: 'review',
+        status_label: '待核验',
+        kind_label: '引用',
+        tone: 'gold',
+        tags: ['引用', '脚注', '导出检查'],
+        updated_at: now - 48 * 60 * 1000,
+        size_label: '证据集',
+        action: 'citation'
+      },
+      {
+        id: 'version-archive',
+        title: '版本归档',
+        summary: versionGroups.length > 0
+          ? `已记录 ${versionGroups.length} 组版本，可随时回退。`
+          : '尚未创建版本，建议在关键阶段手动归档。',
+        status: versionGroups.length > 0 ? 'synced' : 'draft',
+        status_label: versionGroups.length > 0 ? '已同步' : '草稿',
+        kind_label: '版本',
+        tone: 'violet',
+        tags: ['回滚', '对比', '里程碑'],
+        updated_at: now - 2 * 60 * 60 * 1000,
+        size_label: `${versionGroups.length} 组`,
+        action: 'version'
+      },
+      {
+        id: 'asset-upload',
+        title: '上传新素材',
+        summary: '支持图片、文档、模板上传，自动纳入资料库并可插入正文。',
+        status: 'draft',
+        status_label: '待上传',
+        kind_label: '素材',
+        tone: 'azure',
+        tags: ['图片', '文档', '模板'],
+        updated_at: now - 8 * 60 * 60 * 1000,
+        size_label: '上传入口',
+        action: 'upload'
+      }
+    ]
+    return cards
+  }
+
+  function openLibraryCard(card: LibraryCard) {
+    selectedLibraryCardId = card.id
+    if (card.action === 'editor') {
+      switchSurface('editor')
+      return
+    }
+    if (card.action === 'citation') {
+      showCitations = true
+      return
+    }
+    if (card.action === 'metrics') {
+      showPerformanceMetrics = true
+      return
+    }
+    if (card.action === 'version') {
+      void openVersions()
+      return
+    }
+    if (card.action === 'assistant') {
+      assistantOpen = true
+      switchSurface('chat')
+      return
+    }
+    if (card.action === 'upload') {
+      triggerLibraryUpload()
+    }
+  }
+
+  function cardMatchesSearch(card: LibraryCard, query: string) {
+    if (!query) return true
+    const q = query.toLowerCase()
+    const haystack = `${card.title} ${card.summary} ${card.tags.join(' ')}`.toLowerCase()
+    return haystack.includes(q)
+  }
+
+  $: {
+    const cards = buildLibraryCards()
+    const query = librarySearch.trim()
+    filteredLibraryCards = cards.filter((card) => cardMatchesSearch(card, query))
+    if (!librarySelectAll && selectedLibraryCardId && !filteredLibraryCards.some((card) => card.id === selectedLibraryCardId)) {
+      selectedLibraryCardId = ''
     }
   }
 
@@ -1203,6 +1425,61 @@
     }
     if (selectedBlocks.length === 1) return String(selectedBlocks[0].text || '')
     return selectedBlockText.trim()
+  }
+
+  function selectedTargetPlainText() {
+    if (selectedBlocks.length > 1) {
+      return selectedBlocks
+        .map((b) => String(b.text || '').trim())
+        .filter(Boolean)
+        .join('\n\n')
+        .trim()
+    }
+    if (selectedBlocks.length === 1) return String(selectedBlocks[0].text || '').trim()
+    return String(selectedBlockText || '').trim()
+  }
+
+  function buildSelectedRevisionPayload(baseText: string) {
+    const selectedIds = selectedTargetIds()
+    if (!selectedIds.length) return null
+    const selected = selectedTargetPlainText()
+    if (!selected) return null
+    const src = String(baseText || '')
+    if (!src) return { text: selected }
+
+    const candidates: string[] = [selected]
+    const compact = selected.trim()
+    if (compact && compact !== selected) candidates.push(compact)
+    for (const candidate of candidates) {
+      const idx = src.indexOf(candidate)
+      if (idx < 0) continue
+      const secondIdx = src.indexOf(candidate, idx + 1)
+      if (secondIdx >= 0) {
+        return { text: candidate }
+      }
+      return {
+        start: idx,
+        end: idx + candidate.length,
+        text: candidate
+      }
+    }
+    return { text: compact || selected }
+  }
+
+  function summarizeRevisionStatus(meta: Record<string, unknown>) {
+    const ok = meta.ok === true
+    const code = String(meta.error_code || '').trim() || (ok ? 'OK' : 'UNKNOWN')
+    const source = String(meta.selection_source || '').trim()
+    const left = Number(meta.left_window_chars || 0)
+    const right = Number(meta.right_window_chars || 0)
+    const trimmed = meta.trimmed_for_budget === true ? 'trim=1' : 'trim=0'
+    const fallback = meta.fallback_triggered === true ? 'fallback=1' : 'fallback=0'
+    const recovered = meta.fallback_recovered === true ? 'recover=1' : 'recover=0'
+    const details: string[] = [`code=${code}`, trimmed, fallback, recovered]
+    if (source) details.push(`source=${source}`)
+    if (left > 0 || right > 0) details.push(`window=${left}/${right}`)
+    if (ok) return `局部改写成功（${details.join('; ')}）`
+    return `局部改写未命中（${details.join('; ')}），已切换全量生成兜底`
   }
 
   function openAssistantForBlock(customInstruction?: string) {
@@ -2610,6 +2887,7 @@
     requestPayload: Record<string, unknown>,
     opts?: { completionMsg?: string; fromStream?: boolean }
   ): Promise<'applied' | 'pending'> {
+    lastGraphMeta = null
     const resp = await fetch(`/api/doc/${$docId}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2623,6 +2901,18 @@
     if (Boolean(data.requires_confirmation)) {
       openPendingGenerateConfirmation(requestPayload, data, { fromStream: opts?.fromStream })
       return 'pending'
+    }
+    const revisionMeta =
+      data.revision_meta && typeof data.revision_meta === 'object'
+        ? (data.revision_meta as Record<string, unknown>)
+        : null
+    if (revisionMeta) {
+      pushThought('改写诊断', summarizeRevisionStatus(revisionMeta), formatElapsed())
+    }
+    const graphMeta = normalizeGraphMeta(data.graph_meta)
+    if (graphMeta) {
+      lastGraphMeta = graphMeta
+      pushThought('图路由', `非流式 ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
     }
     const txt = String(data.text || '')
     if (!sawSectionDelta) {
@@ -2765,6 +3055,17 @@
     await uploadAsset(file, { source: 'assistant' })
   }
 
+  function triggerLibraryUpload() {
+    libraryUploadInput?.click()
+  }
+
+  async function handleLibraryUploadSelect(event: Event) {
+    const input = event.currentTarget as HTMLInputElement | null
+    const file = input?.files?.[0]
+    if (file) await uploadAsset(file, { source: 'assistant' })
+    if (input) input.value = ''
+  }
+
   function toggleDarkMode() {
     darkMode.update(v => !v)
     document.body.classList.toggle('dark', !$darkMode)
@@ -2798,6 +3099,7 @@
       return
     }
     clearPendingGenerateConfirmation()
+    lastGraphMeta = null
     if (opts?.fromQueue) {
       appendChat('system', '正在执行排队指令…')
     } else if (opts?.fromResume) {
@@ -2894,6 +3196,10 @@
       instruction: requestInstruction,
       text: latestText,
       compose_mode: composeMode
+    }
+    const selectionPayload = buildSelectedRevisionPayload(latestText)
+    if (selectionPayload) {
+      generatePayload.selection = selectionPayload
     }
     if (resumeSections.length > 0) {
       generatePayload.resume_sections = resumeSections
@@ -3027,6 +3333,15 @@
             }
             return
           }
+          if (event === 'revision_status') {
+            const status = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+            const note = summarizeRevisionStatus(status)
+            pushThought('改写诊断', note, formatElapsed())
+            if (status.ok !== true) {
+              pushToast(note, 'info')
+            }
+            return
+          }
           if (event === 'confirmation_required') {
             sawFinal = true
             openPendingGenerateConfirmation(generatePayload, data as Record<string, unknown>, { fromStream: true })
@@ -3034,6 +3349,18 @@
           }
           if (event === 'final') {
             const txt = String(data.text || '')
+            const graphMeta = normalizeGraphMeta(data.graph_meta)
+            const revisionMeta =
+              data.revision_meta && typeof data.revision_meta === 'object'
+                ? (data.revision_meta as Record<string, unknown>)
+                : null
+            if (graphMeta) {
+              lastGraphMeta = graphMeta
+              pushThought('图路由', `流式 ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
+            }
+            if (revisionMeta) {
+              pushThought('改写诊断', summarizeRevisionStatus(revisionMeta), formatElapsed())
+            }
             if (!sawSectionDelta) {
               const finalDoc =
                 data.doc_ir && typeof data.doc_ir === 'object' ? (data.doc_ir as Record<string, unknown>) : null
@@ -3204,6 +3531,11 @@
         throw new Error(await resp.text())
       }
       const data = await resp.json()
+      const graphMeta = normalizeGraphMeta(data.graph_meta)
+      if (graphMeta) {
+        lastGraphMeta = graphMeta
+        pushThought('图路由', `章节重试 ${summarizeGraphMeta(graphMeta)}`, new Date().toLocaleTimeString())
+      }
       const text = String(data.text || '')
       if (text) {
         sourceText.set(text)
@@ -3325,133 +3657,316 @@
     <div class="brand">
       <div class="logo">IR</div>
       <div class="brand-text">
-        <div class="brand-title">写作引擎</div>
-        <div class="brand-sub">Doc IR · 语义写作</div>
+        <div class="brand-title">Astra 写作工作台</div>
+        <div class="brand-sub">图路由引擎 · 结构化编辑</div>
       </div>
     </div>
-    <nav class="menu">
-      <button class="menu-item">概览</button>
-      <button class="menu-item">模板</button>
-      <button class="menu-item">协作</button>
-      <button class="menu-item">历史</button>
-      <button class="menu-item">帮助</button>
-    </nav>
-    <div class="top-actions">
-      <div class="status-chip">
-        <span class="dot"></span>
-        <span>{$docStatus || '未加载'}</span>
+    <div class="workspace-hub">
+      <div class="workspace-status">
+        <div class="status-chip">
+          <span class="dot"></span>
+          <span>{$docStatus || '未加载'}</span>
+        </div>
+        {#if lastGraphMeta}
+          <div class="status-chip light">
+            路由 {lastGraphMeta.route_id || 'default'} · 入口 {lastGraphMeta.route_entry || 'planner'} · 引擎 {lastGraphMeta.engine || 'legacy'}
+          </div>
+        {/if}
+        <div class="status-chip light">
+          <Icon name="doc" size={14} className="ui-icon sm" />
+          <span>{$wordCount} 词</span>
+        </div>
+        {#if feedbackItems.length > 0}
+          <div class="status-chip light">
+            <Icon name="star" size={14} className="ui-icon sm" />
+            <span>满意度 {feedbackItems[0].rating}/5</span>
+          </div>
+        {/if}
+        {#if plagiarismResults.length > 0}
+          <div class="status-chip light">
+            <Icon name="shield" size={14} className="ui-icon sm" />
+            <span>查重峰值 {Math.round(plagiarismMaxScore * 100)}%</span>
+          </div>
+        {/if}
       </div>
-      <div class="status-chip light">字数 {$wordCount}</div>
-      {#if feedbackItems.length > 0}
-        <div class="status-chip light">最近满意度 {feedbackItems[0].rating}/5</div>
-      {/if}
-      {#if plagiarismResults.length > 0}
-        <div class="status-chip light">查重最高 {Math.round(plagiarismMaxScore * 100)}%</div>
-      {/if}
-      <button class="btn ghost" on:click={saveDoc}>保存</button>
-      <button class="btn ghost" on:click={exportDocx}>导出 Word</button>
-      <button class="btn ghost" on:click={exportPdf}>导出 PDF</button>
+      <nav class="menu" aria-label="工作区导航">
+        <button class={`menu-item ${surfaceTab === 'chat' ? 'active' : ''}`} on:click={() => switchSurface('chat')}>
+          <Icon name="chat" className="ui-icon" />
+          <span>对话</span>
+        </button>
+        <button class={`menu-item ${surfaceTab === 'library' ? 'active' : ''}`} on:click={() => switchSurface('library')}>
+          <Icon name="library" className="ui-icon" />
+          <span>资料库</span>
+        </button>
+        <button class={`menu-item ${surfaceTab === 'editor' ? 'active' : ''}`} on:click={() => switchSurface('editor')}>
+          <Icon name="editor" className="ui-icon" />
+          <span>编辑</span>
+        </button>
+        <button class={`menu-item ${surfaceTab === 'canvas' ? 'active' : ''}`} on:click={() => switchSurface('canvas')}>
+          <Icon name="canvas" className="ui-icon" />
+          <span>画布</span>
+        </button>
+      </nav>
+    </div>
+    <div class="top-actions">
+      <button class="btn ghost icon-btn-text" on:click={saveDoc}>
+        <Icon name="save" className="ui-icon" />
+        <span>保存</span>
+      </button>
+      <button class="btn ghost icon-btn-text" on:click={exportDocx}>
+        <Icon name="doc" className="ui-icon" />
+        <span>导出 Word</span>
+      </button>
+      <button class="btn ghost icon-btn-text" on:click={exportPdf}>
+        <Icon name="pdf" className="ui-icon" />
+        <span>导出 PDF</span>
+      </button>
       <button
-        class="btn ghost"
+        class="btn ghost icon-btn-text"
         data-testid="ai-rate-toggle"
         on:click={() => (showAiRatePanel = !showAiRatePanel)}
       >
-        {showAiRatePanel ? '收起AI率' : 'AI率检测'}
+        <Icon name="ai" className="ui-icon" />
+        <span>{showAiRatePanel ? '收起 AI 率' : 'AI 率检测'}</span>
       </button>
       <button
-        class="btn ghost"
+        class="btn ghost icon-btn-text"
         data-testid="plagiarism-toggle"
         on:click={() => (showPlagiarismPanel = !showPlagiarismPanel)}
       >
-        {showPlagiarismPanel ? '收起查重' : '查重检测'}
+        <Icon name="shield" className="ui-icon" />
+        <span>{showPlagiarismPanel ? '收起查重' : '查重检测'}</span>
       </button>
       <button
-        class="btn ghost"
+        class="btn ghost icon-btn-text"
         data-testid="feedback-toggle"
         on:click={() => (showFeedbackPanel = !showFeedbackPanel)}
       >
-        {showFeedbackPanel ? '收起评分' : '满意度评分'}
+        <Icon name="star" className="ui-icon" />
+        <span>{showFeedbackPanel ? '收起评分' : '满意度评分'}</span>
       </button>
       <Settings />
     </div>
   </header>
 
-  <div class="workspace">
+  <div class={`workspace ${hideLibraryInfo ? 'hide-info' : ''}`}>
     <aside class="nav-rail">
-      <button class="nav-btn active" title="文档">
-        <span>文档</span>
+      <div class="rail-search">
+        <input
+          type="text"
+          placeholder="搜索资料卡片..."
+          bind:value={librarySearch}
+        />
+      </div>
+      <button class="rail-upload-btn icon-btn-text" on:click={triggerLibraryUpload}>
+        <Icon name="upload" className="ui-icon" />
+        <span>上传素材</span>
       </button>
-      <button class="nav-btn" title="画布" on:click={() => (canvasOpen = true)}>
-        <span>画布</span>
-      </button>
-      <button class="nav-btn" title="引用" on:click={() => (showCitations = true)}>
-        <span>引用</span>
-      </button>
-      <button class="nav-btn" title="性能" on:click={() => (showPerformanceMetrics = true)}>
-        <span>性能</span>
-      </button>
-      <button class="nav-btn" title="文档库" on:click={() => (showDocList = true)}>
-        <span>文档库</span>
+      <div class="rail-tip">将图片、模板或参考文档拖入编辑区，可直接纳入当前工程。</div>
+
+      <section class="rail-library">
+        <div class="rail-group-head">
+          <span>资料流</span>
+          <em>{filteredLibraryCards.length}</em>
+        </div>
+        <div class={`library-card-stream ${libraryViewMode}`}>
+          {#if filteredLibraryCards.length === 0}
+            <div class="library-empty">没有匹配项，试试其他关键词。</div>
+          {:else}
+            {#each filteredLibraryCards as card}
+              <button
+                class={`library-card tone-${card.tone} ${librarySelectAll || selectedLibraryCardId === card.id ? 'selected' : ''}`}
+                on:click={() => openLibraryCard(card)}
+                title={card.summary}
+              >
+                <div class="library-card-cover">
+                  <span class={`library-status status-${card.status}`}>{card.status_label}</span>
+                  <span class="library-kind">{card.kind_label}</span>
+                </div>
+                <div class="library-card-body">
+                  <div class="library-card-title-row">
+                    <span class="library-card-title">{card.title}</span>
+                    <span class="library-card-time">{formatLibraryCardTime(card.updated_at)}</span>
+                  </div>
+                  <div class="library-card-summary">{card.summary}</div>
+                  <div class="library-card-tags">
+                    {#each card.tags as tag}
+                      <span>#{tag}</span>
+                    {/each}
+                  </div>
+                </div>
+              </button>
+            {/each}
+          {/if}
+        </div>
+      </section>
+
+      <section class="rail-group workflow-group">
+        <div class="rail-group-head">
+          <span>快捷入口</span>
+          <em>4</em>
+        </div>
+        <button class={`nav-btn ${surfaceTab === 'editor' ? 'active' : ''}`} on:click={() => switchSurface('editor')} title="编辑器">
+          <Icon name="editor" className="ui-icon" />
+          <span>正文编辑</span>
+        </button>
+        <button class={`nav-btn ${surfaceTab === 'canvas' ? 'active' : ''}`} on:click={() => switchSurface('canvas')} title="画布">
+          <Icon name="canvas" className="ui-icon" />
+          <span>图形画布</span>
+        </button>
+        <button class="nav-btn" title="引用" on:click={() => (showCitations = true)}>
+          <Icon name="cite" className="ui-icon" />
+          <span>引用管理</span>
+        </button>
+        <button class="nav-btn" title="性能" on:click={() => (showPerformanceMetrics = true)}>
+          <Icon name="chart" className="ui-icon" />
+          <span>性能指标</span>
+        </button>
+      </section>
+
+      <button class="rail-reset icon-btn-text" on:click={() => { librarySearch = ''; librarySelectAll = false; selectedLibraryCardId = ''; }}>
+        <Icon name="clearSelection" className="ui-icon" />
+        <span>重置筛选</span>
       </button>
     </aside>
 
     <section class="doc-area">
+      <div class="library-command-bar">
+        <div class="library-view-switch">
+          <button
+            class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
+            on:click={() => (libraryViewMode = 'grid')}
+            title="网格视图"
+          >
+            <Icon name="grid" className="ui-icon" />
+          </button>
+          <button
+            class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
+            on:click={() => (libraryViewMode = 'masonry')}
+            title="瀑布视图"
+          >
+            <Icon name="masonry" className="ui-icon" />
+          </button>
+          <button
+            class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
+            on:click={() => (libraryViewMode = 'list')}
+            title="列表视图"
+          >
+            <Icon name="list" className="ui-icon" />
+          </button>
+        </div>
+        <div class="library-counter">{librarySearch ? `搜索：${librarySearch}` : '实时文档工作区'}</div>
+        <div class="library-actions">
+          <button class="btn ghost icon-btn-text" on:click={() => (librarySelectAll = !librarySelectAll)}>
+            <Icon name="select" className="ui-icon" />
+            <span>{librarySelectAll ? '取消全选' : '全选资料'}</span>
+          </button>
+          <button class="btn ghost icon-btn-text">
+            <Icon name="batch" className="ui-icon" />
+            <span>批处理 ({librarySelectAll ? filteredLibraryCards.length : 1})</span>
+          </button>
+          <button class="btn ghost icon-btn-text" on:click={() => (hideLibraryInfo = !hideLibraryInfo)}>
+            <Icon name={hideLibraryInfo ? 'eye' : 'eyeOff'} className="ui-icon" />
+            <span>{hideLibraryInfo ? '显示信息栏' : '隐藏信息栏'}</span>
+          </button>
+        </div>
+      </div>
       <div class="doc-toolbar">
         <div class="toolbar-line">
           <div class="toolbar-cluster">
             <span class="cluster-label">文本</span>
-            <button class="tool-btn" title="撤销 Ctrl/Cmd+Z" on:click={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>↶</button>
-            <button class="tool-btn" title="重做 Ctrl/Cmd+Y" on:click={() => runEditorCommand('redo')} disabled={!editorToolbarState.canRedo}>↷</button>
-            <button class="tool-btn" title="复制 Ctrl/Cmd+C" on:click={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>复制</button>
-            <button class="tool-btn" title="剪切 Ctrl/Cmd+X" on:click={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>剪切</button>
-            <button class="tool-btn" title="粘贴 Ctrl/Cmd+V" on:click={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>粘贴</button>
-            <button class="tool-btn" title="清除格式" on:click={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>Tx</button>
+            <button class="tool-btn" title="撤销 Ctrl/Cmd+Z" aria-label="撤销" on:click={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
+              <Icon name="undo" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" title="重做 Ctrl/Cmd+Y" aria-label="重做" on:click={() => runEditorCommand('redo')} disabled={!editorToolbarState.canRedo}>
+              <Icon name="redo" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" title="复制 Ctrl/Cmd+C" aria-label="复制" on:click={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
+              <Icon name="copy" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" title="剪切 Ctrl/Cmd+X" aria-label="剪切" on:click={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
+              <Icon name="cut" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" title="粘贴 Ctrl/Cmd+V" aria-label="粘贴" on:click={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
+              <Icon name="paste" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" title="清除格式" aria-label="清除格式" on:click={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
+              <Icon name="clear" size={14} className="ui-icon sm" />
+            </button>
             <span class="tool-sep"></span>
             <button
               class={`tool-btn ${editorToolbarState.bold ? 'active' : ''}`}
               title="加粗 Ctrl/Cmd+B"
+              aria-label="加粗"
               on:click={() => runEditorCommand('bold')}
               disabled={editorToolbarState.readonly || !editorToolbarState.focused}
             >
-              B
+              <Icon name="bold" size={14} className="ui-icon sm" />
             </button>
             <button
               class={`tool-btn ${editorToolbarState.italic ? 'active' : ''}`}
               title="斜体 Ctrl/Cmd+I"
+              aria-label="斜体"
               on:click={() => runEditorCommand('italic')}
               disabled={editorToolbarState.readonly || !editorToolbarState.focused}
             >
-              I
+              <Icon name="italic" size={14} className="ui-icon sm" />
             </button>
             <button
               class={`tool-btn ${editorToolbarState.underline ? 'active' : ''}`}
               title="下划线 Ctrl/Cmd+U"
+              aria-label="下划线"
               on:click={() => runEditorCommand('underline')}
               disabled={editorToolbarState.readonly || !editorToolbarState.focused}
             >
-              U
+              <Icon name="underline" size={14} className="ui-icon sm" />
             </button>
           </div>
           <div class="toolbar-cluster">
             <span class="cluster-label">结构</span>
-            <button class="tool-btn" on:click={() => runEditorCommand('heading1')}>H1</button>
-            <button class="tool-btn" on:click={() => runEditorCommand('heading2')}>H2</button>
-            <button class="tool-btn" on:click={() => runEditorCommand('quote')}>引用</button>
-            <button class="tool-btn" on:click={() => runEditorCommand('code')}>代码</button>
-            <button class="tool-btn" on:click={() => runEditorCommand('list-bullet')}>列表</button>
-            <button class="tool-btn" on:click={() => runEditorCommand('list-number')}>1.</button>
+            <button class="tool-btn" on:click={() => runEditorCommand('heading1')} aria-label="一级标题">
+              <Icon name="h1" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" on:click={() => runEditorCommand('heading2')} aria-label="二级标题">
+              <Icon name="h2" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" on:click={() => runEditorCommand('quote')} aria-label="引用块">
+              <Icon name="quote" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" on:click={() => runEditorCommand('code')} aria-label="代码块">
+              <Icon name="code" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" on:click={() => runEditorCommand('list-bullet')} aria-label="无序列表">
+              <Icon name="listBullet" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" on:click={() => runEditorCommand('list-number')} aria-label="有序列表">
+              <Icon name="listNumber" size={14} className="ui-icon sm" />
+            </button>
           </div>
           <div class="toolbar-cluster">
             <span class="cluster-label">插入</span>
-            <button class="tool-btn" on:click={() => (canvasOpen = true)}>画布</button>
-            <button class="tool-btn" on:click={() => (showCitations = true)}>引用</button>
+            <button class="tool-btn" on:click={() => (canvasOpen = true)} aria-label="图形画布">
+              <Icon name="diagram" size={14} className="ui-icon sm" />
+            </button>
+            <button class="tool-btn" on:click={() => (showCitations = true)} aria-label="引用管理">
+              <Icon name="cite" size={14} className="ui-icon sm" />
+            </button>
           </div>
           <div class="toolbar-cluster compact">
             <span class="cluster-label">智能写作</span>
-            <button class="btn ghost" on:click={() => handleGenerate($instruction)} disabled={$generating}>生成</button>
-            <button class="btn ghost" on:click={handleStop} disabled={!$generating}>停止</button>
+            <button class="btn ghost icon-btn-text" on:click={() => handleGenerate($instruction)} disabled={$generating}>
+              <Icon name="play" className="ui-icon" />
+              <span>生成</span>
+            </button>
+            <button class="btn ghost icon-btn-text" on:click={handleStop} disabled={!$generating}>
+              <Icon name="stop" className="ui-icon" />
+              <span>停止</span>
+            </button>
             {#if resumeState && !$generating}
-              <button class="btn ghost" on:click={resumeInterruptedGeneration}>续跑</button>
+              <button class="btn ghost icon-btn-text" on:click={resumeInterruptedGeneration}>
+                <Icon name="resume" className="ui-icon" />
+                <span>续跑</span>
+              </button>
             {/if}
           </div>
         </div>
@@ -3752,6 +4267,37 @@
     </section>
 
     <aside class="side-panel">
+      <div class="panel-card media-meta-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">资源元数据</div>
+            <div class="panel-sub">当前工作区摘要</div>
+          </div>
+        </div>
+        <div class="meta-hero">
+          <div class="meta-hero-glow"></div>
+          <div class="meta-hero-text">{metaPreviewSnippet() || '暂无内容预览'}</div>
+        </div>
+        <div class="meta-list">
+          <div><span>名称</span><strong>{guessDocTitle($sourceText)}</strong></div>
+          <div><span>类型</span><strong>text/markdown</strong></div>
+          <div><span>大小</span><strong>{estimateKb($sourceText)} KB</strong></div>
+          <div><span>词数</span><strong>{$wordCount}</strong></div>
+          <div><span>选区</span><strong>{selectedBlockIds.length || 0}</strong></div>
+          <div><span>路由</span><strong>{lastGraphMeta?.route_id || 'default'}</strong></div>
+        </div>
+        <div class="meta-actions">
+          <button class="btn ghost icon-btn-text" on:click={() => switchSurface('editor')}>
+            <Icon name="open" className="ui-icon" />
+            <span>定位到编辑区</span>
+          </button>
+          <button class="btn ghost danger icon-btn-text" on:click={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}>
+            <Icon name="clearSelection" className="ui-icon" />
+            <span>清空选区</span>
+          </button>
+        </div>
+      </div>
+
       <div class="panel-card version-panel">
         <div class="panel-header">
           <div>
@@ -4108,6 +4654,13 @@
     accept="image/*"
     bind:this={uploadImageInput}
     on:change={handleInlineImageSelect}
+  />
+
+  <input
+    class="hidden-input"
+    type="file"
+    bind:this={libraryUploadInput}
+    on:change={handleLibraryUploadSelect}
   />
 
   {#if pendingGenerateConfirmation}
@@ -5338,4 +5891,1154 @@
       grid-column: auto;
     }
   }
+  /* FilmLab-style dark skin overrides */
+  :global(body) {
+    background:
+      radial-gradient(1200px 620px at -6% -18%, rgba(56, 189, 248, 0.16), transparent 68%),
+      radial-gradient(920px 520px at 106% -12%, rgba(234, 179, 8, 0.14), transparent 70%),
+      linear-gradient(180deg, #05080f 0%, #0b111b 52%, #111827 100%);
+    color: #e8eefb;
+  }
+
+  :global(body)::before {
+    background:
+      repeating-linear-gradient(130deg, rgba(255, 255, 255, 0.05) 0, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 40px),
+      repeating-linear-gradient(210deg, rgba(249, 222, 126, 0.05) 0, rgba(249, 222, 126, 0.05) 1px, transparent 1px, transparent 44px);
+    opacity: 0.44;
+  }
+
+  .app {
+    --panel-bg: rgba(10, 17, 32, 0.88);
+    --panel-bg-soft: rgba(16, 24, 42, 0.82);
+    --panel-border: rgba(159, 183, 216, 0.2);
+    --panel-shadow: 0 24px 44px rgba(0, 0, 0, 0.44);
+    --text-main: #e8eefb;
+    --text-muted: rgba(190, 205, 233, 0.72);
+    --accent: #8fc6ff;
+    --accent-weak: rgba(143, 198, 255, 0.16);
+    color: var(--text-main);
+    font-family: "Sora", "Manrope", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
+  }
+
+  :global(*) {
+    box-sizing: border-box;
+  }
+
+  .topbar {
+    background: rgba(7, 13, 26, 0.72);
+    border-bottom: 1px solid rgba(167, 189, 220, 0.2);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(14px);
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 20px;
+  }
+
+  .logo {
+    color: #f8fbff;
+    background: linear-gradient(145deg, rgba(58, 122, 255, 0.98), rgba(44, 186, 255, 0.9));
+    box-shadow: 0 14px 28px rgba(35, 121, 255, 0.35);
+  }
+
+  .brand-title {
+    color: #f7fbff;
+    letter-spacing: 0.02em;
+  }
+
+  .brand-sub {
+    color: rgba(199, 213, 239, 0.7);
+  }
+
+  .menu {
+    gap: 10px;
+    justify-content: flex-start;
+  }
+
+  .menu-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(198, 214, 241, 0.9);
+    border-radius: 999px;
+    border: 1px solid rgba(170, 193, 227, 0.25);
+    background: rgba(18, 28, 50, 0.7);
+    padding: 7px 14px;
+  }
+
+  .menu-item:hover {
+    color: #f4f8ff;
+    background: rgba(45, 65, 108, 0.78);
+    border-color: rgba(174, 206, 252, 0.42);
+  }
+
+  .menu-item.active {
+    color: #ffffff;
+    background: linear-gradient(125deg, rgba(79, 116, 222, 0.92), rgba(38, 164, 228, 0.88));
+    border-color: rgba(189, 220, 255, 0.66);
+    box-shadow: 0 10px 22px rgba(53, 117, 236, 0.36);
+  }
+
+  .top-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .workspace-hub {
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+  }
+
+  .workspace-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .ui-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+  }
+
+  .ui-icon.sm {
+    width: 14px;
+    height: 14px;
+  }
+
+  .ui-icon :global(svg) {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    stroke-width: 1.85;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .icon-btn-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(24, 36, 62, 0.76);
+    color: rgba(221, 231, 247, 0.92);
+    border: 1px solid rgba(154, 183, 224, 0.22);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .workspace-status .status-chip {
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .status-chip.light {
+    background: rgba(33, 47, 83, 0.76);
+    color: rgba(203, 223, 255, 0.9);
+  }
+
+  .status-chip .dot {
+    background: #34d399;
+    box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.16);
+  }
+
+  .btn {
+    background: rgba(44, 61, 96, 0.54);
+    color: #e6eefc;
+    border: 1px solid rgba(149, 177, 219, 0.26);
+  }
+
+  .btn.ghost {
+    background: rgba(28, 39, 68, 0.58);
+    color: rgba(224, 235, 253, 0.92);
+    border: 1px solid rgba(154, 181, 221, 0.24);
+  }
+
+  .btn.primary {
+    background: linear-gradient(130deg, rgba(96, 132, 255, 0.96), rgba(48, 170, 237, 0.92));
+    border: 1px solid rgba(177, 210, 255, 0.52);
+    color: #ffffff;
+    box-shadow: 0 12px 24px rgba(57, 126, 245, 0.34);
+  }
+
+  .btn.primary.danger {
+    background: linear-gradient(130deg, rgba(239, 68, 68, 0.96), rgba(249, 115, 22, 0.92));
+    border: 1px solid rgba(255, 189, 189, 0.45);
+  }
+
+  .btn.ghost.danger {
+    background: rgba(127, 29, 29, 0.4);
+    color: #fecaca;
+    border: 1px solid rgba(248, 113, 113, 0.45);
+  }
+
+  .btn:hover,
+  .tool-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.26);
+  }
+
+  .workspace {
+    grid-template-columns: 228px minmax(0, 1fr) 286px;
+    gap: 18px;
+    padding: 16px 20px 44px;
+  }
+
+  .workspace > * {
+    animation: rise-in 0.38s cubic-bezier(0.2, 0.62, 0.2, 1) both;
+  }
+
+  .workspace > *:nth-child(2) {
+    animation-delay: 0.06s;
+  }
+
+  .workspace > *:nth-child(3) {
+    animation-delay: 0.12s;
+  }
+
+  .workspace.hide-info {
+    grid-template-columns: 228px minmax(0, 1fr);
+  }
+
+  .workspace.hide-info .side-panel {
+    display: none;
+  }
+
+  .nav-rail {
+    gap: 12px;
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(164, 190, 226, 0.2);
+    background: linear-gradient(180deg, rgba(15, 24, 43, 0.96), rgba(10, 17, 32, 0.94));
+    box-shadow: 0 22px 38px rgba(0, 0, 0, 0.4);
+  }
+
+  .rail-search {
+    display: block;
+  }
+
+  .rail-search input {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(165, 190, 228, 0.24);
+    background: rgba(13, 23, 42, 0.82);
+    color: #ecf3ff;
+    padding: 8px 10px;
+    outline: none;
+  }
+
+  .rail-search input:focus {
+    border-color: rgba(160, 205, 255, 0.66);
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+  }
+
+  .rail-upload-btn {
+    border: 1px solid rgba(214, 178, 97, 0.45);
+    background: linear-gradient(145deg, rgba(242, 197, 98, 0.22), rgba(244, 168, 70, 0.2));
+    color: #fbe4ac;
+    border-radius: 12px;
+    padding: 8px 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border 0.2s ease, background 0.2s ease;
+  }
+
+  .rail-upload-btn:hover {
+    border-color: rgba(250, 214, 127, 0.74);
+    background: linear-gradient(145deg, rgba(242, 197, 98, 0.34), rgba(244, 168, 70, 0.3));
+  }
+
+  .rail-tip {
+    border-left: 3px solid rgba(132, 171, 255, 0.58);
+    padding-left: 10px;
+    color: rgba(187, 204, 235, 0.78);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .rail-library {
+    border: 1px solid rgba(160, 184, 220, 0.2);
+    border-radius: 12px;
+    background: rgba(14, 24, 44, 0.54);
+    padding: 10px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .rail-group {
+    border: 1px solid rgba(160, 184, 220, 0.2);
+    border-radius: 12px;
+    background: rgba(14, 24, 44, 0.54);
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .rail-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: rgba(182, 201, 230, 0.82);
+  }
+
+  .rail-group-head em {
+    font-style: normal;
+    color: rgba(238, 216, 143, 0.9);
+    font-weight: 600;
+  }
+
+  .library-card-stream {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .library-card-stream.list .library-card-summary {
+    display: none;
+  }
+
+  .library-card-stream.masonry .library-card {
+    padding-bottom: 10px;
+  }
+
+  .library-empty {
+    padding: 12px 10px;
+    border: 1px dashed rgba(152, 177, 216, 0.32);
+    border-radius: 10px;
+    color: rgba(185, 204, 233, 0.78);
+    font-size: 12px;
+    text-align: center;
+    background: rgba(20, 31, 54, 0.56);
+  }
+
+  .library-card {
+    border: 1px solid rgba(151, 176, 213, 0.24);
+    background: rgba(23, 35, 62, 0.78);
+    border-radius: 11px;
+    padding: 8px;
+    display: grid;
+    gap: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: border 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .library-card:hover {
+    border-color: rgba(165, 208, 255, 0.54);
+    transform: translateY(-1px);
+    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.26);
+  }
+
+  .library-card.selected {
+    border-color: rgba(164, 208, 255, 0.74);
+    box-shadow: 0 0 0 1px rgba(115, 180, 255, 0.26), 0 12px 22px rgba(40, 95, 195, 0.28);
+  }
+
+  .library-card-cover {
+    border-radius: 9px;
+    min-height: 52px;
+    padding: 8px 9px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .library-card.tone-azure .library-card-cover {
+    background: linear-gradient(130deg, rgba(68, 112, 213, 0.5), rgba(46, 156, 220, 0.42));
+  }
+
+  .library-card.tone-gold .library-card-cover {
+    background: linear-gradient(130deg, rgba(170, 126, 48, 0.52), rgba(223, 171, 78, 0.38));
+  }
+
+  .library-card.tone-violet .library-card-cover {
+    background: linear-gradient(130deg, rgba(109, 83, 191, 0.54), rgba(153, 96, 219, 0.36));
+  }
+
+  .library-card.tone-teal .library-card-cover {
+    background: linear-gradient(130deg, rgba(48, 126, 156, 0.52), rgba(44, 183, 171, 0.36));
+  }
+
+  .library-status,
+  .library-kind {
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1;
+    padding: 5px 8px;
+    border: 1px solid transparent;
+  }
+
+  .library-status {
+    color: #edf6ff;
+    background: rgba(10, 19, 35, 0.52);
+    border-color: rgba(182, 204, 238, 0.34);
+  }
+
+  .library-status.status-synced {
+    border-color: rgba(94, 234, 212, 0.45);
+  }
+
+  .library-status.status-draft {
+    border-color: rgba(253, 230, 138, 0.48);
+  }
+
+  .library-status.status-review {
+    border-color: rgba(248, 113, 113, 0.5);
+  }
+
+  .library-kind {
+    color: rgba(227, 236, 252, 0.88);
+    border-color: rgba(174, 198, 232, 0.3);
+    background: rgba(7, 14, 26, 0.34);
+  }
+
+  .library-card-body {
+    display: grid;
+    gap: 6px;
+  }
+
+  .library-card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .library-card-title {
+    font-size: 12px;
+    color: #eef5ff;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .library-card-time {
+    font-size: 11px;
+    color: rgba(184, 202, 230, 0.7);
+    flex: 0 0 auto;
+  }
+
+  .library-card-summary {
+    font-size: 12px;
+    color: rgba(194, 210, 235, 0.84);
+    line-height: 1.45;
+    max-height: 52px;
+    overflow: hidden;
+  }
+
+  .library-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .library-card-tags span {
+    font-size: 11px;
+    color: rgba(184, 211, 248, 0.88);
+    border: 1px solid rgba(145, 175, 216, 0.32);
+    background: rgba(20, 33, 58, 0.72);
+    border-radius: 999px;
+    padding: 3px 8px;
+  }
+
+  .rail-filter {
+    border: 1px solid rgba(154, 180, 218, 0.24);
+    background: rgba(24, 36, 62, 0.7);
+    color: rgba(210, 224, 247, 0.9);
+    border-radius: 10px;
+    padding: 6px 8px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 12px;
+  }
+
+  .rail-filter.active {
+    border-color: rgba(158, 206, 255, 0.66);
+    background: linear-gradient(130deg, rgba(72, 108, 205, 0.72), rgba(39, 145, 201, 0.66));
+    color: #ffffff;
+  }
+
+  .rail-reset {
+    margin-top: auto;
+    border: 1px dashed rgba(153, 178, 214, 0.36);
+    background: rgba(20, 31, 54, 0.56);
+    color: rgba(201, 216, 242, 0.88);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 10px;
+    padding: 8px 10px;
+    text-align: left;
+    border: 1px solid rgba(151, 176, 213, 0.24);
+    background: rgba(25, 36, 63, 0.78);
+    color: rgba(214, 228, 247, 0.9);
+    box-shadow: none;
+  }
+
+  .nav-btn.active {
+    border-color: rgba(158, 206, 255, 0.72);
+    box-shadow: 0 8px 18px rgba(50, 98, 199, 0.32);
+    background: linear-gradient(130deg, rgba(72, 110, 205, 0.72), rgba(39, 145, 201, 0.66));
+    color: #ffffff;
+  }
+
+  .workflow-group {
+    margin-top: 2px;
+  }
+
+  .doc-area {
+    gap: 14px;
+  }
+
+  .library-command-bar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(161, 188, 223, 0.2);
+    background: linear-gradient(180deg, rgba(15, 24, 44, 0.88), rgba(11, 18, 34, 0.84));
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .library-view-switch {
+    display: inline-flex;
+    gap: 6px;
+    padding: 4px;
+    border-radius: 12px;
+    background: rgba(20, 31, 53, 0.88);
+    border: 1px solid rgba(148, 173, 212, 0.24);
+  }
+
+  .view-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: rgba(201, 218, 242, 0.76);
+    min-width: 32px;
+    height: 30px;
+    cursor: pointer;
+  }
+
+  .view-btn.active {
+    color: #ffffff;
+    border-color: rgba(171, 213, 255, 0.62);
+    background: linear-gradient(125deg, rgba(76, 112, 208, 0.86), rgba(40, 157, 222, 0.8));
+    box-shadow: 0 8px 16px rgba(52, 108, 214, 0.32);
+  }
+
+  .library-counter {
+    font-size: 13px;
+    color: rgba(209, 224, 249, 0.84);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .library-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .doc-toolbar,
+  .doc-stage,
+  .panel-card,
+  .feedback-panel {
+    border-color: rgba(158, 184, 222, 0.2);
+    background: linear-gradient(180deg, rgba(14, 23, 43, 0.88), rgba(10, 17, 31, 0.84));
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.34);
+  }
+
+  .panel-card,
+  .feedback-panel,
+  .doc-toolbar,
+  .doc-stage {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel-card::before,
+  .feedback-panel::before,
+  .doc-toolbar::before,
+  .doc-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 38%);
+    opacity: 0.85;
+  }
+
+  .toolbar-cluster {
+    border-color: rgba(156, 181, 218, 0.24);
+    background: rgba(20, 31, 56, 0.76);
+  }
+
+  .cluster-label {
+    color: rgba(187, 205, 235, 0.72);
+  }
+
+  .tool-sep {
+    background: rgba(166, 188, 220, 0.25);
+  }
+
+  .tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(152, 178, 218, 0.28);
+    background: rgba(18, 30, 54, 0.82);
+    color: #e4efff;
+  }
+
+  .tool-btn .ui-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .tool-btn.active {
+    border-color: rgba(160, 207, 255, 0.68);
+    background: linear-gradient(130deg, rgba(77, 113, 206, 0.78), rgba(43, 153, 217, 0.72));
+    color: #ffffff;
+    box-shadow: 0 10px 18px rgba(46, 103, 212, 0.36);
+  }
+
+  .tool-btn:disabled {
+    color: rgba(157, 176, 206, 0.62);
+    border-color: rgba(132, 153, 186, 0.22);
+    background: rgba(17, 27, 48, 0.58);
+  }
+
+  .generation-banner {
+    border: 1px solid rgba(166, 201, 255, 0.28);
+    background: rgba(25, 45, 80, 0.56);
+    color: rgba(214, 228, 252, 0.9);
+  }
+
+  .section-failures {
+    background: rgba(88, 22, 22, 0.34);
+    border: 1px dashed rgba(248, 113, 113, 0.44);
+    color: #fecaca;
+  }
+
+  .failure-row {
+    color: rgba(254, 202, 202, 0.94);
+  }
+
+  .panel-title {
+    color: #eef5ff;
+    letter-spacing: 0.025em;
+  }
+
+  .media-meta-panel .panel-title {
+    color: #f8dfab;
+    letter-spacing: 0.12em;
+    font-size: 12px;
+  }
+
+  .panel-sub,
+  .panel-empty {
+    color: rgba(189, 204, 231, 0.74);
+  }
+
+  .feedback-row textarea,
+  .feedback-row select,
+  .feedback-row input,
+  .plagiarism-grid input,
+  .version-input,
+  .inline-style-row select,
+  .inline-style-row input,
+  .inline-instruction {
+    border: 1px solid rgba(155, 180, 218, 0.28);
+    background: rgba(14, 25, 46, 0.84);
+    color: #e9f1ff;
+  }
+
+  .rating-btn {
+    border: 1px solid rgba(152, 178, 216, 0.3);
+    background: rgba(19, 30, 55, 0.82);
+    color: #dce8ff;
+  }
+
+  .rating-btn.active {
+    border-color: rgba(159, 206, 255, 0.72);
+    background: linear-gradient(130deg, rgba(79, 116, 209, 0.84), rgba(45, 160, 222, 0.76));
+    color: #fff;
+  }
+
+  .feedback-tip {
+    color: rgba(165, 211, 255, 0.9);
+  }
+
+  .feedback-history,
+  .plagiarism-results,
+  .plagiarism-report-actions {
+    border-top-color: rgba(154, 177, 213, 0.26);
+  }
+
+  .feedback-item,
+  .plagiarism-item,
+  .candidate-before,
+  .candidate-card {
+    border: 1px solid rgba(152, 177, 214, 0.24);
+    background: rgba(18, 31, 56, 0.72);
+  }
+
+  .feedback-item-note,
+  .plagiarism-item-head,
+  .candidate-text {
+    color: #e3ecfb;
+  }
+
+  .plagiarism-item-head em,
+  .plagiarism-item-metrics,
+  .candidate-label,
+  .candidate-meta,
+  .inline-selection-meta > span {
+    color: rgba(188, 205, 232, 0.72);
+  }
+
+  .plagiarism-evidence {
+    color: rgba(214, 226, 247, 0.86);
+    border-left-color: rgba(146, 190, 255, 0.54);
+  }
+
+  .candidate-switch {
+    border: 1px solid rgba(154, 180, 220, 0.26);
+    background: rgba(22, 34, 62, 0.72);
+    color: rgba(215, 228, 250, 0.9);
+  }
+
+  .candidate-switch.active {
+    border-color: rgba(155, 203, 255, 0.68);
+    background: linear-gradient(130deg, rgba(74, 110, 207, 0.76), rgba(42, 154, 219, 0.7));
+    color: #ffffff;
+  }
+
+  .inline-tabs {
+    gap: 6px;
+  }
+
+  .inline-tab {
+    border: 1px solid rgba(152, 178, 216, 0.26);
+    background: rgba(18, 30, 54, 0.72);
+    color: rgba(213, 227, 249, 0.9);
+  }
+
+  .inline-tab.active {
+    border-color: rgba(153, 202, 255, 0.66);
+    background: linear-gradient(130deg, rgba(77, 113, 206, 0.78), rgba(43, 154, 218, 0.72));
+    color: #ffffff;
+  }
+
+  .assistant-inline-tip {
+    border-color: rgba(151, 196, 252, 0.38);
+    background: rgba(20, 33, 60, 0.72);
+    color: rgba(214, 226, 248, 0.92);
+  }
+
+  .preset-chip {
+    border-color: rgba(152, 200, 255, 0.44);
+    background: rgba(30, 48, 84, 0.58);
+    color: rgba(205, 223, 251, 0.94);
+  }
+
+  .inline-selection-bar {
+    border: 1px solid rgba(151, 197, 255, 0.36);
+    background: rgba(8, 15, 30, 0.94);
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.48);
+  }
+
+  .inline-selection-meta {
+    color: #ebf2ff;
+  }
+
+  .mini-btn {
+    border: 1px solid rgba(150, 176, 214, 0.3);
+    background: rgba(18, 29, 53, 0.86);
+    color: #dfebff;
+  }
+
+  .mini-btn:hover {
+    border-color: rgba(160, 203, 255, 0.64);
+    background: rgba(30, 46, 81, 0.92);
+  }
+
+  .inline-edit-popover,
+  .confirm-dialog {
+    border: 1px solid rgba(150, 177, 216, 0.3);
+    background: rgba(7, 13, 27, 0.96);
+    box-shadow: 0 28px 52px rgba(0, 0, 0, 0.52);
+  }
+
+  .confirm-note {
+    border-color: rgba(149, 174, 214, 0.28);
+    background: rgba(17, 29, 54, 0.74);
+    color: rgba(214, 228, 250, 0.88);
+  }
+
+  .selected-chip {
+    border: 1px solid rgba(142, 191, 255, 0.38);
+    background: rgba(39, 88, 165, 0.28);
+    color: #dceaff;
+  }
+
+  .media-meta-panel {
+    border-color: rgba(208, 176, 106, 0.34);
+    background:
+      radial-gradient(300px 220px at 86% -10%, rgba(235, 178, 76, 0.18), transparent 70%),
+      linear-gradient(180deg, rgba(22, 29, 50, 0.9), rgba(13, 20, 37, 0.92));
+  }
+
+  .meta-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid rgba(205, 169, 95, 0.34);
+    background: linear-gradient(145deg, rgba(43, 55, 88, 0.74), rgba(26, 35, 58, 0.74));
+    min-height: 96px;
+    padding: 14px 12px;
+  }
+
+  .meta-hero-glow {
+    position: absolute;
+    width: 170px;
+    height: 170px;
+    right: -46px;
+    top: -70px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(245, 200, 112, 0.42), rgba(245, 200, 112, 0.05) 66%, transparent 76%);
+    filter: blur(2px);
+  }
+
+  .meta-hero-text {
+    position: relative;
+    font-size: 13px;
+    line-height: 1.52;
+    color: rgba(235, 241, 253, 0.92);
+    max-height: 74px;
+    overflow: hidden;
+  }
+
+  .meta-list {
+    margin-top: 10px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .meta-list > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px dashed rgba(159, 183, 218, 0.22);
+    padding-bottom: 6px;
+  }
+
+  .meta-list span {
+    color: rgba(179, 196, 225, 0.72);
+    font-size: 12px;
+  }
+
+  .meta-list strong {
+    color: #f2f7ff;
+    font-size: 12px;
+    text-align: right;
+    font-weight: 600;
+    max-width: 62%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .meta-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .version-groups {
+    display: grid;
+    gap: 10px;
+    max-height: 340px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .version-group {
+    border: 1px solid rgba(152, 177, 215, 0.2);
+    border-radius: 12px;
+    background: rgba(19, 30, 54, 0.6);
+    padding: 10px;
+  }
+
+  .version-major,
+  .version-minor {
+    border: 1px solid rgba(153, 179, 218, 0.22);
+    border-radius: 10px;
+    background: rgba(17, 27, 50, 0.74);
+    padding: 10px;
+  }
+
+  .version-major.current,
+  .version-minor.current {
+    border-color: rgba(158, 205, 255, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(116, 182, 255, 0.24);
+  }
+
+  .version-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: #eaf1ff;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .badge {
+    border-radius: 999px;
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid rgba(154, 179, 216, 0.3);
+  }
+
+  .badge.major {
+    color: #fde68a;
+    border-color: rgba(245, 204, 113, 0.46);
+    background: rgba(140, 97, 23, 0.3);
+  }
+
+  .badge.minor {
+    color: #cbe4ff;
+    border-color: rgba(147, 191, 245, 0.42);
+    background: rgba(30, 80, 164, 0.3);
+  }
+
+  .version-meta,
+  .minor-meta,
+  .version-summary {
+    margin-top: 6px;
+    color: rgba(186, 203, 232, 0.74);
+    font-size: 12px;
+  }
+
+  .version-actions,
+  .minor-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .version-minors {
+    margin-top: 8px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .version-diff {
+    margin-top: 12px;
+  }
+
+  .version-diff pre {
+    margin: 8px 0 0;
+    max-height: 180px;
+    overflow: auto;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 173, 210, 0.26);
+    background: rgba(9, 16, 31, 0.9);
+    color: rgba(213, 228, 251, 0.88);
+    padding: 10px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .icon-btn {
+    border: 1px solid rgba(149, 174, 212, 0.28);
+    background: rgba(23, 34, 59, 0.8);
+    color: rgba(220, 231, 249, 0.9);
+  }
+
+  .assistant-toggle {
+    background: linear-gradient(135deg, rgba(84, 121, 236, 0.96), rgba(44, 173, 237, 0.9));
+    box-shadow: 0 14px 24px rgba(34, 103, 230, 0.34);
+  }
+
+  .assistant-queue-badge {
+    background: rgba(5, 10, 20, 0.84);
+    color: #eff6ff;
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(9px) scale(0.992);
+      filter: blur(1px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
+
+  @media (max-width: 1320px) {
+    .workspace {
+      grid-template-columns: 214px minmax(0, 1fr) 272px;
+    }
+  }
+
+  @media (max-width: 1120px) {
+    .workspace {
+      grid-template-columns: 198px minmax(0, 1fr);
+    }
+
+    .side-panel {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .workspace.hide-info .side-panel {
+      display: none;
+    }
+  }
+
+  @media (max-width: 960px) {
+    .topbar {
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 14px 16px;
+    }
+
+    .workspace-hub {
+      gap: 10px;
+    }
+
+    .workspace-status {
+      justify-content: flex-start;
+    }
+
+    .menu {
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .workspace {
+      grid-template-columns: 1fr;
+      padding: 12px 12px 36px;
+      gap: 12px;
+    }
+
+    .workspace.hide-info {
+      grid-template-columns: 1fr;
+    }
+
+    .nav-rail {
+      order: 0;
+    }
+
+    .library-card-stream {
+      max-height: 280px;
+    }
+
+    .doc-area {
+      order: 1;
+    }
+
+    .side-panel {
+      order: 2;
+      grid-template-columns: 1fr;
+    }
+
+    .library-command-bar {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .library-view-switch {
+      justify-content: flex-start;
+      width: max-content;
+    }
+
+    .library-actions {
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .top-actions {
+      justify-content: flex-start;
+    }
+
+    .icon-btn-text {
+      gap: 6px;
+    }
+
+    .top-actions .btn {
+      font-size: 12px;
+      padding: 7px 9px;
+    }
+
+    .toolbar-line {
+      gap: 6px;
+    }
+
+    .toolbar-cluster {
+      width: 100%;
+    }
+
+    .inline-preset-row {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .assistant-dock {
+      right: 10px;
+      bottom: 10px;
+    }
+  }
 </style>
+

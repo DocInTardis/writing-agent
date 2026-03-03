@@ -325,7 +325,7 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
             return re.sub(r"<[^>]+>", "", s or "")
 
         def split_by_h2(html: str):
-            h2_re = re.compile(r"(?is)(<h2\\b[^>]*>.*?</h2>)")
+            h2_re = re.compile(r"(?is)(<h2\b[^>]*>.*?</h2>)")
             parts = h2_re.split(html or "")
             prefix = parts[0] if parts else ""
             sections: list[dict[str, str]] = []
@@ -336,12 +336,33 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
                 sections.append({"title": title_txt, "heading": heading, "content": content})
             return prefix, sections
 
+        def extract_json_payload(raw: str) -> dict | None:
+            text = str(raw or "").strip()
+            if not text:
+                return None
+            if text.startswith("```"):
+                text = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", text).strip()
+                text = re.sub(r"\s*```$", "", text).strip()
+            try:
+                payload = json.loads(text)
+                return payload if isinstance(payload, dict) else None
+            except Exception:
+                pass
+            m = re.search(r"\{[\s\S]*\}", text)
+            if not m:
+                return None
+            try:
+                payload = json.loads(m.group(0))
+                return payload if isinstance(payload, dict) else None
+            except Exception:
+                return None
+
         def normalize_section_fragment(section_title: str, frag_html: str) -> str:
             def esc(s: str) -> str:
                 return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
             cleaned = sanitize_html(frag_html or "")
-            if re.search(r"(?is)<h2\\b", cleaned):
+            if re.search(r"(?is)<h2\b", cleaned):
                 _, secs = split_by_h2(cleaned)
                 if secs:
                     first = secs[0]
@@ -351,24 +372,24 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
 
         def build_worker_prompts(section_title: str, section_html: str, headings: list[str]) -> tuple[str, str]:
             system = (
-                "你是一个“章节写作Agent”。你只负责一个章节，不能改其他章节。\n"
-                "输出要求：\n"
-                "1) 只输出该章节的HTML片段，必须以对应的 <h2>章节标题</h2> 开头。\n"
-                "2) 章节内容必须更具体、更长：至少 4 段 <p>（每段尽量包含具体步骤/定义/约束/示例占位）。\n"
-                "3) 不要编造数据或引用；缺失信息用 [待补充]。\n"
-                "4) 不要输出 <script> 或 on* 事件属性。\n"
-                "5) 你需要自己判断何时插入表格/图片：\n"
-                "   - 对比、指标、清单、实验结果等结构化信息：用 <table class=\"tbl\"> 展示。\n"
-                "   - 需要可视化流程/架构/实体关系：在合适位置插入 [[FLOW: ...]] 或 [[ER: ...]]（系统会自动渲染为图）。\n"
-                "   - 需要图片但无法给出真实图片：插入 [[IMG: 图注/用途]] 作为占位。\n"
+                "You are a constrained section editor.\n"
+                "Edit only one section and return strict JSON only.\n"
+                "JSON schema:\n"
+                '{"section_title":"...","section_html":"<h2>...</h2>...","note":"..."}\n'
+                "Rules:\n"
+                "1) section_html must begin with the target <h2> heading.\n"
+                "2) Keep output safe HTML (no <script>, no on* handlers).\n"
+                "3) Preserve useful existing content unless instruction requires change.\n"
+                "4) Keep changes scoped to the target section.\n"
             )
             user = (
-                f"文档标题：{title}\n"
-                f"文档章节：{', '.join([h for h in headings if h])}\n\n"
-                f"你负责章节：《{section_title}》\n\n"
-                f"用户整体要求：\n{instruction}\n\n"
-                f"当前章节HTML（仅供参考，可重写扩写）：\n{section_html}\n\n"
-                "请直接输出该章节的最终HTML片段。"
+                "<task>rewrite_single_section</task>\n"
+                f"<document_title>{title}</document_title>\n"
+                f"<all_headings>{', '.join([h for h in headings if h])}</all_headings>\n"
+                f"<target_section>{section_title}</target_section>\n"
+                f"<instruction>{instruction}</instruction>\n"
+                f"<current_section_html>{section_html}</current_section_html>\n"
+                'Return strict JSON with key "section_html".'
             )
             return system, user
 
@@ -421,13 +442,36 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
         if not worker_models:
             worker_models = [settings.model]
 
-        yield emit("delta", {"delta": f"多Agent分工：{len(targets)}个章节，{worker_count}个worker…"})
+        yield emit("delta", {"delta": f"multi-agent plan: {len(targets)} sections, {worker_count} workers"})
 
         def run_section_worker(section_title: str, section_html: str, model: str) -> tuple[str, str]:
             worker_client = OllamaClient(base_url=settings.base_url, model=model, timeout_s=settings.timeout_s)
             system, user = build_worker_prompts(section_title, section_html, headings)
+            def _extract_worker_fragment(raw_text: str) -> str:
+                payload = extract_json_payload(raw_text)
+                if not isinstance(payload, dict):
+                    return ""
+                for key in ("section_html", "html", "output_html", "result"):
+                    value = payload.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value
+                return ""
+
             out = worker_client.chat(system=system, user=user, temperature=0.25)
-            frag = normalize_section_fragment(section_title, out)
+            frag_raw = _extract_worker_fragment(out)
+            if not frag_raw:
+                retry_user = (
+                    f"{user}\n"
+                    "<retry_reason>\n"
+                    "Your previous output was invalid. Return strict JSON only with key section_html.\n"
+                    "</retry_reason>"
+                )
+                retry_out = worker_client.chat(system=system, user=retry_user, temperature=0.1)
+                frag_raw = _extract_worker_fragment(retry_out)
+            if not frag_raw:
+                # Fail-closed for worker: keep original section unchanged.
+                frag_raw = section_html
+            frag = normalize_section_fragment(section_title, frag_raw)
             return section_title, frag
 
         updates: dict[str, str] = {}
@@ -446,54 +490,73 @@ async def studio_chat_stream(doc_id: str, request: Request) -> StreamingResponse
                     updates[section_title] = frag
                     yield emit("delta", {"delta": frag})
                 except Exception as e:
-                    yield emit("delta", {"delta": f"<h2>{t}</h2><p>[待补充]（章节Agent失败：{e}）</p>"})
+                    yield emit("delta", {"delta": f"<h2>{t}</h2><p>[todo] section worker failed: {e}</p>"})
 
         merged = merge_sections(prefix, sections, updates)
 
-        # Aggregator: resolve cross-section consistency and conflicts (best-effort). Fallback to merged if bad.
+        # Aggregator: merge section updates with constrained structured output.
         agg_model = os.environ.get("WRITING_AGENT_AGG_MODEL", "").strip() or settings.model
         agg_client = OllamaClient(base_url=settings.base_url, model=agg_model, timeout_s=settings.timeout_s)
         agg_system = (
-            "你是一个“报告合并统筹Agent”。你会收到原始文档HTML与多个章节Agent生成的章节HTML。\n"
-            "任务：把章节结果合并成一个完整HTML报告，替换对应章节内容，解决冲突并统一风格。\n"
-            "要求：\n"
-            "1) 只输出最终HTML（不要解释）。\n"
-            "2) 不要缩短内容：尽量保留并整合所有章节Agent生成的细节。\n"
-            "3) 保留H1标题与所有H2章节；每个章节至少2段<p>；缺失信息用[待补充]。\n"
-            "4) 禁止<script>与on*事件属性。\n"
-            "5) 你需要自己判断何时插入表格/图片：\n"
-            "   - 对比、指标、清单、实验结果等结构化信息：用 <table class=\"tbl\"> 展示。\n"
-            "   - 需要可视化流程/架构/实体关系：在合适位置插入 [[FLOW: ...]] 或 [[ER: ...]]。\n"
-            "   - 需要图片但无法给出真实图片：插入 [[IMG: 图注/用途]]。\n"
+            "You are a constrained HTML report aggregator.\n"
+            "Return strict JSON only (no markdown).\n"
+            "JSON schema:\n"
+            '{"html":"<full_html>","assistant_note":"..."}\n'
+            "Rules:\n"
+            "1) Keep a complete report HTML body with H1 and section H2s.\n"
+            "2) Preserve useful details from section updates; do not arbitrarily shorten.\n"
+            "3) Output safe HTML only (no <script>, no on* handlers).\n"
         )
         agg_user = (
-            f"用户要求：\n{instruction}\n\n"
-            f"原始HTML：\n{base}\n\n"
-            f"合并草稿（已按章节替换）：\n{merged}\n\n"
-            f"章节候选（JSON，key为章节标题）：\n{json.dumps(updates, ensure_ascii=False)}\n\n"
-            "请输出最终完整HTML。"
+            "<task>aggregate_report_html</task>\n"
+            f"<instruction>{instruction}</instruction>\n"
+            f"<base_html>{base}</base_html>\n"
+            f"<merged_candidate>{merged}</merged_candidate>\n"
+            f"<section_updates_json>{json.dumps(updates, ensure_ascii=False)}</section_updates_json>\n"
+            'Return strict JSON with key "html".'
         )
 
-        yield emit("delta", {"delta": "统筹合并中…"})
-        agg_chunks: list[str] = []
+        yield emit("delta", {"delta": "aggregating sections..."})
+        agg_raw = ""
         try:
-            for delta in agg_client.chat_stream(system=agg_system, user=agg_user, temperature=0.2):
-                agg_chunks.append(delta)
-                yield emit("delta", {"delta": delta})
+            agg_raw = agg_client.chat(system=agg_system, user=agg_user, temperature=0.2)
         except Exception as e:
-            yield emit("delta", {"delta": f"统筹合并失败：{e}，将使用章节合并结果。"})
-            agg_chunks = []
+            yield emit("delta", {"delta": f"aggregation failed: {e}; fallback to merged result."})
+        def _extract_aggregated_html(raw_text: str) -> str:
+            payload = extract_json_payload(raw_text)
+            if not isinstance(payload, dict):
+                return ""
+            for key in ("html", "output_html", "result_html", "result"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+            return ""
 
-        raw = "".join(agg_chunks).strip() if agg_chunks else merged
+        raw = _extract_aggregated_html(agg_raw)
+        if not raw and agg_raw:
+            retry_user = (
+                f"{agg_user}\n"
+                "<retry_reason>\n"
+                "Your previous output was invalid. Return strict JSON only with key html.\n"
+                "</retry_reason>"
+            )
+            try:
+                retry_raw = agg_client.chat(system=agg_system, user=retry_user, temperature=0.1)
+            except Exception:
+                retry_raw = ""
+            raw = _extract_aggregated_html(retry_raw)
+        if not raw:
+            # Fail-closed for aggregator: use constrained merged candidate only.
+            raw = merged
         cleaned = sanitize_html(_expand_media_markers(raw))
         enforced = report_policy.enforce(cleaned, title=title, required_headings=required_headings)
         if not enforced.html.strip():
             enforced = report_policy.enforce(merged, title=title, required_headings=required_headings)
 
         session.html = enforced.html
-        assistant = f"已由多Agent扩写并应用到左侧文档（章节数：{len(targets)}）。"
+        assistant = f"Applied multi-agent section updates to the document (sections={len(targets)})."
         if enforced.fixes:
-            assistant += "（已自动补齐结构）"
+            assistant += " (Structure auto-repaired)"
         session.messages.append({"role": "assistant", "content": assistant})
         store.put(session)
         yield emit("final", {"assistant": assistant, "html": session.html})

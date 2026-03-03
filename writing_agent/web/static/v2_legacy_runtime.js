@@ -2877,6 +2877,35 @@
     return s.length;
   }
 
+  function selectedPayloadFromSource() {
+    const ta = el("source");
+    if (!ta) return null;
+    const full = String(ta.value || "");
+    const start = Number(ta.selectionStart || 0);
+    const end = Number(ta.selectionEnd || 0);
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      return { start, end, text: full.slice(start, end) };
+    }
+    return null;
+  }
+
+  function summarizeRevisionStatus(meta) {
+    const obj = meta && typeof meta === "object" ? meta : {};
+    const ok = obj.ok === true;
+    const code = String(obj.error_code || "").trim() || (ok ? "OK" : "UNKNOWN");
+    const source = String(obj.selection_source || "").trim();
+    const left = Number(obj.left_window_chars || 0);
+    const right = Number(obj.right_window_chars || 0);
+    const trimmed = obj.trimmed_for_budget === true ? "trim=1" : "trim=0";
+    const fallback = obj.fallback_triggered === true ? "fallback=1" : "fallback=0";
+    const recovered = obj.fallback_recovered === true ? "recover=1" : "recover=0";
+    const parts = [`code=${code}`, trimmed, fallback, recovered];
+    if (source) parts.push(`source=${source}`);
+    if (left > 0 || right > 0) parts.push(`window=${left}/${right}`);
+    if (ok) return `局部改写成功（${parts.join("; ")}）`;
+    return `局部改写未命中（${parts.join("; ")}），已切换全量生成兜底`;
+  }
+
   let aborter = null;
 
   const btnStop = el("btnStop");
@@ -2956,9 +2985,15 @@
     };
 
     try {
+      const generatePayload = {
+        instruction: inst,
+        text: el("source").value || "",
+      };
+      const selection = selectedPayloadFromSource();
+      if (selection) generatePayload.selection = selection;
       await streamSsePost(
         `/api/doc/${docId}/generate/stream`,
-        { instruction: inst, text: el("source").value || "" },
+        generatePayload,
          (event, data) => {
            if (event === "state") {
              setGraphState(String(data.name || ""));
@@ -2982,7 +3017,13 @@
              }
              return;
            }
-           if (event === "section") {
+            if (event === "revision_status") {
+              const note = summarizeRevisionStatus(data);
+              console.warn("[revision_status]", data);
+              toast(note, "");
+              return;
+            }
+            if (event === "section") {
              const sec = String(data.section || "");
              const phase = String(data.phase || "");
              if (phase === "start") {
@@ -3017,10 +3058,15 @@
              }
              return;
            }
-           if (event === "final") {
-             flush();
-             const txt = String(data.text || "");
-             const probs = Array.isArray(data.problems) ? data.problems : [];
+            if (event === "final") {
+              flush();
+              const txt = String(data.text || "");
+              if (data && typeof data.revision_meta === "object") {
+                const note = summarizeRevisionStatus(data.revision_meta);
+                console.info("[revision_meta]", data.revision_meta);
+                toast(note, "");
+              }
+              const probs = Array.isArray(data.problems) ? data.problems : [];
 
              const cur = String(el("source").value || "");
              const tooShort = stripBodyLen(txt) < stripBodyLen(cur) * 0.75;

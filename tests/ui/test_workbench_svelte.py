@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import json
 from pathlib import Path
 
 import pytest
@@ -548,6 +549,80 @@ def test_workbench_svelte_generate_with_existing_text_confirms_overwrite_mode(se
         request_instruction = str(captured_payload.get("instruction") or "")
         assert user_inst in request_instruction
         assert request_instruction != user_inst
+
+        context.close()
+        browser.close()
+
+
+def test_workbench_svelte_shows_route_graph_meta_chip(server_url):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
+        page.goto(server_url, wait_until="domcontentloaded")
+        page.wait_for_selector(".app")
+        page.wait_for_selector(".editable")
+        page.wait_for_function("window.__waGetStore && window.__waGetStore('docId')")
+        doc_id = page.evaluate("window.__waGetStore('docId')")
+        assert doc_id
+
+        page.evaluate(
+            """
+            async ({ docId }) => {
+              await fetch(`/api/doc/${docId}/save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: '' })
+              });
+            }
+            """,
+            {"docId": doc_id},
+        )
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector(".assistant-dock textarea")
+
+        captured_payload: dict = {}
+
+        def _on_generate(route, request):
+            if request.method != "POST":
+                route.continue_()
+                return
+            payload = request.post_data_json
+            if isinstance(payload, dict):
+                captured_payload.update(payload)
+            final_payload = {
+                "text": "# Draft\n\n## Intro\nGenerated via route graph.",
+                "graph_meta": {
+                    "path": "route_graph",
+                    "trace_id": "trace12345678",
+                    "engine": "native",
+                    "route_id": "resume_sections",
+                    "route_entry": "writer",
+                },
+            }
+            body = f"event: final\ndata: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
+            try:
+                route.fulfill(
+                    status=200,
+                    headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"},
+                    body=body,
+                )
+            except Exception:
+                return
+
+        page.route("**/api/doc/*/generate/stream", _on_generate)
+
+        page.fill(".assistant-dock textarea", "continue intro with extra details")
+        page.click(".assistant-dock .send-btn")
+
+        start = time.time()
+        while not captured_payload and (time.time() - start) < 5:
+            page.wait_for_timeout(100)
+
+        assert captured_payload
+        page.wait_for_function("document.body.innerText.includes('路由 resume_sections')")
+        page.wait_for_function("document.body.innerText.includes('入口 writer')")
+        page.wait_for_function("document.body.innerText.includes('引擎 native')")
 
         context.close()
         browser.close()

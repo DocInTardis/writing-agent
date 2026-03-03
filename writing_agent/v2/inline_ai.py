@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 import logging
+import json
+import re
 
 from writing_agent.llm import OllamaClient, get_ollama_settings
 
@@ -53,6 +55,7 @@ class InlineContext:
     document_title: str
     section_title: Optional[str] = None
     document_type: Optional[str] = None  # "research", "report", "article", etc.
+    pretrimmed: bool = False
 
 
 @dataclass
@@ -79,6 +82,220 @@ class InlineAIEngine:
             model=self.settings.model,
             timeout_s=self.settings.timeout_s
         )
+        self._raw_chat = self.client.chat
+        self._active_operation: InlineOperation | None = None
+        self._active_context: InlineContext | None = None
+        # Route all legacy direct `client.chat(...)` calls through a guarded proxy.
+        self.client.chat = self._chat_proxy  # type: ignore[method-assign]
+
+    _JSON_OUTPUT_OPS = {
+        InlineOperation.CONTINUE,
+        InlineOperation.IMPROVE,
+        InlineOperation.SUMMARIZE,
+        InlineOperation.EXPAND,
+        InlineOperation.CHANGE_TONE,
+        InlineOperation.SIMPLIFY,
+        InlineOperation.ELABORATE,
+        InlineOperation.REPHRASE,
+        InlineOperation.ASK_AI,
+        InlineOperation.EXPLAIN,
+        InlineOperation.TRANSLATE,
+    }
+
+    _STRICT_REWRITE_OPS = {
+        InlineOperation.IMPROVE,
+        InlineOperation.CHANGE_TONE,
+        InlineOperation.SIMPLIFY,
+        InlineOperation.REPHRASE,
+        InlineOperation.TRANSLATE,
+    }
+
+    @staticmethod
+    def _clamp_int(value: int, lo: int, hi: int) -> int:
+        return max(lo, min(hi, value))
+
+    def _dynamic_window_chars(self, selected_len: int) -> int:
+        base = 220
+        coef = 0.8
+        short_boost = 180 if selected_len < 60 else 0
+        candidate = int(base + coef * max(1, selected_len) + short_boost)
+        return self._clamp_int(candidate, 240, 1200)
+
+    @staticmethod
+    def _tail_chars(text: str, limit: int) -> str:
+        s = str(text or "")
+        if limit <= 0 or len(s) <= limit:
+            return s
+        return s[-limit:]
+
+    @staticmethod
+    def _head_chars(text: str, limit: int) -> str:
+        s = str(text or "")
+        if limit <= 0 or len(s) <= limit:
+            return s
+        return s[:limit]
+
+    @staticmethod
+    def _strip_fences(raw: str) -> str:
+        s = str(raw or "").strip()
+        if s.startswith("```"):
+            s = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", s).strip()
+            s = re.sub(r"\s*```$", "", s).strip()
+        return s
+
+    @staticmethod
+    def _xml_escape(raw: str) -> str:
+        s = str(raw or "")
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def _extract_output_text(self, raw: str, *, expect_json: bool) -> tuple[str, bool]:
+        text = self._strip_fences(raw)
+        if expect_json:
+            parsed = None
+            try:
+                parsed = json.loads(text)
+            except Exception:
+                m = re.search(r"\{[\s\S]*\}", text)
+                if m:
+                    try:
+                        parsed = json.loads(m.group(0))
+                    except Exception:
+                        parsed = None
+            if isinstance(parsed, dict):
+                for key in ("output_text", "generated_text", "text", "result", "answer"):
+                    value = parsed.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip(), True
+            text = re.sub(r"^(output_text|generated_text|text|result|answer)\s*[:：]\s*", "", text, flags=re.I).strip()
+            return text.strip(), False
+        return text.strip(), True
+
+    def _build_guarded_prompt(self, operation: InlineOperation, context: InlineContext, user_prompt: str) -> str:
+        selected = str(context.selected_text or "")
+        if context.pretrimmed:
+            left = str(context.before_text or "")
+            right = str(context.after_text or "")
+        else:
+            selected_len = len(selected)
+            window = self._dynamic_window_chars(selected_len)
+            left = self._tail_chars(context.before_text, window)
+            right = self._head_chars(context.after_text, window)
+        left = self._xml_escape(left)
+        selected = self._xml_escape(selected)
+        right = self._xml_escape(right)
+        instruction_block = self._xml_escape(str(user_prompt or ""))
+
+        task_map = {
+            InlineOperation.CONTINUE: "continue writing at the current cursor position",
+            InlineOperation.IMPROVE: "improve selected text while preserving intent",
+            InlineOperation.SUMMARIZE: "summarize selected text",
+            InlineOperation.EXPAND: "expand selected text with details",
+            InlineOperation.CHANGE_TONE: "rewrite selected text in target tone",
+            InlineOperation.SIMPLIFY: "simplify selected text",
+            InlineOperation.ELABORATE: "elaborate selected text",
+            InlineOperation.REPHRASE: "rephrase selected text",
+            InlineOperation.ASK_AI: "answer question about selected text",
+            InlineOperation.EXPLAIN: "explain selected text",
+            InlineOperation.TRANSLATE: "translate selected text",
+        }
+        task = task_map.get(operation, "edit selected text")
+        constraints = [
+            "Treat tagged blocks as separate channels; do not confuse instruction with content.",
+            "Do not output left/right context in output_text.",
+            "Preserve structural markers such as [[TABLE:...]] / [[FIGURE:...]] when present.",
+            "Return JSON only, no markdown fences, no commentary.",
+        ]
+        if operation in self._STRICT_REWRITE_OPS:
+            constraints.insert(1, "Only rewrite the selected_text span; avoid introducing unrelated content.")
+        if operation == InlineOperation.CONTINUE:
+            constraints.insert(1, "Generate continuation text only; do not rewrite existing text.")
+
+        joined_constraints = "\n".join(f"- {item}" for item in constraints)
+        return (
+            "You are a controlled inline editor.\n"
+            f"<task>\n{task}\n</task>\n"
+            f"<constraints>\n{joined_constraints}\n</constraints>\n"
+            f"<left_context>\n{left}\n</left_context>\n"
+            f"<selected_text>\n{selected}\n</selected_text>\n"
+            f"<right_context>\n{right}\n</right_context>\n"
+            f"<instruction>\n{instruction_block}\n</instruction>\n"
+            'Respond as strict JSON only: {"output_text":"..."}'
+        )
+
+    def _chat_guarded(
+        self,
+        *,
+        operation: InlineOperation,
+        context: InlineContext,
+        system: str,
+        user: str,
+        temperature: float,
+        options: dict | None = None,
+    ) -> str:
+        expect_json = operation in self._JSON_OUTPUT_OPS
+        user_prompt = self._build_guarded_prompt(operation, context, user) if expect_json else user
+        raw = self._raw_chat(
+            system=system,
+            user=user_prompt,
+            temperature=temperature,
+            options=options or {},
+        )
+        text, parsed_ok = self._extract_output_text(raw, expect_json=expect_json)
+        if expect_json and not parsed_ok:
+            retry_prompt = (
+                f"{user_prompt}\n"
+                "<retry_reason>\n"
+                "Previous output was not valid strict JSON. Return only {\"output_text\":\"...\"}.\n"
+                "</retry_reason>"
+            )
+            retry_raw = self._raw_chat(
+                system=system,
+                user=retry_prompt,
+                temperature=max(0.0, float(temperature) - 0.1),
+                options=options or {},
+            )
+            retry_text, retry_ok = self._extract_output_text(retry_raw, expect_json=True)
+            if retry_ok and retry_text.strip():
+                text, parsed_ok = retry_text, True
+            elif retry_text.strip():
+                text = retry_text
+
+        if operation in self._STRICT_REWRITE_OPS and context.selected_text:
+            source = str(context.selected_text or "").strip()
+            if expect_json and not parsed_ok:
+                return source
+            if not text:
+                return source
+            max_len = max(2400, len(source) * 6)
+            if len(text) > max_len:
+                return source
+        return text.strip()
+
+    def _chat_proxy(
+        self,
+        *,
+        system: str,
+        user: str,
+        temperature: float = 0.6,
+        options: dict | None = None,
+    ) -> str:
+        operation = self._active_operation
+        context = self._active_context
+        if operation is None or context is None:
+            return self._raw_chat(
+                system=system,
+                user=user,
+                temperature=temperature,
+                options=options or {},
+            )
+        return self._chat_guarded(
+            operation=operation,
+            context=context,
+            system=system,
+            user=user,
+            temperature=temperature,
+            options=options,
+        )
 
     async def execute_operation(
         self,
@@ -98,35 +315,41 @@ class InlineAIEngine:
             InlineResult with generated text
         """
         try:
-            if operation == InlineOperation.CONTINUE:
-                result = await self._continue_writing(context, **kwargs)
-            elif operation == InlineOperation.IMPROVE:
-                result = await self._improve_text(context, **kwargs)
-            elif operation == InlineOperation.SUMMARIZE:
-                result = await self._summarize_text(context, **kwargs)
-            elif operation == InlineOperation.EXPAND:
-                result = await self._expand_text(context, **kwargs)
-            elif operation == InlineOperation.CHANGE_TONE:
-                result = await self._change_tone(context, **kwargs)
-            elif operation == InlineOperation.SIMPLIFY:
-                result = await self._simplify_text(context, **kwargs)
-            elif operation == InlineOperation.ELABORATE:
-                result = await self._elaborate_text(context, **kwargs)
-            elif operation == InlineOperation.REPHRASE:
-                result = await self._rephrase_text(context, **kwargs)
-            elif operation == InlineOperation.ASK_AI:
-                result = await self._ask_ai(context, **kwargs)
-            elif operation == InlineOperation.EXPLAIN:
-                result = await self._explain_text(context, **kwargs)
-            elif operation == InlineOperation.TRANSLATE:
-                result = await self._translate_text(context, **kwargs)
-            else:
-                return InlineResult(
-                    success=False,
-                    generated_text="",
-                    operation=operation,
-                    error=f"Unknown operation: {operation}"
-                )
+            self._active_operation = operation
+            self._active_context = context
+            try:
+                if operation == InlineOperation.CONTINUE:
+                    result = await self._continue_writing(context, **kwargs)
+                elif operation == InlineOperation.IMPROVE:
+                    result = await self._improve_text(context, **kwargs)
+                elif operation == InlineOperation.SUMMARIZE:
+                    result = await self._summarize_text(context, **kwargs)
+                elif operation == InlineOperation.EXPAND:
+                    result = await self._expand_text(context, **kwargs)
+                elif operation == InlineOperation.CHANGE_TONE:
+                    result = await self._change_tone(context, **kwargs)
+                elif operation == InlineOperation.SIMPLIFY:
+                    result = await self._simplify_text(context, **kwargs)
+                elif operation == InlineOperation.ELABORATE:
+                    result = await self._elaborate_text(context, **kwargs)
+                elif operation == InlineOperation.REPHRASE:
+                    result = await self._rephrase_text(context, **kwargs)
+                elif operation == InlineOperation.ASK_AI:
+                    result = await self._ask_ai(context, **kwargs)
+                elif operation == InlineOperation.EXPLAIN:
+                    result = await self._explain_text(context, **kwargs)
+                elif operation == InlineOperation.TRANSLATE:
+                    result = await self._translate_text(context, **kwargs)
+                else:
+                    return InlineResult(
+                        success=False,
+                        generated_text="",
+                        operation=operation,
+                        error=f"Unknown operation: {operation}"
+                    )
+            finally:
+                self._active_operation = None
+                self._active_context = None
 
             return InlineResult(
                 success=True,
@@ -175,10 +398,12 @@ class InlineAIEngine:
             # In a real implementation, you would use the LLM's streaming API
             try:
                 # For now, we'll simulate streaming by chunking the response
-                result = self.client.chat(
+                result = self._chat_guarded(
+                    operation=operation,
+                    context=context,
                     system=system_prompt,
                     user=prompt,
-                    temperature=self._get_temperature(operation)
+                    temperature=self._get_temperature(operation),
                 )
 
                 # Simulate streaming by yielding chunks
@@ -225,62 +450,47 @@ class InlineAIEngine:
     ) -> str:
         """Build prompt for the given operation"""
         if operation == InlineOperation.ASK_AI:
-            question = kwargs.get("question", "请分析这段文本的内容。")
-            return f"""请回答关于以下文本的问题。
+            question = str(kwargs.get("question") or "Analyze the selected text.")
+            return (
+                "Answer the question about the selected text.\n\n"
+                f"Selected text:\n{context.selected_text}\n\n"
+                f"Question:\n{question}\n\n"
+                "Answer clearly and directly."
+            )
 
-文本内容：
-{context.selected_text}
+        if operation == InlineOperation.EXPLAIN:
+            detail_level = str(kwargs.get("detail_level") or "medium")
+            detail_desc = {"brief": "brief", "medium": "medium-detail", "detailed": "detailed"}.get(
+                detail_level,
+                "medium-detail",
+            )
+            return (
+                f"Explain the selected text in a {detail_desc} way.\n\n"
+                f"Selected text:\n{context.selected_text}\n\n"
+                "Include key ideas, important terms, and practical interpretation."
+            )
 
-问题：{question}
-
-请提供详细、准确的回答："""
-
-        elif operation == InlineOperation.EXPLAIN:
-            detail_level = kwargs.get("detail_level", "medium")
-            detail_desc = {"brief": "简要", "medium": "适中", "detailed": "详细"}.get(detail_level, "适中")
-            return f"""请{detail_desc}地解释以下文本的含义：
-
-文本：
-{context.selected_text}
-
-解释要求：
-1. 说明核心概念
-2. 解释关键术语
-3. 提供必要的背景信息
-4. 使用易懂的语言
-
-解释："""
-
-        elif operation == InlineOperation.IMPROVE:
-            focus = kwargs.get("focus", "general")
+        if operation == InlineOperation.IMPROVE:
+            focus = str(kwargs.get("focus") or "general")
             focus_desc = self._get_improvement_focus_desc(focus)
-            return f"""请改进以下文本，使其更加{focus_desc}。
+            return (
+                f"Improve the selected text for {focus_desc}.\n\n"
+                f"Selected text:\n{context.selected_text}\n\n"
+                "Keep original intent and facts."
+            )
 
-原文：
-{context.selected_text}
-
-要求：
-1. 保持原意不变
-2. 改进语言表达
-3. 增强可读性
-4. 保持与文档整体风格一致
-
-改进后的文本："""
-
-        # Add more operation-specific prompts as needed
-        else:
-            return f"处理文本：{context.selected_text}"
+        return f"Process this selected text:\n{context.selected_text}"
 
     def _get_system_prompt(self, operation: InlineOperation) -> str:
         """Get system prompt for the given operation"""
         prompts = {
-            InlineOperation.ASK_AI: "你是专业的文本分析助手，擅长回答关于文本内容的问题。",
-            InlineOperation.EXPLAIN: "你是专业的文本解释专家，擅长用清晰易懂的方式解释复杂内容。",
-            InlineOperation.IMPROVE: "你是专业的文本编辑，擅长改进文本质量。",
-            InlineOperation.CONTINUE: "你是专业的写作助手，擅长根据上下文继续写作，保持风格和逻辑的连贯性。",
-            InlineOperation.SUMMARIZE: "你是专业的内容总结专家，擅长提炼核心要点。",
+            InlineOperation.ASK_AI: "You are a precise text analysis assistant.",
+            InlineOperation.EXPLAIN: "You are a clear and educational explainer.",
+            InlineOperation.IMPROVE: "You are a professional writing editor.",
+            InlineOperation.CONTINUE: "You are a professional writing assistant that continues content coherently.",
+            InlineOperation.SUMMARIZE: "You are a concise summarization assistant.",
         }
-        return prompts.get(operation, "你是专业的写作助手。")
+        return prompts.get(operation, "You are a professional writing assistant.")
 
     def _get_temperature(self, operation: InlineOperation) -> float:
         """Get temperature for the given operation"""
@@ -299,27 +509,14 @@ class InlineAIEngine:
         context: InlineContext,
         target_words: int = 200
     ) -> str:
-        """
-        Continue writing from the current position
-
-        Args:
-            context: Document context
-            target_words: Target number of words to generate
-
-        Returns:
-            Generated continuation text
-        """
-        # Build context-aware prompt
+        """Continue writing from the current position."""
         prompt = self._build_continue_prompt(context, target_words)
-
-        # Generate continuation
         result = self.client.chat(
-            system="你是专业的写作助手，擅长根据上下文继续写作，保持风格和逻辑的连贯性。",
+            system="You are a writing continuation assistant.",
             user=prompt,
             temperature=0.7,
-            options={"num_predict": min(800, target_words * 4)}
+            options={"num_predict": min(800, target_words * 4)},
         )
-
         return result.strip()
 
     async def _improve_text(
@@ -327,35 +524,17 @@ class InlineAIEngine:
         context: InlineContext,
         focus: str = "general"
     ) -> str:
-        """
-        Improve selected text
-
-        Args:
-            context: Document context
-            focus: Improvement focus ("grammar", "clarity", "style", "general")
-
-        Returns:
-            Improved text
-        """
-        prompt = f"""请改进以下文本，使其更加{self._get_improvement_focus_desc(focus)}。
-
-原文：
-{context.selected_text}
-
-要求：
-1. 保持原意不变
-2. 改进语言表达
-3. 增强可读性
-4. 保持与文档整体风格一致
-
-改进后的文本："""
-
-        result = self.client.chat(
-            system="你是专业的文本编辑，擅长改进文本质量。",
-            user=prompt,
-            temperature=0.5
+        """Improve selected text."""
+        prompt = (
+            f"Improve the selected text for {self._get_improvement_focus_desc(focus)}.\n\n"
+            f"Selected text:\n{context.selected_text}\n\n"
+            "Keep the same intent and improve readability."
         )
-
+        result = self.client.chat(
+            system="You are a professional text editor.",
+            user=prompt,
+            temperature=0.5,
+        )
         return result.strip()
 
     async def _summarize_text(
@@ -363,28 +542,16 @@ class InlineAIEngine:
         context: InlineContext,
         max_sentences: int = 3
     ) -> str:
-        """
-        Summarize selected text
-
-        Args:
-            context: Document context
-            max_sentences: Maximum number of sentences in summary
-
-        Returns:
-            Summary text
-        """
-        prompt = f"""请用{max_sentences}句话总结以下内容的核心要点：
-
-{context.selected_text}
-
-总结："""
-
-        result = self.client.chat(
-            system="你是专业的内容总结专家，擅长提炼核心要点。",
-            user=prompt,
-            temperature=0.3
+        """Summarize selected text."""
+        prompt = (
+            f"Summarize the selected text in up to {max_sentences} sentences.\n\n"
+            f"Selected text:\n{context.selected_text}"
         )
-
+        result = self.client.chat(
+            system="You are a concise summarization assistant.",
+            user=prompt,
+            temperature=0.3,
+        )
         return result.strip()
 
     async def _expand_text(
@@ -392,39 +559,20 @@ class InlineAIEngine:
         context: InlineContext,
         expansion_ratio: float = 2.0
     ) -> str:
-        """
-        Expand selected text with more details
-
-        Args:
-            context: Document context
-            expansion_ratio: Target expansion ratio (2.0 = double the length)
-
-        Returns:
-            Expanded text
-        """
+        """Expand selected text with more details."""
         current_words = len(context.selected_text.split())
-        target_words = int(current_words * expansion_ratio)
-
-        prompt = f"""请扩展以下内容，添加更多细节、例子和解释，目标字数约{target_words}字：
-
-原文：
-{context.selected_text}
-
-扩展要求：
-1. 保持核心观点不变
-2. 添加具体例子和细节
-3. 增强论证深度
-4. 保持逻辑连贯
-
-扩展后的文本："""
-
+        target_words = max(50, int(current_words * expansion_ratio))
+        prompt = (
+            f"Expand the selected text with useful details to about {target_words} words.\n\n"
+            f"Selected text:\n{context.selected_text}\n\n"
+            "Keep the same core claims."
+        )
         result = self.client.chat(
-            system="你是专业的内容扩展专家，擅长丰富文本内容。",
+            system="You are a detail-oriented writing assistant.",
             user=prompt,
             temperature=0.6,
-            options={"num_predict": target_words * 4}
+            options={"num_predict": target_words * 4},
         )
-
         return result.strip()
 
     async def _change_tone(
@@ -432,138 +580,68 @@ class InlineAIEngine:
         context: InlineContext,
         target_tone: ToneStyle
     ) -> str:
-        """
-        Change the tone/style of selected text
-
-        Args:
-            context: Document context
-            target_tone: Target tone style
-
-        Returns:
-            Text with changed tone
-        """
+        """Change the tone/style of selected text."""
         tone_desc = self._get_tone_description(target_tone)
-
-        prompt = f"""请将以下文本改写为{tone_desc}风格：
-
-原文：
-{context.selected_text}
-
-要求：
-1. 保持原意和信息完整
-2. 调整语言风格和用词
-3. 适应目标语境
-
-改写后的文本："""
-
-        result = self.client.chat(
-            system=f"你是专业的文本改写专家，擅长调整文本风格为{tone_desc}。",
-            user=prompt,
-            temperature=0.6
+        prompt = (
+            f"Rewrite the selected text in a {tone_desc} tone.\n\n"
+            f"Selected text:\n{context.selected_text}\n\n"
+            "Keep meaning and key information unchanged."
         )
-
+        result = self.client.chat(
+            system=f"You are a style transfer editor specialized in {tone_desc} writing.",
+            user=prompt,
+            temperature=0.6,
+        )
         return result.strip()
 
     async def _simplify_text(
         self,
         context: InlineContext
     ) -> str:
-        """
-        Simplify complex text
-
-        Args:
-            context: Document context
-
-        Returns:
-            Simplified text
-        """
-        prompt = f"""请将以下复杂文本简化，使其更易理解：
-
-原文：
-{context.selected_text}
-
-简化要求：
-1. 使用简单词汇
-2. 缩短句子长度
-3. 保持核心信息
-4. 提高可读性
-
-简化后的文本："""
-
-        result = self.client.chat(
-            system="你是专业的文本简化专家，擅长将复杂内容转化为易懂的表达。",
-            user=prompt,
-            temperature=0.5
+        """Simplify complex text."""
+        prompt = (
+            "Simplify the selected text for readability.\n\n"
+            f"Selected text:\n{context.selected_text}\n\n"
+            "Use simpler words and shorter sentences while preserving key facts."
         )
-
+        result = self.client.chat(
+            system="You are a plain-language editor.",
+            user=prompt,
+            temperature=0.5,
+        )
         return result.strip()
 
     async def _elaborate_text(
         self,
         context: InlineContext
     ) -> str:
-        """
-        Add more detailed explanation
-
-        Args:
-            context: Document context
-
-        Returns:
-            Elaborated text
-        """
-        prompt = f"""请对以下内容进行详细阐述，添加更多解释和说明：
-
-原文：
-{context.selected_text}
-
-阐述要求：
-1. 解释关键概念
-2. 提供背景信息
-3. 添加具体例子
-4. 增强理解深度
-
-阐述后的文本："""
-
-        result = self.client.chat(
-            system="你是专业的内容阐述专家，擅长深入解释和说明。",
-            user=prompt,
-            temperature=0.6
+        """Add more detailed explanation."""
+        prompt = (
+            "Elaborate on the selected text with clearer explanation and examples.\n\n"
+            f"Selected text:\n{context.selected_text}"
         )
-
+        result = self.client.chat(
+            system="You are an explanatory writing assistant.",
+            user=prompt,
+            temperature=0.6,
+        )
         return result.strip()
 
     async def _rephrase_text(
         self,
         context: InlineContext
     ) -> str:
-        """
-        Rephrase text with different wording
-
-        Args:
-            context: Document context
-
-        Returns:
-            Rephrased text
-        """
-        prompt = f"""请用不同的表达方式重新表述以下内容：
-
-原文：
-{context.selected_text}
-
-改写要求：
-1. 保持原意完全一致
-2. 使用不同的词汇和句式
-3. 保持自然流畅
-4. 避免重复原文用词
-
-改写后的文本："""
-
-        result = self.client.chat(
-            system="你是专业的文本改写专家，擅长用不同方式表达相同内容。",
-            user=prompt,
-            temperature=0.7
+        """Rephrase text with different wording."""
+        prompt = (
+            "Rephrase the selected text with different wording.\n\n"
+            f"Selected text:\n{context.selected_text}\n\n"
+            "Keep the original meaning exactly."
         )
-
+        result = self.client.chat(
+            system="You are a paraphrasing assistant.",
+            user=prompt,
+            temperature=0.7,
+        )
         return result.strip()
 
     async def _ask_ai(
@@ -571,34 +649,20 @@ class InlineAIEngine:
         context: InlineContext,
         question: str = ""
     ) -> str:
-        """
-        Ask AI a question about selected text
-
-        Args:
-            context: Document context
-            question: User's question
-
-        Returns:
-            AI's answer
-        """
+        """Ask AI a question about selected text."""
         if not question:
-            question = "请分析这段文本的内容。"
+            question = "Analyze this selected text."
 
-        prompt = f"""请回答关于以下文本的问题。
-
-文本内容：
-{context.selected_text}
-
-问题：{question}
-
-请提供详细、准确的回答："""
-
-        result = self.client.chat(
-            system="你是专业的文本分析助手，擅长回答关于文本内容的问题。",
-            user=prompt,
-            temperature=0.5
+        prompt = (
+            "Answer the question about the selected text.\n\n"
+            f"Selected text:\n{context.selected_text}\n\n"
+            f"Question:\n{question}"
         )
-
+        result = self.client.chat(
+            system="You are a text analysis assistant.",
+            user=prompt,
+            temperature=0.5,
+        )
         return result.strip()
 
     async def _explain_text(
@@ -606,41 +670,23 @@ class InlineAIEngine:
         context: InlineContext,
         detail_level: str = "medium"
     ) -> str:
-        """
-        Explain selected text
-
-        Args:
-            context: Document context
-            detail_level: Level of detail ("brief", "medium", "detailed")
-
-        Returns:
-            Explanation
-        """
+        """Explain selected text."""
         detail_desc = {
-            "brief": "简要",
-            "medium": "适中",
-            "detailed": "详细"
-        }.get(detail_level, "适中")
+            "brief": "brief",
+            "medium": "medium-detail",
+            "detailed": "detailed",
+        }.get(detail_level, "medium-detail")
 
-        prompt = f"""请{detail_desc}地解释以下文本的含义：
-
-文本：
-{context.selected_text}
-
-解释要求：
-1. 说明核心概念
-2. 解释关键术语
-3. 提供必要的背景信息
-4. 使用易懂的语言
-
-解释："""
-
-        result = self.client.chat(
-            system="你是专业的文本解释专家，擅长用清晰易懂的方式解释复杂内容。",
-            user=prompt,
-            temperature=0.5
+        prompt = (
+            f"Explain the selected text in a {detail_desc} way.\n\n"
+            f"Selected text:\n{context.selected_text}\n\n"
+            "Cover key ideas, terms, and implications."
         )
-
+        result = self.client.chat(
+            system="You are a clear explanation assistant.",
+            user=prompt,
+            temperature=0.5,
+        )
         return result.strip()
 
     async def _translate_text(
@@ -648,48 +694,29 @@ class InlineAIEngine:
         context: InlineContext,
         target_language: str = "en"
     ) -> str:
-        """
-        Translate selected text
-
-        Args:
-            context: Document context
-            target_language: Target language code ("en", "zh", "ja", "ko", etc.)
-
-        Returns:
-            Translated text
-        """
+        """Translate selected text."""
         language_names = {
-            "en": "英语",
-            "zh": "中文",
-            "ja": "日语",
-            "ko": "韩语",
-            "fr": "法语",
-            "de": "德语",
-            "es": "西班牙语",
-            "ru": "俄语"
+            "en": "English",
+            "zh": "Chinese",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "fr": "French",
+            "de": "German",
+            "es": "Spanish",
+            "ru": "Russian",
         }
 
         target_lang_name = language_names.get(target_language, target_language)
-
-        prompt = f"""请将以下文本翻译成{target_lang_name}：
-
-原文：
-{context.selected_text}
-
-翻译要求：
-1. 准确传达原意
-2. 符合目标语言习惯
-3. 保持专业术语准确性
-4. 自然流畅
-
-翻译："""
-
-        result = self.client.chat(
-            system=f"你是专业的翻译专家，擅长将文本翻译成{target_lang_name}。",
-            user=prompt,
-            temperature=0.3
+        prompt = (
+            f"Translate the selected text to {target_lang_name}.\n\n"
+            f"Selected text:\n{context.selected_text}\n\n"
+            "Preserve meaning, terminology, and natural phrasing."
         )
-
+        result = self.client.chat(
+            system=f"You are a professional translator to {target_lang_name}.",
+            user=prompt,
+            temperature=0.3,
+        )
         return result.strip()
 
     def _build_continue_prompt(
@@ -697,59 +724,54 @@ class InlineAIEngine:
         context: InlineContext,
         target_words: int
     ) -> str:
-        """Build prompt for continue writing operation"""
+        """Build prompt for continue writing operation."""
         prompt_parts = []
 
-        # Add document context
         if context.document_title:
-            prompt_parts.append(f"文档标题：{context.document_title}")
+            prompt_parts.append(f"Document title: {context.document_title}")
 
         if context.section_title:
-            prompt_parts.append(f"当前章节：{context.section_title}")
+            prompt_parts.append(f"Current section: {context.section_title}")
 
-        # Add before context
         if context.before_text:
             before_preview = context.before_text[-500:] if len(context.before_text) > 500 else context.before_text
-            prompt_parts.append(f"\n前文内容：\n{before_preview}")
+            prompt_parts.append(f"\nPrevious context:\n{before_preview}")
 
-        # Add instruction
-        prompt_parts.append(f"\n请继续写作，生成约{target_words}字的内容。要求：")
-        prompt_parts.append("1. 保持与前文风格一致")
-        prompt_parts.append("2. 逻辑连贯，自然过渡")
-        prompt_parts.append("3. 内容充实，有深度")
-        prompt_parts.append("4. 语言流畅，表达清晰")
+        prompt_parts.append(f"\nContinue writing about {target_words} words. Requirements:")
+        prompt_parts.append("1. Keep style consistent with previous context")
+        prompt_parts.append("2. Maintain logical continuity")
+        prompt_parts.append("3. Provide concrete and useful content")
+        prompt_parts.append("4. Keep language clear and fluent")
 
         if context.after_text:
             after_preview = context.after_text[:200] if len(context.after_text) > 200 else context.after_text
-            prompt_parts.append(f"\n后文预览：\n{after_preview}")
-            prompt_parts.append("\n注意：生成的内容需要与后文自然衔接。")
+            prompt_parts.append(f"\nUpcoming context preview:\n{after_preview}")
+            prompt_parts.append("\nEnsure smooth transition into the upcoming context.")
 
-        prompt_parts.append("\n继续写作：")
-
+        prompt_parts.append("\nContinuation:")
         return "\n".join(prompt_parts)
 
     def _get_improvement_focus_desc(self, focus: str) -> str:
-        """Get description for improvement focus"""
+        """Get description for improvement focus."""
         focus_map = {
-            "grammar": "语法正确、规范",
-            "clarity": "清晰明了、易懂",
-            "style": "文采优美、有风格",
-            "general": "整体质量更高"
+            "grammar": "grammar and correctness",
+            "clarity": "clarity and readability",
+            "style": "style and expressiveness",
+            "general": "overall quality",
         }
-        return focus_map.get(focus, "更好")
+        return focus_map.get(focus, "overall quality")
 
     def _get_tone_description(self, tone: ToneStyle) -> str:
-        """Get description for tone style"""
+        """Get description for tone style."""
         tone_map = {
-            ToneStyle.FORMAL: "正式、庄重",
-            ToneStyle.CASUAL: "轻松、随意",
-            ToneStyle.ACADEMIC: "学术、严谨",
-            ToneStyle.TECHNICAL: "技术、专业",
-            ToneStyle.CREATIVE: "创意、生动",
-            ToneStyle.PROFESSIONAL: "专业、得体"
+            ToneStyle.FORMAL: "formal",
+            ToneStyle.CASUAL: "casual",
+            ToneStyle.ACADEMIC: "academic",
+            ToneStyle.TECHNICAL: "technical",
+            ToneStyle.CREATIVE: "creative",
+            ToneStyle.PROFESSIONAL: "professional",
         }
-        return tone_map.get(tone, "专业")
-
+        return tone_map.get(tone, "professional")
 
 # Convenience functions for common operations
 
@@ -827,3 +849,5 @@ async def improve_text(
         return result.generated_text
     else:
         raise Exception(result.error or "Improve text failed")
+
+

@@ -8,6 +8,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
+from writing_agent.web.domains import context_policy_domain
+
 router = APIRouter()
 
 
@@ -15,6 +17,54 @@ def _app_v2():
     from writing_agent.web import app_v2
 
     return app_v2
+
+
+def _clamp_int(value: int, lo: int, hi: int) -> int:
+    return max(lo, min(hi, value))
+
+
+def _normalize_inline_context_policy(raw: object) -> dict[str, object]:
+    return context_policy_domain.normalize_inline_context_policy(raw)
+
+
+def _trim_inline_context(
+    *,
+    selected_text: str,
+    before_text: str,
+    after_text: str,
+    policy: dict[str, object],
+) -> tuple[str, str, dict[str, object]]:
+    selected_len = len(str(selected_text or ""))
+    base = int(policy.get("window_formula_base") or 220)
+    coef = float(policy.get("window_formula_coef") or 0.8)
+    extra = int(policy.get("short_selection_extra_chars") or 180)
+    win_min = int(policy.get("window_min_chars") or 240)
+    win_max = max(win_min, int(policy.get("window_max_chars") or 1200))
+    short_threshold = int(policy.get("short_selection_threshold_chars") or 60)
+
+    short_boost = extra if selected_len < short_threshold else 0
+    side = _clamp_int(int(base + coef * max(1, selected_len) + short_boost), win_min, win_max)
+
+    before_raw = str(before_text or "")
+    after_raw = str(after_text or "")
+    before_trim = before_raw[-side:] if len(before_raw) > side else before_raw
+    after_trim = after_raw[:side] if len(after_raw) > side else after_raw
+    trimmed_for_window = (before_trim != before_raw) or (after_trim != after_raw)
+
+    total_cap = int(policy.get("context_total_max_chars") or 2400)
+    if len(before_trim) + len(after_trim) > total_cap:
+        half = max(120, total_cap // 2)
+        before_trim = before_trim[-half:] if len(before_trim) > half else before_trim
+        after_trim = after_trim[:half] if len(after_trim) > half else after_trim
+        trimmed_for_window = True
+
+    meta = {
+        "policy_version": str(policy.get("version") or "dynamic_v1"),
+        "left_window_chars": int(len(before_trim)),
+        "right_window_chars": int(len(after_trim)),
+        "trimmed_for_budget": bool(trimmed_for_window),
+    }
+    return before_trim, after_trim, meta
 
 
 async def doc_ir_ops(doc_id: str, request: Request) -> dict:
@@ -293,9 +343,16 @@ async def inline_ai(doc_id: str, request: Request) -> dict:
 
     data = await request.json()
     operation = data.get("operation")
-    selected_text = data.get("selected_text", "")
-    before_text = data.get("before_text", "")
-    after_text = data.get("after_text", "")
+    selected_text = str(data.get("selected_text", "") or "")
+    before_text_raw = str(data.get("before_text", "") or "")
+    after_text_raw = str(data.get("after_text", "") or "")
+    context_policy = _normalize_inline_context_policy(data.get("context_policy"))
+    before_text, after_text, context_meta = _trim_inline_context(
+        selected_text=selected_text,
+        before_text=before_text_raw,
+        after_text=after_text_raw,
+        policy=context_policy,
+    )
 
     try:
         op = InlineOperation(operation)
@@ -309,6 +366,7 @@ async def inline_ai(doc_id: str, request: Request) -> dict:
         document_title=data.get("document_title", ""),
         section_title=data.get("section_title"),
         document_type=data.get("document_type"),
+        pretrimmed=True,
     )
     engine = InlineAIEngine()
 
@@ -327,11 +385,22 @@ async def inline_ai(doc_id: str, request: Request) -> dict:
             kwargs["target_tone"] = ToneStyle(tone_str)
         except ValueError:
             kwargs["target_tone"] = ToneStyle.PROFESSIONAL
+    elif op == InlineOperation.ASK_AI:
+        kwargs["question"] = data.get("question", "")
+    elif op == InlineOperation.EXPLAIN:
+        kwargs["detail_level"] = data.get("detail_level", "medium")
+    elif op == InlineOperation.TRANSLATE:
+        kwargs["target_language"] = data.get("target_language", "en")
 
     result = await engine.execute_operation(op, context, **kwargs)
     if not result.success:
         raise app_v2.HTTPException(status_code=500, detail=result.error or "operation failed")
-    return {"ok": 1, "generated_text": result.generated_text, "operation": result.operation.value}
+    return {
+        "ok": 1,
+        "generated_text": result.generated_text,
+        "operation": result.operation.value,
+        "context_meta": context_meta,
+    }
 
 
 async def inline_ai_stream(doc_id: str, request: Request) -> StreamingResponse:
@@ -344,9 +413,16 @@ async def inline_ai_stream(doc_id: str, request: Request) -> StreamingResponse:
 
     data = await request.json()
     operation = data.get("operation")
-    selected_text = data.get("selected_text", "")
-    before_text = data.get("before_text", "")
-    after_text = data.get("after_text", "")
+    selected_text = str(data.get("selected_text", "") or "")
+    before_text_raw = str(data.get("before_text", "") or "")
+    after_text_raw = str(data.get("after_text", "") or "")
+    context_policy = _normalize_inline_context_policy(data.get("context_policy"))
+    before_text, after_text, context_meta = _trim_inline_context(
+        selected_text=selected_text,
+        before_text=before_text_raw,
+        after_text=after_text_raw,
+        policy=context_policy,
+    )
 
     try:
         op = InlineOperation(operation)
@@ -360,6 +436,7 @@ async def inline_ai_stream(doc_id: str, request: Request) -> StreamingResponse:
         document_title=data.get("document_title", ""),
         section_title=data.get("section_title"),
         document_type=data.get("document_type"),
+        pretrimmed=True,
     )
 
     kwargs = {}
@@ -390,6 +467,7 @@ async def inline_ai_stream(doc_id: str, request: Request) -> StreamingResponse:
         return f"event: {event}\ndata: {app_v2.json.dumps(payload, ensure_ascii=False)}\n\n"
 
     async def event_generator():
+        yield emit("context_meta", context_meta)
         try:
             async for event in engine.execute_operation_stream(op, context, **kwargs):
                 yield emit(event.get("type", "message"), event)

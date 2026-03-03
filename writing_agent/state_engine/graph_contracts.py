@@ -94,9 +94,9 @@ def default_graph_definition() -> GraphDefinition:
         GraphEdgeDef(source="reviewer", target="qa"),
     )
     routes = (
+        GraphRouteDef(route_id="format_only", entry_node="qa", match="format_only==true"),
+        GraphRouteDef(route_id="resume_sections", entry_node="writer", match="len(resume_sections)>0"),
         GraphRouteDef(route_id="compose_mode", entry_node="planner", match="compose_mode in {'auto','continue','overwrite'}"),
-        GraphRouteDef(route_id="resume_sections", entry_node="planner", match="len(resume_sections)>0"),
-        GraphRouteDef(route_id="format_only", entry_node="planner", match="format_only==true"),
     )
     return GraphDefinition(schema_version="1.0", nodes=nodes, edges=edges, routes=routes)
 

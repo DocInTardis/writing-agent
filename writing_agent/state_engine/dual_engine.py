@@ -5,6 +5,7 @@ This module belongs to `writing_agent.state_engine` in the writing-agent codebas
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from typing import Any, Callable
 from writing_agent.state_engine.checkpoint_store import CheckpointStore
 from writing_agent.state_engine.graph_contracts import (
     GraphDefinition,
+    GraphRouteDef,
     default_graph_definition,
     edge_map,
     node_map,
@@ -94,10 +96,23 @@ class DualGraphEngine:
                 prior = saved.get("events") if isinstance(saved.get("events"), list) else []
                 restored = deterministic_replay(prior)
                 state.update(restored)
+                saved_state = saved.get("state") if isinstance(saved.get("state"), dict) else {}
+                prior_route = saved_state.get("_route") if isinstance(saved_state, dict) else None
+                if isinstance(prior_route, dict):
+                    state["_route"] = {
+                        "id": str(prior_route.get("id") or "").strip(),
+                        "entry_node": str(prior_route.get("entry_node") or "").strip(),
+                    }
                 events.extend(prior)
                 self._seed_defaults(state)
 
-        order = self._topological_order()
+        route = self._resolve_route(state)
+        self._apply_route_defaults(state, route)
+        route_id = str(route.route_id) if route else "default"
+        route_entry = str(route.entry_node) if route else ""
+        state["_route"] = {"id": route_id, "entry_node": route_entry}
+
+        order = self._execution_order(entry_node=route.entry_node if route else None)
         nodes = node_map(self.definition)
         for node_id in order:
             node_def = nodes[node_id]
@@ -120,6 +135,8 @@ class DualGraphEngine:
                             "span_id": uuid.uuid4().hex,
                             "node_id": node_id,
                             "engine": "native",
+                            "route_id": route_id,
+                            "route_entry": route_entry,
                             "started_at": time.time(),
                             "ended_at": time.time(),
                         },
@@ -137,6 +154,8 @@ class DualGraphEngine:
                 "span_id": uuid.uuid4().hex,
                 "node_id": node_id,
                 "engine": "native",
+                "route_id": route_id,
+                "route_entry": route_entry,
                 "started_at": started,
                 "ended_at": ended,
             }
@@ -172,15 +191,30 @@ class DualGraphEngine:
                 prior = saved.get("events") if isinstance(saved.get("events"), list) else []
                 restored = deterministic_replay(prior)
                 state.update(restored)
+                saved_state = saved.get("state") if isinstance(saved.get("state"), dict) else {}
+                prior_route = saved_state.get("_route") if isinstance(saved_state, dict) else None
+                if isinstance(prior_route, dict):
+                    state["_route"] = {
+                        "id": str(prior_route.get("id") or "").strip(),
+                        "entry_node": str(prior_route.get("entry_node") or "").strip(),
+                    }
                 events.extend(prior)
                 self._seed_defaults(state)
 
+        route = self._resolve_route(state)
+        self._apply_route_defaults(state, route)
+        route_id = str(route.route_id) if route else "default"
+        route_entry = str(route.entry_node) if route else ""
+        state["_route"] = {"id": route_id, "entry_node": route_entry}
+
         graph = StateGraph(dict)
+        available_nodes: set[str] = set()
 
         for node in self.definition.nodes:
             handler = handlers.get(node.handler_name)
             if handler is None:
                 continue
+            available_nodes.add(node.node_id)
 
             def _mk(node_id: str, schema=node.schema, fn=handler):
                 def _runner(data: dict[str, Any]) -> dict[str, Any]:
@@ -202,6 +236,8 @@ class DualGraphEngine:
                                         "span_id": uuid.uuid4().hex,
                                         "node_id": node_id,
                                         "engine": "langgraph",
+                                        "route_id": route_id,
+                                        "route_entry": route_entry,
                                         "started_at": time.time(),
                                         "ended_at": time.time(),
                                     },
@@ -223,6 +259,8 @@ class DualGraphEngine:
                                 "span_id": uuid.uuid4().hex,
                                 "node_id": node_id,
                                 "engine": "langgraph",
+                                "route_id": route_id,
+                                "route_entry": route_entry,
                                 "started_at": started,
                                 "ended_at": ended,
                             },
@@ -235,15 +273,25 @@ class DualGraphEngine:
 
             graph.add_node(node.node_id, _mk(node.node_id))
 
-        order = self._topological_order()
+        order = self._execution_order(entry_node=route.entry_node if route else None)
         if not order:
             return state, events
-        graph.set_entry_point(order[0])
+        route_nodes = set(order)
+        entry_node = next((node_id for node_id in order if node_id in available_nodes), None)
+        if not entry_node:
+            return state, events
+        graph.set_entry_point(entry_node)
         adjacency = edge_map(self.definition)
         for src, targets in adjacency.items():
             for target in targets:
+                if src not in route_nodes or target not in route_nodes:
+                    continue
+                if src not in available_nodes or target not in available_nodes:
+                    continue
                 graph.add_edge(src, target)
-        graph.add_edge(order[-1], END)
+        exit_node = next((node_id for node_id in reversed(order) if node_id in available_nodes), None)
+        if exit_node:
+            graph.add_edge(exit_node, END)
         app = graph.compile()
         final_state = app.invoke(state)
         return dict(final_state or {}), events
@@ -271,6 +319,76 @@ class DualGraphEngine:
             # fall back to declared order
             return nodes
         return order
+
+    def _execution_order(self, *, entry_node: str | None = None) -> list[str]:
+        order = self._topological_order()
+        if not entry_node:
+            return order
+        entry = str(entry_node).strip()
+        if not entry or entry not in order:
+            return order
+        adjacency = edge_map(self.definition)
+        reachable: set[str] = set()
+        queue: list[str] = [entry]
+        while queue:
+            cur = queue.pop(0)
+            if cur in reachable:
+                continue
+            reachable.add(cur)
+            for nxt in adjacency.get(cur, []):
+                if nxt not in reachable:
+                    queue.append(nxt)
+        selected = [node_id for node_id in order if node_id in reachable]
+        return selected or order
+
+    def _resolve_route(self, state: dict[str, Any]) -> GraphRouteDef | None:
+        routes = list(self.definition.routes or ())
+        if not routes:
+            return None
+        map_by_id = {str(route.route_id): route for route in routes}
+        prior = state.get("_route")
+        if isinstance(prior, dict):
+            prior_id = str(prior.get("id") or "").strip()
+            if prior_id and prior_id in map_by_id:
+                return map_by_id[prior_id]
+        for route in routes:
+            if self._route_match(route.match, state):
+                return route
+        return None
+
+    def _route_match(self, expr: str, state: dict[str, Any]) -> bool:
+        raw = str(expr or "").strip()
+        if not raw:
+            return False
+        # Normalize booleans from config-style strings to Python literals.
+        py_expr = re.sub(r"\btrue\b", "True", raw, flags=re.IGNORECASE)
+        py_expr = re.sub(r"\bfalse\b", "False", py_expr, flags=re.IGNORECASE)
+        env: dict[str, Any] = dict(state or {})
+        env.setdefault("compose_mode", "auto")
+        env.setdefault("resume_sections", [])
+        env.setdefault("format_only", False)
+        try:
+            out = eval(py_expr, {"__builtins__": {}, "len": len}, env)
+            return bool(out)
+        except Exception:
+            return False
+
+    def _apply_route_defaults(self, state: dict[str, Any], route: GraphRouteDef | None) -> None:
+        if route is None:
+            return
+        route_id = str(route.route_id or "").strip().lower()
+        if route_id == "resume_sections":
+            state.setdefault(
+                "plan",
+                {
+                    "compose_mode": str(state.get("compose_mode") or "auto"),
+                    "resume_sections": list(state.get("resume_sections") or []),
+                },
+            )
+        elif route_id == "format_only":
+            state.setdefault("draft", str(state.get("current_text") or ""))
+            state.setdefault("review", {"issues": []})
+            state.setdefault("fixups", [])
 
     def _seed_defaults(self, state: dict[str, Any]) -> None:
         """Populate default fields required by graph node contracts."""

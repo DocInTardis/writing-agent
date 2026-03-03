@@ -1064,12 +1064,28 @@ def run_generate_graph_dual_engine(
             "qa": _qa,
         },
     )
+    actual_engine = ""
+    for row in reversed(list(_events or [])):
+        if not isinstance(row, dict):
+            continue
+        meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        candidate = str(meta.get("engine") or "").strip()
+        if candidate:
+            actual_engine = candidate
+            break
+    if not actual_engine:
+        actual_engine = "langgraph" if should_use_langgraph() else "native"
+    route = state.get("_route") if isinstance(state.get("_route"), dict) else {}
+    route_id = str(route.get("id") or "")
+    route_entry = str(route.get("entry_node") or "")
     return {
         "ok": 1,
         "text": str(state.get("final_text") or ""),
         "problems": list(state.get("problems") or []),
         "trace_id": str(state.get("trace_id") or ""),
-        "engine": "langgraph" if should_use_langgraph() else "native",
+        "engine": actual_engine,
+        "route_id": route_id,
+        "route_entry": route_entry,
     }
 
 from writing_agent.v2 import graph_runner_post_domain as post_domain
