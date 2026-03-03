@@ -199,6 +199,8 @@ def test_reliability_edit_attempt_during_generation_no_crash(server_url):
 
         _send_assistant(page, "Generate a long draft for stability test.")
         page.wait_for_timeout(120)
+        page.keyboard.press("Escape")
+        page.wait_for_selector(".assistant-sheet", state="detached")
         page.click(".editable")
         page.keyboard.type("LOCAL_EDIT_ATTEMPT")
         page.wait_for_function("window.__waGetStore && window.__waGetStore('generating') === false")
@@ -299,6 +301,9 @@ def test_reliability_resume_button_replays_interrupted_instruction(server_url):
 
         _send_assistant(page, "Please continue this draft.")
         page.wait_for_function("window.__waGetStore && window.__waGetStore('generating') === false")
+        page.keyboard.press("Escape")
+        page.wait_for_selector(".assistant-sheet", state="detached")
+        page.click(".toolbar-advanced-toggle")
         page.wait_for_selector("button:has-text('续跑')", timeout=3000)
         page.click("button:has-text('续跑')")
         page.wait_for_function("window.__waGetStore && window.__waGetStore('generating') === false")
@@ -777,7 +782,7 @@ def test_document_quality_citation_verify_pipeline(server_url):
 
         page.route("**/api/doc/*/citations/verify", _on_verify)
 
-        page.click(".nav-btn[title='引用']")
+        page.click("button.tool-btn[aria-label='引用管理']")
         page.wait_for_selector(".modal h2")
         page.wait_for_selector(".list-section .citation-item")
 

@@ -196,6 +196,9 @@ def test_workbench_svelte_shortcuts_and_toolbar_state(server_url, tmp_path):
         page.wait_for_timeout(120)
         assert "abcXYZ" in para.inner_text()
 
+        # Undo/redo controls are in the folded advanced toolbar by default.
+        page.click(".toolbar-advanced-toggle")
+        page.wait_for_selector('button.tool-btn[title*="Ctrl/Cmd+Z"]')
         undo_btn = page.locator('button.tool-btn[title*="Ctrl/Cmd+Z"]').first
         redo_btn = page.locator('button.tool-btn[title*="Ctrl/Cmd+Y"]').first
         assert not undo_btn.evaluate("el => el.disabled")
