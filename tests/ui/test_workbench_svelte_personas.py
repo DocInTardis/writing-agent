@@ -99,9 +99,19 @@ def _seed_doc(page: Page, doc_id: str, text: str) -> None:
     )
 
 
+def _ensure_assistant_open(page: Page) -> None:
+    sheet = page.locator(".assistant-sheet")
+    if sheet.count() > 0 and sheet.first.is_visible():
+        page.wait_for_selector(".assistant-sheet .composer textarea")
+        return
+    page.click(".assistant-fab")
+    page.wait_for_selector(".assistant-sheet .composer textarea")
+
+
 def _send_assistant(page: Page, instruction: str) -> None:
-    page.fill(".assistant-dock textarea", instruction)
-    page.click(".assistant-dock .send-btn")
+    _ensure_assistant_open(page)
+    page.fill(".assistant-sheet .composer textarea", instruction)
+    page.click(".assistant-sheet .send-btn")
 
 
 def _wait_until(predicate, timeout_s: float = 8.0) -> None:
@@ -411,7 +421,8 @@ def test_upload_text_and_image_files_are_accepted(server_url, tmp_path):
             )
         )
 
-        file_input = ".assistant-dock input[type='file'][accept*='.docx']"
+        _ensure_assistant_open(page)
+        file_input = ".assistant-sheet input[type='file'][accept*='.docx']"
 
         with page.expect_response("**/api/doc/*/upload") as txt_resp_info:
             page.set_input_files(file_input, str(txt_path))
@@ -436,7 +447,7 @@ def test_upload_text_and_image_files_are_accepted(server_url, tmp_path):
         page.wait_for_function(
             """
             () => {
-              const chat = document.querySelector('.assistant-dock .chat-history');
+              const chat = document.querySelector('.assistant-sheet .chat-history');
               if (!chat) return false;
               const t = chat.innerText || '';
               return t.includes('upload-notes.txt')
@@ -464,7 +475,7 @@ def test_intent_inference_for_continue_and_overwrite_without_dialog(server_url):
             "# Existing\n\n## Intro\nThis existing content is long enough to trigger compose mode logic.",
         )
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_selector(".assistant-dock textarea")
+        _ensure_assistant_open(page)
 
         payloads: list[dict] = []
         dialogs: list[str] = []
@@ -521,7 +532,7 @@ def test_modify_intent_prefers_continue_not_overwrite(server_url):
             "# Draft\n\n## Body\nFirst paragraph.\n\nSecond paragraph for refinement.\n\nConclusion.",
         )
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_selector(".assistant-dock textarea")
+        _ensure_assistant_open(page)
         page.wait_for_function(
             "window.__waGetStore && String(window.__waGetStore('sourceText') || '').includes('Second paragraph for refinement.')"
         )

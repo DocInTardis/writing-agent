@@ -73,6 +73,21 @@ def server_url(tmp_path_factory) -> str:
             proc.kill()
 
 
+def _ensure_assistant_open(page) -> None:
+    sheet = page.locator(".assistant-sheet")
+    if sheet.count() > 0 and sheet.first.is_visible():
+        page.wait_for_selector(".assistant-sheet .composer textarea")
+        return
+    page.click(".assistant-fab")
+    page.wait_for_selector(".assistant-sheet .composer textarea")
+
+
+def _send_assistant_instruction(page, instruction: str) -> None:
+    _ensure_assistant_open(page)
+    page.fill(".assistant-sheet .composer textarea", instruction)
+    page.click(".assistant-sheet .send-btn")
+
+
 def test_workbench_svelte_render_and_screenshot(server_url, tmp_path):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -425,7 +440,7 @@ def test_workbench_svelte_generate_with_existing_text_confirms_continue_mode(ser
             {"docId": doc_id},
         )
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_selector(".assistant-dock textarea")
+        _ensure_assistant_open(page)
         page.wait_for_function(
             "window.__waGetStore && String(window.__waGetStore('sourceText') || '').includes('这里已经有足够长度')"
         )
@@ -458,8 +473,7 @@ def test_workbench_svelte_generate_with_existing_text_confirms_continue_mode(ser
 
         page.route("**/api/doc/*/generate/stream", _on_generate)
 
-        page.fill(".assistant-dock textarea", "请补充结论段")
-        page.click(".assistant-dock .send-btn")
+        _send_assistant_instruction(page, "请补充结论段")
 
         start = time.time()
         while not captured_payload and (time.time() - start) < 5:
@@ -503,7 +517,7 @@ def test_workbench_svelte_generate_with_existing_text_confirms_overwrite_mode(se
             {"docId": doc_id, "text": existing_text},
         )
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_selector(".assistant-dock textarea")
+        _ensure_assistant_open(page)
         page.wait_for_function(
             "window.__waGetStore && String(window.__waGetStore('sourceText') || '').includes('meaningful content')"
         )
@@ -537,8 +551,7 @@ def test_workbench_svelte_generate_with_existing_text_confirms_overwrite_mode(se
         page.route("**/api/doc/*/generate/stream", _on_generate)
 
         user_inst = "Please complete this draft into a final version."
-        page.fill(".assistant-dock textarea", user_inst)
-        page.click(".assistant-dock .send-btn")
+        _send_assistant_instruction(page, user_inst)
 
         start = time.time()
         while not captured_payload and (time.time() - start) < 5:
@@ -579,7 +592,7 @@ def test_workbench_svelte_shows_route_graph_meta_chip(server_url):
             {"docId": doc_id},
         )
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_selector(".assistant-dock textarea")
+        _ensure_assistant_open(page)
 
         captured_payload: dict = {}
 
@@ -612,17 +625,61 @@ def test_workbench_svelte_shows_route_graph_meta_chip(server_url):
 
         page.route("**/api/doc/*/generate/stream", _on_generate)
 
-        page.fill(".assistant-dock textarea", "continue intro with extra details")
-        page.click(".assistant-dock .send-btn")
+        _send_assistant_instruction(page, "continue intro with extra details")
 
         start = time.time()
         while not captured_payload and (time.time() - start) < 5:
             page.wait_for_timeout(100)
 
         assert captured_payload
-        page.wait_for_function("document.body.innerText.includes('路由 resume_sections')")
-        page.wait_for_function("document.body.innerText.includes('入口 writer')")
-        page.wait_for_function("document.body.innerText.includes('引擎 native')")
+        page.wait_for_function(
+            "(() => { const el = document.querySelector('.assistant-sheet .thought-list'); return !!el && (el.innerText || '').includes('route=resume_sections; entry=writer; engine=native'); })()"
+        )
+
+        context.close()
+        browser.close()
+
+
+def test_workbench_svelte_focus_modes_smoke(server_url, tmp_path):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(accept_downloads=True)
+        page = context.new_page()
+        page.goto(server_url, wait_until="domcontentloaded")
+        page.wait_for_selector(".app")
+        page.wait_for_selector(".workspace.mode-editor")
+        page.wait_for_selector(".workspace-status-line")
+        page.wait_for_selector(".doc-toolbar")
+        assert page.locator(".library-mode-stage").count() == 0
+
+        page.click(".menu-item:has-text('资料')")
+        page.wait_for_selector(".workspace.mode-library")
+        page.wait_for_selector(".library-mode-stage")
+        page.wait_for_selector(".library-mode-stage[aria-label='资料模式拖拽工作区']")
+        assert page.locator(".doc-toolbar").count() == 0
+        if page.locator(".modal-backdrop").count() > 0:
+            page.locator(".modal-backdrop").click(position={"x": 5, "y": 5})
+            page.wait_for_selector(".modal-backdrop", state="detached")
+
+        page.click(".menu-item:has-text('编辑')")
+        page.wait_for_selector(".workspace.mode-editor")
+        page.wait_for_selector(".doc-toolbar")
+
+        page.click(".top-actions .btn:has-text('文档信息')")
+        page.wait_for_selector(".info-drawer")
+        page.click(".info-drawer .btn:has-text('关闭')")
+        page.wait_for_selector(".info-drawer", state="detached")
+
+        page.click(".assistant-fab")
+        page.wait_for_selector(".assistant-sheet .composer textarea")
+        page.keyboard.press("Escape")
+        page.wait_for_selector(".assistant-sheet", state="detached")
+        page.keyboard.press("Control+K")
+        page.wait_for_selector(".assistant-sheet .composer textarea")
+
+        screenshot_path = tmp_path / "workbench_svelte_focus_modes_smoke.png"
+        page.screenshot(path=str(screenshot_path), full_page=True, timeout=120000)
+        assert screenshot_path.exists()
 
         context.close()
         browser.close()

@@ -15,6 +15,13 @@
   import { initWasmEngine, isWasmAvailable } from './lib/engine/wasmLoader'
   import { textToDocIr, docIrToMarkdown } from './lib/utils/markdown'
   import {
+    buildGenerateRequestPayload,
+    sanitizeAiDocumentText,
+    sanitizeAiInputText,
+    sanitizeAiSelectionPayload,
+    sanitizeAiStringList
+  } from './lib/utils/ai_payload'
+  import {
     appendChat,
     docId,
     docStatus,
@@ -109,6 +116,7 @@
     route_entry: string
   }
   type WorkbenchSurface = 'chat' | 'library' | 'editor' | 'canvas'
+  type WorkspaceMode = 'editor' | 'library' | 'collab'
   type LibraryCard = {
     id: string
     title: string
@@ -124,13 +132,16 @@
   }
   let resumeState: ResumeState | null = null
   let lastGraphMeta: GraphMeta | null = null
-  let surfaceTab: WorkbenchSurface = 'library'
+  let surfaceTab: WorkbenchSurface = 'editor'
+  let workspaceMode: WorkspaceMode = 'editor'
   let libraryViewMode: 'grid' | 'masonry' | 'list' = 'grid'
   let librarySearch = ''
   let librarySelectAll = false
   let selectedLibraryCardId = ''
   let filteredLibraryCards: LibraryCard[] = []
+  let topStatusLine = '未加载'
   let hideLibraryInfo = false
+  let infoDrawerOpen = false
   let showDocList = false
   let showCitations = false
   let showPerformanceMetrics = false
@@ -188,7 +199,8 @@
   let versionTree = ''
   let versionMessage = ''
   let versionError = ''
-  let assistantOpen = true
+  let assistantOpen = false
+  let showAdvancedToolbar = false
   let canvasOpen = false
   let selectedBlockId = ''
   let selectedBlockIds: string[] = []
@@ -423,10 +435,57 @@
     return `route=${routeId}; entry=${routeEntry}; engine=${engine}; trace=${trace}`
   }
 
+  function focusAssistantInput() {
+    queueMicrotask(() => {
+      const input = document.querySelector('.assistant-sheet .composer textarea') as HTMLTextAreaElement | null
+      if (input) input.focus()
+    })
+  }
+
+  function setAssistantOpen(next: boolean) {
+    assistantOpen = next
+    if (assistantOpen) focusAssistantInput()
+  }
+
+  function toggleAssistantOpen() {
+    setAssistantOpen(!assistantOpen)
+  }
+
+  function switchWorkspaceMode(mode: WorkspaceMode) {
+    workspaceMode = mode
+    if (mode === 'library') {
+      showDocList = true
+    }
+    if (mode !== 'collab') {
+      setAssistantOpen(false)
+    }
+    if (mode === 'editor') {
+      canvasOpen = false
+    }
+  }
+
+  function openInfoDrawer() {
+    infoDrawerOpen = true
+  }
+
+  function closeInfoDrawer() {
+    infoDrawerOpen = false
+  }
+
+  function toggleInfoDrawer() {
+    infoDrawerOpen = !infoDrawerOpen
+  }
+
+  function runBatchFromToolbar() {
+    switchWorkspaceMode('library')
+    pushToast('已切换到资料模式，可继续执行批处理。', 'info')
+  }
+
   function switchSurface(tab: WorkbenchSurface) {
     surfaceTab = tab
     if (tab === 'chat') {
-      assistantOpen = true
+      switchWorkspaceMode('collab')
+      setAssistantOpen(true)
       return
     }
     if (tab === 'canvas') {
@@ -434,7 +493,11 @@
       return
     }
     if (tab === 'library') {
-      showDocList = true
+      switchWorkspaceMode('library')
+      return
+    }
+    if (tab === 'editor') {
+      switchWorkspaceMode('editor')
     }
   }
 
@@ -467,6 +530,24 @@
     if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
     if (diff < day) return `${Math.floor(diff / hour)} 小时前`
     return `${Math.floor(diff / day)} 天前`
+  }
+
+  function buildTopStatusLine() {
+    const parts: string[] = []
+    parts.push($docStatus || '未加载')
+    parts.push(`${Math.max(0, Number($wordCount || 0))} 词`)
+    if (lastGraphMeta?.route_id || lastGraphMeta?.route_entry || lastGraphMeta?.engine) {
+      parts.push(
+        `路由 ${lastGraphMeta?.route_id || 'default'}/${lastGraphMeta?.route_entry || 'planner'} · ${lastGraphMeta?.engine || 'legacy'}`
+      )
+    }
+    if (feedbackItems.length > 0) {
+      parts.push(`满意度 ${feedbackItems[0].rating}/5`)
+    }
+    if (plagiarismResults.length > 0) {
+      parts.push(`查重峰值 ${Math.round(plagiarismMaxScore * 100)}%`)
+    }
+    return parts.join(' · ')
   }
 
   function buildLibraryCards(): LibraryCard[] {
@@ -567,8 +648,8 @@
       return
     }
     if (card.action === 'assistant') {
-      assistantOpen = true
-      switchSurface('chat')
+      switchWorkspaceMode('collab')
+      setAssistantOpen(true)
       return
     }
     if (card.action === 'upload') {
@@ -591,6 +672,8 @@
       selectedLibraryCardId = ''
     }
   }
+
+  $: topStatusLine = buildTopStatusLine()
 
   function selectedSectionKeys() {
     const out: string[] = []
@@ -1442,10 +1525,10 @@
   function buildSelectedRevisionPayload(baseText: string) {
     const selectedIds = selectedTargetIds()
     if (!selectedIds.length) return null
-    const selected = selectedTargetPlainText()
+    const selected = sanitizeAiInputText(selectedTargetPlainText(), { trim: true, maxChars: 16000 })
     if (!selected) return null
-    const src = String(baseText || '')
-    if (!src) return { text: selected }
+    const src = sanitizeAiDocumentText(baseText)
+    if (!src) return sanitizeAiSelectionPayload({ text: selected })
 
     const candidates: string[] = [selected]
     const compact = selected.trim()
@@ -1455,15 +1538,15 @@
       if (idx < 0) continue
       const secondIdx = src.indexOf(candidate, idx + 1)
       if (secondIdx >= 0) {
-        return { text: candidate }
+        return sanitizeAiSelectionPayload({ text: candidate })
       }
-      return {
+      return sanitizeAiSelectionPayload({
         start: idx,
         end: idx + candidate.length,
         text: candidate
-      }
+      })
     }
-    return { text: compact || selected }
+    return sanitizeAiSelectionPayload({ text: compact || selected })
   }
 
   function summarizeRevisionStatus(meta: Record<string, unknown>) {
@@ -1484,7 +1567,8 @@
 
   function openAssistantForBlock(customInstruction?: string) {
     inlinePanelTab = 'assistant'
-    assistantOpen = true
+    switchWorkspaceMode('collab')
+    setAssistantOpen(true)
     const ids = selectedTargetIds()
     const base = selectedTargetText()
     const req = String(customInstruction || '').trim()
@@ -1497,10 +1581,7 @@
           : '请只修改我选中的这段内容，不要改其他段落。'
       instruction.set(`${title}\n${base}\n\n修改要求：${req}`)
     }
-    queueMicrotask(() => {
-      const input = document.querySelector('.assistant-dock .composer textarea') as HTMLTextAreaElement | null
-      if (input) input.focus()
-    })
+    focusAssistantInput()
   }
 
   async function previewSelectedBlockEdit() {
@@ -1516,7 +1597,7 @@
       blockEditError = '标题与正文混选时暂不支持候选生成，请只选段落块。'
       return
     }
-    const input = blockEditCmd.trim()
+    const input = sanitizeAiInputText(blockEditCmd, { trim: true, maxChars: 2400 })
     if (!input) return
     blockPreviewBusy = true
     blockEditError = ''
@@ -1562,9 +1643,14 @@
           for (const blockId of blockIds) {
             const payload: Record<string, unknown> = {
               block_id: blockId,
-              instruction: variant.instruction,
+              instruction: sanitizeAiInputText(variant.instruction, { trim: true, maxChars: 2400 }),
               doc_ir: workingDoc,
-              variants: [{ label: variant.label, instruction: variant.instruction }]
+              variants: [
+                {
+                  label: sanitizeAiInputText(variant.label, { trim: true, maxChars: 40 }),
+                  instruction: sanitizeAiInputText(variant.instruction, { trim: true, maxChars: 2400 })
+                }
+              ]
             }
             const resp = await fetch(`/api/doc/${$docId}/block-edit/preview`, {
               method: 'POST',
@@ -1611,15 +1697,34 @@
   }
 
   function handleInlineShortcut(event: KeyboardEvent) {
+    const key = String(event.key || '').toLowerCase()
+    const withCmd = event.ctrlKey || event.metaKey
+    if (withCmd && key === 'k') {
+      event.preventDefault()
+      switchWorkspaceMode('collab')
+      toggleAssistantOpen()
+      return
+    }
+    if (event.key === 'Escape') {
+      if (assistantOpen) {
+        setAssistantOpen(false)
+        return
+      }
+      if (infoDrawerOpen) {
+        closeInfoDrawer()
+        return
+      }
+      if (inlinePopoverOpen) {
+        inlinePopoverOpen = false
+      }
+      return
+    }
     if (!selectedBlockIds.length) return
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault()
       const placement: 'up' | 'down' = event.shiftKey ? 'up' : 'down'
       openInlinePopover(inlinePanelTab as InlinePanelTab, placement)
       return
-    }
-    if (event.key === 'Escape') {
-      if (inlinePopoverOpen) inlinePopoverOpen = false
     }
   }
 
@@ -3066,6 +3171,16 @@
     if (input) input.value = ''
   }
 
+  async function handleLibraryDrop(event: DragEvent) {
+    event.preventDefault()
+    const files = event.dataTransfer?.files
+    if (!files || files.length === 0) return
+    const all = Array.from(files)
+    for (const file of all.slice(0, 10)) {
+      await uploadAsset(file, { source: 'assistant' })
+    }
+  }
+
   function toggleDarkMode() {
     darkMode.update(v => !v)
     document.body.classList.toggle('dark', !$darkMode)
@@ -3081,7 +3196,7 @@
       cursorAnchor?: string
     }
   ) {
-    const inst = String(text || '').trim()
+    const inst = sanitizeAiInputText(text, { trim: true, maxChars: 12000 })
     if (!inst) return
     if (isGenerationOrRenderBusy()) {
       if (!opts?.fromQueue) {
@@ -3109,7 +3224,7 @@
       instruction.set('')
     }
     runEditorCommand('commit')
-    const latestText = String($sourceText || '')
+    const latestText = sanitizeAiDocumentText($sourceText || '')
     const hasExistingText = hasMeaningfulDocContent(latestText)
     const inferredMode = inferComposeMode(inst)
     let composeMode: 'auto' | 'continue' | 'overwrite' = opts?.forcedComposeMode || inferredMode || 'auto'
@@ -3129,8 +3244,9 @@
     } else if (!inferredMode && composeMode === 'overwrite') {
       requestInstruction = `请忽略当前已有正文，按用户需求从头完整重写，并用新内容覆盖旧内容。\n\n用户需求：${inst}`
     }
-    const resumeSections = normalizeStringArray(opts?.resumeSections || [])
-    const cursorAnchor = String(opts?.cursorAnchor || '').trim()
+    const resumeSections = sanitizeAiStringList(opts?.resumeSections || [], { maxItems: 64, maxItemChars: 120 })
+    const cursorAnchor = sanitizeAiInputText(opts?.cursorAnchor || '', { trim: true, maxChars: 260 })
+    requestInstruction = sanitizeAiInputText(requestInstruction, { trim: true, maxChars: 12000 })
     resumeState = {
       status: 'running',
       updated_at: Date.now() / 1000,
@@ -3192,21 +3308,15 @@
       }
     }, 1000)
 
-    const generatePayload: Record<string, unknown> = {
+    const selectionPayload = buildSelectedRevisionPayload(latestText)
+    const generatePayload = buildGenerateRequestPayload({
       instruction: requestInstruction,
       text: latestText,
-      compose_mode: composeMode
-    }
-    const selectionPayload = buildSelectedRevisionPayload(latestText)
-    if (selectionPayload) {
-      generatePayload.selection = selectionPayload
-    }
-    if (resumeSections.length > 0) {
-      generatePayload.resume_sections = resumeSections
-    }
-    if (cursorAnchor) {
-      generatePayload.cursor_anchor = cursorAnchor
-    }
+      composeMode,
+      selection: selectionPayload,
+      resumeSections,
+      cursorAnchor
+    })
 
     try {
       await streamSsePost(
@@ -3512,7 +3622,7 @@
 
   async function retrySection(section: string) {
     const id = $docId
-    const target = String(section || '').trim()
+    const target = sanitizeAiInputText(section, { trim: true, maxChars: 120 })
     if (!id || !target || $generating) return
     runEditorCommand('commit')
     await saveDoc().catch(() => {})
@@ -3524,7 +3634,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           section: target,
-          instruction: String($instruction || '').trim(),
+          instruction: sanitizeAiInputText($instruction || '', { trim: true, maxChars: 12000 }),
         })
       })
       if (!resp.ok) {
@@ -3662,49 +3772,19 @@
       </div>
     </div>
     <div class="workspace-hub">
-      <div class="workspace-status">
-        <div class="status-chip">
-          <span class="dot"></span>
-          <span>{$docStatus || '未加载'}</span>
-        </div>
-        {#if lastGraphMeta}
-          <div class="status-chip light">
-            路由 {lastGraphMeta.route_id || 'default'} · 入口 {lastGraphMeta.route_entry || 'planner'} · 引擎 {lastGraphMeta.engine || 'legacy'}
-          </div>
-        {/if}
-        <div class="status-chip light">
-          <Icon name="doc" size={14} className="ui-icon sm" />
-          <span>{$wordCount} 词</span>
-        </div>
-        {#if feedbackItems.length > 0}
-          <div class="status-chip light">
-            <Icon name="star" size={14} className="ui-icon sm" />
-            <span>满意度 {feedbackItems[0].rating}/5</span>
-          </div>
-        {/if}
-        {#if plagiarismResults.length > 0}
-          <div class="status-chip light">
-            <Icon name="shield" size={14} className="ui-icon sm" />
-            <span>查重峰值 {Math.round(plagiarismMaxScore * 100)}%</span>
-          </div>
-        {/if}
+      <div class="workspace-status-line" title={topStatusLine}>
+        <span class="dot"></span>
+        <span>{topStatusLine}</span>
       </div>
-      <nav class="menu" aria-label="工作区导航">
-        <button class={`menu-item ${surfaceTab === 'chat' ? 'active' : ''}`} on:click={() => switchSurface('chat')}>
-          <Icon name="chat" className="ui-icon" />
-          <span>对话</span>
-        </button>
-        <button class={`menu-item ${surfaceTab === 'library' ? 'active' : ''}`} on:click={() => switchSurface('library')}>
-          <Icon name="library" className="ui-icon" />
-          <span>资料库</span>
-        </button>
-        <button class={`menu-item ${surfaceTab === 'editor' ? 'active' : ''}`} on:click={() => switchSurface('editor')}>
-          <Icon name="editor" className="ui-icon" />
+      <nav class="menu" aria-label="工作区模式">
+        <button class={`menu-item ${workspaceMode === 'editor' ? 'active' : ''}`} on:click={() => switchWorkspaceMode('editor')}>
           <span>编辑</span>
         </button>
-        <button class={`menu-item ${surfaceTab === 'canvas' ? 'active' : ''}`} on:click={() => switchSurface('canvas')}>
-          <Icon name="canvas" className="ui-icon" />
-          <span>画布</span>
+        <button class={`menu-item ${workspaceMode === 'library' ? 'active' : ''}`} on:click={() => switchWorkspaceMode('library')}>
+          <span>资料</span>
+        </button>
+        <button class={`menu-item ${workspaceMode === 'collab' ? 'active' : ''}`} on:click={() => switchWorkspaceMode('collab')}>
+          <span>协作</span>
         </button>
       </nav>
     </div>
@@ -3721,35 +3801,15 @@
         <Icon name="pdf" className="ui-icon" />
         <span>导出 PDF</span>
       </button>
-      <button
-        class="btn ghost icon-btn-text"
-        data-testid="ai-rate-toggle"
-        on:click={() => (showAiRatePanel = !showAiRatePanel)}
-      >
-        <Icon name="ai" className="ui-icon" />
-        <span>{showAiRatePanel ? '收起 AI 率' : 'AI 率检测'}</span>
-      </button>
-      <button
-        class="btn ghost icon-btn-text"
-        data-testid="plagiarism-toggle"
-        on:click={() => (showPlagiarismPanel = !showPlagiarismPanel)}
-      >
-        <Icon name="shield" className="ui-icon" />
-        <span>{showPlagiarismPanel ? '收起查重' : '查重检测'}</span>
-      </button>
-      <button
-        class="btn ghost icon-btn-text"
-        data-testid="feedback-toggle"
-        on:click={() => (showFeedbackPanel = !showFeedbackPanel)}
-      >
-        <Icon name="star" className="ui-icon" />
-        <span>{showFeedbackPanel ? '收起评分' : '满意度评分'}</span>
+      <button class="btn ghost icon-btn-text" on:click={toggleInfoDrawer}>
+        <Icon name="doc" className="ui-icon" />
+        <span>文档信息</span>
       </button>
       <Settings />
     </div>
   </header>
 
-  <div class={`workspace ${hideLibraryInfo ? 'hide-info' : ''}`}>
+  <div class={`workspace ${hideLibraryInfo ? 'hide-info' : ''} mode-${workspaceMode}`}>
     <aside class="nav-rail">
       <div class="rail-search">
         <input
@@ -3806,17 +3866,21 @@
           <span>快捷入口</span>
           <em>4</em>
         </div>
-        <button class={`nav-btn ${surfaceTab === 'editor' ? 'active' : ''}`} on:click={() => switchSurface('editor')} title="编辑器">
+        <button class={`nav-btn ${workspaceMode === 'editor' ? 'active' : ''}`} on:click={() => switchWorkspaceMode('editor')} title="编辑器">
           <Icon name="editor" className="ui-icon" />
           <span>正文编辑</span>
         </button>
-        <button class={`nav-btn ${surfaceTab === 'canvas' ? 'active' : ''}`} on:click={() => switchSurface('canvas')} title="画布">
+        <button class="nav-btn" on:click={() => (canvasOpen = true)} title="画布">
           <Icon name="canvas" className="ui-icon" />
           <span>图形画布</span>
         </button>
         <button class="nav-btn" title="引用" on:click={() => (showCitations = true)}>
           <Icon name="cite" className="ui-icon" />
           <span>引用管理</span>
+        </button>
+        <button class={`nav-btn ${workspaceMode === 'collab' ? 'active' : ''}`} title="协作助手" on:click={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}>
+          <Icon name="chat" className="ui-icon" />
+          <span>协作助手</span>
         </button>
         <button class="nav-btn" title="性能" on:click={() => (showPerformanceMetrics = true)}>
           <Icon name="chart" className="ui-icon" />
@@ -3831,6 +3895,97 @@
     </aside>
 
     <section class="doc-area">
+      {#if workspaceMode === 'library'}
+        <div class="library-command-bar">
+          <div class="library-view-switch">
+            <button
+              class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
+              on:click={() => (libraryViewMode = 'grid')}
+              title="网格视图"
+            >
+              <Icon name="grid" className="ui-icon" />
+            </button>
+            <button
+              class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
+              on:click={() => (libraryViewMode = 'masonry')}
+              title="瀑布视图"
+            >
+              <Icon name="masonry" className="ui-icon" />
+            </button>
+            <button
+              class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
+              on:click={() => (libraryViewMode = 'list')}
+              title="列表视图"
+            >
+              <Icon name="list" className="ui-icon" />
+            </button>
+          </div>
+          <div class="library-counter">{librarySearch ? `搜索：${librarySearch}` : '资料模式：拖拽素材、整理证据、批量管理'}</div>
+          <div class="library-actions">
+            <button class="btn ghost icon-btn-text" on:click={triggerLibraryUpload}>
+              <Icon name="upload" className="ui-icon" />
+              <span>上传素材</span>
+            </button>
+            <button class="btn ghost icon-btn-text" on:click={() => (librarySelectAll = !librarySelectAll)}>
+              <Icon name="select" className="ui-icon" />
+              <span>{librarySelectAll ? '取消全选' : '全选资料'}</span>
+            </button>
+            <button class="btn ghost icon-btn-text" on:click={() => switchWorkspaceMode('editor')}>
+              <Icon name="open" className="ui-icon" />
+              <span>返回编辑</span>
+            </button>
+          </div>
+        </div>
+        <section
+          class="library-mode-stage"
+          aria-label="资料模式拖拽工作区"
+          on:dragover|preventDefault
+          on:drop={handleLibraryDrop}
+        >
+          <div class="library-mode-dropzone">
+            <div class="panel-title">资料工作区</div>
+            <div class="panel-sub">拖拽图片/文档到此处，或点击上传素材。资料模式默认不展示正文编辑器。</div>
+            <div class="library-mode-actions">
+              <button class="btn ghost icon-btn-text" on:click={triggerLibraryUpload}>
+                <Icon name="upload" className="ui-icon" />
+                <span>上传文件</span>
+              </button>
+              <button class="btn ghost icon-btn-text" on:click={() => (showCitations = true)}>
+                <Icon name="cite" className="ui-icon" />
+                <span>引用管理</span>
+              </button>
+              <button class="btn ghost icon-btn-text" on:click={openVersions}>
+                <Icon name="clock" className="ui-icon" />
+                <span>版本记录</span>
+              </button>
+            </div>
+          </div>
+          <div class={`library-mode-board ${libraryViewMode}`}>
+            {#if filteredLibraryCards.length === 0}
+              <div class="panel-empty">暂无匹配资料，请调整筛选条件或上传新素材。</div>
+            {:else}
+              {#each filteredLibraryCards as card}
+                <button
+                  class={`library-mode-card tone-${card.tone} ${librarySelectAll || selectedLibraryCardId === card.id ? 'selected' : ''}`}
+                  on:click={() => openLibraryCard(card)}
+                  title={card.summary}
+                >
+                  <div class="library-mode-card-head">
+                    <span class={`library-status status-${card.status}`}>{card.status_label}</span>
+                    <span class="library-kind">{card.kind_label}</span>
+                  </div>
+                  <div class="library-mode-card-title">{card.title}</div>
+                  <div class="library-mode-card-summary">{card.summary}</div>
+                  <div class="library-mode-card-foot">
+                    <span>{formatLibraryCardTime(card.updated_at)}</span>
+                    <span>{card.size_label}</span>
+                  </div>
+                </button>
+              {/each}
+            {/if}
+          </div>
+        </section>
+      {:else}
       <div class="library-command-bar">
         <div class="library-view-switch">
           <button
@@ -3865,35 +4020,22 @@
             <Icon name="batch" className="ui-icon" />
             <span>批处理 ({librarySelectAll ? filteredLibraryCards.length : 1})</span>
           </button>
-          <button class="btn ghost icon-btn-text" on:click={() => (hideLibraryInfo = !hideLibraryInfo)}>
-            <Icon name={hideLibraryInfo ? 'eye' : 'eyeOff'} className="ui-icon" />
-            <span>{hideLibraryInfo ? '显示信息栏' : '隐藏信息栏'}</span>
+          <button class="btn ghost icon-btn-text" on:click={openInfoDrawer}>
+            <Icon name="doc" className="ui-icon" />
+            <span>文档信息</span>
           </button>
         </div>
       </div>
       <div class="doc-toolbar">
-        <div class="toolbar-line">
-          <div class="toolbar-cluster">
-            <span class="cluster-label">文本</span>
-            <button class="tool-btn" title="撤销 Ctrl/Cmd+Z" aria-label="撤销" on:click={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
-              <Icon name="undo" size={14} className="ui-icon sm" />
+        <div class="toolbar-line primary">
+          <div class="toolbar-cluster core">
+            <span class="cluster-label">创作核心</span>
+            <button class="tool-btn" on:click={() => runEditorCommand('heading1')} aria-label="一级标题">
+              <Icon name="h1" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" title="重做 Ctrl/Cmd+Y" aria-label="重做" on:click={() => runEditorCommand('redo')} disabled={!editorToolbarState.canRedo}>
-              <Icon name="redo" size={14} className="ui-icon sm" />
+            <button class="tool-btn" on:click={() => runEditorCommand('heading2')} aria-label="二级标题">
+              <Icon name="h2" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" title="复制 Ctrl/Cmd+C" aria-label="复制" on:click={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
-              <Icon name="copy" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" title="剪切 Ctrl/Cmd+X" aria-label="剪切" on:click={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
-              <Icon name="cut" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" title="粘贴 Ctrl/Cmd+V" aria-label="粘贴" on:click={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
-              <Icon name="paste" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" title="清除格式" aria-label="清除格式" on:click={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
-              <Icon name="clear" size={14} className="ui-icon sm" />
-            </button>
-            <span class="tool-sep"></span>
             <button
               class={`tool-btn ${editorToolbarState.bold ? 'active' : ''}`}
               title="加粗 Ctrl/Cmd+B"
@@ -3903,48 +4045,13 @@
             >
               <Icon name="bold" size={14} className="ui-icon sm" />
             </button>
-            <button
-              class={`tool-btn ${editorToolbarState.italic ? 'active' : ''}`}
-              title="斜体 Ctrl/Cmd+I"
-              aria-label="斜体"
-              on:click={() => runEditorCommand('italic')}
-              disabled={editorToolbarState.readonly || !editorToolbarState.focused}
-            >
-              <Icon name="italic" size={14} className="ui-icon sm" />
-            </button>
-            <button
-              class={`tool-btn ${editorToolbarState.underline ? 'active' : ''}`}
-              title="下划线 Ctrl/Cmd+U"
-              aria-label="下划线"
-              on:click={() => runEditorCommand('underline')}
-              disabled={editorToolbarState.readonly || !editorToolbarState.focused}
-            >
-              <Icon name="underline" size={14} className="ui-icon sm" />
-            </button>
-          </div>
-          <div class="toolbar-cluster">
-            <span class="cluster-label">结构</span>
-            <button class="tool-btn" on:click={() => runEditorCommand('heading1')} aria-label="一级标题">
-              <Icon name="h1" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" on:click={() => runEditorCommand('heading2')} aria-label="二级标题">
-              <Icon name="h2" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" on:click={() => runEditorCommand('quote')} aria-label="引用块">
-              <Icon name="quote" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" on:click={() => runEditorCommand('code')} aria-label="代码块">
-              <Icon name="code" size={14} className="ui-icon sm" />
-            </button>
             <button class="tool-btn" on:click={() => runEditorCommand('list-bullet')} aria-label="无序列表">
               <Icon name="listBullet" size={14} className="ui-icon sm" />
             </button>
             <button class="tool-btn" on:click={() => runEditorCommand('list-number')} aria-label="有序列表">
               <Icon name="listNumber" size={14} className="ui-icon sm" />
             </button>
-          </div>
-          <div class="toolbar-cluster">
-            <span class="cluster-label">插入</span>
+            <span class="tool-sep"></span>
             <button class="tool-btn" on:click={() => (canvasOpen = true)} aria-label="图形画布">
               <Icon name="diagram" size={14} className="ui-icon sm" />
             </button>
@@ -3952,24 +4059,86 @@
               <Icon name="cite" size={14} className="ui-icon sm" />
             </button>
           </div>
-          <div class="toolbar-cluster compact">
-            <span class="cluster-label">智能写作</span>
-            <button class="btn ghost icon-btn-text" on:click={() => handleGenerate($instruction)} disabled={$generating}>
-              <Icon name="play" className="ui-icon" />
-              <span>生成</span>
-            </button>
-            <button class="btn ghost icon-btn-text" on:click={handleStop} disabled={!$generating}>
-              <Icon name="stop" className="ui-icon" />
-              <span>停止</span>
-            </button>
-            {#if resumeState && !$generating}
-              <button class="btn ghost icon-btn-text" on:click={resumeInterruptedGeneration}>
-                <Icon name="resume" className="ui-icon" />
-                <span>续跑</span>
-              </button>
-            {/if}
-          </div>
+          <button class="btn ghost btn-sm toolbar-advanced-toggle" on:click={() => (showAdvancedToolbar = !showAdvancedToolbar)}>
+            {showAdvancedToolbar ? '收起高级' : '高级操作'}
+          </button>
+          <button class="btn primary icon-btn-text toolbar-generate-btn" on:click={() => handleGenerate($instruction)} disabled={$generating}>
+            <Icon name="play" className="ui-icon" />
+            <span>{$generating ? '生成中…' : '生成'}</span>
+          </button>
         </div>
+        {#if showAdvancedToolbar}
+          <div class="toolbar-line secondary">
+            <div class="toolbar-cluster">
+              <span class="cluster-label">结构与编辑</span>
+              <button class="tool-btn" title="撤销 Ctrl/Cmd+Z" aria-label="撤销" on:click={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
+                <Icon name="undo" size={14} className="ui-icon sm" />
+              </button>
+              <button class="tool-btn" title="重做 Ctrl/Cmd+Y" aria-label="重做" on:click={() => runEditorCommand('redo')} disabled={!editorToolbarState.canRedo}>
+                <Icon name="redo" size={14} className="ui-icon sm" />
+              </button>
+              <button class="tool-btn" title="复制 Ctrl/Cmd+C" aria-label="复制" on:click={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
+                <Icon name="copy" size={14} className="ui-icon sm" />
+              </button>
+              <button class="tool-btn" title="剪切 Ctrl/Cmd+X" aria-label="剪切" on:click={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
+                <Icon name="cut" size={14} className="ui-icon sm" />
+              </button>
+              <button class="tool-btn" title="粘贴 Ctrl/Cmd+V" aria-label="粘贴" on:click={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
+                <Icon name="paste" size={14} className="ui-icon sm" />
+              </button>
+              <button class="tool-btn" title="清除格式" aria-label="清除格式" on:click={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
+                <Icon name="clear" size={14} className="ui-icon sm" />
+              </button>
+              <button class="tool-btn" on:click={() => runEditorCommand('quote')} aria-label="引用块">
+                <Icon name="quote" size={14} className="ui-icon sm" />
+              </button>
+              <button class="tool-btn" on:click={() => runEditorCommand('code')} aria-label="代码块">
+                <Icon name="code" size={14} className="ui-icon sm" />
+              </button>
+            </div>
+            <div class="toolbar-cluster compact">
+              <span class="cluster-label">高级操作</span>
+              <button class="btn ghost icon-btn-text" on:click={runBatchFromToolbar}>
+                <Icon name="batch" className="ui-icon" />
+                <span>批处理</span>
+              </button>
+              <button
+                class="btn ghost icon-btn-text"
+                data-testid="ai-rate-toggle"
+                on:click={() => (showAiRatePanel = !showAiRatePanel)}
+              >
+                <Icon name="ai" className="ui-icon" />
+                <span>{showAiRatePanel ? '收起 AI 率' : 'AI 率检测'}</span>
+              </button>
+              <button
+                class="btn ghost icon-btn-text"
+                data-testid="plagiarism-toggle"
+                on:click={() => (showPlagiarismPanel = !showPlagiarismPanel)}
+              >
+                <Icon name="shield" className="ui-icon" />
+                <span>{showPlagiarismPanel ? '收起查重' : '查重检测'}</span>
+              </button>
+              <button
+                class="btn ghost icon-btn-text"
+                data-testid="feedback-toggle"
+                on:click={() => (showFeedbackPanel = !showFeedbackPanel)}
+              >
+                <Icon name="star" className="ui-icon" />
+                <span>{showFeedbackPanel ? '收起评分' : '满意度评分'}</span>
+              </button>
+              <button class="btn ghost icon-btn-text" on:click={handleStop} disabled={!$generating}>
+                <Icon name="stop" className="ui-icon" />
+                <span>停止</span>
+              </button>
+              {#if resumeState && !$generating}
+                <button class="btn ghost icon-btn-text" on:click={resumeInterruptedGeneration}>
+                  <Icon name="resume" className="ui-icon" />
+                  <span>续跑</span>
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/if}
       </div>
 
       {#if $generating && progress.total > 0}
@@ -4263,41 +4432,11 @@
           />
         {/if}
       </div>
+      {/if}
 
     </section>
 
     <aside class="side-panel">
-      <div class="panel-card media-meta-panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">资源元数据</div>
-            <div class="panel-sub">当前工作区摘要</div>
-          </div>
-        </div>
-        <div class="meta-hero">
-          <div class="meta-hero-glow"></div>
-          <div class="meta-hero-text">{metaPreviewSnippet() || '暂无内容预览'}</div>
-        </div>
-        <div class="meta-list">
-          <div><span>名称</span><strong>{guessDocTitle($sourceText)}</strong></div>
-          <div><span>类型</span><strong>text/markdown</strong></div>
-          <div><span>大小</span><strong>{estimateKb($sourceText)} KB</strong></div>
-          <div><span>词数</span><strong>{$wordCount}</strong></div>
-          <div><span>选区</span><strong>{selectedBlockIds.length || 0}</strong></div>
-          <div><span>路由</span><strong>{lastGraphMeta?.route_id || 'default'}</strong></div>
-        </div>
-        <div class="meta-actions">
-          <button class="btn ghost icon-btn-text" on:click={() => switchSurface('editor')}>
-            <Icon name="open" className="ui-icon" />
-            <span>定位到编辑区</span>
-          </button>
-          <button class="btn ghost danger icon-btn-text" on:click={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}>
-            <Icon name="clearSelection" className="ui-icon" />
-            <span>清空选区</span>
-          </button>
-        </div>
-      </div>
-
       <div class="panel-card version-panel">
         <div class="panel-header">
           <div>
@@ -4374,6 +4513,43 @@
 
     </aside>
   </div>
+
+  {#if infoDrawerOpen}
+    <div class="info-drawer-backdrop" role="presentation">
+      <button type="button" class="sheet-backdrop-hit" on:click={closeInfoDrawer} aria-label="关闭文档信息"></button>
+      <div class="info-drawer panel-card media-meta-panel" role="dialog" aria-modal="true" aria-label="文档信息">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">文档信息</div>
+            <div class="panel-sub">当前工作区摘要</div>
+          </div>
+          <button class="btn ghost btn-sm" on:click={closeInfoDrawer}>关闭</button>
+        </div>
+        <div class="meta-hero">
+          <div class="meta-hero-glow"></div>
+          <div class="meta-hero-text">{metaPreviewSnippet() || '暂无内容预览'}</div>
+        </div>
+        <div class="meta-list">
+          <div><span>名称</span><strong>{guessDocTitle($sourceText)}</strong></div>
+          <div><span>类型</span><strong>text/markdown</strong></div>
+          <div><span>大小</span><strong>{estimateKb($sourceText)} KB</strong></div>
+          <div><span>词数</span><strong>{$wordCount}</strong></div>
+          <div><span>选区</span><strong>{selectedBlockIds.length || 0}</strong></div>
+          <div><span>路由</span><strong>{lastGraphMeta?.route_id || 'default'}</strong></div>
+        </div>
+        <div class="meta-actions">
+          <button class="btn ghost icon-btn-text" on:click={() => switchWorkspaceMode('editor')}>
+            <Icon name="open" className="ui-icon" />
+            <span>定位到编辑区</span>
+          </button>
+          <button class="btn ghost danger icon-btn-text" on:click={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}>
+            <Icon name="clearSelection" className="ui-icon" />
+            <span>清空选区</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   {#if selectedBlockIds.length > 0 && inlineBarVisible}
     <div
@@ -4632,21 +4808,33 @@
     </section>
   {/if}
 
-  <div class={`assistant-dock ${assistantOpen ? 'open' : ''}`}>
-    <button class="assistant-toggle" on:click={() => (assistantOpen = !assistantOpen)}>
-      {assistantOpen ? '收起助手' : '打开助手'}
-      {#if queuedGlobalInstructions.length > 0}
-        <span class="assistant-queue-badge">{queuedGlobalInstructions.length}</span>
-      {/if}
-    </button>
-    {#if assistantOpen}
-      <Chat
-        variant="assistant"
-        on:send={(e) => handleGenerate(e.detail)}
-        on:upload={handleAssistantUpload}
-      />
+  <button class="assistant-fab" on:click={toggleAssistantOpen} title="打开智能助手 (Ctrl/Cmd+K)">
+    <Icon name="chat" className="ui-icon" />
+    <span>助手</span>
+    {#if queuedGlobalInstructions.length > 0}
+      <span class="assistant-queue-badge">{queuedGlobalInstructions.length}</span>
     {/if}
-  </div>
+  </button>
+
+  {#if assistantOpen}
+    <div class="assistant-sheet-backdrop" role="presentation">
+      <button type="button" class="sheet-backdrop-hit" on:click={() => setAssistantOpen(false)} aria-label="关闭智能助手"></button>
+      <div class="assistant-sheet" role="dialog" aria-modal="true" aria-label="智能助手">
+        <div class="assistant-sheet-head">
+          <div>
+            <div class="panel-title">智能助手</div>
+            <div class="panel-sub">快捷键：Ctrl/Cmd + K</div>
+          </div>
+          <button class="btn ghost btn-sm" on:click={() => setAssistantOpen(false)}>关闭</button>
+        </div>
+        <Chat
+          variant="assistant"
+          on:send={(e) => handleGenerate(e.detail)}
+          on:upload={handleAssistantUpload}
+        />
+      </div>
+    </div>
+  {/if}
 
   <input
     class="hidden-input"
@@ -4808,30 +4996,6 @@
     gap: 10px;
     flex-wrap: wrap;
     justify-content: flex-end;
-  }
-
-  .status-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.06);
-    font-size: 12px;
-    color: #0f172a;
-  }
-
-  .status-chip.light {
-    background: rgba(37, 99, 235, 0.08);
-    color: #1e40af;
-  }
-
-  .status-chip .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
   }
 
   .feedback-panel {
@@ -5693,31 +5857,6 @@
     justify-content: flex-end;
   }
 
-  .assistant-dock {
-    position: fixed;
-    right: 28px;
-    bottom: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 5;
-    align-items: flex-end;
-  }
-
-  .assistant-toggle {
-    border: none;
-    background: linear-gradient(135deg, #2563eb, #38bdf8);
-    color: #fff;
-    padding: 10px 16px;
-    border-radius: 999px;
-    font-size: 12px;
-    cursor: pointer;
-    box-shadow: 0 12px 20px rgba(37, 99, 235, 0.3);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-
   .assistant-queue-badge {
     min-width: 18px;
     height: 18px;
@@ -5837,9 +5976,14 @@
       flex-direction: row;
       justify-content: center;
     }
-    .assistant-dock {
+    .assistant-fab {
       right: 12px;
       bottom: 12px;
+    }
+    .assistant-sheet,
+    .info-drawer {
+      width: min(92vw, 560px);
+      min-width: 0;
     }
     .inline-selection-bar {
       left: 12px !important;
@@ -5994,14 +6138,6 @@
     gap: 8px;
   }
 
-  .workspace-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    min-width: 0;
-  }
-
   .ui-icon {
     display: inline-flex;
     align-items: center;
@@ -6029,35 +6165,6 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-  }
-
-  .status-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(24, 36, 62, 0.76);
-    color: rgba(221, 231, 247, 0.92);
-    border: 1px solid rgba(154, 183, 224, 0.22);
-    border-radius: 999px;
-    padding: 5px 10px;
-    font-size: 12px;
-  }
-
-  .workspace-status .status-chip {
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .status-chip.light {
-    background: rgba(33, 47, 83, 0.76);
-    color: rgba(203, 223, 255, 0.9);
-  }
-
-  .status-chip .dot {
-    background: #34d399;
-    box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.16);
   }
 
   .btn {
@@ -6900,14 +7007,420 @@
     color: rgba(220, 231, 249, 0.9);
   }
 
-  .assistant-toggle {
-    background: linear-gradient(135deg, rgba(84, 121, 236, 0.96), rgba(44, 173, 237, 0.9));
-    box-shadow: 0 14px 24px rgba(34, 103, 230, 0.34);
-  }
-
   .assistant-queue-badge {
     background: rgba(5, 10, 20, 0.84);
     color: #eff6ff;
+  }
+
+  /* Focus-first simplification */
+  :global(body) {
+    background: #0f172a !important;
+    color: #e2e8f0;
+  }
+
+  :global(body)::before {
+    display: none !important;
+    content: none !important;
+    background: none !important;
+  }
+
+  .app {
+    --panel-bg: rgba(15, 23, 42, 0.92);
+    --panel-bg-soft: rgba(15, 23, 42, 0.86);
+    --panel-border: rgba(148, 163, 184, 0.16);
+    --panel-shadow: 0 12px 28px rgba(2, 6, 23, 0.32);
+    --text-main: #e2e8f0;
+    --text-muted: rgba(148, 163, 184, 0.8);
+    --accent: #60a5fa;
+    --accent-weak: rgba(96, 165, 250, 0.14);
+    font-family: "Sora", "Manrope", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
+  }
+
+  .topbar {
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: none;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .workspace-status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .workspace-status-line .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.14);
+    flex: 0 0 auto;
+  }
+
+  .menu-item {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #94a3b8;
+    box-shadow: none;
+  }
+
+  .menu-item:hover {
+    background: rgba(30, 41, 59, 0.8);
+    border-color: rgba(148, 163, 184, 0.24);
+    color: #e2e8f0;
+  }
+
+  .menu-item.active {
+    background: rgba(51, 65, 85, 0.88);
+    border-color: rgba(148, 163, 184, 0.36);
+    color: #f8fafc;
+    box-shadow: none;
+  }
+
+  .workspace {
+    grid-template-columns: 72px minmax(0, 1fr) 320px;
+    gap: 14px;
+    padding: 12px 16px 30px;
+  }
+
+  .workspace.mode-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace.mode-editor .nav-rail,
+  .workspace.mode-editor .side-panel,
+  .workspace.mode-editor .library-command-bar {
+    display: none;
+  }
+
+  .workspace.mode-library {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .workspace.mode-library .side-panel {
+    display: none;
+  }
+
+  .library-mode-stage {
+    display: grid;
+    gap: 12px;
+    min-height: 360px;
+    border: 1px dashed rgba(148, 163, 184, 0.28);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(15, 23, 42, 0.56);
+  }
+
+  .library-mode-dropzone {
+    border: 1px dashed rgba(148, 163, 184, 0.34);
+    border-radius: 12px;
+    padding: 12px;
+    background: rgba(30, 41, 59, 0.36);
+    display: grid;
+    gap: 10px;
+  }
+
+  .library-mode-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .library-mode-board {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .library-mode-board.list {
+    grid-template-columns: 1fr;
+  }
+
+  .library-mode-card {
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.78);
+    color: #e2e8f0;
+    padding: 10px;
+    text-align: left;
+    display: grid;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .library-mode-card.selected {
+    border-color: rgba(96, 165, 250, 0.68);
+    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.24);
+  }
+
+  .library-mode-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .library-mode-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .library-mode-card-summary {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #94a3b8;
+    min-height: 38px;
+  }
+
+  .library-mode-card-foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: #64748b;
+    font-size: 11px;
+  }
+
+  .workspace.mode-collab {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+
+  .workspace.mode-collab .nav-rail,
+  .workspace.mode-collab .library-command-bar {
+    display: none;
+  }
+
+  .workspace.mode-library .nav-rail {
+    width: 72px;
+    padding: 10px 6px;
+    transition: width 0.18s ease;
+  }
+
+  .workspace.mode-library .nav-rail:hover,
+  .workspace.mode-library .nav-rail:focus-within {
+    width: 252px;
+  }
+
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-search,
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-tip,
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-group-head em,
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-summary,
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-tags,
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-time,
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-upload-btn span,
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-reset span,
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .nav-btn span {
+    display: none;
+  }
+
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-library {
+    overflow: hidden;
+  }
+
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card {
+    min-height: auto;
+    padding: 8px;
+  }
+
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-cover {
+    display: none;
+  }
+
+  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-title {
+    font-size: 11px;
+  }
+
+  .doc-toolbar,
+  .doc-stage,
+  .panel-card,
+  .feedback-panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    box-shadow: none;
+  }
+
+  .panel-card::before,
+  .feedback-panel::before,
+  .doc-toolbar::before,
+  .doc-stage::before {
+    display: none;
+  }
+
+  .toolbar-line.primary {
+    justify-content: space-between;
+  }
+
+  .toolbar-line.secondary {
+    padding-top: 8px;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+  }
+
+  .toolbar-cluster {
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(15, 23, 42, 0.74);
+  }
+
+  .toolbar-cluster.core {
+    flex: 1;
+  }
+
+  .toolbar-advanced-toggle {
+    margin-left: auto;
+  }
+
+  .toolbar-generate-btn {
+    min-width: 96px;
+  }
+
+  .tool-btn {
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: #cbd5e1;
+    box-shadow: none;
+  }
+
+  .tool-btn.active {
+    background: rgba(59, 130, 246, 0.22);
+    border-color: rgba(96, 165, 250, 0.72);
+    color: #dbeafe;
+    box-shadow: none;
+  }
+
+  .btn {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: #cbd5e1;
+    box-shadow: none;
+  }
+
+  .btn.ghost {
+    background: transparent;
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+  }
+
+  .btn.primary {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: #cbd5e1;
+    box-shadow: none;
+  }
+
+  .toolbar-generate-btn.btn.primary {
+    background: #3b82f6;
+    border-color: #60a5fa;
+    color: #fff;
+  }
+
+  .btn.primary.danger {
+    background: #b91c1c;
+    border-color: #ef4444;
+    color: #fff;
+  }
+
+  .top-actions .btn {
+    background: transparent;
+    border-color: rgba(148, 163, 184, 0.26);
+  }
+
+  .info-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 33;
+    background: rgba(2, 6, 23, 0.45);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .sheet-backdrop-hit {
+    flex: 1;
+    border: none;
+    background: transparent;
+    cursor: default;
+  }
+
+  .info-drawer {
+    width: min(420px, 40vw);
+    min-width: 320px;
+    height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    border-left: 1px solid rgba(148, 163, 184, 0.24);
+    padding: 16px 14px;
+    overflow: auto;
+  }
+
+  .assistant-fab {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    z-index: 34;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    background: rgba(15, 23, 42, 0.95);
+    color: #e2e8f0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .assistant-fab > span:not(.assistant-queue-badge) {
+    display: none;
+  }
+
+  .assistant-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgba(2, 6, 23, 0.48);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .assistant-sheet {
+    width: min(40vw, 560px);
+    min-width: 320px;
+    height: 100vh;
+    background: #0f172a;
+    border-left: 1px solid rgba(148, 163, 184, 0.26);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .assistant-sheet-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  :global(.assistant-sheet .chat-shell.assistant) {
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    box-shadow: none;
   }
 
   @keyframes rise-in {
@@ -6957,7 +7470,7 @@
       gap: 10px;
     }
 
-    .workspace-status {
+    .workspace-status-line {
       justify-content: flex-start;
     }
 
@@ -7007,6 +7520,10 @@
     .library-actions {
       justify-content: flex-start;
     }
+
+    .library-mode-board {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 760px) {
@@ -7035,9 +7552,13 @@
       grid-template-columns: 1fr 1fr;
     }
 
-    .assistant-dock {
+    .assistant-fab {
       right: 10px;
       bottom: 10px;
+    }
+    .assistant-sheet,
+    .info-drawer {
+      width: min(96vw, 560px);
     }
   }
 </style>

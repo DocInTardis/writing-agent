@@ -46,9 +46,9 @@ DEFAULT_OUT_ROOT = Path(".data") / "out"
 
 APP_SELECTOR = ".app"
 EDITOR_SELECTOR = ".editable"
-TEXTAREA_SELECTOR = ".assistant-dock .composer textarea"
-SEND_SELECTOR = ".assistant-dock .send-btn"
-THOUGHT_ITEM_SELECTOR = ".assistant-dock .thought-item"
+TEXTAREA_SELECTOR = ".assistant-sheet .composer textarea"
+SEND_SELECTOR = ".assistant-sheet .send-btn"
+THOUGHT_ITEM_SELECTOR = ".assistant-sheet .thought-item"
 
 
 @dataclass
@@ -260,9 +260,9 @@ def ensure_server_available(
 def ensure_assistant_open(page: Page) -> None:
     if page.locator(TEXTAREA_SELECTOR).count() > 0:
         return
-    toggle = page.locator(".assistant-dock .assistant-toggle")
-    if toggle.count() > 0:
-        toggle.first.click()
+    fab = page.locator(".assistant-fab")
+    if fab.count() > 0:
+        fab.first.click()
         page.wait_for_selector(TEXTAREA_SELECTOR, timeout=5000)
 
 
@@ -331,6 +331,7 @@ def wait_until_generation_idle(page: Page, timeout_s: float = 45.0, poll_interva
 
 def send_instruction(page: Page, instruction: str) -> None:
     wait_until_generation_idle(page, timeout_s=30.0, poll_interval_s=0.4)
+    ensure_assistant_open(page)
     page.fill(TEXTAREA_SELECTOR, instruction)
     btn = page.locator(SEND_SELECTOR).first
     end = time.monotonic() + 20.0
