@@ -1,6 +1,8 @@
 import io
 import os
+import re
 import zipfile
+import xml.etree.ElementTree as ET
 from types import SimpleNamespace
 
 from docx import Document
@@ -39,6 +41,14 @@ def _extract_xml_parts(docx_bytes: bytes, prefix: str) -> list[str]:
                 with zf.open(name) as handle:
                     parts.append(handle.read().decode("utf-8", errors="ignore"))
     return parts
+
+
+def _build_docx_bytes(parts: dict[str, str]) -> bytes:
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, text in parts.items():
+            zf.writestr(name, text.encode("utf-8"))
+    return out.getvalue()
 
 
 def test_export_docx_strict_validation():
@@ -137,11 +147,51 @@ def test_export_docx_strict_validation():
     assert heading2_style.paragraph_format.alignment == WD_ALIGN_PARAGRAPH.CENTER
 
     doc_xml = _extract_xml(docx_bytes, "word/document.xml")
-    assert "TOC \\\\o" in doc_xml
+    assert "w:hyperlink" in doc_xml
+    assert 'w:anchor="toc_' in doc_xml
+    assert "w:bookmarkStart" in doc_xml
 
     header_xmls = _extract_xml_parts(docx_bytes, "word/header")
     assert header_xmls
     assert any("Sample Report" in header_xml for header_xml in header_xmls)
+
+
+def test_docx_export_keeps_abstract_and_keywords_sections() -> None:
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    text = "\n".join(
+        [
+            "# Title",
+            "",
+            "## 摘要",
+            "",
+            "这是一段摘要内容，用于验证导出链路不会删除摘要。",
+            "",
+            "## 关键词",
+            "",
+            "写作代理；DocIR；导出",
+            "",
+            "## 1 引言",
+            "",
+            "正文内容。",
+            "",
+            "## 参考文献",
+            "",
+            "[1] A. Ref. 2024. https://example.com",
+        ]
+    )
+    payload = {
+        "text": text,
+        "generation_prefs": {"export_gate_policy": "off", "strict_doc_format": False, "strict_citation_verify": False},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+
+    resp = _download_docx(client, doc_id)
+    doc = Document(io.BytesIO(resp.content))
+    body = "\n".join(p.text for p in doc.paragraphs if p.text)
+    assert "摘要" in body
+    assert "关键词" in body
 
 
 def test_docx_export_does_not_set_update_fields_by_default(monkeypatch) -> None:
@@ -173,6 +223,83 @@ def test_docx_export_sets_update_fields_when_opt_in(monkeypatch) -> None:
     settings_xml = _extract_xml(resp.content, "word/settings.xml")
     assert "w:updateFields" in settings_xml
     assert 'w:val="true"' in settings_xml
+
+
+def test_docx_export_disables_toc_footer_postprocess_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("WRITING_AGENT_DOCX_TOC_FOOTER_POSTPROCESS", raising=False)
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# Title\n\n## Intro\n\nBody",
+        "generation_prefs": {"include_cover": True, "include_toc": True, "page_numbers": True, "export_gate_policy": "off"},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+    footer_xmls = _extract_xml_parts(resp.content, "word/footer")
+    assert footer_xmls
+    # Default path should keep native python-docx namespace prefix style.
+    assert not any("<ns0:ftr" in x for x in footer_xmls)
+
+
+def test_docx_export_uses_clickable_toc_links_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("WRITING_AGENT_DOCX_DYNAMIC_TOC_FIELD", raising=False)
+    monkeypatch.delenv("WRITING_AGENT_DOCX_TOC_HYPERLINK", raising=False)
+    monkeypatch.delenv("WRITING_AGENT_DOCX_TOC_FIELD_LOCK", raising=False)
+    monkeypatch.delenv("WRITING_AGENT_DOCX_TOC_CLICKABLE_LINKS", raising=False)
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# 标题\n\n## 第一章 绪论\n\n正文\n\n### 1.1 背景\n\n正文",
+        "generation_prefs": {"include_cover": True, "include_toc": True, "page_numbers": True, "export_gate_policy": "off"},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+    document_xml = _extract_xml(resp.content, "word/document.xml")
+    assert 'TOC \\\\o' not in document_xml
+    assert "w:hyperlink" in document_xml
+    assert 'w:anchor="toc_' in document_xml
+    assert "w:bookmarkStart" in document_xml
+    assert 'w:leader="dot"' in document_xml
+    assert "<w:tab/>" in document_xml
+
+
+def test_docx_export_supports_static_toc_when_dynamic_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_DOCX_DYNAMIC_TOC_FIELD", "0")
+    monkeypatch.delenv("WRITING_AGENT_DOCX_TOC_CLICKABLE_LINKS", raising=False)
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# 标题\n\n## 第一章 绪论\n\n正文\n\n### 1.1 背景\n\n正文",
+        "generation_prefs": {"include_cover": True, "include_toc": True, "page_numbers": True, "export_gate_policy": "off"},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+    document_xml = _extract_xml(resp.content, "word/document.xml")
+    assert 'TOC \\\\o' not in document_xml
+    assert "w:hyperlink" in document_xml
+    assert 'w:anchor="toc_' in document_xml
+
+
+def test_docx_export_supports_dynamic_toc_when_clickable_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_DOCX_TOC_CLICKABLE_LINKS", "0")
+    monkeypatch.setenv("WRITING_AGENT_DOCX_DYNAMIC_TOC_FIELD", "1")
+    monkeypatch.delenv("WRITING_AGENT_DOCX_TOC_HYPERLINK", raising=False)
+    monkeypatch.delenv("WRITING_AGENT_DOCX_TOC_FIELD_LOCK", raising=False)
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# 鏍囬\n\n## 绗竴绔?缁\n\n姝ｆ枃\n\n### 1.1 鑳屾櫙\n\n姝ｆ枃",
+        "generation_prefs": {"include_cover": True, "include_toc": True, "page_numbers": True, "export_gate_policy": "off"},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+    document_xml = _extract_xml(resp.content, "word/document.xml")
+    assert 'TOC \\\\o' in document_xml
+    assert 'w:fldLock="true"' in document_xml
 
 
 def test_export_template_policy_default_disables_legacy_auto_pick(monkeypatch) -> None:
@@ -362,3 +489,160 @@ def test_normalize_export_text_only_dedupes_headings_in_strict_mode() -> None:
     assert "## Background" in relaxed
     assert "## 背景" in relaxed
     assert strict != relaxed
+
+def test_docx_export_footer_uses_default_refs_and_non_empty_page_fields(monkeypatch) -> None:
+    monkeypatch.delenv("WA_USE_RUST_ENGINE", raising=False)
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# Sample Report\n\n## Introduction\n\nBody paragraph.\n",
+        "generation_prefs": {
+            "include_cover": True,
+            "include_toc": True,
+            "toc_levels": 2,
+            "include_header": True,
+            "page_numbers": True,
+            "header_text": "Sample Report",
+            "footer_text": "",
+            "export_gate_policy": "off",
+            "strict_doc_format": False,
+            "strict_citation_verify": False,
+        },
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+
+    doc_xml = _extract_xml(resp.content, "word/document.xml")
+    ns = {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+    }
+    root = ET.fromstring(doc_xml)
+    footer_refs = root.findall(".//w:sectPr/w:footerReference", ns)
+    footer_types = [str(ref.attrib.get(f"{{{ns['w']}}}type") or "default").lower() for ref in footer_refs]
+    assert "first" not in footer_types
+    assert "even" not in footer_types
+
+    footer_xmls = _extract_xml_parts(resp.content, "word/footer")
+    assert footer_xmls
+    has_page_field = False
+    for footer_xml in footer_xmls:
+        if re.search(r"<(?:\w+:)?instrText[^>]*>\s*PAGE[^<]*</(?:\w+:)?instrText>", footer_xml, flags=re.IGNORECASE):
+            has_page_field = True
+            assert re.search(r"<(?:\w+:)?t[^>]*>\s*(I|1)\s*</(?:\w+:)?t>", footer_xml) is not None
+            assert re.search(r"<(?:\w+:)?t[^>]*/>", footer_xml) is None
+            assert re.search(r"<(?:\w+:)?t[^>]*>\s*</(?:\w+:)?t>", footer_xml) is None
+    assert has_page_field is True
+
+
+def test_validate_docx_bytes_flags_nondefault_footer_and_empty_page_field() -> None:
+    parts = {
+        "[Content_Types].xml": """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">
+  <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>
+  <Default Extension=\"xml\" ContentType=\"application/xml\"/>
+</Types>""",
+        "_rels/.rels": """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">
+  <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>
+</Relationships>""",
+        "word/document.xml": """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"
+            xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">
+  <w:body>
+    <w:p><w:r><w:t>demo</w:t></w:r></w:p>
+    <w:sectPr>
+      <w:footerReference w:type=\"first\" r:id=\"rIdFooter1\"/>
+    </w:sectPr>
+  </w:body>
+</w:document>""",
+        "word/_rels/document.xml.rels": """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">
+  <Relationship Id=\"rIdFooter1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer1.xml\"/>
+</Relationships>""",
+        "word/footer1.xml": """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<w:ftr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">
+  <w:p>
+    <w:r><w:fldChar w:fldCharType=\"begin\"/></w:r>
+    <w:r><w:instrText xml:space=\"preserve\">PAGE</w:instrText></w:r>
+    <w:r><w:fldChar w:fldCharType=\"separate\"/></w:r>
+    <w:r><w:t xml:space=\"preserve\"></w:t></w:r>
+    <w:r><w:fldChar w:fldCharType=\"end\"/></w:r>
+  </w:p>
+</w:ftr>""",
+    }
+    bad_docx = _build_docx_bytes(parts)
+    issues = app_v2._validate_docx_bytes(bad_docx)
+    assert any(x.startswith("footer-ref:nondefault:first") for x in issues)
+    assert any(x.startswith("page-field-empty:word/footer1.xml") for x in issues)
+
+
+def test_docx_export_single_mode_ignores_backend_env_safe(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_DOCX_BACKEND_MODE", "safe")
+    monkeypatch.delenv("WA_USE_RUST_ENGINE", raising=False)
+    monkeypatch.setattr(app_v2, "_doc_ir_has_styles", lambda _doc_ir: True)
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# Safe Mode\n\n## Intro\n\nBody text.",
+        "generation_prefs": {"export_gate_policy": "off", "strict_doc_format": False, "strict_citation_verify": False},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+    assert resp.headers.get("X-Docx-Export-Backend") == "parsed_docx_exporter"
+    assert resp.headers.get("X-Docx-Backend-Mode") == "single_parsed"
+
+
+def test_docx_export_single_mode_ignores_backend_env_auto(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_DOCX_BACKEND_MODE", "auto")
+    monkeypatch.setattr(app_v2, "_doc_ir_has_styles", lambda _doc_ir: True)
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# Auto Mode\n\n## Intro\n\nBody text.",
+        "generation_prefs": {"export_gate_policy": "off", "strict_doc_format": False, "strict_citation_verify": False},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+    assert resp.headers.get("X-Docx-Export-Backend") == "parsed_docx_exporter"
+    assert resp.headers.get("X-Docx-Backend-Mode") == "single_parsed"
+
+
+def test_docx_export_blocks_when_validation_fails_and_enforced(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_DOCX_VALIDATION_ENFORCE", "1")
+    monkeypatch.setattr(app_v2, "_validate_docx_bytes", lambda _payload: ["simulated-invalid-docx"])
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# Validate Block\n\n## Intro\n\nBody text.",
+        "generation_prefs": {"export_gate_policy": "off", "strict_doc_format": False, "strict_citation_verify": False},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = client.get(f"/download/{doc_id}.docx")
+    assert resp.status_code == 500
+    assert "DOCX导出失败" in (resp.text or "")
+
+
+def test_docx_export_uses_fallback_when_first_validation_fails(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_DOCX_VALIDATION_ENFORCE", "1")
+    calls = {"n": 0}
+
+    def _validate_once_fail(_payload: bytes) -> list[str]:
+        calls["n"] += 1
+        return ["simulated-invalid-docx"] if calls["n"] == 1 else []
+
+    monkeypatch.setattr(app_v2, "_validate_docx_bytes", _validate_once_fail)
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# Validate Fallback\n\n## Intro\n\nBody text.",
+        "generation_prefs": {"export_gate_policy": "off", "strict_doc_format": False, "strict_citation_verify": False},
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+    assert resp.headers.get("X-Docx-Repair") == "fallback_no_toc_header_pagenum"
+    assert calls["n"] >= 2

@@ -5,6 +5,7 @@ This module belongs to `writing_agent.v2` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Callable
 
@@ -166,6 +167,12 @@ def sanitize_output_text(
     banned_phrases: list[str],
 ) -> str:
     value = (text or "").replace("\r", "")
+    drop_ascii_lines = str(os.environ.get("WRITING_AGENT_DROP_ASCII_LINES", "0")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     value = re.sub(r"\[\s*(?:待补充|todo|tbd)[^\]]*\]", "", value, flags=re.IGNORECASE)
     value = re.sub(r"[（(]\s*(?:待补充|todo|tbd)[^）)]*[)）]", "", value, flags=re.IGNORECASE)
     value = strip_markdown_noise(value)
@@ -175,7 +182,7 @@ def sanitize_output_text(
     value = strip_chatty_closings(value, banned_phrases=banned_phrases)
     filtered_lines: list[str] = []
     for line in value.split("\n"):
-        if is_mostly_ascii_line(line) and not has_cjk(line):
+        if drop_ascii_lines and is_mostly_ascii_line(line) and not has_cjk(line):
             continue
         if re.match(r"^#{1,3}\s*[?？]{2,}\s*$", line):
             line = "## 参考文献"

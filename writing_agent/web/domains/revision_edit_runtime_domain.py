@@ -2271,34 +2271,3 @@ def try_revision_edit(
         return None
     _emit_revision_status(report_status, {"ok": True, "error_code": "", "selection_source": "full_document"})
     return updated, "revision applied (full_document)"
-
-    system = (
-        "你是文档修改助手，需要按要求改写全文，但必须保持章节结构与顺序。\n"
-        "要求：\n"
-        "1) 仅输出纯文本，保留 # / ## / ### 标题行。\n"
-        "2) 不删除正文段落（除非明显重复/乱码）；不改变章节顺序。\n"
-        "3) 不编造事实、数据或引用；禁止占位符或自我指涉。\n"
-        "4) 保留 [[TABLE:...]] / [[FIGURE:...]] 标记。\n"
-    )
-    user = (
-        f"修改要求：\n{analysis_instruction}\n\n"
-        f"原文：\n{base_text}\n\n"
-        "Please output the rewritten full document."
-    )
-    buf: list[str] = []
-    try:
-        for delta in client.chat_stream(system=system, user=user, temperature=0.25):
-            buf.append(delta)
-    except Exception:
-        return None
-    rewritten = sanitize_output_text("".join(buf).strip())
-    if not rewritten:
-        _emit_revision_status(report_status, {"ok": False, "error_code": "E_SCHEMA_INVALID"})
-        return None
-    updated = replace_question_headings(rewritten)
-    updated = sanitize_output_text(updated)
-    if not updated.strip():
-        _emit_revision_status(report_status, {"ok": False, "error_code": "E_SCHEMA_INVALID"})
-        return None
-    _emit_revision_status(report_status, {"ok": True, "error_code": "", "selection_source": "full_document"})
-    return updated, "已按修改指令更新内容"

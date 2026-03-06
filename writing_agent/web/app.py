@@ -10,6 +10,7 @@ import json
 import os
 import re
 import uuid
+from html.parser import HTMLParser
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -24,7 +25,7 @@ from writing_agent.agents.report_policy import ReportPolicy, extract_template_he
 from writing_agent.agents.diagram_agent import DiagramAgent, DiagramRequest
 from writing_agent.diagrams import render_er_svg, render_flowchart_svg
 from writing_agent.diagrams.spec import DiagramSpec, ErEntity, ErRelation, ErSpec, FlowEdge, FlowNode, FlowchartSpec
-from writing_agent.document import HtmlDocxBuilder
+from writing_agent.document import ExportPrefs, V2ReportDocxExporter
 from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
 from writing_agent.models import FormattingRequirements, ReportRequest
 from writing_agent.storage import InMemoryStore
@@ -38,7 +39,7 @@ app = FastAPI(title="写作 Agent")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 store = InMemoryStore()
-html_docx_builder = HtmlDocxBuilder()
+legacy_docx_exporter = V2ReportDocxExporter()
 edit_agent = DocumentEditAgent()
 report_policy = ReportPolicy(min_section_paragraphs=2, min_total_chars=1200)
 diagram_agent = DiagramAgent()
@@ -124,6 +125,154 @@ def _read_report_template(name: str) -> str:
     if not p.exists():
         raise HTTPException(status_code=404, detail="模板不存在")
     return p.read_text(encoding="utf-8")
+
+
+class _LegacyHtmlToReportTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.blocks: list[dict[str, object]] = []
+        self._list_stack: list[dict[str, object]] = []
+        self._kind: str | None = None
+        self._level: int = 0
+        self._ordered: bool = False
+        self._index: int = 0
+        self._buf: list[str] = []
+        self._ignore_depth = 0
+
+    def _normalize_text(self, value: str) -> str:
+        s = str(value or "").replace("\xa0", " ")
+        s = re.sub(r"\s+\n", "\n", s)
+        s = re.sub(r"[ \t\r\f\v]+", " ", s)
+        s = re.sub(r"\n{2,}", "\n", s)
+        return s.strip()
+
+    def _flush(self) -> None:
+        if self._kind is None:
+            return
+        text = self._normalize_text("".join(self._buf))
+        if text:
+            item: dict[str, object] = {
+                "kind": self._kind,
+                "level": self._level,
+                "text": text,
+            }
+            if self._kind == "list_item":
+                item["ordered"] = bool(self._ordered)
+                item["index"] = int(self._index)
+            self.blocks.append(item)
+        self._kind = None
+        self._level = 0
+        self._ordered = False
+        self._index = 0
+        self._buf = []
+
+    def _start_block(self, kind: str, *, level: int = 0, ordered: bool = False, index: int = 0) -> None:
+        self._flush()
+        self._kind = kind
+        self._level = int(level or 0)
+        self._ordered = bool(ordered)
+        self._index = int(index or 0)
+        self._buf = []
+
+    def _append(self, text: str) -> None:
+        if self._ignore_depth > 0:
+            return
+        if self._kind is None:
+            self._start_block("paragraph")
+        self._buf.append(text)
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        t = str(tag or "").lower()
+        if t in {"script", "style"}:
+            self._ignore_depth += 1
+            return
+        if self._ignore_depth > 0:
+            return
+        if t in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            self._start_block("heading", level=int(t[1]))
+            return
+        if t == "p":
+            self._start_block("paragraph")
+            return
+        if t == "br":
+            self._append("\n")
+            return
+        if t in {"ul", "ol"}:
+            self._flush()
+            self._list_stack.append({"ordered": t == "ol", "index": 0})
+            return
+        if t == "li":
+            ordered = False
+            index = 0
+            if self._list_stack:
+                top = self._list_stack[-1]
+                ordered = bool(top.get("ordered"))
+                if ordered:
+                    next_idx = int(top.get("index") or 0) + 1
+                    top["index"] = next_idx
+                    index = next_idx
+            self._start_block("list_item", ordered=ordered, index=index)
+
+    def handle_endtag(self, tag: str) -> None:
+        t = str(tag or "").lower()
+        if t in {"script", "style"} and self._ignore_depth > 0:
+            self._ignore_depth -= 1
+            return
+        if self._ignore_depth > 0:
+            return
+        if t in {"h1", "h2", "h3", "h4", "h5", "h6", "p", "li"}:
+            self._flush()
+            return
+        if t in {"ul", "ol"}:
+            self._flush()
+            if self._list_stack:
+                self._list_stack.pop()
+
+    def handle_data(self, data: str) -> None:
+        if self._ignore_depth > 0:
+            return
+        self._append(str(data or ""))
+
+    def close(self) -> None:
+        super().close()
+        self._flush()
+
+
+def _legacy_html_to_report_text(html_text: str, *, fallback_title: str) -> str:
+    parser = _LegacyHtmlToReportTextParser()
+    parser.feed(str(html_text or ""))
+    parser.close()
+
+    lines: list[str] = []
+    has_h1 = False
+    for block in parser.blocks:
+        kind = str(block.get("kind") or "")
+        text = str(block.get("text") or "").strip()
+        if not text:
+            continue
+        if kind == "heading":
+            level = max(1, min(6, int(block.get("level") or 1)))
+            if level == 1:
+                has_h1 = True
+            lines.append(f"{'#' * level} {text}")
+        elif kind == "list_item":
+            ordered = bool(block.get("ordered"))
+            if ordered:
+                idx = max(1, int(block.get("index") or 1))
+                lines.append(f"{idx}. {text}")
+            else:
+                lines.append(f"- {text}")
+        else:
+            lines.append(text)
+        lines.append("")
+
+    body = "\n".join(lines).strip()
+    title = str(fallback_title or "").strip() or "报告"
+    if not has_h1:
+        body = f"# {title}\n\n{body}" if body else f"# {title}\n"
+    if not body.endswith("\n"):
+        body += "\n"
+    return body
 
 
 @app.get("/files/{file_id}")
@@ -656,16 +805,20 @@ def download_docx(doc_id: str) -> StreamingResponse:
         raise HTTPException(status_code=404, detail="文档为空")
     required = extract_template_headings(session.template_html) if (session.template_html or "").strip() else None
     enforced = report_policy.enforce(session.html, title=session.request.topic, required_headings=required)
-    def resolve_image(src: str) -> str | None:
-        if not src or not src.startswith("/files/"):
-            return None
-        file_id = src[len("/files/") :]
-        if not _SAFE_FILE_ID.match(file_id):
-            return None
-        p = (UPLOADS_DIR / file_id)
-        return str(p) if p.exists() else None
-
-    payload = html_docx_builder.build(enforced.html, session.request.formatting, resolve_image_path=resolve_image)
+    report_text = _legacy_html_to_report_text(
+        enforced.html,
+        fallback_title=str(session.request.topic or "报告"),
+    )
+    payload = legacy_docx_exporter.build_from_text(
+        report_text,
+        session.request.formatting,
+        ExportPrefs(
+            include_cover=False,
+            include_toc=False,
+            include_header=False,
+            page_numbers=False,
+        ),
+    )
     filename = f"{session.request.topic or 'document'}.docx"
     return StreamingResponse(
         io.BytesIO(payload),

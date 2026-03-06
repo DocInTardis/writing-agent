@@ -50,6 +50,9 @@ def _trim_inline_context(
     before_trim = before_raw[-side:] if len(before_raw) > side else before_raw
     after_trim = after_raw[:side] if len(after_raw) > side else after_raw
     trimmed_for_window = (before_trim != before_raw) or (after_trim != after_raw)
+    reason_codes: list[str] = []
+    if trimmed_for_window:
+        reason_codes.append("context_window")
 
     total_cap = int(policy.get("context_total_max_chars") or 2400)
     if len(before_trim) + len(after_trim) > total_cap:
@@ -57,12 +60,14 @@ def _trim_inline_context(
         before_trim = before_trim[-half:] if len(before_trim) > half else before_trim
         after_trim = after_trim[:half] if len(after_trim) > half else after_trim
         trimmed_for_window = True
+        reason_codes.append("context_total_cap")
 
     meta = {
         "policy_version": str(policy.get("version") or "dynamic_v1"),
         "left_window_chars": int(len(before_trim)),
         "right_window_chars": int(len(after_trim)),
         "trimmed_for_budget": bool(trimmed_for_window),
+        "truncate_reason_codes": reason_codes,
     }
     return before_trim, after_trim, meta
 

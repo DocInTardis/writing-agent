@@ -55,7 +55,7 @@ class PlanSection:
     evidence_queries: list[str]
 
 
-_DISALLOWED_SECTIONS = {"摘要", "关键词", "目录", "Abstract", "Keywords"}
+_DISALLOWED_SECTIONS = {"目录", "Table of Contents", "Contents"}
 _ACK_SECTIONS = {"致谢", "鸣谢"}
 _META_PHRASES = [
     "\u4e0b\u9762\u662f",
@@ -81,7 +81,7 @@ def _clean_section_title(title: str) -> str:
     )
 
 def _sanitize_planned_sections(sections: list[str]) -> list[str]:
-    banned = {"\u6458\u8981", "\u5173\u952e\u8bcd", "\u76ee\u5f55", "Abstract", "Keywords", "\u5efa\u8bae", "\u9644\u5f55"}
+    banned = {"\u76ee\u5f55", "Table of Contents", "Contents", "\u5efa\u8bae", "\u9644\u5f55"}
     out: list[str] = []
     seen: set[str] = set()
     for s in sections or []:
@@ -485,7 +485,7 @@ def _expand_with_context(
     max_add = max(min_paras, min(50, max(12, int(min_chars / 40) or 12)))
     while _section_body_len(base) < min_chars and added < max_add:
         plan_para = _plan_point_paragraph(section, plan, added + 1)
-        extra = plan_para or _generic_fill_paragraph(section, idx=added + 1)
+        extra = plan_para
         if not extra:
             break
         base = (base + '\n\n' + extra) if base else extra
@@ -726,7 +726,8 @@ def _fast_fill_section(
         min_figures=min_figures,
         section_title=_section_title,
         is_reference_section=_is_reference_section,
-        generic_fill_paragraph=lambda sec, i: _generic_fill_paragraph(sec, idx=i),
+        # Fail-fast mode: avoid semantic filler in production path.
+        generic_fill_paragraph=lambda sec, i: "",
     )
 
 def _postprocess_section(
@@ -752,7 +753,8 @@ def _postprocess_section(
         format_references=_format_references,
         strip_reference_like_lines=_strip_reference_like_lines,
         strip_inline_headings=_strip_inline_headings,
-        generic_fill_paragraph=lambda sec, i: _generic_fill_paragraph(sec, idx=i),
+        # Fail-fast mode: avoid semantic filler in production path.
+        generic_fill_paragraph=lambda sec, i: "",
         sanitize_output_text=_sanitize_output_text,
         ensure_media_markers=lambda content, sec_title, tables, figures: _ensure_media_markers(
             content,
@@ -939,13 +941,12 @@ def _map_section_parents(sections: list[str]) -> dict[str, str]:
 def _merge_sections_text(title: str, sections: list[str], section_text: dict[str, str]) -> str:
     if not sections:
         sections = [
-            "Introduction",
-            "Requirement Analysis",
-            "Overall Design",
-            "Data Design",
-            "Testing and Results",
-            "Conclusion",
-            "References",
+            "引言",
+            "相关研究",
+            "方法设计",
+            "实验与分析",
+            "结论",
+            "参考文献",
         ]
     out = [f"# {title}"]
     for sec in sections:
@@ -953,7 +954,7 @@ def _merge_sections_text(title: str, sections: list[str], section_text: dict[str
         prefix = "##" if level <= 2 else "###"
         out.append(f"{prefix} {heading}")
         content = (section_text.get(sec) or "").strip()
-        out.append(content or _generic_fill_paragraph(sec, idx=1))
+        out.append(content)
     return "\n\n".join(out).strip() + "\n"
 
 def _apply_section_updates(base_text: str, updates, transitions) -> str:

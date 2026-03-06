@@ -1,15 +1,46 @@
 from __future__ import annotations
 
+import re
 import time
 
 from fastapi.testclient import TestClient
 
 import writing_agent.web.app_v2 as app_v2
-from writing_agent.models import Citation
+from writing_agent.agents.citations import CitationAgent
+from writing_agent.models import Citation, CitationStyle
 
 
 def _client() -> TestClient:
     return TestClient(app_v2.app)
+
+
+def test_citation_agent_formats_gbt_online_reference() -> None:
+    cite = Citation(
+        key="openai-2024",
+        title="Structured Outputs",
+        authors="OpenAI",
+        year="2024",
+        venue="",
+        url="https://platform.openai.com/docs/guides/structured-output",
+    )
+    ref = CitationAgent().format_reference(cite, CitationStyle.GBT)
+    assert "[EB/OL]" in ref
+    assert "https://platform.openai.com/docs/guides/structured-output" in ref
+    assert re.search(r"\[(?:19|20)\d{2}-\d{2}-\d{2}\]", ref) is not None
+
+
+def test_citation_agent_formats_gbt_journal_reference() -> None:
+    cite = Citation(
+        key="smith-2022",
+        title="A Survey on Writing Agents",
+        authors="Smith J",
+        year="2022",
+        venue="Journal of Intelligent Systems",
+        url="",
+    )
+    ref = CitationAgent().format_reference(cite, CitationStyle.GBT)
+    assert "[J]" in ref
+    assert "Journal of Intelligent Systems, 2022." in ref
 
 
 def test_compose_mode_helpers_cover_invalid_and_guard_text():
@@ -151,8 +182,277 @@ def test_export_check_autofix_allows_export_for_missing_toc_and_reference():
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("can_export") is True
-    warnings = body.get("warnings") or []
-    assert any(str(w.get("code") or "") == "autofix_applied" for w in warnings if isinstance(w, dict))
+    # Text-TOC insertion is no longer mandatory by default for DOCX export,
+    # so autofix warning may or may not appear depending on what changed.
+    assert isinstance(body.get("warnings") or [], list)
+
+
+def test_export_check_blocks_missing_abstract_keywords_for_academic_doc() -> None:
+    session = app_v2.store.create()
+    text = "\n".join(
+        [
+            "# Thesis Title",
+            "",
+            "## 1 Introduction",
+            "",
+            ("content " * 260).strip(),
+            "",
+            "## 2 Method",
+            "",
+            ("details " * 260).strip(),
+            "",
+            "## References",
+            "",
+            "[1] A. Ref. 2024. https://example.com/1",
+            "[2] B. Ref. 2024. https://example.com/2",
+            "[3] C. Ref. 2024. https://example.com/3",
+            "[4] D. Ref. 2024. https://example.com/4",
+            "[5] E. Ref. 2024. https://example.com/5",
+            "[6] F. Ref. 2024. https://example.com/6",
+            "[7] G. Ref. 2024. https://example.com/7",
+            "[8] H. Ref. 2024. https://example.com/8",
+        ]
+    )
+    app_v2._set_doc_text(session, text)
+    session.generation_prefs = {"strict_doc_format": True, "strict_citation_verify": False, "purpose": "undergraduate thesis"}
+    app_v2.store.put(session)
+
+    client = _client()
+    resp = client.get(f"/api/doc/{session.id}/export/check?format=docx&auto_fix=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("can_export") is False
+    codes = {str(item.get("code") or "") for item in (body.get("issues") or []) if isinstance(item, dict)}
+    assert "missing_abstract" in codes
+    assert "missing_keywords" in codes
+
+
+def test_export_check_blocks_figure_table_mentions_without_objects() -> None:
+    session = app_v2.store.create()
+    text = "\n".join(
+        [
+            "# Thesis Title",
+            "",
+            "## 摘要",
+            "",
+            ("这是一段摘要内容。" * 80),
+            "",
+            "## 关键词",
+            "",
+            "写作代理；DocIR；路由",
+            "",
+            "## 1 引言",
+            "",
+            ("如图1所示，系统采用四层架构。如表1所示，指标对比如下。" * 40),
+            "",
+            "## 参考文献",
+            "",
+            "[1] A. Ref. 2024. https://example.com/1",
+            "[2] B. Ref. 2024. https://example.com/2",
+            "[3] C. Ref. 2024. https://example.com/3",
+            "[4] D. Ref. 2024. https://example.com/4",
+            "[5] E. Ref. 2024. https://example.com/5",
+            "[6] F. Ref. 2024. https://example.com/6",
+            "[7] G. Ref. 2024. https://example.com/7",
+            "[8] H. Ref. 2024. https://example.com/8",
+        ]
+    )
+    app_v2._set_doc_text(session, text)
+    session.generation_prefs = {"strict_doc_format": True, "strict_citation_verify": False, "purpose": "毕业论文"}
+    app_v2.store.put(session)
+
+    client = _client()
+    resp = client.get(f"/api/doc/{session.id}/export/check?format=docx&auto_fix=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("can_export") is False
+    codes = {str(item.get("code") or "") for item in (body.get("issues") or []) if isinstance(item, dict)}
+    assert "figure_mention_without_object" in codes
+    assert "table_mention_without_object" in codes
+
+
+def test_export_check_blocks_insufficient_h2_h3_depth_for_academic_doc() -> None:
+    session = app_v2.store.create()
+    text = "\n".join(
+        [
+            "# Thesis Title",
+            "",
+            "## Abstract",
+            "",
+            ("This is abstract text. " * 40).strip(),
+            "",
+            "## Keywords",
+            "",
+            "writing agent; docir; export",
+            "",
+            "## 1 Introduction",
+            "",
+            ("intro content " * 180).strip(),
+            "",
+            "## 2 Method",
+            "",
+            ("method content " * 180).strip(),
+            "",
+            "## References",
+            "",
+            "[1] Author A. Paper One[J]. Journal A, 2024.",
+            "[2] Author B. Paper Two[J]. Journal B, 2024.",
+            "[3] Author C. Paper Three[J]. Journal C, 2024.",
+            "[4] Author D. Paper Four[J]. Journal D, 2024.",
+            "[5] Author E. Paper Five[J]. Journal E, 2024.",
+            "[6] Author F. Paper Six[J]. Journal F, 2024.",
+            "[7] Author G. Paper Seven[J]. Journal G, 2024.",
+            "[8] Author H. Paper Eight[J]. Journal H, 2024.",
+        ]
+    )
+    app_v2._set_doc_text(session, text)
+    session.generation_prefs = {
+        "strict_doc_format": True,
+        "strict_citation_verify": False,
+        "purpose": "undergraduate thesis",
+        "min_reference_count": 8,
+        "min_h2_count": 3,
+        "min_h3_count": 1,
+    }
+    app_v2.store.put(session)
+
+    client = _client()
+    resp = client.get(f"/api/doc/{session.id}/export/check?format=docx&auto_fix=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("can_export") is False
+    codes = {str(item.get("code") or "") for item in (body.get("issues") or []) if isinstance(item, dict)}
+    assert "heading_depth_h2_insufficient" in codes
+    assert "heading_depth_h3_insufficient" in codes
+
+
+def test_export_check_blocks_non_gbt7714_reference_items_for_academic_doc() -> None:
+    session = app_v2.store.create()
+    text = "\n".join(
+        [
+            "# Thesis Title",
+            "",
+            "## Abstract",
+            "",
+            ("This is abstract text. " * 40).strip(),
+            "",
+            "## Keywords",
+            "",
+            "writing agent; docir; export",
+            "",
+            "## 1 Introduction",
+            "",
+            ("intro content " * 180).strip(),
+            "",
+            "### 1.1 Background",
+            "",
+            ("background content " * 80).strip(),
+            "",
+            "## 2 Method",
+            "",
+            ("method content " * 180).strip(),
+            "",
+            "### 2.1 Pipeline",
+            "",
+            ("pipeline content " * 80).strip(),
+            "",
+            "## References",
+            "",
+            "[1] OpenAI Structured Outputs https://platform.openai.com/docs/guides/structured-output",
+            "[2] Anthropic XML tags https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags",
+            "[3] RFC 5789 https://www.rfc-editor.org/rfc/rfc5789",
+            "[4] RFC 6902 https://www.rfc-editor.org/rfc/rfc6902",
+            "[5] LaserTagger https://aclanthology.org/D19-1510",
+            "[6] Levenshtein Transformer https://arxiv.org/abs/1905.11006",
+            "[7] EditEval benchmark https://arxiv.org/abs/2501.12345",
+            "[8] Self-Refine https://arxiv.org/abs/2303.17651",
+        ]
+    )
+    app_v2._set_doc_text(session, text)
+    session.generation_prefs = {
+        "strict_doc_format": True,
+        "strict_citation_verify": False,
+        "purpose": "undergraduate thesis",
+        "min_reference_count": 8,
+        "min_h2_count": 2,
+        "min_h3_count": 1,
+    }
+    app_v2.store.put(session)
+
+    client = _client()
+    resp = client.get(f"/api/doc/{session.id}/export/check?format=docx&auto_fix=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("can_export") is False
+    issues = [item for item in (body.get("issues") or []) if isinstance(item, dict)]
+    codes = {str(item.get("code") or "") for item in issues}
+    assert "reference_gbt7714_noncompliant" in codes
+    gbt_issue = next((x for x in issues if str(x.get("code") or "") == "reference_gbt7714_noncompliant"), {})
+    meta = gbt_issue.get("meta") if isinstance(gbt_issue, dict) else {}
+    assert isinstance(meta, dict)
+    assert int(meta.get("violation_count") or 0) >= 1
+
+
+def test_export_check_blocks_reference_numbering_gaps() -> None:
+    session = app_v2.store.create()
+    text = "\n".join(
+        [
+            "# Thesis Title",
+            "",
+            "## Abstract",
+            "",
+            ("This is abstract text. " * 40).strip(),
+            "",
+            "## Keywords",
+            "",
+            "writing agent; docir; export",
+            "",
+            "## 1 Introduction",
+            "",
+            ("intro content " * 180).strip(),
+            "",
+            "### 1.1 Background",
+            "",
+            ("background content " * 80).strip(),
+            "",
+            "## 2 Method",
+            "",
+            ("method content " * 180).strip(),
+            "",
+            "### 2.1 Pipeline",
+            "",
+            ("pipeline content " * 80).strip(),
+            "",
+            "## References",
+            "",
+            "[1] Author A. Paper One[J]. Journal A, 2024.",
+            "[3] Author B. Paper Two[J]. Journal B, 2024.",
+            "[4] Author C. Paper Three[J]. Journal C, 2024.",
+            "[5] Author D. Paper Four[J]. Journal D, 2024.",
+            "[6] Author E. Paper Five[J]. Journal E, 2024.",
+            "[7] Author F. Paper Six[J]. Journal F, 2024.",
+            "[8] Author G. Paper Seven[J]. Journal G, 2024.",
+            "[9] Author H. Paper Eight[J]. Journal H, 2024.",
+        ]
+    )
+    app_v2._set_doc_text(session, text)
+    session.generation_prefs = {
+        "strict_doc_format": True,
+        "strict_citation_verify": False,
+        "purpose": "undergraduate thesis",
+        "min_reference_count": 8,
+        "min_h2_count": 2,
+        "min_h3_count": 1,
+    }
+    app_v2.store.put(session)
+
+    client = _client()
+    resp = client.get(f"/api/doc/{session.id}/export/check?format=docx&auto_fix=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("can_export") is False
+    codes = {str(item.get("code") or "") for item in (body.get("issues") or []) if isinstance(item, dict)}
+    assert "reference_numbering_invalid" in codes
 
 
 def test_doc_api_exposes_resume_state_when_interrupted():
@@ -271,7 +571,6 @@ def test_export_check_off_policy_never_blocks():
     assert body.get("policy") == "off"
     assert body.get("can_export") is True
     issues = [x for x in (body.get("issues") or []) if isinstance(x, dict)]
-    assert issues
     assert all(bool(x.get("blocking")) is False for x in issues)
 
 

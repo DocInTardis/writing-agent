@@ -38,7 +38,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 from writing_agent.document import ExportPrefs, V2ReportDocxExporter
-from writing_agent.document.html_docx import HtmlDocxBuilder
 from writing_agent.agents.citations import CitationAgent
 from writing_agent.models import Citation, CitationStyle
 from writing_agent.llm import OllamaClient, OllamaError, get_default_provider, get_ollama_settings
@@ -51,7 +50,6 @@ from writing_agent.web.domains import (
     citation_alert_domain,
     citation_render_domain,
     doc_state_domain,
-    doc_ir_html_domain,
     export_settings_domain,
     export_quality_domain,
     export_structure_domain,
@@ -330,7 +328,6 @@ def wa_bridge_wasm() -> Response:
     return FileResponse(wasm_path, media_type="application/wasm")
 store = InMemoryStore()
 docx_exporter = V2ReportDocxExporter()
-html_docx_exporter = HtmlDocxBuilder()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(REPO_ROOT / ".data"))).resolve()
 USER_TEMPLATES_DIR = DATA_DIR / "templates"
@@ -816,8 +813,12 @@ def root() -> RedirectResponse:
     }
     session.generation_prefs = {
         "purpose": "毕业设计/课程报告",
+        "quality_profile": "academic_cnki_default",
         "figure_types": ["flow", "er", "sequence", "bar", "line"],
         "table_types": ["summary", "metrics", "compare"],
+        "min_reference_count": 8,
+        "min_h2_count": 3,
+        "min_h3_count": 1,
         "include_cover": True,
         "include_toc": True,
         "toc_levels": 3,

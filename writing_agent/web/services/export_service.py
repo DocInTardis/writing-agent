@@ -6,8 +6,10 @@ This module belongs to `writing_agent.web.services` in the writing-agent codebas
 from __future__ import annotations
 
 import io
+import os
 import re
 import tempfile
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -18,6 +20,47 @@ from .base import app_v2_module
 
 
 class ExportService:
+    _SINGLE_DOCX_BACKEND_MODE = "single_parsed"
+
+    @staticmethod
+    def _compact_for_compare(text: str) -> str:
+        return re.sub(r"\s+", "", str(text or ""))
+
+    @staticmethod
+    def _canonicalize_docx_payload(payload: bytes) -> tuple[bytes, str]:
+        """
+        Best-effort DOCX normalization for Word compatibility.
+        Returns (payload, status) where status is one of:
+        - skipped
+        - canonicalized
+        - failed:<reason>
+        """
+        raw_flag = str(os.environ.get("WRITING_AGENT_DOCX_CANONICALIZE", "0")).strip().lower()
+        enabled = raw_flag in {"1", "true", "yes", "on"}
+        if not enabled:
+            return payload, "skipped"
+        try:
+            from docx import Document as PythonDocxDocument  # type: ignore
+        except Exception as exc:
+            return payload, f"failed:python-docx-unavailable:{exc}"
+
+        try:
+            src = io.BytesIO(payload)
+            doc = PythonDocxDocument(src)
+            out = io.BytesIO()
+            doc.save(out)
+            normalized = out.getvalue()
+            if not normalized:
+                return payload, "failed:empty-output"
+            return normalized, "canonicalized"
+        except Exception as exc:
+            return payload, f"failed:{exc}"
+
+    @staticmethod
+    def _docx_validation_enforce_enabled() -> bool:
+        raw = str(os.environ.get("WRITING_AGENT_DOCX_VALIDATION_ENFORCE", "1")).strip().lower()
+        return raw in {"1", "true", "yes", "on"}
+
     def export_check(self, doc_id: str, format: str = "docx", auto_fix: int = 1) -> dict:
         app_v2 = app_v2_module()
 
@@ -69,6 +112,18 @@ class ExportService:
                 doc_ir = app_v2.doc_ir_from_dict(session.doc_ir)
             except Exception:
                 doc_ir = None
+        if doc_ir is not None:
+            try:
+                doc_ir_text = app_v2.doc_ir_to_text(doc_ir)
+            except Exception:
+                doc_ir_text = ""
+            # Guard against stale doc_ir after postprocess/repair: export should reflect latest text.
+            if self._compact_for_compare(doc_ir_text) != self._compact_for_compare(base_text):
+                try:
+                    text = app_v2._normalize_export_text(base_text, session=session)
+                    doc_ir = app_v2.doc_ir_from_text(text)
+                except Exception:
+                    doc_ir = None
         if doc_ir is None:
             if not (base_text or "").strip():
                 raise app_v2.HTTPException(status_code=400, detail="document is empty")
@@ -80,32 +135,48 @@ class ExportService:
         parsed = app_v2.doc_ir_to_parsed(doc_ir)
         fmt = app_v2._formatting_from_session(session)
         prefs = app_v2._export_prefs_from_session(session)
-        export_backend = "unknown"
-        export_style_path = "plain"
-        use_html = app_v2._doc_ir_has_styles(doc_ir)
-        if use_html:
-            export_backend = "html_docx_exporter"
-            export_style_path = "styled_doc_ir"
-            html = app_v2._doc_ir_to_html(doc_ir)
-            payload = app_v2.html_docx_exporter.build(html, fmt)
-        else:
-            export_style_path = "parsed_text"
-            template_path = app_v2._resolve_export_template_path(session)
-            try:
-                text = app_v2.doc_ir_to_text(doc_ir)
-            except Exception:
-                text = base_text
-            text = app_v2._normalize_export_text(text, session=session)
-            rust_payload = app_v2._try_rust_docx_export(text)
-            if rust_payload:
-                export_backend = "rust_docx_export"
-                payload = rust_payload
-            else:
-                export_backend = "parsed_docx_exporter"
-                payload = app_v2.docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
+        export_backend = "parsed_docx_exporter"
+        export_style_path = "parsed_single_mode"
+        backend_mode = self._SINGLE_DOCX_BACKEND_MODE
+        template_path = app_v2._resolve_export_template_path(session)
+        payload = app_v2.docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
+        payload, canonicalize_status = self._canonicalize_docx_payload(payload)
         issues = app_v2._validate_docx_bytes(payload)
+        repair_strategy = "none"
+        if issues:
+            # Last-resort fallback: remove TOC/header/page-number complexity and rebuild.
+            # We prefer returning a compatible document over returning a potentially broken one.
+            try:
+                fallback_prefs = replace(
+                    prefs,
+                    include_toc=False,
+                    include_header=False,
+                    page_numbers=False,
+                )
+                fallback_payload = app_v2.docx_exporter.build_from_parsed(
+                    parsed, fmt, fallback_prefs, template_path=template_path or None
+                )
+                fallback_payload, fallback_canon = self._canonicalize_docx_payload(fallback_payload)
+                fallback_issues = app_v2._validate_docx_bytes(fallback_payload)
+                if not fallback_issues:
+                    payload = fallback_payload
+                    issues = []
+                    canonicalize_status = fallback_canon
+                    repair_strategy = "fallback_no_toc_header_pagenum"
+                    export_style_path = "parsed_single_mode_fallback"
+                else:
+                    issues.extend([f"fallback:{x}" for x in fallback_issues if x])
+                    repair_strategy = "fallback_failed"
+            except Exception as exc:
+                issues.append(f"fallback-build:{exc}")
+                repair_strategy = "fallback_exception"
         if issues:
             app_v2.logger.warning(f"[docx-validate] {doc_id}: " + ";".join(issues))
+            if self._docx_validation_enforce_enabled():
+                raise app_v2.HTTPException(
+                    status_code=500,
+                    detail=f"DOCX导出失败：结构校验未通过（{';'.join(issues[:4])}）",
+                )
         filename = f"{parsed.title or 'document'}.docx"
         filename = re.sub(r'[\r\n"]+', "", filename)
         safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", filename) or "document.docx"
@@ -117,6 +188,9 @@ class ExportService:
             "X-Docx-Template": Path(template_path).name if 'template_path' in locals() and template_path else "",
             "X-Docx-Export-Policy": str(quality.get("policy") or ""),
             "X-Docx-Validation": "warning" if issues else "ok",
+            "X-Docx-Canonicalized": canonicalize_status,
+            "X-Docx-Backend-Mode": backend_mode,
+            "X-Docx-Repair": repair_strategy,
         }
         if issues:
             headers["X-Docx-Warn"] = ",".join(issues)[:256]
@@ -149,22 +223,14 @@ class ExportService:
         parsed = app_v2.doc_ir_to_parsed(doc_ir)
         fmt = app_v2._formatting_from_session(session)
         prefs = app_v2._export_prefs_from_session(session)
-        use_html = app_v2._doc_ir_has_styles(doc_ir)
-        if use_html:
-            html = app_v2._doc_ir_to_html(doc_ir)
-            docx_bytes = app_v2.html_docx_exporter.build(html, fmt)
-        else:
-            template_path = app_v2._resolve_export_template_path(session)
-            try:
-                text = app_v2.doc_ir_to_text(doc_ir)
-            except Exception:
-                text = base_text
-            text = app_v2._normalize_export_text(text, session=session)
-            rust_payload = app_v2._try_rust_docx_export(text)
-            if rust_payload:
-                docx_bytes = rust_payload
-            else:
-                docx_bytes = app_v2.docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
+        template_path = app_v2._resolve_export_template_path(session)
+        docx_bytes = app_v2.docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
+        issues = app_v2._validate_docx_bytes(docx_bytes)
+        if issues and self._docx_validation_enforce_enabled():
+            raise app_v2.HTTPException(
+                status_code=500,
+                detail=f"PDF导出失败：中间DOCX校验未通过（{';'.join(issues[:4])}）",
+            )
         with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp_docx:
             tmp_docx.write(docx_bytes)
             tmp_docx_path = Path(tmp_docx.name)

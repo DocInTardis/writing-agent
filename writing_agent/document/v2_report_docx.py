@@ -10,10 +10,11 @@ import re
 from io import BytesIO
 from dataclasses import dataclass
 from typing import Any
+import unicodedata
 
 from docx import Document
 from docx.enum.section import WD_SECTION
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.oxml.text.paragraph import CT_P
@@ -48,6 +49,13 @@ class ExportPrefs:
     page_size: str = "A4"
 
 
+@dataclass(frozen=True)
+class TocAnchorEntry:
+    level: int
+    title: str
+    anchor: str
+
+
 FIRST_LINE_INDENT_CM = 0.85
 
 
@@ -57,12 +65,59 @@ def _center_chapter_headings_enabled() -> bool:
 
 
 def _update_fields_on_open_enabled() -> bool:
+    # Default to disabled to avoid Word open-time field update prompts.
     raw = str(os.environ.get("WRITING_AGENT_DOCX_UPDATE_FIELDS_ON_OPEN", "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _dynamic_toc_field_enabled() -> bool:
+    # Keep dynamic TOC enabled by default (user requirement).
+    raw = str(os.environ.get("WRITING_AGENT_DOCX_DYNAMIC_TOC_FIELD", "1")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _toc_field_lock_enabled() -> bool:
+    # Lock TOC field by default to reduce open-time update prompts.
+    raw = str(os.environ.get("WRITING_AGENT_DOCX_TOC_FIELD_LOCK", "1")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _toc_hyperlink_enabled() -> bool:
+    # Hyperlink switch can trigger extra update behavior in some Word setups.
+    raw = str(os.environ.get("WRITING_AGENT_DOCX_TOC_HYPERLINK", "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _page_field_lock_enabled() -> bool:
+    raw = str(os.environ.get("WRITING_AGENT_DOCX_PAGE_FIELD_LOCK", "1")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _toc_clickable_links_enabled() -> bool:
+    # Default to clickable manual TOC (Ctrl+Click jump), independent from field update.
+    raw = str(os.environ.get("WRITING_AGENT_DOCX_TOC_CLICKABLE_LINKS", "1")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _toc_footer_postprocess_enabled() -> bool:
+    # Disabled by default: XML re-serialization of footer parts can introduce
+    # namespace edge-cases that trigger Word repair prompts on some versions.
+    raw = str(os.environ.get("WRITING_AGENT_DOCX_TOC_FOOTER_POSTPROCESS", "0")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
 
 class V2ReportDocxExporter:
     """\n    Builds a graduation-design style .docx:\n    - Cover page (no page number)\n    - TOC field (Word updates on open)\n    - Main content with heading numbering\n    - Footer page numbers\n    """
+
+    def _resolve_toc_style_name(self, doc: Document, level: int) -> str | None:
+        lvl = max(1, min(9, int(level or 1)))
+        for candidate in (f"TOC {lvl}", f"TOC{lvl}"):
+            try:
+                _ = doc.styles[candidate]
+                return candidate
+            except Exception:
+                continue
+        return None
 
     def build_from_text(
         self,
@@ -94,6 +149,8 @@ class V2ReportDocxExporter:
         self._apply_styles(doc, formatting)
         if _update_fields_on_open_enabled():
             _enable_update_fields(doc)
+        else:
+            _disable_update_fields(doc)
 
         raw_title = _strip_inline_markers((parsed.title or "").strip())
         if raw_title in {"\u672a\u547d\u540d\u6587\u6863", "\u672a\u547d\u540d\u62a5\u544a"}:
@@ -105,6 +162,12 @@ class V2ReportDocxExporter:
         # blocks = _ensure_min_figures(blocks)
         # blocks = _ensure_min_tables(blocks)
         blocks = _ensure_reference_section(blocks)
+        # Normalize heading structure before TOC/content emission.
+        if blocks and blocks[0].type == "heading" and int(blocks[0].level or 0) == 1:
+            blocks = blocks[1:]
+        blocks = _promote_headings_if_no_h1(blocks)
+        toc_entries = self._collect_toc_entries(blocks, levels=max(1, min(4, int(prefs.toc_levels))))
+        toc_anchors = self._build_toc_anchor_entries(toc_entries)
 
         header_text = (prefs.header_text or "").strip() or title
         footer_text = (prefs.footer_text or "").strip()
@@ -117,7 +180,12 @@ class V2ReportDocxExporter:
             self._add_cover(doc, title)
             if prefs.include_toc:
                 toc_section = self._new_section(doc, start_page_numbering=True, numbering_format="upperRoman")
-                self._add_toc(doc, levels=max(1, min(4, int(prefs.toc_levels))))
+                self._add_toc(
+                    doc,
+                    levels=max(1, min(4, int(prefs.toc_levels))),
+                    entries=toc_anchors,
+                    blocks=blocks,
+                )
                 main_section = self._new_section(doc, start_page_numbering=True, numbering_format="decimal")
             else:
                 main_section = self._new_section(doc, start_page_numbering=True, numbering_format="decimal")
@@ -125,7 +193,12 @@ class V2ReportDocxExporter:
             if prefs.include_toc:
                 toc_section = cover_section
                 _set_section_page_numbering(toc_section, start_at=1, numbering_format="upperRoman")
-                self._add_toc(doc, levels=max(1, min(4, int(prefs.toc_levels))))
+                self._add_toc(
+                    doc,
+                    levels=max(1, min(4, int(prefs.toc_levels))),
+                    entries=toc_anchors,
+                    blocks=blocks,
+                )
                 main_section = self._new_section(doc, start_page_numbering=True, numbering_format="decimal")
             else:
                 main_section = cover_section
@@ -133,7 +206,6 @@ class V2ReportDocxExporter:
 
         if prefs.page_numbers:
             _clear_header_footer(cover_section)
-            _disable_first_page_numbering(cover_section)
             _remove_section_page_numbering(cover_section)
             if toc_section is not None:
                 _clear_header_footer(toc_section)
@@ -143,11 +215,6 @@ class V2ReportDocxExporter:
         if prefs.include_header:
             self._set_header(main_section, header_text)
 
-        # Skip the first H1 block if it duplicates title.
-        if blocks and blocks[0].type == "heading" and int(blocks[0].level or 0) == 1:
-            blocks = blocks[1:]
-        blocks = _promote_headings_if_no_h1(blocks)
-
         self._emit_content(
             doc,
             blocks,
@@ -155,11 +222,12 @@ class V2ReportDocxExporter:
             number_headings=False,
             apply_para_format=True,
             heading_styles=heading_styles,
+            toc_anchor_entries=toc_anchors,
         )
         _ensure_reference_citations(doc)
         _strip_cover_section_numbering(doc)
         buf = _save_doc(doc)
-        if prefs.page_numbers and prefs.include_toc:
+        if prefs.page_numbers and prefs.include_toc and _toc_footer_postprocess_enabled():
             buf = _postprocess_toc_footer_numbers(buf)
         return buf
 
@@ -255,6 +323,23 @@ class V2ReportDocxExporter:
             h3.paragraph_format.line_spacing = 1.73
         except Exception:
             pass
+        for i in range(1, 4):
+            try:
+                toc_style_name = self._resolve_toc_style_name(doc, i)
+                if not toc_style_name:
+                    continue
+                toc_style = doc.styles[toc_style_name]
+                toc_style.font.name = formatting.font_name or "瀹嬩綋"
+                toc_style.font.size = Pt(formatting.font_size_pt or 12)
+                toc_style.font.bold = False
+                toc_para = toc_style.paragraph_format
+                toc_para.space_before = Pt(0)
+                toc_para.space_after = Pt(0)
+                toc_para.line_spacing = 1.5
+                r_pr = toc_style._element.get_or_add_rPr()  # type: ignore[attr-defined]
+                r_pr.get_or_add_rFonts().set(qn("w:eastAsia"), formatting.font_name_east_asia or "瀹嬩綋")
+            except Exception:
+                pass
 
     def _add_cover(self, doc: Document, title: str) -> None:
         p = doc.add_paragraph()
@@ -276,7 +361,123 @@ class V2ReportDocxExporter:
         doc.add_paragraph("")
         # The next section will start a new page; avoid double breaks here.
 
-    def _add_toc(self, doc: Document, *, levels: int) -> None:
+    def _collect_toc_entries(self, blocks: list[DocBlock], *, levels: int) -> list[tuple[int, str]]:
+        max_level = max(1, min(4, int(levels or 3)))
+        out: list[tuple[int, str]] = []
+        seen: set[tuple[int, str]] = set()
+        for block in blocks:
+            if block.type != "heading":
+                continue
+            level = max(1, min(6, int(block.level or 1)))
+            if level > max_level:
+                continue
+            title = _sanitize_heading_text((block.text or "").strip())
+            if not title:
+                continue
+            key = (level, title)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append((level, title))
+            if len(out) >= 120:
+                break
+        return out
+
+    def _build_toc_anchor_entries(self, entries: list[tuple[int, str]]) -> list[TocAnchorEntry]:
+        def _bookmark_name(title: str, idx: int) -> str:
+            slug = re.sub(r"[^0-9A-Za-z_]+", "_", str(title or "").strip())
+            slug = re.sub(r"_+", "_", slug).strip("_")
+            if not slug:
+                slug = f"h{idx:03d}"
+            if not re.match(r"^[A-Za-z_]", slug):
+                slug = f"h_{slug}"
+            # Word bookmark names are safest when kept short and ASCII.
+            return f"toc_{idx:03d}_{slug[:24]}"
+
+        out: list[TocAnchorEntry] = []
+        for idx, (level, title) in enumerate(entries, start=1):
+            out.append(TocAnchorEntry(level=int(level or 1), title=str(title or ""), anchor=_bookmark_name(title, idx)))
+        return out
+
+    def _display_width(self, text: str) -> int:
+        total = 0
+        for ch in str(text or ""):
+            if unicodedata.east_asian_width(ch) in {"W", "F"}:
+                total += 2
+            else:
+                total += 1
+        return total
+
+    def _estimate_toc_pages(self, entries: list[tuple[int, str]], blocks: list[DocBlock], *, start_page: int = 1) -> list[int]:
+        if not entries:
+            return []
+        def _norm(value: str) -> str:
+            return re.sub(r"\s+", "", str(value or "").strip().lower())
+
+        def _block_cost(block: DocBlock) -> int:
+            t = str(block.type or "")
+            if t == "heading":
+                return 70
+            if t == "paragraph":
+                return max(40, len(str(block.text or "")))
+            if t == "list":
+                items = getattr(block, "items", None) or []
+                try:
+                    return max(80, sum(len(str(x or "")) for x in list(items)))
+                except Exception:
+                    return 120
+            if t == "table":
+                return 700
+            if t == "figure":
+                return 600
+            return 120
+
+        key_to_indices: dict[tuple[int, str], list[int]] = {}
+        for idx, (lvl, title) in enumerate(entries):
+            key = (int(lvl or 1), _norm(title))
+            key_to_indices.setdefault(key, []).append(idx)
+        pages = [max(1, int(start_page)) for _ in entries]
+        page = max(1, int(start_page))
+        budget = 0
+        page_capacity = 1800
+        for block in blocks:
+            if block.type == "heading":
+                level = max(1, min(6, int(block.level or 1)))
+                title = _sanitize_heading_text((block.text or "").strip())
+                key = (level, _norm(title))
+                queue = key_to_indices.get(key) or []
+                if queue:
+                    idx = queue.pop(0)
+                    pages[idx] = page
+            budget += _block_cost(block)
+            while budget >= page_capacity:
+                page += 1
+                budget -= page_capacity
+        return pages
+
+    def _render_toc_preview_text(self, entries: list[tuple[int, str]], blocks: list[DocBlock]) -> str:
+        if not entries:
+            return ""
+        pages = self._estimate_toc_pages(entries, blocks, start_page=1)
+        target_width = 72
+        lines: list[str] = []
+        for idx, (level, title) in enumerate(entries):
+            depth = max(1, min(4, int(level or 1)))
+            indent = "  " * max(0, depth - 1)
+            text = f"{indent}{title}".rstrip()
+            page_num = max(1, int(pages[idx] if idx < len(pages) else 1))
+            fill = max(6, target_width - self._display_width(text) - len(str(page_num)))
+            lines.append(f"{text}{'.' * fill}{page_num}")
+        return "\n".join(lines).strip()
+
+    def _add_toc(
+        self,
+        doc: Document,
+        *,
+        levels: int,
+        entries: list[TocAnchorEntry] | None = None,
+        blocks: list[DocBlock] | None = None,
+    ) -> None:
         h = doc.add_paragraph()
         try:
             h.style = "TOC Heading"
@@ -284,9 +485,85 @@ class V2ReportDocxExporter:
             pass
         h.alignment = WD_ALIGN_PARAGRAPH.CENTER
         _apply_toc_heading_style(h, "\u76ee \u5f55")
-        p = doc.add_paragraph()
-        instr = f'TOC \\\\o \"1-{levels}\" \\\\h \\\\z \\\\u'
-        _add_field_simple(p, instr, "")
+        toc_entries = list(entries or [])
+        plain_entries = [(int(x.level or 1), str(x.title or "")) for x in toc_entries]
+        if _toc_clickable_links_enabled():
+            if not toc_entries:
+                p = doc.add_paragraph("\u65e0\u76ee\u5f55\u9879")
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                return
+            pages = self._estimate_toc_pages(plain_entries, list(blocks or []), start_page=1)
+            for idx, entry in enumerate(toc_entries):
+                level = max(1, min(4, int(entry.level or 1)))
+                title = str(entry.title or "")
+                anchor = str(entry.anchor or "").strip()
+                page_num = max(1, int(pages[idx] if idx < len(pages) else 1))
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                try:
+                    toc_style_name = self._resolve_toc_style_name(doc, level)
+                    if toc_style_name:
+                        p.style = toc_style_name
+                except Exception:
+                    pass
+                try:
+                    p.paragraph_format.left_indent = Cm(max(0.0, float(level - 1) * 0.75))
+                    p.paragraph_format.first_line_indent = Cm(0)
+                    p.paragraph_format.space_before = Pt(0)
+                    p.paragraph_format.space_after = Pt(0)
+                except Exception:
+                    pass
+                try:
+                    sec = doc.sections[-1]
+                    right_tab = sec.page_width - sec.left_margin - sec.right_margin
+                    tab_stops = p.paragraph_format.tab_stops
+                    try:
+                        tab_stops.clear_all()
+                    except Exception:
+                        pass
+                    tab_stops.add_tab_stop(right_tab, WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
+                except Exception:
+                    pass
+                if anchor:
+                    _add_internal_hyperlink(p, title, anchor)
+                else:
+                    _add_inline_runs(p, title)
+                p.add_run("\t")
+                if anchor:
+                    _add_internal_hyperlink(p, str(page_num), anchor)
+                else:
+                    p.add_run(str(page_num))
+            return
+
+        if _dynamic_toc_field_enabled():
+            p = doc.add_paragraph()
+            switches = [f'\\\\o \"1-{levels}\"']
+            if _toc_hyperlink_enabled():
+                switches.append("\\\\h")
+            switches.extend(["\\\\z", "\\\\u"])
+            instr = "TOC " + " ".join(switches)
+            preview = self._render_toc_preview_text(plain_entries, list(blocks or []))
+            _add_field_simple(p, instr, preview, lock=_toc_field_lock_enabled())
+            return
+
+        if not toc_entries:
+            p = doc.add_paragraph("\u65e0\u76ee\u5f55\u9879")
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            return
+
+        for entry in toc_entries:
+            level = int(entry.level or 1)
+            title = str(entry.title or "")
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            try:
+                p.paragraph_format.left_indent = Cm(max(0.0, float(level - 1) * 0.75))
+                p.paragraph_format.first_line_indent = Cm(0)
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+            except Exception:
+                pass
+            _add_inline_runs(p, title)
 
     def _new_section(
         self,
@@ -339,14 +616,16 @@ class V2ReportDocxExporter:
             if footer_text:
                 p.add_run(footer_text)
             if page_format:
-                _add_field_simple(p, f"PAGE \\\\* {page_format}", "")
+                _add_field_simple(p, f"PAGE \\\\* {page_format}", "", lock=_page_field_lock_enabled())
             else:
-                _add_field_simple(p, "PAGE", "")
+                _add_field_simple(p, "PAGE", "", lock=_page_field_lock_enabled())
 
         _write_footer(getattr(sec, "footer", None))
-        # Ensure first/even page footers also have the numbering.
-        _write_footer(getattr(sec, "first_page_footer", None))
-        _write_footer(getattr(sec, "even_page_footer", None))
+        try:
+            sec.different_first_page_header_footer = False
+        except Exception:
+            pass
+        _strip_non_default_header_footer_refs(sec)
 
     def _emit_content(
         self,
@@ -357,6 +636,7 @@ class V2ReportDocxExporter:
         number_headings: bool,
         apply_para_format: bool,
         heading_styles: dict[int, str] | None = None,
+        toc_anchor_entries: list[TocAnchorEntry] | None = None,
     ) -> None:
         h1 = 0
         h2 = 0
@@ -375,6 +655,32 @@ class V2ReportDocxExporter:
         )
         inserted_reference_heading = False
         ref_buffer: list[tuple[int | None, str]] = []
+        bookmark_id = 1
+
+        def _norm_key(level: int, title: str) -> tuple[int, str]:
+            return (
+                max(1, min(6, int(level or 1))),
+                re.sub(r"\s+", "", str(title or "").strip().lower()),
+            )
+
+        anchor_queue: dict[tuple[int, str], list[str]] = {}
+        for item in list(toc_anchor_entries or []):
+            key = _norm_key(int(item.level or 1), str(item.title or ""))
+            anchor_queue.setdefault(key, []).append(str(item.anchor or ""))
+
+        def _attach_anchor(paragraph: Paragraph | None, level: int, heading_title: str) -> None:
+            nonlocal bookmark_id
+            if paragraph is None:
+                return
+            key = _norm_key(level, heading_title)
+            queue = anchor_queue.get(key) or []
+            if not queue:
+                return
+            anchor = str(queue.pop(0) or "").strip()
+            if not anchor:
+                return
+            _add_bookmark(paragraph, anchor, bookmark_id)
+            bookmark_id += 1
 
         def flush_reference_buffer() -> None:
             nonlocal ref_buffer, ref_index
@@ -498,7 +804,8 @@ class V2ReportDocxExporter:
                         if seen_h1:
                             doc.add_page_break()
                         seen_h1 = True
-                        _add_heading(doc, clean, level=1, align=WD_ALIGN_PARAGRAPH.CENTER)
+                        heading_paragraph = _add_heading(doc, clean, level=1, align=WD_ALIGN_PARAGRAPH.CENTER)
+                        _attach_anchor(heading_paragraph, lvl, text)
                         current_section = _normalize_section_title(clean)
                         ref_index = 0
                         continue
@@ -510,19 +817,21 @@ class V2ReportDocxExporter:
                         h2 = 0
                         h3 = 0
                         t = f"\u7b2c{h1}\u7ae0 {clean}"
-                        _add_heading(doc, t, level=1, align=WD_ALIGN_PARAGRAPH.CENTER)
+                        heading_paragraph = _add_heading(doc, t, level=1, align=WD_ALIGN_PARAGRAPH.CENTER)
+                        _attach_anchor(heading_paragraph, lvl, text)
                     elif lvl == 2:
                         if h1 == 0:
                             h1 = 1
                         h2 += 1
                         h3 = 0
                         t = f"{h1}.{h2} {clean}"
-                        _add_heading(
+                        heading_paragraph = _add_heading(
                             doc,
                             t,
                             level=2,
                             align=WD_ALIGN_PARAGRAPH.CENTER if _center_chapter_headings_enabled() else WD_ALIGN_PARAGRAPH.LEFT,
                         )
+                        _attach_anchor(heading_paragraph, lvl, text)
                     else:
                         if h1 == 0:
                             h1 = 1
@@ -530,7 +839,8 @@ class V2ReportDocxExporter:
                             h2 = 1
                         h3 += 1
                         t = f"{h1}.{h2}.{h3} {clean}"
-                        _add_heading(doc, t, level=3, align=WD_ALIGN_PARAGRAPH.LEFT)
+                        heading_paragraph = _add_heading(doc, t, level=3, align=WD_ALIGN_PARAGRAPH.LEFT)
+                        _attach_anchor(heading_paragraph, lvl, text)
                 else:
                     level = max(1, min(3, lvl))
                     if level == 1:
@@ -539,9 +849,10 @@ class V2ReportDocxExporter:
                         seen_h1 = True
                     if heading_styles:
                         style_name = heading_styles.get(level)
-                        _add_heading(doc, text, level=level, style_name=style_name)
+                        heading_paragraph = _add_heading(doc, text, level=level, style_name=style_name)
                     else:
-                        _add_heading(doc, text, level=level)
+                        heading_paragraph = _add_heading(doc, text, level=level)
+                    _attach_anchor(heading_paragraph, level, text)
                 current_section = _normalize_section_title(text)
                 if _is_reference_title(current_section):
                     ref_index = 0

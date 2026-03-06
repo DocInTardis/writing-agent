@@ -111,10 +111,26 @@ class GenerationService:
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
+        prefs = dict(session.generation_prefs or {})
+        touched_defaults = False
+        if not str(prefs.get("quality_profile") or "").strip():
+            prefs["quality_profile"] = "academic_cnki_default"
+            touched_defaults = True
+        for key, value in (("min_reference_count", 8), ("min_h2_count", 3), ("min_h3_count", 1)):
+            try:
+                current = int(prefs.get(key) or 0)
+            except Exception:
+                current = 0
+            if current <= 0:
+                prefs[key] = value
+                touched_defaults = True
+        if touched_defaults:
+            session.generation_prefs = prefs
+            app_v2.store.put(session)
 
         # 闃舵2锛氳姹傛爣鍑嗗寲 + 骞傜瓑鎺у埗銆?
         data = await request.json()
-        req = self._parse_generate_payload(app_v2, data)
+        req = self._parse_generate_payload(app_v2, data, session=session)
         idempotency_key = self._resolve_idempotency_key(doc_id=doc_id, request=request, payload=data)
         cached = self._load_idempotent_result(idempotency_key)
         if cached is not None:
@@ -140,6 +156,23 @@ class GenerationService:
             )
             # overwrite 妯″紡涓嬩笉甯﹀巻鍙叉鏂囷紱鍏朵粬妯″紡浼樺厛鍙栬姹備腑鐨?text锛屽叾娆′細璇濇鏂囥€?
             base_text = "" if req["compose_mode"] == "overwrite" else (req["current_text"] or session.doc_text or "")
+            if str((req.get("plan_confirm") or {}).get("decision") or "").strip().lower() == "interrupted":
+                interrupted_result = {
+                    "ok": 1,
+                    "status": "interrupted",
+                    "failure_reason": "plan_not_confirmed_by_user",
+                    "quality_snapshot": {
+                        "status": "interrupted",
+                        "reason": "plan_not_confirmed_by_user",
+                        "problem_count": 1,
+                    },
+                    "text": base_text,
+                    "problems": ["plan_not_confirmed_by_user"],
+                    "doc_ir": app_v2._safe_doc_ir_payload(base_text),
+                    "plan_feedback": dict(req.get("plan_confirm") or {}),
+                }
+                self._save_idempotent_result(idempotency_key, interrupted_result)
+                return interrupted_result
 
             # 闃舵5锛氬厛灏濊瘯浣庡欢杩熷揩鎹疯矾寰勶紝鍛戒腑鍒欑洿鎺ヨ繑鍥炪€?
             shortcut, revision_meta = self._try_shortcuts(
@@ -187,6 +220,7 @@ class GenerationService:
                 base_text=base_text,
                 cfg=cfg,
                 target_chars=target_chars,
+                plan_confirm=req["plan_confirm"],
             )
             # 闃舵9锛氱粺涓€鍚庡鐞嗭紙娓呯悊鍥炲０銆佷慨澶嶇粨鏋勭瓑锛夊苟鎸佷箙鍖栥€?
             final_text = app_v2._postprocess_output_text(
@@ -199,7 +233,18 @@ class GenerationService:
             app_v2._set_doc_text(session, final_text)
             app_v2._auto_commit_version(session, "auto: after update")
             app_v2.store.put(session)
-            result = {"ok": 1, "text": final_text, "problems": problems, "doc_ir": app_v2._safe_doc_ir_payload(final_text)}
+            terminal_status = str((graph_meta or {}).get("terminal_status") or "success").strip().lower()
+            if terminal_status not in {"success", "failed", "interrupted"}:
+                terminal_status = "success"
+            result = {
+                "ok": 1,
+                "status": terminal_status,
+                "failure_reason": str((graph_meta or {}).get("failure_reason") or ""),
+                "quality_snapshot": dict((graph_meta or {}).get("quality_snapshot") or {}),
+                "text": final_text,
+                "problems": problems,
+                "doc_ir": app_v2._safe_doc_ir_payload(final_text),
+            }
             if revision_meta:
                 result["revision_meta"] = revision_meta
             if graph_meta:
@@ -210,7 +255,7 @@ class GenerationService:
             # 闃舵10锛氭棤璁烘垚鍔熷け璐ラ兘閲婃斁鏂囨。绾х敓鎴愰攣銆?
             app_v2._finish_doc_generation(doc_id, token)
 
-    def _parse_generate_payload(self, app_v2, data: dict) -> dict:
+    def _parse_generate_payload(self, app_v2, data: dict, *, session=None) -> dict:
         """Normalize external request payload into internal fields."""
         selection_payload = data.get("selection")
         selection_text = (
@@ -218,6 +263,9 @@ class GenerationService:
             if isinstance(selection_payload, dict)
             else str(selection_payload or "")
         )
+        incoming_plan_confirm = data.get("plan_confirm")
+        if incoming_plan_confirm is None:
+            incoming_plan_confirm = self._load_plan_confirm_state(app_v2, session=session)
         return {
             "raw_instruction": str(data.get("instruction") or "").strip(),
             "current_text": str(data.get("text") or ""),
@@ -228,7 +276,68 @@ class GenerationService:
             "resume_sections": app_v2._normalize_resume_sections(data.get("resume_sections")),
             "cursor_anchor": str(data.get("cursor_anchor") or ""),
             "confirm_apply": bool(data.get("confirm_apply") is True),
+            "plan_confirm": self._normalize_plan_confirm_payload(incoming_plan_confirm),
         }
+
+    @staticmethod
+    def _normalize_plan_confirm_payload(raw: object) -> dict:
+        data = raw if isinstance(raw, dict) else {}
+        decision_raw = str(data.get("decision") or "").strip().lower()
+        if decision_raw in {"stop", "terminate", "cancel", "reject"}:
+            decision = "interrupted"
+        elif decision_raw in {"interrupted", "approved"}:
+            decision = decision_raw
+        else:
+            decision = "approved"
+        try:
+            score = int(data.get("score") or 0)
+        except Exception:
+            score = 0
+        score = max(0, min(5, score))
+        note = str(data.get("note") or "").strip()[:300]
+        return {
+            "decision": decision,
+            "score": score,
+            "note": note,
+        }
+
+    @staticmethod
+    def _load_plan_confirm_state(app_v2, *, session) -> dict | None:
+        if session is None:
+            return None
+        try:
+            data = app_v2._get_internal_pref(session, "_wa_plan_confirm", {})  # type: ignore[attr-defined]
+            return data if isinstance(data, dict) else None
+        except Exception:
+            prefs = session.generation_prefs if isinstance(getattr(session, "generation_prefs", None), dict) else {}
+            value = prefs.get("_wa_plan_confirm") if isinstance(prefs, dict) else None
+            return value if isinstance(value, dict) else None
+
+    @staticmethod
+    def _save_plan_confirm_state(app_v2, *, session, payload: dict) -> None:
+        if session is None:
+            return
+        value = dict(payload or {})
+        value["updated_at"] = time.time()
+        try:
+            app_v2._set_internal_pref(session, "_wa_plan_confirm", value)  # type: ignore[attr-defined]
+        except Exception:
+            prefs = dict(session.generation_prefs or {})
+            prefs["_wa_plan_confirm"] = value
+            session.generation_prefs = prefs
+        app_v2.store.put(session)
+
+    async def plan_confirm(self, doc_id: str, request: Request) -> dict:
+        app_v2 = app_v2_module()
+        session = app_v2.store.get(doc_id)
+        if session is None:
+            raise app_v2.HTTPException(status_code=404, detail="document not found")
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise app_v2.HTTPException(status_code=400, detail="body must be object")
+        payload = self._normalize_plan_confirm_payload(data)
+        self._save_plan_confirm_state(app_v2, session=session, payload=payload)
+        return {"ok": 1, "plan_confirm": payload}
 
     def _resolve_idempotency_key(self, *, doc_id: str, request: Request, payload: dict) -> str:
         """Resolve idempotency key from header or deterministic payload hash."""
@@ -487,7 +596,8 @@ class GenerationService:
             cfg = app_v2.GenerateConfig(
                 workers=int(app_v2.os.environ.get("WRITING_AGENT_WORKERS", "12")),
                 min_total_chars=internal_target,
-                max_total_chars=internal_target,
+                # Keep only a lower bound to avoid truncating complete paragraphs at tail.
+                max_total_chars=0,
             )
         else:
             cfg = app_v2.GenerateConfig(workers=int(app_v2.os.environ.get("WRITING_AGENT_WORKERS", "12")))
@@ -505,6 +615,7 @@ class GenerationService:
         base_text: str,
         cfg,
         target_chars: int,
+        plan_confirm: dict,
     ) -> tuple[str, list[str], dict | None]:
         """Run graph generation with single-pass fallback on failure/insufficient output."""
         required_h2 = list(resume_sections) if resume_sections else list(session.template_required_h2 or [])
@@ -513,6 +624,11 @@ class GenerationService:
         final_text: str | None = None
         problems: list[str] = []
         graph_meta: dict | None = None
+        prompt_trace: list[dict] = []
+        terminal_status = "success"
+        failure_reason = ""
+        quality_snapshot: dict = {}
+        engine_failover = False
         started = time.time()
         use_route_graph = False
 
@@ -572,17 +688,30 @@ class GenerationService:
                     compose_mode=compose_mode,
                     resume_sections=resume_sections,
                     format_only=False,
+                    plan_confirm=plan_confirm,
                 )
                 if isinstance(out, dict):
                     final_text = str(out.get("text") or "")
                     problems = list(out.get("problems") or [])
+                    status_raw = str(out.get("terminal_status") or "").strip().lower()
+                    if status_raw in {"success", "failed", "interrupted"}:
+                        terminal_status = status_raw
+                    failure_reason = str(out.get("failure_reason") or "").strip()
+                    if isinstance(out.get("quality_snapshot"), dict):
+                        quality_snapshot = dict(out.get("quality_snapshot") or {})
+                    raw_prompt_trace = out.get("prompt_trace")
+                    if isinstance(raw_prompt_trace, list):
+                        prompt_trace = [dict(x) for x in raw_prompt_trace if isinstance(x, dict)]
                     graph_meta = {
                         "path": "route_graph",
                         "trace_id": str(out.get("trace_id") or ""),
                         "engine": str(out.get("engine") or ""),
                         "route_id": str(out.get("route_id") or ""),
                         "route_entry": str(out.get("route_entry") or ""),
+                        "plan_feedback": dict(out.get("plan_feedback") or {}),
                     }
+                    if terminal_status != "success" and failure_reason and failure_reason not in problems:
+                        problems.append(failure_reason)
                     if str(final_text).strip():
                         _record_metric(
                             "route_graph_success",
@@ -612,9 +741,26 @@ class GenerationService:
                     )
                 )
                 for ev in app_v2._iter_with_timeout(gen, per_event=stall_s, overall=overall_s):
+                    if ev.get("event") == "prompt_route":
+                        meta = ev.get("metadata") if isinstance(ev.get("metadata"), dict) else {}
+                        prompt_trace.append(
+                            {
+                                "stage": str(ev.get("stage") or ""),
+                                "metadata": dict(meta),
+                            }
+                        )
+                        continue
                     if ev.get("event") == "final":
                         final_text = str(ev.get("text") or "")
                         problems = list(ev.get("problems") or [])
+                        status_raw = str(ev.get("status") or "").strip().lower()
+                        if status_raw in {"success", "failed", "interrupted"}:
+                            terminal_status = status_raw
+                        failure_reason = str(ev.get("failure_reason") or "").strip()
+                        if isinstance(ev.get("quality_snapshot"), dict):
+                            quality_snapshot = dict(ev.get("quality_snapshot") or {})
+                        if terminal_status != "success" and failure_reason and failure_reason not in problems:
+                            problems.append(failure_reason)
                         _record_metric(
                             "legacy_graph_success",
                             path="legacy_graph",
@@ -637,6 +783,17 @@ class GenerationService:
                     current_text=base_text,
                     target_chars=target_chars,
                 )
+                engine_failover = True
+                terminal_status = "interrupted"
+                failure_reason = "engine_failover_graph_failed"
+                quality_snapshot = {
+                    "status": terminal_status,
+                    "reason": failure_reason,
+                    "problem_count": len(problems),
+                    "needs_review": True,
+                }
+                if failure_reason not in problems:
+                    problems.append(failure_reason)
                 _record_metric(
                     "fallback_recovered",
                     path="single_pass",
@@ -653,7 +810,21 @@ class GenerationService:
                 )
                 raise app_v2.HTTPException(status_code=500, detail=f"generation failed: {e}; fallback failed: {ee}") from ee
 
-        if not final_text or len(str(final_text).strip()) < 20:
+        no_semantic_failover_reasons = {
+            "analysis_needs_clarification",
+            "analysis_guard_failed",
+            "section_language_mismatch",
+            "section_hierarchy_insufficient",
+            "must_include_missing",
+            "keyword_domain_mismatch",
+            "missing_section_headings",
+            "section_content_missing",
+        }
+        no_semantic_failover = (
+            terminal_status in {"failed", "interrupted"}
+            and str(failure_reason or "").strip() in no_semantic_failover_reasons
+        )
+        if (not final_text or len(str(final_text).strip()) < 20) and not no_semantic_failover:
             _record_metric(
                 "graph_insufficient",
                 path="route_graph" if use_route_graph else "legacy_graph",
@@ -668,6 +839,17 @@ class GenerationService:
                     current_text=base_text,
                     target_chars=target_chars,
                 )
+                engine_failover = True
+                terminal_status = "interrupted"
+                failure_reason = "engine_failover_insufficient_output"
+                quality_snapshot = {
+                    "status": terminal_status,
+                    "reason": failure_reason,
+                    "problem_count": len(problems),
+                    "needs_review": True,
+                }
+                if failure_reason not in problems:
+                    problems.append(failure_reason)
                 _record_metric(
                     "fallback_recovered",
                     path="single_pass",
@@ -683,6 +865,16 @@ class GenerationService:
                     error_code=route_graph_metrics_domain.extract_error_code(e, default="E_FALLBACK_FAILED"),
                 )
                 raise app_v2.HTTPException(status_code=500, detail=f"generation produced insufficient text: {e}") from e
+
+        if graph_meta is None:
+            graph_meta = {}
+        graph_meta["terminal_status"] = terminal_status if terminal_status in {"success", "failed", "interrupted"} else "failed"
+        graph_meta["failure_reason"] = failure_reason
+        graph_meta["quality_snapshot"] = dict(quality_snapshot or {})
+        graph_meta["engine_failover"] = bool(engine_failover)
+        graph_meta["needs_review"] = bool(engine_failover)
+        if prompt_trace:
+            graph_meta["prompt_trace"] = prompt_trace[-24:]
 
         return str(final_text), problems, graph_meta
 

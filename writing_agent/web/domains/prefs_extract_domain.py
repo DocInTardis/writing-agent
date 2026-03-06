@@ -217,11 +217,24 @@ def normalize_ai_prefs(data: object) -> dict:
         out["purpose"] = purpose
 
     mode = str(data.get("target_length_mode") or "").strip().lower()
+    target_len_val = coerce_int(data.get("target_length_value"))
+    target_char_count = coerce_int(data.get("target_char_count"))
+
+    # Backward-compatible length normalization:
+    # - keep canonical target_length_mode/target_length_value
+    # - preserve target_char_count for older call sites and tests
     if mode in {"chars", "pages"}:
         out["target_length_mode"] = mode
-        val = coerce_int(data.get("target_length_value"))
-        if val and val > 0:
-            out["target_length_value"] = val
+        if target_len_val and target_len_val > 0:
+            out["target_length_value"] = target_len_val
+        if mode == "chars":
+            char_val = target_char_count if (target_char_count and target_char_count > 0) else target_len_val
+            if char_val and char_val > 0:
+                out["target_char_count"] = char_val
+    elif target_char_count and target_char_count > 0:
+        out["target_length_mode"] = "chars"
+        out["target_length_value"] = target_char_count
+        out["target_char_count"] = target_char_count
 
     if isinstance(data.get("expand_outline"), bool):
         out["expand_outline"] = bool(data.get("expand_outline"))

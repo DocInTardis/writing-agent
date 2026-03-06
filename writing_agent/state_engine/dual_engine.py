@@ -396,6 +396,8 @@ class DualGraphEngine:
         state.setdefault("resume_sections", [])
         state.setdefault("format_only", False)
         state.setdefault("policy", {})
+        state.setdefault("plan_confirm", {"decision": "approved", "score": 0, "note": ""})
+        state.setdefault("plan_confirmed", True)
 
 
 def should_use_langgraph() -> bool:

@@ -32,11 +32,43 @@ except Exception:  # pragma: no cover - optional dependency
 
 FIRST_LINE_INDENT_CM = 0.85
 
-def _add_field_simple(paragraph, instr: str, default_text: str) -> None:
+
+def _docx_aggressive_split_enabled() -> bool:
+    raw = str(os.environ.get("WRITING_AGENT_DOCX_AGGRESSIVE_SPLIT", "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _resolved_field_default_text(instr: str, default_text: str) -> str:
+    text = str(default_text or "")
+    if text.strip():
+        return text
+    instr_upper = str(instr or "").upper().strip()
+    # PAGE fields with empty display text are commonly flagged as dirty by Word.
+    if instr_upper.startswith("PAGE"):
+        if "ROMAN" in instr_upper:
+            return "I"
+        return "1"
+    return text
+
+
+def _add_field_simple(
+    paragraph,
+    instr: str,
+    default_text: str,
+    *,
+    lock: bool = False,
+    dirty: bool = False,
+) -> None:
     # Use complex field to preserve switches like \\* ROMAN.
+    display_text = _resolved_field_default_text(instr, default_text)
+
     r_begin = OxmlElement("w:r")
     fld_begin = OxmlElement("w:fldChar")
     fld_begin.set(qn("w:fldCharType"), "begin")
+    if lock:
+        fld_begin.set(qn("w:fldLock"), "true")
+    if dirty:
+        fld_begin.set(qn("w:dirty"), "true")
     r_begin.append(fld_begin)
 
     r_instr = OxmlElement("w:r")
@@ -51,10 +83,17 @@ def _add_field_simple(paragraph, instr: str, default_text: str) -> None:
     r_sep.append(fld_sep)
 
     r_text = OxmlElement("w:r")
-    t = OxmlElement("w:t")
-    t.set(qn("xml:space"), "preserve")
-    t.text = default_text
-    r_text.append(t)
+    segments = str(display_text or "").split("\n")
+    if not segments:
+        segments = [""]
+    for idx, seg in enumerate(segments):
+        t = OxmlElement("w:t")
+        t.set(qn("xml:space"), "preserve")
+        t.text = seg
+        r_text.append(t)
+        if idx < (len(segments) - 1):
+            br = OxmlElement("w:br")
+            r_text.append(br)
 
     r_end = OxmlElement("w:r")
     fld_end = OxmlElement("w:fldChar")
@@ -76,15 +115,84 @@ def _add_heading(
     level: int,
     style_name: str | None = None,
     align: WD_ALIGN_PARAGRAPH | None = None,
-) -> None:
+):
     p = doc.add_paragraph()
+    # Prefer template style, but fall back to built-in Heading styles so
+    # Word TOC fields can always pick up heading hierarchy.
+    target_style = style_name or f"Heading {level}"
     try:
-        p.style = style_name or f"Heading {level}"
+        p.style = target_style
     except Exception:
-        pass
+        try:
+            p.style = f"Heading {max(1, min(9, int(level or 1)))}"
+        except Exception:
+            pass
     if align is not None:
         p.alignment = align
     _add_inline_runs(p, text)
+    return p
+
+
+def _add_bookmark(paragraph, name: str, bookmark_id: int) -> None:
+    anchor = str(name or "").strip()
+    if not anchor:
+        return
+    bid = max(1, int(bookmark_id or 1))
+    try:
+        p = paragraph._p  # type: ignore[attr-defined]
+        b_start = OxmlElement("w:bookmarkStart")
+        b_start.set(qn("w:id"), str(bid))
+        b_start.set(qn("w:name"), anchor)
+        b_end = OxmlElement("w:bookmarkEnd")
+        b_end.set(qn("w:id"), str(bid))
+        # Keep paragraph properties first (<w:pPr>) to avoid XML order issues.
+        insert_pos = 0
+        if len(p) > 0 and getattr(p[0], "tag", "") == qn("w:pPr"):
+            insert_pos = 1
+        p.insert(insert_pos, b_start)
+        p.append(b_end)
+    except Exception:
+        pass
+
+
+def _add_internal_hyperlink(paragraph, text: str, anchor: str) -> None:
+    try:
+        p = paragraph._p  # type: ignore[attr-defined]
+        hl = OxmlElement("w:hyperlink")
+        hl.set(qn("w:anchor"), str(anchor or ""))
+        run = OxmlElement("w:r")
+        r_pr = OxmlElement("w:rPr")
+        r_style = OxmlElement("w:rStyle")
+        r_style.set(qn("w:val"), "Hyperlink")
+        r_pr.append(r_style)
+        r_fonts = OxmlElement("w:rFonts")
+        r_fonts.set(qn("w:ascii"), "Times New Roman")
+        r_fonts.set(qn("w:hAnsi"), "Times New Roman")
+        r_fonts.set(qn("w:eastAsia"), "宋体")
+        r_pr.append(r_fonts)
+        sz = OxmlElement("w:sz")
+        sz.set(qn("w:val"), "24")
+        r_pr.append(sz)
+        sz_cs = OxmlElement("w:szCs")
+        sz_cs.set(qn("w:val"), "24")
+        r_pr.append(sz_cs)
+        # Keep TOC appearance close to thesis templates: black + no underline.
+        color = OxmlElement("w:color")
+        color.set(qn("w:val"), "000000")
+        r_pr.append(color)
+        u = OxmlElement("w:u")
+        u.set(qn("w:val"), "none")
+        r_pr.append(u)
+        run.append(r_pr)
+        t = OxmlElement("w:t")
+        t.set(qn("xml:space"), "preserve")
+        t.text = str(text or "")
+        run.append(t)
+        hl.append(run)
+        p.append(hl)
+    except Exception:
+        # Fallback to plain text if hyperlink injection fails.
+        paragraph.add_run(str(text or ""))
 
 
 def _add_inline_runs(paragraph, text: str) -> None:
@@ -196,6 +304,8 @@ def _split_heading_tail(text: str) -> tuple[str, str]:
     s = (text or "").strip()
     if not s:
         return "", ""
+    if not _docx_aggressive_split_enabled():
+        return s, ""
     head = s
     tail = ""
     common_heads = [
@@ -259,6 +369,8 @@ def _split_paragraph_chunks(text: str) -> list[str]:
     if not raw:
         return []
     lines = [s.strip() for s in re.split(r"\n+", raw) if s.strip()]
+    if not _docx_aggressive_split_enabled():
+        return lines
     out: list[str] = []
     for line in lines:
         if re.match(r"^\s*\[\d+\]\s+", line):
@@ -342,7 +454,15 @@ def _strip_chapter_prefix(text: str) -> str:
 
 
 def _remove_disallowed_sections(blocks: list[DocBlock]) -> list[DocBlock]:
-    disallowed = {"\u6458\u8981", "\u5173\u952e\u8bcd", "\u76ee\u5f55", "Abstract", "Keywords", "\u81f4\u8c22", "\u9e23\u8c22"}
+    # Keep abstract/keywords in export; remove only manual TOC/ack sections.
+    disallowed = {
+        "\u76ee\u5f55",
+        "\u76ee\u6b21",
+        "table of contents",
+        "contents",
+        "\u81f4\u8c22",
+        "\u9e23\u8c22",
+    }
     out: list[DocBlock] = []
     skip_level: int | None = None
     for b in blocks:
@@ -381,16 +501,41 @@ def _normalize_section_title(text: str) -> str:
     return s.strip()
 
 
+# Stable Unicode-safe predicates for reference title and noise filtering.
 def _is_reference_title(title: str) -> bool:
-    t = (title or "").strip()
-    return bool(t) and ("参考文献" in t or "参考资料" in t or t == "文献")
+    t = (title or "").strip().lower()
+    if not t:
+        return False
+    return any(
+        key in t
+        for key in (
+            "\u53c2\u8003\u6587\u732e",
+            "\u53c2\u8003\u8d44\u6599",
+            "references",
+            "reference",
+            "bibliography",
+        )
+    )
 
 
 def _is_reference_noise(text: str) -> bool:
     t = (text or "").strip()
     if not t:
         return True
-    phrases = ["示例", "虚构", "请注意", "由于您没有提供", "由于未提供", "没有提供", "我将为您", "以下为", "仅供参考"]
+    phrases = [
+        "\u793a\u4f8b",
+        "\u865a\u6784",
+        "\u8bf7\u6ce8\u610f",
+        "\u7531\u4e8e\u60a8\u6ca1\u6709\u63d0\u4f9b",
+        "\u7531\u4e8e\u672a\u63d0\u4f9b",
+        "\u6ca1\u6709\u63d0\u4f9b",
+        "\u6211\u5c06\u4e3a\u60a8",
+        "\u4ee5\u4e0b\u4e3a",
+        "\u4ec5\u4f9b\u53c2\u8003",
+        "example",
+        "placeholder",
+        "for demonstration",
+    ]
     return any(p in t for p in phrases)
 
 
@@ -450,13 +595,38 @@ def _force_paragraph_center(paragraph: Paragraph) -> None:
         pass
 
 
-def _clear_header_footer(sec) -> None:
+def _strip_non_default_header_footer_refs(sec) -> None:
+    try:
+        sect_pr = sec._sectPr  # type: ignore[attr-defined]
+    except Exception:
+        return
+    seen_default: set[str] = set()
+    for node in list(sect_pr):
+        tag = str(getattr(node, "tag", ""))
+        if tag.endswith("}headerReference"):
+            kind = "header"
+        elif tag.endswith("}footerReference"):
+            kind = "footer"
+        else:
+            continue
+        ref_type = str(node.get(qn("w:type")) or "default")
+        if ref_type != "default":
+            sect_pr.remove(node)
+            continue
+        if kind in seen_default:
+            sect_pr.remove(node)
+            continue
+        seen_default.add(kind)
+
+
+def _clear_header_footer(sec, *, include_variants: bool = False) -> None:
     containers = [
         getattr(sec, "header", None),
         getattr(sec, "footer", None),
     ]
-    for attr in ("first_page_header", "first_page_footer", "even_page_header", "even_page_footer"):
-        containers.append(getattr(sec, attr, None))
+    if include_variants:
+        for attr in ("first_page_header", "first_page_footer", "even_page_header", "even_page_footer"):
+            containers.append(getattr(sec, attr, None))
     for container in containers:
         if container is None:
             continue
@@ -474,6 +644,12 @@ def _clear_header_footer(sec) -> None:
                 p._element.getparent().remove(p._element)  # type: ignore[attr-defined]
             except Exception:
                 pass
+    if not include_variants:
+        try:
+            sec.different_first_page_header_footer = False
+        except Exception:
+            pass
+    _strip_non_default_header_footer_refs(sec)
 
 
 def _disable_first_page_numbering(sec) -> None:
@@ -494,6 +670,7 @@ def _disable_first_page_numbering(sec) -> None:
                 pass
     except Exception:
         pass
+    _strip_non_default_header_footer_refs(sec)
 
 
 def _remove_section_page_numbering(sec) -> None:
@@ -549,6 +726,21 @@ def _enable_update_fields(doc: Document) -> None:
             upd = OxmlElement("w:updateFields")
             settings.append(upd)
         upd.set(qn("w:val"), "true")
+    except Exception:
+        pass
+
+
+def _disable_update_fields(doc: Document) -> None:
+    try:
+        settings = doc.settings.element
+        upd = settings.find(qn("w:updateFields"))
+        if upd is not None:
+            settings.remove(upd)
+        # Explicitly hint Word not to auto-update fields when opening.
+        no_auto = settings.find(qn("w:doNotAutoUpdateFields"))
+        if no_auto is None:
+            no_auto = OxmlElement("w:doNotAutoUpdateFields")
+            settings.append(no_auto)
     except Exception:
         pass
 

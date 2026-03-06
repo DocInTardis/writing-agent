@@ -45,3 +45,8 @@ async def generate_section_flow(doc_id: str, request: Request) -> dict:
 async def revise_flow(doc_id: str, request: Request) -> dict:
     return await revise_doc(doc_id, request)
 
+
+@router.post("/api/doc/{doc_id}/plan/confirm")
+async def plan_confirm_flow(doc_id: str, request: Request) -> dict:
+    return await service.plan_confirm(doc_id, request)
+

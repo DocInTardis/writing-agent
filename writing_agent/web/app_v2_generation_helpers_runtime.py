@@ -485,6 +485,19 @@ def _looks_like_prompt_echo(text: str, instruction: str) -> bool:
     hit = sum(1 for p in phrases if p in lower)
     if hit >= 2:
         return True
+    # Guard against revise fallback returning prompt scaffold instead of revised content.
+    if lower.startswith("you are ") and "assistant" in lower:
+        return True
+    prompt_markers = (
+        "revision request:",
+        "<execution_plan>",
+        "<original_document>",
+        "<task>revise_full_document</task>",
+        "<revised_markdown>",
+        "<revised_document>",
+    )
+    if any(marker in lower for marker in prompt_markers):
+        return True
     if src.startswith("浣犳槸") and ("鍔╂墜" in src or "妯″瀷" in src or "鍐欎綔" in src):
         return True
     short_instruction = instruction.strip()[:12]

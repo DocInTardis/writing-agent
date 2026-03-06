@@ -61,10 +61,19 @@ def default_graph_definition() -> GraphDefinition:
             handler_name="planner",
         ),
         GraphNodeDef(
+            node_id="plan_confirm",
+            description="Require explicit user confirmation before writer execution",
+            schema=NodeSchema(
+                input_fields=("plan", "instruction", "plan_confirm"),
+                output_fields=("plan_confirmed", "plan_feedback", "metadata"),
+            ),
+            handler_name="plan_confirm",
+        ),
+        GraphNodeDef(
             node_id="writer",
             description="Generate section/body content",
             schema=NodeSchema(
-                input_fields=("plan", "instruction", "current_text", "format_only"),
+                input_fields=("plan", "plan_confirmed", "instruction", "current_text", "format_only"),
                 output_fields=("draft", "section_events", "metadata"),
             ),
             handler_name="writer",
@@ -89,7 +98,8 @@ def default_graph_definition() -> GraphDefinition:
         ),
     )
     edges = (
-        GraphEdgeDef(source="planner", target="writer"),
+        GraphEdgeDef(source="planner", target="plan_confirm"),
+        GraphEdgeDef(source="plan_confirm", target="writer"),
         GraphEdgeDef(source="writer", target="reviewer"),
         GraphEdgeDef(source="reviewer", target="qa"),
     )

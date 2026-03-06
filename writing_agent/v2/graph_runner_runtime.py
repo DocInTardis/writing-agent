@@ -6,6 +6,15 @@ This module belongs to `writing_agent.v2` in the writing-agent codebase.
 from __future__ import annotations
 
 from writing_agent.v2.graph_runner import *  # noqa: F401,F403
+from writing_agent.v2 import graph_runner as _graph_runner_module
+
+# Ensure runtime has access to internal helper symbols (including private names)
+# used by the delegated implementation below.
+for _name in dir(_graph_runner_module):
+    if _name.startswith("__"):
+        continue
+    if _name not in globals():
+        globals()[_name] = getattr(_graph_runner_module, _name)
 
 
 def _runtime_escape_prompt_text(raw: object) -> str:
@@ -24,10 +33,27 @@ def run_generate_graph(
 ):
     """\n    Yields dict events suitable for SSE:\n      - {"event":"state","name":...,"phase":"start"|"end"}\n      - {"event":"plan","title":...,"sections":[...]}\n      - {"event":"section","phase":"start"|"delta"|"end","section":...,"delta":...}\n      - {"event":"final","text":...,"problems":[...]}\n    """
     settings = get_ollama_settings()
-    strict_json_raw = os.environ.get("WRITING_AGENT_STRICT_JSON", "0").strip().lower()
+    strict_json_raw = os.environ.get("WRITING_AGENT_STRICT_JSON", "1").strip().lower()
     strict_json = strict_json_raw in {"1", "true", "yes", "on"}
     run_id = f"run_{int(time.time()*1000)}"
     run_start_ts = time.time()
+    prompt_trace: list[dict] = []
+
+    def _capture_prompt_trace(row: dict) -> None:
+        if not isinstance(row, dict):
+            return
+        prompt_trace.append(dict(row))
+        try:
+            if row.get("event") == "prompt_route":
+                yield_row = dict(row)
+                yield_row.setdefault("ts", time.time())
+                # Emit lightweight route event for observability.
+                nonlocal_yield.append(yield_row)
+        except Exception:
+            pass
+
+    # Helper queue for prompt route events captured before main stream loop emits them.
+    nonlocal_yield: list[dict] = []
     if not settings.enabled:
         raise OllamaError("Ollama is not enabled (WRITING_AGENT_USE_OLLAMA=0)")
     client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
@@ -87,11 +113,35 @@ def run_generate_graph(
         model=agg_model,
         instruction=instruction,
         current_text=current_text,
+        trace_hook=_capture_prompt_trace,
     )
+    while nonlocal_yield:
+        row = nonlocal_yield.pop(0)
+        yield {"event": "prompt_route", "stage": row.get("stage", ""), "metadata": row.get("metadata", {})}
     _record_phase_timing(run_id, {"phase": "ANALYSIS", "event": "end", "duration_s": time.time() - analysis_start_ts})
     analysis_summary = _format_analysis_summary(analysis, fallback=instruction)
     if analysis_summary:
         yield {"event": "delta", "delta": "Analysis completed with structured key points."}
+    if bool((analysis or {}).get("_needs_clarification")):
+        clarify_questions = [
+            str(x).strip() for x in ((analysis or {}).get("_clarification_questions") or []) if str(x).strip()
+        ][:5]
+        reason = "analysis_needs_clarification"
+        quality_snapshot = {
+            "status": "interrupted",
+            "reason": reason,
+            "clarification_questions": clarify_questions,
+        }
+        yield {
+            "event": "final",
+            "text": "",
+            "problems": [reason],
+            "status": "interrupted",
+            "failure_reason": reason,
+            "quality_snapshot": quality_snapshot,
+            "clarification_questions": clarify_questions,
+        }
+        return
     wants_ack = _wants_acknowledgement(instruction)
     if required_outline:
         required_outline = _filter_ack_outline(required_outline, allow_ack=wants_ack)
@@ -117,11 +167,13 @@ def run_generate_graph(
     if not sections:
         if fast_plan:
             sections = _default_outline_from_instruction(instruction) or [
-                "Introduction",
-                "This Week Work",
-                "Issues and Risks",
-                "Next Week Plan",
-                "Support Needed",
+                "摘要",
+                "关键词",
+                "引言",
+                "系统设计与实现",
+                "实验与结果分析",
+                "结论",
+                "参考文献",
             ]
         else:
             plan_list_start = time.time()
@@ -130,19 +182,89 @@ def run_generate_graph(
                 model=agg_model,
                 title=title,
                 instruction=analysis_summary or instruction,
+                trace_hook=_capture_prompt_trace,
             )
+            while nonlocal_yield:
+                row = nonlocal_yield.pop(0)
+                yield {"event": "prompt_route", "stage": row.get("stage", ""), "metadata": row.get("metadata", {})}
             _record_phase_timing(run_id, {"phase": "PLAN_SECTIONS", "event": "end", "duration_s": time.time() - plan_list_start})
     sections = [s for s in (sections or []) if (_section_title(s) or "").strip()]
     if not sections:
         sections = [
-            "Introduction",
-            "Requirement Analysis",
-            "Overall Design",
-            "Data Design",
-            "Testing and Results",
-            "Conclusion",
-            "References",
+            "引言",
+            "相关研究",
+            "方法设计",
+            "实验与分析",
+            "结论",
+            "参考文献",
         ]
+    guard_ok, guard_reasons, guard_meta = _analysis_correctness_guard(
+        analysis=analysis,
+        instruction=instruction,
+        sections=sections,
+        section_title=_section_title,
+        is_reference_section=_is_reference_section,
+    )
+    if not guard_ok:
+        reason = guard_reasons[0] if guard_reasons else "analysis_guard_failed"
+        quality_snapshot = {
+            "status": "failed",
+            "reason": reason,
+            "guard_reasons": guard_reasons,
+            "guard_meta": guard_meta,
+        }
+        yield {
+            "event": "final",
+            "text": "",
+            "problems": list(guard_reasons),
+            "status": "failed",
+            "failure_reason": reason,
+            "quality_snapshot": quality_snapshot,
+        }
+        return
+    quality_profile = str(_prompt_quality_profile() or "").strip().lower()
+    if quality_profile == "academic_cnki_default":
+        h2_count = 0
+        h3_count = 0
+        for sec in sections:
+            lvl, title = _split_section_token(sec)
+            if _is_reference_section(title):
+                continue
+            if lvl <= 2:
+                h2_count += 1
+            else:
+                h3_count += 1
+        try:
+            min_h2 = max(1, int(os.environ.get("WRITING_AGENT_MIN_H2_COUNT", "3")))
+        except Exception:
+            min_h2 = 3
+        # H3 guard is enforced only when outline expansion is requested.
+        try:
+            min_h3 = max(0, int(os.environ.get("WRITING_AGENT_MIN_H3_COUNT", "1" if expand_outline else "0")))
+        except Exception:
+            min_h3 = 1 if expand_outline else 0
+        depth_reasons: list[str] = []
+        if h2_count < min_h2:
+            depth_reasons.append("plan_h2_insufficient")
+        if min_h3 > 0 and h3_count < min_h3:
+            depth_reasons.append("plan_h3_insufficient")
+        if depth_reasons:
+            reason = depth_reasons[0]
+            quality_snapshot = {
+                "status": "failed",
+                "reason": reason,
+                "depth": {"h2": h2_count, "h3": h3_count, "min_h2": min_h2, "min_h3": min_h3},
+                "guard_reasons": depth_reasons,
+            }
+            yield {
+                "event": "final",
+                "text": "",
+                "problems": list(depth_reasons),
+                "status": "failed",
+                "failure_reason": reason,
+                "quality_snapshot": quality_snapshot,
+            }
+            return
     total_chars = _target_total_chars(config)
     base_targets = _compute_section_targets(sections=sections, base_min_paras=config.min_section_paragraphs, total_chars=total_chars)
     if fast_plan:
@@ -156,7 +278,11 @@ def run_generate_graph(
             instruction=analysis_summary or instruction,
             sections=sections,
             total_chars=total_chars,
+            trace_hook=_capture_prompt_trace,
         )
+        while nonlocal_yield:
+            row = nonlocal_yield.pop(0)
+            yield {"event": "prompt_route", "stage": row.get("stage", ""), "metadata": row.get("metadata", {})}
         _record_phase_timing(run_id, {"phase": "PLAN_DETAIL", "event": "end", "duration_s": time.time() - plan_detail_start})
         plan_map = _normalize_plan_map(
             plan_raw=plan_raw,
@@ -178,6 +304,8 @@ def run_generate_graph(
                 "tables": list(plan.tables or [])[:2],
                 "evidence_queries": list(plan.evidence_queries or [])[:4],
             })
+        if prompt_trace:
+            struct_plan["prompt_trace"] = prompt_trace[-12:]
         yield {"event": "struct_plan", "plan": struct_plan}
     except Exception:
         pass
@@ -387,15 +515,11 @@ def run_generate_graph(
                 continue
         if last_err is not None:
             q.put({"event": "section_error", "section": section, "reason": str(last_err)[:200]})
-        strict_json_raw = os.environ.get("WRITING_AGENT_STRICT_JSON", "0").strip().lower()
+        strict_json_raw = os.environ.get("WRITING_AGENT_STRICT_JSON", "1").strip().lower()
         if strict_json_raw in {"1", "true", "yes", "on"}:
             return
-        if _is_reference_section(_section_title(section) or section):
-            fallback = _fast_fill_references(section)
-        else:
-            fallback = _generic_fill_paragraph(section, idx=1)
-        section_text[section] = fallback
-        q.put({"event": "section", "phase": "delta", "section": section, "delta": fallback})
+        # Fail-fast mode: no semantic filler for failed sections.
+        section_text[section] = ""
         q.put({"event": "section", "phase": "end", "section": section, "ts": time.time()})
         _record_phase_timing(
             run_id,
@@ -525,7 +649,7 @@ def run_generate_graph(
                 if _is_reference_section(_section_title(sec) or sec):
                     section_text[sec] = "\n".join(_format_reference_items(reference_sources or [])).strip()
                 else:
-                    section_text[sec] = _generic_fill_paragraph(sec, idx=1)
+                    section_text[sec] = ""
     
     merged = _sanitize_output_text(_merge_sections_text(title, sections, section_text))
 
@@ -638,7 +762,7 @@ def run_generate_graph(
                 if _is_reference_section(_section_title(sec) or sec):
                     i += 1
                     continue
-                extra = _plan_point_paragraph(sec, plan_map.get(sec), i + 1) or _generic_fill_paragraph(sec, idx=i + 1)
+                extra = _plan_point_paragraph(sec, plan_map.get(sec), i + 1)
                 if extra:
                     current = (section_text.get(sec) or '').strip()
                     section_text[sec] = (current + '\n\n' + extra).strip() if current else extra
@@ -656,7 +780,7 @@ def run_generate_graph(
                 if _is_reference_section(_section_title(sec) or sec):
                     i += 1
                     continue
-                extra = _plan_point_paragraph(sec, plan_map.get(sec), i + 1) or _generic_fill_paragraph(sec, idx=i + 1)
+                extra = _plan_point_paragraph(sec, plan_map.get(sec), i + 1)
                 if extra:
                     current = (section_text.get(sec) or '').strip()
                     section_text[sec] = (current + '\n\n' + extra).strip() if current else extra
@@ -665,36 +789,54 @@ def run_generate_graph(
                 i += 1
 
     merged = _strip_disallowed_sections_text(merged)
+    hard_failures: list[str] = []
     if not re.search(r"(?m)^##\s+.+$", merged):
-        fallback_sections = [
-            "Introduction",
-            "Requirement Analysis",
-            "Overall Design",
-            "Data Design",
-            "Testing and Results",
-            "Conclusion",
-            "References",
-        ]
-        fallback_text: dict[str, str] = {}
-        for sec in fallback_sections:
-            if _is_reference_section(sec):
-                lines = _format_reference_items(reference_sources or [])
-                fallback_text[sec] = "\n".join(lines).strip()
-            else:
-                fallback_text[sec] = _generic_fill_paragraph(sec, idx=1)
-        merged = _sanitize_output_text(_merge_sections_text(title, fallback_sections, fallback_text))
+        hard_failures.append("missing_section_headings")
+    missing_content = [sec for sec in sections if not (section_text.get(sec) or "").strip() and not _is_reference_section(_section_title(sec) or sec)]
+    if missing_content:
+        hard_failures.append("section_content_missing")
     merged = _strip_ack_sections_text(merged, allow_ack=wants_ack)
     merged = _clean_generated_text(merged)
     merged = _normalize_final_output(merged, expected_sections=sections)
-    if config.max_total_chars and config.max_total_chars > 0:
+    trim_total_enabled = str(os.environ.get("WRITING_AGENT_ENABLE_TOTAL_TRIM", "0")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if trim_total_enabled and config.max_total_chars and config.max_total_chars > 0:
         merged = _trim_total_chars(merged, int(config.max_total_chars))
     problems = _light_self_check(text=merged, sections=sections, target_chars=total_chars, evidence_enabled=evidence_enabled, reference_sources=reference_sources)
+    for reason in hard_failures:
+        if reason and reason not in problems:
+            problems.append(reason)
     if not agg_recorded:
         _record_phase_timing(run_id, {"phase": "AGGREGATE", "event": "end", "duration_s": time.time() - agg_start_ts})
         _record_phase_timing(run_id, {"phase": "TOTAL", "event": "end", "duration_s": time.time() - run_start_ts})
         agg_recorded = True
     yield {"event": "state", "name": "AGGREGATE", "phase": "end"}
-    yield {"event": "final", "text": merged, "problems": problems}
+    terminal_status = "success"
+    failure_reason = ""
+    if hard_failures:
+        terminal_status = "failed"
+        failure_reason = hard_failures[0]
+    elif not str(merged or "").strip():
+        terminal_status = "failed"
+        failure_reason = "empty_draft"
+    quality_snapshot = {
+        "status": terminal_status,
+        "reason": failure_reason,
+        "problem_count": len(problems),
+        "has_text": bool(str(merged or "").strip()),
+    }
+    yield {
+        "event": "final",
+        "text": merged,
+        "problems": problems,
+        "status": terminal_status,
+        "failure_reason": failure_reason,
+        "quality_snapshot": quality_snapshot,
+    }
 
 
 
@@ -821,7 +963,21 @@ def _generate_section_stream(
             out_queue.put(payload)
         return text
 
-    config = get_prompt_config("writer")
+    route, prompt_meta = _route_prompt_for_role(
+        role="writer",
+        instruction=instruction,
+        intent="generate",
+        section_title=sec_name,
+    )
+    config = get_prompt_config("writer", route=route)
+    out_queue.put(
+        {
+            "event": "prompt_route",
+            "stage": "writer_section",
+            "section": section,
+            "metadata": prompt_meta,
+        }
+    )
     system, user = PromptBuilder.build_writer_prompt(
         section_title=sec_name,
         plan_hint=plan_hint or "",
@@ -829,7 +985,8 @@ def _generate_section_stream(
         analysis_summary=analysis_summary or instruction,
         section_id=section_id,
         previous_content=None,
-        rag_context=rag_context
+        rag_context=rag_context,
+        route=route,
     )
     if table_hint:
         system += f"{table_hint}"

@@ -1,5 +1,7 @@
+import io
 from types import SimpleNamespace
 
+from docx import Document
 from fastapi.testclient import TestClient
 
 import writing_agent.web.app as legacy_app
@@ -149,3 +151,27 @@ def test_studio_stream_aggregator_invalid_json_falls_back_to_merged(monkeypatch)
     final_html = str(updated.html or "")
     assert "worker merged text" in final_html
     assert "hacked-agg" not in final_html
+
+
+def test_legacy_download_docx_uses_parsed_export_path() -> None:
+    session = _prepare_session("<h1>Legacy Title</h1><h2>Background</h2><p>Legacy paragraph.</p>")
+    formatting = legacy_app.FormattingRequirements()
+    session.request = legacy_app.ReportRequest(
+        topic="Legacy Title",
+        report_type="",
+        formatting=formatting,
+        include_figures=False,
+        writing_style="academic",
+        manual_sources_text="",
+    )
+    legacy_app.store.put(session)
+
+    client = TestClient(legacy_app.app)
+    resp = client.get(f"/download/{session.id}.docx")
+    assert resp.status_code == 200
+    assert resp.content[:2] == b"PK"
+    doc = Document(io.BytesIO(resp.content))
+    text = "\n".join(p.text for p in doc.paragraphs if p.text)
+    assert "Background" in text
+    assert "Legacy paragraph." in text
+    assert "<h1>" not in text and "<p>" not in text

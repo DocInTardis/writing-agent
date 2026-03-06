@@ -1,4 +1,4 @@
-"""Graph Section Draft Domain module.
+﻿"""Graph Section Draft Domain module.
 
 This module belongs to `writing_agent.v2` in the writing-agent codebase.
 """
@@ -12,8 +12,12 @@ import re
 import time
 from typing import Callable
 
+_PARA_SENT_END_RE = re.compile(r"[。！？!?；;.:]\s*$")
+_PARA_CLOSING_RE = re.compile(r"[”’」』）》】\)\]]+\s*$")
+_LIST_LINE_RE = re.compile(r"^\s*(?:[-*•·]|\d+[.\uFF0E\u3001\)]|[一二三四五六七八九十]+[.\u3001\)])\s+")
 
-REF_HEADING_RE = re.compile(r"^\s*(参考文献|references|bibliography)\s*$", re.IGNORECASE)
+
+REF_HEADING_RE = re.compile(r"^\s*(鍙傝€冩枃鐚畖references|bibliography)\s*$", re.IGNORECASE)
 REF_LINE_RE = re.compile(r"^\s*\[\d+\]\s+")
 
 
@@ -163,7 +167,7 @@ def stream_structured_blocks(
     strict_json: bool = True,
     text_store=None,
 ) -> str:
-    strict_json_raw = os.environ.get("WRITING_AGENT_STRICT_JSON", "0").strip().lower()
+    strict_json_raw = os.environ.get("WRITING_AGENT_STRICT_JSON", "1").strip().lower()
     strict_json_env = strict_json_raw in {"1", "true", "yes", "on"}
     strict_json = bool(strict_json) and strict_json_env
     buf = ""
@@ -261,14 +265,14 @@ def strip_inline_headings(
         if re.match(r"^\s*#{1,6}\s+", token):
             is_heading = True
             token = re.sub(r"^\s*#{1,6}\s+", "", token).strip()
-        if re.match(r"^第\s*\d+\s*[章节]\s*", token):
+        if re.match(r"^绗琝s*\d+\s*[绔犺妭]\s*", token):
             is_heading = True
-            token = re.sub(r"^第\s*\d+\s*[章节]\s*", "", token).strip()
+            token = re.sub(r"^绗琝s*\d+\s*[绔犺妭]\s*", "", token).strip()
         if section_title and token == section_title:
             continue
-        if re.match(r"^[一二三四五六七八九十]+[、.]\s*", token):
+        if re.match(r"^[涓€浜屼笁鍥涗簲鍏竷鍏節鍗乚+[銆?]\s*", token):
             is_heading = True
-            token = re.sub(r"^[一二三四五六七八九十]+[、.]\s*", "", token).strip()
+            token = re.sub(r"^[涓€浜屼笁鍥涗簲鍏竷鍏節鍗乚+[銆?]\s*", "", token).strip()
         if re.match(r"^\d+(?:\.\d+)*\s+", token):
             is_heading = True
             token = re.sub(r"^\d+(?:\.\d+)*\s+", "", token).strip()
@@ -276,7 +280,7 @@ def strip_inline_headings(
             continue
         if is_heading:
             continue
-        if len(token) <= 10 and not re.search(r"[。！？；：]", token) and looks_like_heading_text(token):
+        if len(token) <= 10 and not re.search(r"[銆傦紒锛燂紱锛歖", token) and looks_like_heading_text(token):
             continue
         lines.append(token)
     return "\n".join(lines).strip()
@@ -290,7 +294,7 @@ def format_references(text: str, *, strip_markdown_noise: Callable[[str], str]) 
         token = line.strip()
         if not token:
             continue
-        if "引用格式" in token or "格式示例" in token:
+        if "寮曠敤鏍煎紡" in token or "鏍煎紡绀轰緥" in token:
             continue
         token = re.sub(r"^\s*[-*\u2022]\s+", "", token)
         token = re.sub(r"^\s*\d+\.\s*", "", token)
@@ -304,7 +308,7 @@ def format_references(text: str, *, strip_markdown_noise: Callable[[str], str]) 
     merged: list[str] = []
     for line in lines:
         if merged and (len(line) <= 8 or re.fullmatch(r"[\d\W]+", line)):
-            merged[-1] = (merged[-1].rstrip("，,") + " " + line).strip()
+            merged[-1] = (merged[-1].rstrip("锛?") + " " + line).strip()
         else:
             merged.append(line)
     out: list[str] = []
@@ -341,7 +345,7 @@ def generic_fill_paragraph(
     is_reference_section: Callable[[str], bool],
     find_section_description: Callable[[str], str],
 ) -> str:
-    sec = (section_title(section) or "").strip() or "本节"
+    sec = (section_title(section) or "").strip() or "鏈妭"
     if is_reference_section(sec):
         return ""
 
@@ -396,9 +400,9 @@ def fast_fill_section(
             break
     extras: list[str] = []
     if min_tables > 0:
-        extras.append('[[TABLE:{"caption":"关键指标与功能对比","columns":["指标","说明","备注"],"rows":[["准确性","满足业务核算需求",""],["效率","减少人工核对",""],["可维护性","结构清晰易扩展",""]]}]]')
+        extras.append('[[TABLE:{"caption":"鍏抽敭鎸囨爣涓庡姛鑳藉姣?,"columns":["鎸囨爣","璇存槑","澶囨敞"],"rows":[["鍑嗙‘鎬?,"婊¤冻涓氬姟鏍哥畻闇€姹?,""],["鏁堢巼","鍑忓皯浜哄伐鏍稿",""],["鍙淮鎶ゆ€?,"缁撴瀯娓呮櫚鏄撴墿灞?,""]]}]]')
     if min_figures > 0:
-        extras.append('[[FIGURE:{"type":"flow","caption":"业务流程示意","data":{"nodes":["录入","核算","审批","发放"],"edges":[["录入","核算"],["核算","审批"],["审批","发放"]]}}]]')
+        extras.append('[[FIGURE:{"type":"flow","caption":"涓氬姟娴佺▼绀烘剰","data":{"nodes":["褰曞叆","鏍哥畻","瀹℃壒","鍙戞斁"],"edges":[["褰曞叆","鏍哥畻"],["鏍哥畻","瀹℃壒"],["瀹℃壒","鍙戞斁"]]}}]]')
     if extras:
         body = body.strip() + "\n\n" + "\n\n".join(extras)
     return body.strip()
@@ -454,7 +458,7 @@ def postprocess_section(
         paras = [p.strip() for p in re.split(r"\n\s*\n+", value) if p.strip()]
         paras = [re.sub(r"\s*\n+\s*", " ", p).strip() for p in paras if p.strip()]
     if len(paras) <= 1 and len(value) >= 420:
-        parts = [p.strip() for p in re.split(r"(?<=[。！？!?\.])\s*", " ".join(paras) or value) if p.strip()]
+        parts = [p.strip() for p in re.split(r"(?<=[銆傦紒锛??\.])\s*", " ".join(paras) or value) if p.strip()]
         if len(parts) >= 6:
             chunked: list[str] = []
             buf: list[str] = []
@@ -513,6 +517,64 @@ def _section_paragraphs(text: str) -> list[str]:
     return [p for p in re.split(r"\n\s*\n+", str(text or "")) if p.strip()]
 
 
+def _is_reference_or_list_paragraph(text: str) -> bool:
+    token = str(text or "").strip()
+    if not token:
+        return True
+    if token.startswith("[[TABLE:") or token.startswith("[[FIGURE:"):
+        return True
+    if REF_LINE_RE.match(token):
+        return True
+    if _LIST_LINE_RE.match(token):
+        return True
+    return False
+
+
+def _paragraph_looks_complete(text: str) -> bool:
+    token = str(text or "").strip()
+    if not token:
+        return True
+    if _is_reference_or_list_paragraph(token):
+        return True
+    if _PARA_SENT_END_RE.search(token):
+        return True
+    m = _PARA_CLOSING_RE.search(token)
+    if m:
+        core = token[: m.start()].rstrip()
+        if _PARA_SENT_END_RE.search(core):
+            return True
+    return False
+
+
+def _has_incomplete_paragraph(text: str) -> bool:
+    for para in _section_paragraphs(text):
+        if not _paragraph_looks_complete(para):
+            return True
+    return False
+
+
+def _ensure_paragraph_integrity(text: str) -> str:
+    paras = _section_paragraphs(text)
+    if not paras:
+        return str(text or "").strip()
+    out: list[str] = []
+    for para in paras:
+        token = str(para or "").strip()
+        if not token:
+            continue
+        if _paragraph_looks_complete(token):
+            out.append(token)
+            continue
+        if len(token) <= 24 and out:
+            out[-1] = (out[-1].rstrip() + " " + token).strip()
+            continue
+        suffix = "."
+        if re.search(r"[\u4e00-\u9fff]", token):
+            suffix = "。"
+        out.append(token.rstrip() + suffix)
+    return "\n\n".join(out).strip()
+
+
 def _section_minimum_satisfied(*, text: str, min_paras: int, min_chars: int) -> bool:
     paras = _section_paragraphs(text)
     body_len = _section_body_len(text)
@@ -568,7 +630,9 @@ def _build_continue_prompt(
     user += f"<allowed_urls>\n{urls_block}\n</allowed_urls>\n"
     user += f"<current_section_draft>\n{_escape_prompt_text(txt)}\n</current_section_draft>\n"
     user += (
-        f"<target>\nAdd at least {max(220, missing_chars)} chars and satisfy minimum {min_paras} paragraphs.\n</target>\n"
+        f"<target>\nAdd at least {max(220, missing_chars)} chars and satisfy minimum {min_paras} paragraphs.\n"
+        "Each paragraph must be semantically complete; do not leave truncated half-sentences.\n"
+        "</target>\n"
         "Return NDJSON now."
     )
     return system, user
@@ -643,12 +707,13 @@ def ensure_section_minimums_stream(
         min_tables=min_tables,
         min_figures=min_figures,
     )
-    if _section_minimum_satisfied(text=txt, min_paras=min_paras, min_chars=min_chars):
-        return txt
+    incomplete = _has_incomplete_paragraph(txt)
+    if _section_minimum_satisfied(text=txt, min_paras=min_paras, min_chars=min_chars) and not incomplete:
+        return _ensure_paragraph_integrity(txt)
 
-    rounds = max(0, min(2, int(os.environ.get("WRITING_AGENT_SECTION_CONTINUE_ROUNDS", "2"))))
+    rounds = max(0, min(4, int(os.environ.get("WRITING_AGENT_SECTION_CONTINUE_ROUNDS", "3"))))
     if rounds <= 0:
-        return txt
+        return _ensure_paragraph_integrity(txt)
 
     client = ollama_client_cls(base_url=base_url, model=model, timeout_s=240.0)
     section_id = normalize_section_id(section)
@@ -693,24 +758,32 @@ def ensure_section_minimums_stream(
             min_tables=min_tables,
             min_figures=min_figures,
         )
-        if _section_minimum_satisfied(text=txt, min_paras=min_paras, min_chars=min_chars):
+        incomplete = _has_incomplete_paragraph(txt)
+        if _section_minimum_satisfied(text=txt, min_paras=min_paras, min_chars=min_chars) and not incomplete:
             break
         body_len = _section_body_len(txt)
-        if attempt >= rounds and body_len > 0 and body_len < min_chars:
-            retry_missing = min_chars - body_len
-            if retry_missing > 100:
+        need_retry_for_length = body_len > 0 and body_len < min_chars
+        need_retry_for_integrity = incomplete
+        if attempt >= rounds and (need_retry_for_length or need_retry_for_integrity):
+            retry_missing = max(0, min_chars - body_len)
+            if retry_missing > 100 or need_retry_for_integrity:
                 out_queue.put(
                     {
                         "event": "section",
                         "phase": "retry",
                         "section": section,
-                        "message": f"content below target ({body_len}/{min_chars}), continuing...",
+                        "message": (
+                            f"content below target ({body_len}/{min_chars}), continuing..."
+                            if need_retry_for_length
+                            else "detected incomplete paragraph tail, continuing..."
+                        ),
                     }
                 )
                 retry_user = (
                     f"{user}\n"
                     "<retry_reason>\n"
                     f"content below target ({body_len}/{min_chars}); continue generation.\n"
+                    "Also complete truncated paragraph tails.\n"
                     "</retry_reason>\n"
                     f"<latest_draft>\n{_escape_prompt_text(txt)}\n</latest_draft>\n"
                     f"Please continue and add around {retry_missing} more characters."
@@ -730,6 +803,7 @@ def ensure_section_minimums_stream(
                     is_reference_section=is_reference_section,
                     section_timeout_s=section_timeout_s,
                 )
-                if _section_body_len(txt) >= min_chars:
+                if _section_body_len(txt) >= min_chars and not _has_incomplete_paragraph(txt):
                     break
-    return txt
+    return _ensure_paragraph_integrity(txt)
+

@@ -103,6 +103,12 @@ EXPORTED_FUNCTIONS = [
 
 
 def _try_quick_edit(text: str, instruction: str, confirm_apply: bool = False) -> revision_edit_runtime_domain.EditExecutionResult | None:
+    raw = str(instruction or "").strip()
+    # Avoid shortcut edit path for generation-oriented instructions.
+    if re.search(r"\b(write|draft|generate|restructure|output|compose|create|develop)\b", raw, flags=re.IGNORECASE):
+        return None
+    if re.search(r"(plus\s+body\s+text|two\s+parts|style\s+guide\s+plus)", raw, flags=re.IGNORECASE):
+        return None
     return revision_edit_runtime_domain.try_quick_edit(
         text,
         instruction,
@@ -118,6 +124,11 @@ def _try_ai_intent_edit(
     analysis: dict | None = None,
     confirm_apply: bool = False,
 ) -> revision_edit_runtime_domain.EditExecutionResult | None:
+    raw = str(instruction or "").strip()
+    if re.search(r"\b(write|draft|generate|restructure|output|compose|create|develop)\b", raw, flags=re.IGNORECASE):
+        return None
+    if re.search(r"(plus\s+body\s+text|two\s+parts|style\s+guide\s+plus)", raw, flags=re.IGNORECASE):
+        return None
     return revision_edit_runtime_domain.try_ai_intent_edit(
         text,
         instruction,
@@ -538,7 +549,72 @@ def _extract_template_with_model(
     filename: str,
     text: str,
 ) -> dict:
-    return {}
+    _ = base_url, model
+    src = str(text or "")
+    raw_name = str(filename or "").strip()
+    name = re.sub(r"\.[A-Za-z0-9]+$", "", raw_name).strip() or "模板"
+
+    outline: list[tuple[int, str]] = []
+    seen: set[tuple[int, str]] = set()
+    for raw in src.splitlines():
+        line = str(raw or "").strip()
+        if not line:
+            continue
+        level = 0
+        title = ""
+        m_md = re.match(r"^(#{1,3})\s*(.+?)\s*$", line)
+        if m_md:
+            level = len(m_md.group(1))
+            title = str(m_md.group(2) or "").strip()
+        else:
+            m_num = re.match(r"^(\d+(?:\.\d+)*)[、.\)]?\s*(.+?)\s*$", line)
+            if m_num:
+                depth = len(str(m_num.group(1) or "").split("."))
+                level = 1 if depth <= 1 else (2 if depth == 2 else 3)
+                title = str(m_num.group(2) or "").strip()
+        if not title:
+            continue
+        title = re.sub(r"\s+", " ", title).strip()
+        if len(title) < 2:
+            continue
+        key = (level or 2, title)
+        if key in seen:
+            continue
+        seen.add(key)
+        outline.append(key)
+        if len(outline) >= 24:
+            break
+
+    if not outline:
+        inferred = _extract_template_titles_with_model(
+            base_url=base_url,
+            model=model,
+            filename=filename,
+            text=text,
+        )
+        titles = inferred.get("titles") if isinstance(inferred, dict) else []
+        if isinstance(titles, list):
+            for t in titles:
+                title = str(t or "").strip()
+                if not title:
+                    continue
+                key = (2, title)
+                if key in seen:
+                    continue
+                seen.add(key)
+                outline.append(key)
+
+    required_h2 = [title for lvl, title in outline if int(lvl) == 2 and "参考文献" not in title]
+    out = {
+        "name": name,
+        "outline": outline,
+        "required_h2": required_h2,
+        "questions": [],
+        "source": "heuristic_template_v1",
+    }
+    if not outline:
+        out["questions"] = ["未识别到稳定模板结构，请补充二级章节目录或提供更清晰模板文本。"]
+    return out
 
 def _extract_template_refine_with_model(
     *,
@@ -548,7 +624,57 @@ def _extract_template_refine_with_model(
     text: str,
     initial: dict,
 ) -> dict:
-    return dict(initial or {})
+    base = dict(initial or {})
+    seed = _extract_template_with_model(
+        base_url=base_url,
+        model=model,
+        filename=filename,
+        text=text,
+    )
+    if not base:
+        base = dict(seed)
+    outline_raw = base.get("outline")
+    if not isinstance(outline_raw, list) or not outline_raw:
+        outline_raw = seed.get("outline") if isinstance(seed.get("outline"), list) else []
+    dedup_outline: list[tuple[int, str]] = []
+    seen: set[tuple[int, str]] = set()
+    for item in outline_raw:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            try:
+                lvl = int(item[0])
+            except Exception:
+                lvl = 2
+            title = str(item[1] or "").strip()
+        elif isinstance(item, dict):
+            try:
+                lvl = int(item.get("level") or 2)
+            except Exception:
+                lvl = 2
+            title = str(item.get("title") or "").strip()
+        else:
+            lvl = 2
+            title = str(item or "").strip()
+        if not title:
+            continue
+        lvl = 1 if lvl <= 1 else (2 if lvl == 2 else 3)
+        key = (lvl, re.sub(r"\s+", " ", title))
+        if key in seen:
+            continue
+        seen.add(key)
+        dedup_outline.append(key)
+    base["outline"] = dedup_outline
+    base["required_h2"] = [title for lvl, title in dedup_outline if lvl == 2 and "参考文献" not in title]
+    if not base.get("name"):
+        base["name"] = str(seed.get("name") or re.sub(r"\.[A-Za-z0-9]+$", "", str(filename or "")).strip() or "模板")
+    questions = base.get("questions")
+    if not isinstance(questions, list):
+        questions = []
+    questions = [str(q).strip() for q in questions if str(q).strip()]
+    if not dedup_outline and not questions:
+        questions = ["未识别到模板结构，请提供“一级/二级章节”文本目录后重试。"]
+    base["questions"] = questions
+    base["source"] = "heuristic_template_refine_v1"
+    return base
 
 def _extract_prefs_with_model(
     *,
@@ -557,7 +683,43 @@ def _extract_prefs_with_model(
     text: str,
     timeout_s: float,
 ) -> dict:
-    return {}
+    _ = base_url, model, timeout_s
+    src = str(text or "").strip()
+    if not src:
+        raise ValueError("prefs_extract_empty_input")
+    parsed = _fast_extract_prefs(src)
+    if not isinstance(parsed, dict):
+        raise ValueError("prefs_extract_invalid_payload")
+    out = dict(parsed)
+    title = str(out.get("title") or "").strip()
+    if not title:
+        m = re.search(r"(?:题目|标题)[:：]\s*([^\n]{4,80})", src, flags=re.IGNORECASE)
+        if m:
+            title = str(m.group(1) or "").strip()
+            out["title"] = title
+    fmt = out.get("formatting")
+    if not isinstance(fmt, dict):
+        fmt = {}
+    prefs = out.get("generation_prefs")
+    if not isinstance(prefs, dict):
+        prefs = {}
+    if not prefs.get("purpose"):
+        prefs["purpose"] = "学术论文" if re.search(r"(论文|thesis|paper|毕业)", src, flags=re.IGNORECASE) else "技术报告"
+    target_chars = _extract_target_chars_from_instruction(src)
+    if target_chars > 0:
+        prefs["target_char_count"] = int(target_chars)
+    out["formatting"] = _normalize_ai_formatting(fmt)
+    out["generation_prefs"] = _normalize_ai_prefs(prefs)
+    questions = out.get("questions")
+    if not isinstance(questions, list):
+        questions = []
+    questions = [str(x).strip() for x in questions if str(x).strip()]
+    out["questions"] = questions
+    out["summary"] = str(out.get("summary") or "").strip() or "已完成偏好抽取（启发式）。"
+    out["source"] = "heuristic_prefs_v1"
+    if not out["generation_prefs"]:
+        raise ValueError("prefs_extract_no_structured_fields")
+    return out
 
 def _extract_template_titles_with_model(
     *,
@@ -587,7 +749,47 @@ def _extract_prefs_refine_with_model(
     initial: dict,
     timeout_s: float,
 ) -> dict:
-    return dict(initial or {})
+    merged = dict(initial or {})
+    probe = _extract_prefs_with_model(
+        base_url=base_url,
+        model=model,
+        text=text,
+        timeout_s=timeout_s,
+    )
+    if not merged:
+        merged = dict(probe)
+    else:
+        for key in ("title", "summary"):
+            if not str(merged.get(key) or "").strip() and str(probe.get(key) or "").strip():
+                merged[key] = probe[key]
+        fmt = merged.get("formatting") if isinstance(merged.get("formatting"), dict) else {}
+        probe_fmt = probe.get("formatting") if isinstance(probe.get("formatting"), dict) else {}
+        fmt = dict(fmt)
+        for key, value in probe_fmt.items():
+            fmt.setdefault(str(key), value)
+        prefs = merged.get("generation_prefs") if isinstance(merged.get("generation_prefs"), dict) else {}
+        probe_prefs = probe.get("generation_prefs") if isinstance(probe.get("generation_prefs"), dict) else {}
+        prefs = dict(prefs)
+        for key, value in probe_prefs.items():
+            prefs.setdefault(str(key), value)
+        merged["formatting"] = _normalize_ai_formatting(fmt)
+        merged["generation_prefs"] = _normalize_ai_prefs(prefs)
+    qs = merged.get("questions")
+    if not isinstance(qs, list):
+        qs = []
+    dedup_qs: list[str] = []
+    seen_q: set[str] = set()
+    for q in qs:
+        item = str(q or "").strip()
+        if not item:
+            continue
+        if item in seen_q:
+            continue
+        seen_q.add(item)
+        dedup_qs.append(item)
+    merged["questions"] = dedup_qs
+    merged["source"] = "heuristic_prefs_refine_v1"
+    return merged
 
 def _coerce_float(value: object) -> float | None:
     return prefs_extract_domain.coerce_float(value)

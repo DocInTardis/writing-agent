@@ -48,6 +48,22 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
     resume_sections = _normalize_resume_sections(data.get("resume_sections"))
     cursor_anchor = str(data.get("cursor_anchor") or "").strip()
     confirm_apply = bool(data.get("confirm_apply") is True)
+    plan_confirm_raw = data.get("plan_confirm")
+    plan_confirm_obj = plan_confirm_raw if isinstance(plan_confirm_raw, dict) else {}
+    plan_decision = str(plan_confirm_obj.get("decision") or "").strip().lower()
+    if plan_decision in {"stop", "terminate", "cancel", "reject"}:
+        plan_decision = "interrupted"
+    elif plan_decision != "interrupted":
+        plan_decision = "approved"
+    try:
+        plan_score = int(plan_confirm_obj.get("score") or 0)
+    except Exception:
+        plan_score = 0
+    plan_confirm = {
+        "decision": plan_decision,
+        "score": max(0, min(5, plan_score)),
+        "note": str(plan_confirm_obj.get("note") or "").strip()[:300],
+    }
     if not raw_instruction:
         raise HTTPException(status_code=400, detail="instruction required")
     stream_token = _try_begin_doc_generation_with_wait(doc_id, mode="stream")
@@ -57,6 +73,27 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         _touch_doc_generation(doc_id, stream_token)
         return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
     def iter_events():
+        truncate_reason_codes: set[str] = set()
+
+        def _with_reason_codes(payload: dict) -> dict:
+            out = dict(payload or {})
+            if truncate_reason_codes:
+                out["truncate_reason_codes"] = sorted(truncate_reason_codes)
+            return out
+
+        def _with_terminal(payload: dict) -> dict:
+            out = dict(payload or {})
+            meta = out.get("graph_meta") if isinstance(out.get("graph_meta"), dict) else {}
+            status_raw = str(out.get("status") or meta.get("terminal_status") or "success").strip().lower()
+            status = status_raw if status_raw in {"success", "failed", "interrupted"} else "success"
+            out["status"] = status
+            out["failure_reason"] = str(out.get("failure_reason") or meta.get("failure_reason") or "")
+            snapshot = out.get("quality_snapshot")
+            if not isinstance(snapshot, dict):
+                snapshot = meta.get("quality_snapshot")
+            out["quality_snapshot"] = dict(snapshot) if isinstance(snapshot, dict) else {}
+            return _with_reason_codes(out)
+
         base_text = "" if compose_mode == "overwrite" else (current_text or session.doc_text or "")
         format_only = _try_handle_format_only_request(
             session=session,
@@ -66,7 +103,27 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             selection=selection_text,
         )
         if format_only is not None:
-            yield emit("final", format_only)
+            yield emit("final", _with_terminal(format_only))
+            return
+        if str(plan_confirm.get("decision") or "").strip().lower() == "interrupted":
+            interrupted_payload = {
+                "text": base_text,
+                "problems": ["plan_not_confirmed_by_user"],
+                "doc_ir": _safe_doc_ir_payload(base_text),
+                "status": "interrupted",
+                "failure_reason": "plan_not_confirmed_by_user",
+                "quality_snapshot": {
+                    "status": "interrupted",
+                    "reason": "plan_not_confirmed_by_user",
+                    "problem_count": 1,
+                },
+                "plan_feedback": {
+                    "decision": "interrupted",
+                    "score": int(plan_confirm.get("score") or 0),
+                    "note": str(plan_confirm.get("note") or ""),
+                },
+            }
+            yield emit("final", _with_terminal(interrupted_payload))
             return
         yield emit("delta", {"delta": "model preparing..."})
         prep_queue: queue.Queue[str] = queue.Queue()
@@ -150,7 +207,10 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             _auto_commit_version(session, "auto: after update")
             store.put(session)
             yield emit("delta", {"delta": note})
-            yield emit("final", {"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)})
+            yield emit(
+                "final",
+                _with_terminal({"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)}),
+            )
             return
         analysis_quick = _run_message_analysis(session, compose_instruction, quick=True)
         ai_edit = None if resume_sections else _try_ai_intent_edit(base_text, raw_instruction, analysis_quick, confirm_apply)
@@ -182,7 +242,10 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             _auto_commit_version(session, "auto: after update")
             store.put(session)
             yield emit("delta", {"delta": note})
-            yield emit("final", {"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)})
+            yield emit(
+                "final",
+                _with_terminal({"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)}),
+            )
             return
         if _should_route_to_revision(raw_instruction, base_text, analysis_quick):
             summary = "Detected revision instruction and switched to quick edit flow."
@@ -218,7 +281,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                 payload = {"text": updated_text, "problems": [], "doc_ir": _safe_doc_ir_payload(updated_text)}
                 if revision_status:
                     payload["revision_meta"] = revision_status
-                yield emit("final", payload)
+                yield emit("final", _with_terminal(payload))
                 return
             if revision_status:
                 yield emit("revision_status", revision_status)
@@ -248,6 +311,18 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     elif event.get("event") == "result":
                         final_text = event.get("text", "")
                 if final_text:
+                    failover_meta = {
+                        "path": "single_pass_stream",
+                        "trace_id": "",
+                        "engine": "single_pass",
+                        "route_id": "",
+                        "route_entry": "",
+                        "engine_failover": True,
+                        "terminal_status": "interrupted",
+                        "needs_review": True,
+                    }
+                    if prompt_trace:
+                        failover_meta["prompt_trace"] = prompt_trace[-24:]
                     final_text = _postprocess_output_text(
                         session,
                         final_text,
@@ -261,7 +336,9 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                             yield emit("section", {"section": "fast", "phase": "delta", "delta": final_text})
                         yield emit(
                             "final",
-                            {"text": final_text, "problems": quality_issues, "doc_ir": _safe_doc_ir_payload(final_text)},
+                            _with_terminal(
+                                {"text": final_text, "problems": quality_issues, "doc_ir": _safe_doc_ir_payload(final_text)}
+                            ),
                         )
                         _set_doc_text(session, final_text)
                         _auto_commit_version(session, "auto: after update")
@@ -325,7 +402,8 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             cfg = GenerateConfig(
                 workers=int(os.environ.get("WRITING_AGENT_WORKERS", "12")),  # tuned from 10 -> 12
                 min_total_chars=internal_target,
-                max_total_chars=internal_target,
+                # Keep only a lower bound to avoid truncating complete paragraphs at tail.
+                max_total_chars=0,
             )
         else:
             cfg = GenerateConfig(
@@ -334,7 +412,9 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         final_text: str | None = None
         problems: list[str] = []
         graph_meta: dict | None = None
+        prompt_trace: list[dict] = []
         use_route_graph = False
+        skip_insufficient_failover = False
 
         def _route_elapsed_ms() -> float:
             return max(0.0, (time.time() - start_ts) * 1000.0)
@@ -422,9 +502,26 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     compose_mode=compose_mode,
                     resume_sections=resume_sections,
                     format_only=False,
+                    plan_confirm=plan_confirm,
                 )
                 if isinstance(out, dict):
                     candidate = str(out.get("text") or "")
+                    terminal_status = str(out.get("terminal_status") or "").strip().lower()
+                    failure_reason = str(out.get("failure_reason") or "").strip()
+                    no_semantic_failover_reasons = {
+                        "analysis_needs_clarification",
+                        "analysis_guard_failed",
+                        "section_language_mismatch",
+                        "section_hierarchy_insufficient",
+                        "must_include_missing",
+                        "keyword_domain_mismatch",
+                        "missing_section_headings",
+                        "section_content_missing",
+                    }
+                    no_semantic_failover = (
+                        terminal_status in {"failed", "interrupted"}
+                        and failure_reason in no_semantic_failover_reasons
+                    )
                     if candidate.strip():
                         graph_meta = {
                             "path": "route_graph",
@@ -432,7 +529,16 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                             "engine": str(out.get("engine") or ""),
                             "route_id": str(out.get("route_id") or ""),
                             "route_entry": str(out.get("route_entry") or ""),
+                            "terminal_status": str(out.get("terminal_status") or "success"),
+                            "failure_reason": str(out.get("failure_reason") or ""),
+                            "quality_snapshot": dict(out.get("quality_snapshot") or {}),
+                            "plan_feedback": dict(out.get("plan_feedback") or {}),
                         }
+                        raw_prompt_trace = out.get("prompt_trace")
+                        if isinstance(raw_prompt_trace, list):
+                            prompt_trace = [dict(x) for x in raw_prompt_trace if isinstance(x, dict)]
+                            if prompt_trace:
+                                graph_meta["prompt_trace"] = prompt_trace[-24:]
                         final_text = _postprocess_output_text(
                             session,
                             candidate,
@@ -447,7 +553,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         }
                         if graph_meta:
                             payload["graph_meta"] = graph_meta
-                        yield emit("final", payload)
+                        yield emit("final", _with_reason_codes(payload))
                         _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
                         _record_route_metric(
                             "route_graph_success",
@@ -455,6 +561,46 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                             fallback_triggered=False,
                             fallback_recovered=False,
                         )
+                    elif no_semantic_failover:
+                        skip_insufficient_failover = True
+                        problems = [failure_reason] if failure_reason else list(out.get("problems") or [])
+                        graph_meta = {
+                            "path": "route_graph",
+                            "trace_id": str(out.get("trace_id") or ""),
+                            "engine": str(out.get("engine") or ""),
+                            "route_id": str(out.get("route_id") or ""),
+                            "route_entry": str(out.get("route_entry") or ""),
+                            "terminal_status": terminal_status or "failed",
+                            "failure_reason": failure_reason,
+                            "quality_snapshot": dict(out.get("quality_snapshot") or {}),
+                            "plan_feedback": dict(out.get("plan_feedback") or {}),
+                        }
+                        if prompt_trace:
+                            graph_meta["prompt_trace"] = prompt_trace[-24:]
+                        yield emit(
+                            "final",
+                            _with_reason_codes(
+                                _with_terminal(
+                                    {
+                                        "text": "",
+                                        "problems": problems,
+                                        "doc_ir": _safe_doc_ir_payload(""),
+                                        "graph_meta": graph_meta,
+                                        "status": terminal_status or "failed",
+                                        "failure_reason": failure_reason,
+                                        "quality_snapshot": dict(out.get("quality_snapshot") or {}),
+                                    }
+                                )
+                            ),
+                        )
+                        _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
+                        _record_route_metric(
+                            "route_graph_semantic_failed",
+                            path="route_graph",
+                            fallback_triggered=False,
+                            fallback_recovered=False,
+                        )
+                        return
             else:
                 gen = run_generate_graph(
                     instruction=instruction,
@@ -472,7 +618,27 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     if gap > max_gap_s:
                         max_gap_s = gap
                     last_event_at = now
+                    if ev.get("event") == "prompt_route":
+                        meta = ev.get("metadata") if isinstance(ev.get("metadata"), dict) else {}
+                        prompt_trace.append(
+                            {
+                                "stage": str(ev.get("stage") or ""),
+                                "metadata": dict(meta),
+                            }
+                        )
+                        yield emit("prompt_route", ev)
+                        continue
                     if ev.get("event") == "final":
+                        if not isinstance(graph_meta, dict):
+                            graph_meta = {
+                                "path": "legacy_graph",
+                                "trace_id": "",
+                                "engine": "legacy",
+                                "route_id": "",
+                                "route_entry": "",
+                            }
+                        if prompt_trace:
+                            graph_meta["prompt_trace"] = prompt_trace[-24:]
                         final_text = _postprocess_output_text(
                             session,
                             str(ev.get("text") or ""),
@@ -483,6 +649,10 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         payload = dict(ev)
                         payload["text"] = final_text
                         payload["doc_ir"] = _safe_doc_ir_payload(final_text)
+                        if graph_meta:
+                            payload["graph_meta"] = graph_meta
+                        if str(payload.get("event") or "").strip().lower() == "final":
+                            payload = _with_terminal(payload)
                         yield emit(payload.get("event", "message"), payload)
                         _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
                         _record_route_metric(
@@ -499,6 +669,8 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         if last_section_at is not None and time.time() - last_section_at > section_stall_s:
                             raise TimeoutError("section stalled")
         except Exception as e:
+            if isinstance(e, TimeoutError) or "timeout" in str(e).lower() or "stalled" in str(e).lower():
+                truncate_reason_codes.add("timeout_fallback")
             _record_route_metric(
                 "graph_failed",
                 path="route_graph" if use_route_graph else "legacy_graph",
@@ -534,6 +706,18 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     elif event.get("event") == "result":
                         final_text = event.get("text", "")
                 if final_text:
+                    failover_meta = {
+                        "path": "single_pass_stream",
+                        "trace_id": "",
+                        "engine": "single_pass",
+                        "route_id": "",
+                        "route_entry": "",
+                        "engine_failover": True,
+                        "terminal_status": "interrupted",
+                        "needs_review": True,
+                    }
+                    if prompt_trace:
+                        failover_meta["prompt_trace"] = prompt_trace[-24:]
                     final_text = _postprocess_output_text(
                         session,
                         final_text,
@@ -546,7 +730,14 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         yield emit("section", {"section": "fallback", "phase": "delta", "delta": final_text})
                     yield emit(
                         "final",
-                        {"text": final_text, "problems": quality_issues, "doc_ir": _safe_doc_ir_payload(final_text)},
+                        _with_terminal(
+                            {
+                                "text": final_text,
+                                "problems": quality_issues,
+                                "doc_ir": _safe_doc_ir_payload(final_text),
+                                "graph_meta": failover_meta,
+                            }
+                        ),
                     )
                     _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
                     _record_route_metric(
@@ -564,7 +755,8 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     error_code=route_graph_metrics_domain.extract_error_code(ee, default="E_FALLBACK_FAILED"),
                 )
                 yield emit("error", {"message": f"generation failed: {e}; fallback failed: {ee}"})
-        if final_text is None or len(final_text.strip()) < 20:
+        if (final_text is None or len(final_text.strip()) < 20) and not skip_insufficient_failover:
+            truncate_reason_codes.add("insufficient_output_fallback")
             _record_route_metric(
                 "graph_insufficient",
                 path="route_graph" if use_route_graph else "legacy_graph",
@@ -590,6 +782,18 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     elif event.get("event") == "result":
                         final_text = event.get("text", "")
                 if final_text:
+                    failover_meta = {
+                        "path": "single_pass_stream",
+                        "trace_id": "",
+                        "engine": "single_pass",
+                        "route_id": "",
+                        "route_entry": "",
+                        "engine_failover": True,
+                        "terminal_status": "interrupted",
+                        "needs_review": True,
+                    }
+                    if prompt_trace:
+                        failover_meta["prompt_trace"] = prompt_trace[-24:]
                     final_text = _postprocess_output_text(
                         session,
                         final_text,
@@ -605,7 +809,14 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         )
                     yield emit(
                         "final",
-                        {"text": final_text, "problems": quality_issues, "doc_ir": _safe_doc_ir_payload(final_text)},
+                        _with_terminal(
+                            {
+                                "text": final_text,
+                                "problems": quality_issues,
+                                "doc_ir": _safe_doc_ir_payload(final_text),
+                                "graph_meta": failover_meta,
+                            }
+                        ),
                     )
                     _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
                     _record_route_metric(

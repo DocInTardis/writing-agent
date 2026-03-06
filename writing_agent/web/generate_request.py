@@ -285,6 +285,17 @@ def try_handle_format_only_request(
 ) -> dict | None:
     if str(selection or "").strip():
         return None
+    instruction_text = str(instruction or "").strip()
+    # Do not treat mixed "format + content generation" instructions as format-only.
+    # These should continue through normal generation/rewrite pipelines.
+    if re.search(r"\b(write|draft|generate|restructure|output|compose|create|develop)\b", instruction_text, flags=re.IGNORECASE):
+        return None
+    if re.search(r"(生成|撰写|起草|写一|输出|重写|改写|扩写|补充|重构|正文|内容)", instruction_text):
+        return None
+    # Empty documents should not short-circuit into format-only updates:
+    # users typically expect content generation plus style constraints.
+    if not str(base_text or "").strip():
+        return None
     if compose_mode != "overwrite" and base_text != getattr(session, "doc_text", ""):
         set_doc_text(session, base_text)
     note = apply_format_only_update(session, instruction)

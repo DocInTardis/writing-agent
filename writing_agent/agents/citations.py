@@ -6,6 +6,7 @@ This module belongs to `writing_agent.agents` in the writing-agent codebase.
 from __future__ import annotations
 
 import re
+from datetime import date
 from dataclasses import dataclass
 
 from writing_agent.models import Citation, CitationStyle, ReportRequest
@@ -56,17 +57,30 @@ class CitationAgent:
         return CitationParseResult(citations=citations, warnings=warnings)
 
     def format_reference(self, citation: Citation, style: CitationStyle) -> str:
-        authors = citation.authors or "佚名"
-        year = citation.year or "n.d."
-        title = citation.title
-        url = citation.url or ""
+        authors = (citation.authors or "Anonymous").strip()
+        year = (citation.year or "").strip()
+        title = (citation.title or citation.key or "Untitled").strip()
+        venue = (citation.venue or "").strip()
+        url = (citation.url or "").strip()
 
         if style == CitationStyle.IEEE:
-            base = f"{authors}, “{title},” {year}."
+            year_part = year or "n.d."
+            base = f"{authors}, “{title},” {year_part}."
         elif style == CitationStyle.APA:
-            base = f"{authors} ({year}). {title}."
+            year_part = year or "n.d."
+            base = f"{authors} ({year_part}). {title}."
+        elif style == CitationStyle.GBT:
+            year_match = re.search(r"(?:19|20)\d{2}", year)
+            year_part = year_match.group(0) if year_match else "n.d."
+            if url:
+                access_date = date.today().strftime("%Y-%m-%d")
+                return f"{authors}. {title}[EB/OL]. {year_part}[{access_date}]. {url}"
+            if venue:
+                return f"{authors}. {title}[J]. {venue}, {year_part}."
+            return f"{authors}. {title}[J]. {year_part}."
         else:
-            base = f"{authors}. {title} ({year})."
+            year_part = year or "n.d."
+            base = f"{authors}. {title} ({year_part})."
 
         if url:
             return f"{base} {url}"

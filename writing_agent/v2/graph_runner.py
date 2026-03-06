@@ -16,9 +16,17 @@ from concurrent.futures import ThreadPoolExecutor, wait
 import ctypes
 import subprocess
 from pathlib import Path
+from typing import Callable
 from urllib.parse import quote
 
-from writing_agent.v2.prompts import PromptBuilder, get_prompt_config
+from writing_agent.v2.prompt_registry import PromptRegistry
+from writing_agent.v2.prompts import (
+    PromptBuilder,
+    build_prompt_route,
+    get_prompt_config,
+    instruction_language,
+    prompt_route_metadata,
+)
 
 from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
 from writing_agent.sections_catalog import find_section_description, section_catalog_text
@@ -199,7 +207,7 @@ def _section_timeout_s() -> float:
             return max(10.0, float(raw))
         except Exception:
             pass
-    return 120.0  # default raised from 60s to 120s for long sections
+    return 180.0  # higher default to reduce timeout-driven partial sections
 
 
 def _is_evidence_enabled() -> bool:
@@ -215,8 +223,9 @@ def _truncate_text(text: str, *, max_chars: int = 1200) -> str:
         return s
     return s[: max(0, max_chars - 3)].rstrip() + "..."
 
-_DISALLOWED_SECTIONS = {"\u6458\u8981", "\u5173\u952e\u8bcd", "\u76ee\u5f55", "Abstract", "Keywords"}
+_DISALLOWED_SECTIONS = {"\u76ee\u5f55", "Table of Contents", "Contents"}
 _ACK_SECTIONS = {"\u81f4\u8c22", "\u9e23\u8c22"}
+_PROMPT_REGISTRY = PromptRegistry()
 
 _PHASE_METRICS_PATH = Path(".data/metrics/phase_timing.json")
 _PHASE_METRICS_LOCK = threading.Lock()
@@ -303,10 +312,50 @@ def _strip_ack_sections_text(text: str, *, allow_ack: bool) -> str:
 
 
 def _default_outline_from_instruction(text: str) -> list[str]:
-    s = (text or "").lower()
-    if "weekly" in s or "week report" in s or "周报" in str(text or ""):
-        return ["This Week Work", "Issues and Risks", "Next Week Plan", "Support Needed"]
+    _ = text
+    # Disabled: default weekly heuristics previously caused planning drift.
     return []
+
+
+def _prompt_quality_profile() -> str:
+    raw = os.environ.get("WRITING_AGENT_QUALITY_PROFILE", "").strip()
+    return raw or "academic_cnki_default"
+
+
+def _resolve_doc_type_for_prompt(instruction: str) -> str:
+    text = str(instruction or "")
+    if re.search(r"(周报|weekly|this week|next week)", text, flags=re.IGNORECASE):
+        return "weekly"
+    if re.search(r"(技术报告|report|架构|implementation|工程)", text, flags=re.IGNORECASE):
+        return "technical_report"
+    return "academic"
+
+
+def _route_prompt_for_role(
+    *,
+    role: str,
+    instruction: str,
+    intent: str,
+    section_title: str = "",
+    revise_scope: str = "none",
+) -> tuple[object, dict[str, str]]:
+    context, route = build_prompt_route(
+        role=role,
+        instruction=instruction,
+        intent=intent,
+        doc_type=_resolve_doc_type_for_prompt(instruction),
+        language=instruction_language(instruction),
+        quality_profile=_prompt_quality_profile(),
+        revise_scope=revise_scope,
+        section_title=section_title,
+        registry=_PROMPT_REGISTRY,
+    )
+    meta = prompt_route_metadata(route)
+    meta["prompt_intent"] = str(context.intent)
+    meta["prompt_doc_type"] = str(context.doc_type)
+    meta["prompt_language"] = str(context.language)
+    meta["prompt_quality_profile"] = str(context.quality_profile)
+    return route, meta
 
 
 def _pick_draft_models(worker_models: list[str], *, agg_model: str, fallback: str) -> tuple[str, str]:
@@ -386,16 +435,34 @@ def _plan_sections_with_model(
     instruction: str,
     sections: list[str],
     total_chars: int,
+    trace_hook=None,
 ) -> dict:
     if not sections:
         return {}
     client = OllamaClient(base_url=base_url, model=model, timeout_s=_plan_timeout_s())
-    config = get_prompt_config("planner")
+    route, prompt_meta = _route_prompt_for_role(
+        role="planner",
+        instruction=instruction,
+        intent="plan",
+    )
+    config = get_prompt_config("planner", route=route)
+    if callable(trace_hook):
+        try:
+            trace_hook(
+                {
+                    "event": "prompt_route",
+                    "stage": "planner_detail",
+                    "metadata": prompt_meta,
+                }
+            )
+        except Exception:
+            pass
     system, user = PromptBuilder.build_planner_prompt(
         title=title,
         total_chars=total_chars,
         sections=sections,
-        instruction=instruction
+        instruction=instruction,
+        route=route,
     )
     return _require_json_response(
         client=client,
@@ -408,7 +475,7 @@ def _plan_sections_with_model(
 
 
 def _sanitize_planned_sections(sections: list[str]) -> list[str]:
-    banned = {"\u6458\u8981", "\u5173\u952e\u8bcd", "\u76ee\u5f55", "Abstract", "Keywords", "\u5efa\u8bae", "\u9644\u5f55"}
+    banned = {"\u76ee\u5f55", "Table of Contents", "Contents", "\u5efa\u8bae", "\u9644\u5f55"}
     out: list[str] = []
     seen: set[str] = set()
     for s in sections or []:
@@ -459,7 +526,7 @@ def _strip_chapter_prefix_local(text: str) -> str:
 
 
 def _sanitize_section_tokens(sections: list[str], *, keep_full_titles: bool = False) -> list[str]:
-    banned = {"\u6458\u8981", "\u5173\u952e\u8bcd", "\u76ee\u5f55", "Abstract", "Keywords", "\u5efa\u8bae", "\u9644\u5f55"}
+    banned = {"\u76ee\u5f55", "Table of Contents", "Contents", "\u5efa\u8bae", "\u9644\u5f55"}
     out: list[str] = []
     refs: list[str] = []
     seen: set[tuple[int, str]] = set()
@@ -526,17 +593,44 @@ def _plan_sections_list_with_model(
     model: str,
     title: str,
     instruction: str,
+    trace_hook=None,
 ) -> list[str]:
     client = OllamaClient(base_url=base_url, model=model, timeout_s=_plan_timeout_s())
     catalog = section_catalog_text()
+    route, route_meta = _route_prompt_for_role(
+        role="planner",
+        instruction=instruction,
+        intent="plan",
+    )
+    if callable(trace_hook):
+        try:
+            trace_hook(
+                {
+                    "event": "prompt_route",
+                    "stage": "planner_sections",
+                    "metadata": route_meta,
+                }
+            )
+        except Exception:
+            pass
+    profile = str(os.environ.get("WRITING_AGENT_QUALITY_PROFILE", "").strip() or "academic_cnki_default")
+    include_abstract_keywords = profile == "academic_cnki_default"
+    extra_rule = (
+        "For academic_cnki_default profile include 摘要 and 关键词 as mandatory sections."
+        if include_abstract_keywords
+        else "Do not force 摘要/关键词 unless user asks explicitly."
+    )
     system = (
         "You are a Chinese academic writing structure planner.\n"
         "Return strict JSON only; no markdown.\n"
         'Schema: {"sections":[string]}.\n'
         "Rules: at most 16 sections, no duplicates, no empty titles; "
-        "do not include abstract/keywords/acknowledgement unless explicitly requested. Typical size is 4-12 sections.\n"
+        f"{extra_rule} Typical size is 4-12 sections.\n"
         'Example: {"sections":["Introduction","Related Work","Method","Experiments","Conclusion","References"]}'
     )
+    custom_system = str(route.payload.get("planner_list_system") or "").strip() if route else ""
+    if custom_system:
+        system = custom_system
     user = (
         "<task>plan_sections_list</task>\n"
         "<constraints>\n"
@@ -544,6 +638,7 @@ def _plan_sections_list_with_model(
         "- Return strict JSON only.\n"
         "- Use only the provided section catalog where possible.\n"
         "</constraints>\n"
+        f"<prompt_route>\n{_escape_prompt_text(json.dumps(route_meta, ensure_ascii=False))}\n</prompt_route>\n"
         f"<report_title>\n{_escape_prompt_text(title)}\n</report_title>\n"
         f"<user_requirement>\n{_escape_prompt_text(instruction)}\n</user_requirement>\n"
         f"<section_catalog>\n{_escape_prompt_text(catalog)}\n</section_catalog>\n"
@@ -608,20 +703,38 @@ def _analyze_instruction(
     model: str,
     instruction: str,
     current_text: str,
+    trace_hook=None,
 ) -> dict:
     fast_raw = os.environ.get("WRITING_AGENT_ANALYSIS_FAST", "").strip().lower()
     force_fast = fast_raw in {"force", "always"}
     if force_fast or fast_raw in {"1", "true", "yes", "on"}:
         if force_fast or (len((instruction or "").strip()) <= 120 and not (current_text or "").strip()):
-            return {"topic": (instruction or "").strip(), "doc_type": "report"}
+            return _normalize_analysis_for_generation({"topic": (instruction or "").strip(), "doc_type": "report"}, instruction)
     client = OllamaClient(base_url=base_url, model=model, timeout_s=_analysis_timeout_s())
-    config = get_prompt_config("analysis")
+    route, prompt_meta = _route_prompt_for_role(
+        role="analysis",
+        instruction=instruction,
+        intent="analyze",
+    )
+    config = get_prompt_config("analysis", route=route)
+    if callable(trace_hook):
+        try:
+            trace_hook(
+                {
+                    "event": "prompt_route",
+                    "stage": "analysis",
+                    "metadata": prompt_meta,
+                }
+            )
+        except Exception:
+            pass
     excerpt = _truncate_text(current_text or "", max_chars=800)
     system, user = PromptBuilder.build_analysis_prompt(
         instruction=instruction,
-        excerpt=excerpt
+        excerpt=excerpt,
+        route=route,
     )
-    return _require_json_response(
+    out = _require_json_response(
         client=client,
         system=system,
         user=user,
@@ -629,6 +742,147 @@ def _analyze_instruction(
         temperature=config.temperature,
         max_retries=max(2, int(os.environ.get("WRITING_AGENT_JSON_RETRIES", "2"))),
     )
+    normalized = _normalize_analysis_for_generation(out, instruction)
+    if _analysis_strict_schema_enabled() and not bool(normalized.get("_schema_valid")):
+        raise ValueError(
+            "analysis_schema_invalid:"
+            + ",".join([str(x) for x in (normalized.get("_schema_missing") or []) if str(x).strip()])
+        )
+    if float(normalized.get("_confidence_score") or 0.0) < _analysis_conf_threshold():
+        questions = [str(x).strip() for x in (normalized.get("_clarification_questions") or []) if str(x).strip()]
+        normalized["_needs_clarification"] = True
+        normalized["_clarification_questions"] = questions
+    else:
+        normalized["_needs_clarification"] = False
+    return normalized
+
+
+def _analysis_strict_schema_enabled() -> bool:
+    raw = str(os.environ.get("WRITING_AGENT_ANALYSIS_STRICT_SCHEMA", "1")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _analysis_conf_threshold() -> float:
+    raw = str(os.environ.get("WRITING_AGENT_ANALYSIS_CONF_THRESHOLD", "0.62")).strip()
+    try:
+        return max(0.0, min(1.0, float(raw)))
+    except Exception:
+        return 0.62
+
+
+def _normalize_analysis_for_generation(data: dict, instruction: str) -> dict:
+    base = data if isinstance(data, dict) else {}
+    topic = str(base.get("topic") or "").strip() or str(instruction or "").strip()
+    doc_type = str(base.get("doc_type") or "").strip() or "academic"
+    keywords_raw = base.get("keywords")
+    keywords = [str(x).strip() for x in keywords_raw] if isinstance(keywords_raw, list) else []
+    keywords = [x for x in keywords if x]
+    must_include_raw = base.get("must_include")
+    must_include = [str(x).strip() for x in must_include_raw] if isinstance(must_include_raw, list) else []
+    must_include = [x for x in must_include if x]
+    confidence_raw = base.get("confidence")
+    confidence = confidence_raw if isinstance(confidence_raw, dict) else {}
+
+    def _field_conf(name: str, default: float) -> float:
+        try:
+            value = float(confidence.get(name, default))
+        except Exception:
+            value = default
+        return max(0.0, min(1.0, value))
+
+    conf_map = {
+        "topic": _field_conf("topic", 0.7 if topic else 0.2),
+        "doc_type": _field_conf("doc_type", 0.65 if doc_type else 0.2),
+        "structure": _field_conf("structure", 0.66 if must_include else 0.58),
+        "keywords": _field_conf("keywords", 0.64 if keywords else 0.56),
+    }
+    conf_score = round(sum(conf_map.values()) / float(len(conf_map)), 4)
+    missing: list[str] = []
+    if not topic:
+        missing.append("topic")
+    if not doc_type:
+        missing.append("doc_type")
+
+    clarification: list[str] = []
+    if conf_map["topic"] < 0.55:
+        clarification.append("请明确主题与研究对象。")
+    if conf_map["doc_type"] < 0.55:
+        clarification.append("请明确文体类型（学术论文/技术报告/周报）。")
+    if conf_map["structure"] < 0.5:
+        clarification.append("请补充章节结构要求（至少给出一级或二级目录）。")
+    if conf_map["keywords"] < 0.45:
+        clarification.append("请提供3-5个关键词或核心术语。")
+    if not clarification and missing:
+        clarification.append("需求解析字段不完整，请补充核心写作要求。")
+
+    out = dict(base)
+    out["topic"] = topic
+    out["doc_type"] = doc_type
+    out["keywords"] = keywords
+    out["must_include"] = must_include
+    out["confidence"] = conf_map
+    out["_confidence_score"] = conf_score
+    out["_clarification_questions"] = clarification
+    out["_schema_missing"] = missing
+    out["_schema_valid"] = len(missing) == 0
+    return out
+
+
+def _analysis_correctness_guard(
+    *,
+    analysis: dict | None,
+    instruction: str,
+    sections: list[str],
+    section_title: Callable[[str], str],
+    is_reference_section: Callable[[str], bool],
+) -> tuple[bool, list[str], dict]:
+    obj = analysis if isinstance(analysis, dict) else {}
+    reasons: list[str] = []
+    titles = [str(section_title(s) or s).strip() for s in (sections or []) if str(section_title(s) or s).strip()]
+    body_titles = [t for t in titles if not is_reference_section(t)]
+
+    lang = instruction_language(instruction)
+    expected_zh = str(lang).lower().startswith("zh")
+    if expected_zh and titles:
+        zh_count = 0
+        for title in titles:
+            if any("\u4e00" <= ch <= "\u9fff" for ch in title):
+                zh_count += 1
+        zh_ratio = zh_count / float(max(1, len(titles)))
+        if zh_ratio < 0.6:
+            reasons.append("section_language_mismatch")
+
+    doc_type = str(obj.get("doc_type") or "").strip().lower()
+    if doc_type in {"academic", "thesis", "paper"} and len(body_titles) < 4:
+        reasons.append("section_hierarchy_insufficient")
+
+    must_include_raw = obj.get("must_include")
+    must_include = [str(x).strip() for x in must_include_raw] if isinstance(must_include_raw, list) else []
+    must_include = [x for x in must_include if x]
+    missing_required = [item for item in must_include if not any(item in title for title in titles)]
+    if missing_required:
+        reasons.append("must_include_missing")
+
+    keywords_raw = obj.get("keywords")
+    keywords = [str(x).strip() for x in keywords_raw] if isinstance(keywords_raw, list) else []
+    keywords = [x for x in keywords if x]
+    if keywords and body_titles:
+        matched = 0
+        for key in keywords:
+            if any(key in title for title in body_titles):
+                matched += 1
+        if matched == 0:
+            reasons.append("keyword_domain_mismatch")
+
+    meta = {
+        "lang": lang,
+        "doc_type": doc_type,
+        "section_count": len(titles),
+        "body_section_count": len(body_titles),
+        "must_include_missing": missing_required[:8],
+        "keywords": keywords[:8],
+    }
+    return (len(reasons) == 0), reasons, meta
 
 
 def _format_analysis_summary(analysis: dict, *, fallback: str) -> str:
@@ -1021,6 +1275,7 @@ def run_generate_graph_dual_engine(
     compose_mode: str = "auto",
     resume_sections: list[str] | None = None,
     format_only: bool = False,
+    plan_confirm: dict | None = None,
 ):
     """
     Dual-engine orchestration entry.
@@ -1035,7 +1290,51 @@ def run_generate_graph_dual_engine(
             "plan": {"compose_mode": compose_mode, "resume_sections": list(resume_sections or [])},
         }
 
+    def _plan_confirm(payload: dict) -> dict:
+        raw = payload.get("plan_confirm") if isinstance(payload.get("plan_confirm"), dict) else {}
+        decision_raw = str(raw.get("decision") or "").strip().lower()
+        if decision_raw in {"stop", "terminate", "cancel", "reject"}:
+            decision = "interrupted"
+        elif decision_raw in {"approved", "interrupted"}:
+            decision = decision_raw
+        else:
+            decision = "approved"
+        try:
+            score = int(raw.get("score") or 0)
+        except Exception:
+            score = 0
+        score = max(0, min(5, score))
+        note = str(raw.get("note") or "").strip()[:300]
+        feedback = {
+            "decision": decision,
+            "score": score,
+            "note": note,
+        }
+        if decision == "interrupted":
+            return {
+                "plan_confirmed": False,
+                "plan_feedback": feedback,
+                "terminal_status": "interrupted",
+                "failure_reason": "plan_not_confirmed_by_user",
+                "quality_snapshot": {
+                    "status": "interrupted",
+                    "reason": "plan_not_confirmed_by_user",
+                    "problem_count": 1,
+                },
+            }
+        return {"plan_confirmed": True, "plan_feedback": feedback}
+
     def _writer(payload: dict) -> dict:
+        if not bool(payload.get("plan_confirmed", True)):
+            reason = str(payload.get("failure_reason") or "plan_not_confirmed_by_user")
+            return {
+                "draft": str(current_text or ""),
+                "problems": [reason],
+                "prompt_trace": list(payload.get("prompt_trace") or []),
+                "terminal_status": "interrupted",
+                "failure_reason": reason,
+                "quality_snapshot": dict(payload.get("quality_snapshot") or {}),
+            }
         generator = run_generate_graph(
             instruction=instruction,
             current_text=current_text,
@@ -1046,12 +1345,38 @@ def run_generate_graph_dual_engine(
         )
         final_text = ""
         problems: list[str] = []
+        prompt_trace: list[dict] = []
         for event in generator:
+            if not isinstance(event, dict):
+                continue
+            if event.get("event") == "prompt_route":
+                meta = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+                prompt_trace.append(
+                    {
+                        "stage": str(event.get("stage") or ""),
+                        "metadata": dict(meta),
+                    }
+                )
+                continue
             if isinstance(event, dict) and event.get("event") == "final":
                 final_text = str(event.get("text") or "")
                 problems = list(event.get("problems") or [])
                 break
-        return {"draft": final_text, "problems": problems}
+        terminal_status = "success" if final_text.strip() else "failed"
+        failure_reason = "" if terminal_status == "success" else "empty_draft"
+        quality_snapshot = {
+            "status": terminal_status,
+            "problem_count": len(problems),
+            "has_text": bool(final_text.strip()),
+        }
+        return {
+            "draft": final_text,
+            "problems": problems,
+            "prompt_trace": prompt_trace[-24:],
+            "terminal_status": terminal_status,
+            "failure_reason": failure_reason,
+            "quality_snapshot": quality_snapshot,
+        }
 
     def _reviewer(payload: dict) -> dict:
         draft = str(payload.get("draft") or "")
@@ -1062,12 +1387,39 @@ def run_generate_graph_dual_engine(
             evidence_enabled=_is_evidence_enabled(),
             reference_sources=[],
         )
-        return {"review": {"issues": issues}, "fixups": []}
+        return {
+            "review": {"issues": issues},
+            "fixups": [],
+            "prompt_trace": list(payload.get("prompt_trace") or []),
+            "terminal_status": str(payload.get("terminal_status") or ""),
+            "failure_reason": str(payload.get("failure_reason") or ""),
+            "quality_snapshot": dict(payload.get("quality_snapshot") or {}),
+        }
 
     def _qa(payload: dict) -> dict:
+        problems = list((payload.get("review") or {}).get("issues") or payload.get("problems") or [])
+        terminal_status_raw = str(payload.get("terminal_status") or "").strip().lower()
+        terminal_status = terminal_status_raw if terminal_status_raw in {"success", "failed", "interrupted"} else ""
+        if not terminal_status:
+            terminal_status = "success" if not problems else "failed"
+        failure_reason = str(payload.get("failure_reason") or "").strip()
+        if terminal_status != "success" and not failure_reason:
+            failure_reason = "quality_gate_failed" if problems else "unknown_failure"
+        quality_snapshot = dict(payload.get("quality_snapshot") or {})
+        if not quality_snapshot:
+            quality_snapshot = {
+                "status": terminal_status,
+                "problem_count": len(problems),
+                "has_text": bool(str(payload.get("draft") or "").strip()),
+            }
         return {
             "final_text": str(payload.get("draft") or ""),
-            "problems": list((payload.get("review") or {}).get("issues") or payload.get("problems") or []),
+            "problems": problems,
+            "prompt_trace": list(payload.get("prompt_trace") or []),
+            "terminal_status": terminal_status,
+            "failure_reason": failure_reason,
+            "quality_snapshot": quality_snapshot,
+            "plan_feedback": dict(payload.get("plan_feedback") or {}),
         }
 
     engine = DualGraphEngine(use_langgraph=should_use_langgraph())
@@ -1080,9 +1432,11 @@ def run_generate_graph_dual_engine(
             "compose_mode": compose_mode,
             "resume_sections": list(resume_sections or []),
             "format_only": bool(format_only),
+            "plan_confirm": dict(plan_confirm or {}),
         },
         handlers={
             "planner": _planner,
+            "plan_confirm": _plan_confirm,
             "writer": _writer,
             "reviewer": _reviewer,
             "qa": _qa,
@@ -1106,6 +1460,11 @@ def run_generate_graph_dual_engine(
         "ok": 1,
         "text": str(state.get("final_text") or ""),
         "problems": list(state.get("problems") or []),
+        "prompt_trace": list(state.get("prompt_trace") or []),
+        "terminal_status": str(state.get("terminal_status") or "failed"),
+        "failure_reason": str(state.get("failure_reason") or ""),
+        "quality_snapshot": dict(state.get("quality_snapshot") or {}),
+        "plan_feedback": dict(state.get("plan_feedback") or {}),
         "trace_id": str(state.get("trace_id") or ""),
         "engine": actual_engine,
         "route_id": route_id,

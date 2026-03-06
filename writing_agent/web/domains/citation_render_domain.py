@@ -90,9 +90,6 @@ def apply_citations_for_export(text: str, citations: dict[str, Citation], style:
         return f"[{num}]"
 
     replaced = _CITATION_MARK_RE.sub(_replace, text)
-    if not ordered_keys and citations:
-        for key in citations.keys():
-            _assign_key(key)
     if not ordered_keys:
         return replaced
     citer = CitationAgent()
@@ -175,9 +172,6 @@ def apply_citations_to_doc_ir(doc_ir, citations: dict[str, Citation], style: Cit
     sections = data.get("sections")
     if isinstance(sections, list):
         _walk_sections(sections)
-    if not ordered_keys and citations:
-        for key in citations.keys():
-            _assign_key(key)
     if not ordered_keys:
         return doc_ir_from_dict(data)
     citer = CitationAgent()

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import date
 from pathlib import Path
 from typing import Callable
 
@@ -143,6 +144,7 @@ def format_reference_items(
     extract_year_fn: Callable[[str], str],
     format_authors_fn: Callable[[list[str]], str],
 ) -> list[str]:
+    access_date = date.today().strftime("%Y-%m-%d")
     rows: list[dict] = []
     for source in sources or []:
         title = str(source.get("title") or "").strip()
@@ -161,23 +163,19 @@ def format_reference_items(
 
     out: list[str] = []
     for idx, row in enumerate(rows, 1):
-        authors = format_authors_fn(row.get("authors") or [])
+        authors = format_authors_fn(row.get("authors") or []) or "Anonymous"
         title = row.get("title") or "untitled source"
-        year = row.get("year") or ""
+        year = row.get("year") or "n.d."
         source = row.get("source") or ""
         url = row.get("url") or ""
 
-        parts = []
-        if authors:
-            parts.append(f"{authors}.")
-        parts.append(f"{title}.")
-        if source:
-            parts.append(f"{source}.")
-        if year:
-            parts.append(f"{year}.")
         if url:
-            parts.append(f"URL: {url}")
-        line = " ".join([p for p in parts if p]).strip()
+            core = f"{authors}. {title}[EB/OL]. {year}[{access_date}]. {url}"
+        elif source:
+            core = f"{authors}. {title}[J]. {source}, {year}."
+        else:
+            core = f"{authors}. {title}[J]. {year}."
+        line = re.sub(r"\s+", " ", core).strip()
         out.append(f"[{idx}] {line}")
         if len(out) >= 12:
             break

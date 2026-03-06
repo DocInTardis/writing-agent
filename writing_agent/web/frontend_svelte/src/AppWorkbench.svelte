@@ -86,6 +86,9 @@
   }
   let pendingGenerateConfirmation: PendingGenerateConfirmation | null = null
   let confirmDialogBusy = false
+  let planConfirmDecision: 'approved' | 'interrupted' = 'approved'
+  let planConfirmScore = 5
+  let planConfirmNote = ''
   let leftWidth = 46
   let resizing = false
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
@@ -3186,6 +3189,24 @@
     document.body.classList.toggle('dark', !$darkMode)
   }
 
+  async function persistPlanConfirmPreference() {
+    if (!$docId) return
+    const payload = {
+      decision: planConfirmDecision,
+      score: Math.max(0, Math.min(5, Math.round(Number(planConfirmScore) || 0))),
+      note: String(planConfirmNote || '').trim().slice(0, 300)
+    }
+    try {
+      await fetch(`/api/doc/${$docId}/plan/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    } catch {
+      // Ignore persistence errors; payload still travels with current generate request.
+    }
+  }
+
   async function handleGenerate(
     text: string,
     opts?: {
@@ -3315,7 +3336,12 @@
       composeMode,
       selection: selectionPayload,
       resumeSections,
-      cursorAnchor
+      cursorAnchor,
+      planConfirm: {
+        decision: planConfirmDecision,
+        score: Math.max(0, Math.min(5, Math.round(Number(planConfirmScore) || 0))),
+        note: String(planConfirmNote || '').trim().slice(0, 300)
+      }
     })
 
     try {
@@ -3460,6 +3486,14 @@
           if (event === 'final') {
             const txt = String(data.text || '')
             const graphMeta = normalizeGraphMeta(data.graph_meta)
+            const terminalStatusRaw = String(data.status || (data.graph_meta && (data.graph_meta as any).terminal_status) || 'success')
+              .trim()
+              .toLowerCase()
+            const terminalStatus =
+              terminalStatusRaw === 'failed' || terminalStatusRaw === 'interrupted' || terminalStatusRaw === 'success'
+                ? terminalStatusRaw
+                : 'success'
+            const failureReason = String(data.failure_reason || (data.graph_meta && (data.graph_meta as any).failure_reason) || '').trim()
             const revisionMeta =
               data.revision_meta && typeof data.revision_meta === 'object'
                 ? (data.revision_meta as Record<string, unknown>)
@@ -3480,13 +3514,31 @@
                 data.doc_ir && typeof data.doc_ir === 'object' ? (data.doc_ir as Record<string, unknown>) : null
               finalizeStreamText(txt, finalDoc)
             }
-            docStatus.set('完成')
-            flowStatus.set('完成')
+            if (terminalStatus === 'interrupted') {
+              docStatus.set(failureReason ? `已中断: ${failureReason}` : '已中断')
+              flowStatus.set('已中断')
+            } else if (terminalStatus === 'failed') {
+              docStatus.set(failureReason ? `生成失败: ${failureReason}` : '生成失败')
+              flowStatus.set('失败')
+            } else {
+              docStatus.set('完成')
+              flowStatus.set('完成')
+            }
             sawFinal = true
             resumeState = null
-            appendChat('system', '已完成生成。')
-            pushThought('完成', '生成完成', formatElapsed())
-            pushToast('生成完成', 'ok')
+            if (terminalStatus === 'interrupted') {
+              appendChat('system', failureReason ? `任务已中断：${failureReason}` : '任务已中断。')
+              pushThought('中断', failureReason || '任务已中断', formatElapsed())
+              pushToast(failureReason ? `任务已中断：${failureReason}` : '任务已中断', 'info')
+            } else if (terminalStatus === 'failed') {
+              appendChat('system', failureReason ? `生成失败：${failureReason}` : '生成失败。')
+              pushThought('失败', failureReason || '生成失败', formatElapsed())
+              pushToast(failureReason ? `生成失败：${failureReason}` : '生成失败', 'bad')
+            } else {
+              appendChat('system', '已完成生成。')
+              pushThought('完成', '生成完成', formatElapsed())
+              pushToast('生成完成', 'ok')
+            }
             saveDoc().catch(() => {})
             return
           }
@@ -4126,6 +4178,28 @@
                 <Icon name="star" className="ui-icon" />
                 <span>{showFeedbackPanel ? '收起评分' : '满意度评分'}</span>
               </button>
+              <div class="plan-confirm-inline">
+                <span class="plan-confirm-label">计划确认</span>
+                <select
+                  class="plan-confirm-select"
+                  bind:value={planConfirmDecision}
+                  on:change={() => void persistPlanConfirmPreference()}
+                >
+                  <option value="approved">通过</option>
+                  <option value="interrupted">终止</option>
+                </select>
+                <label class="plan-confirm-score">
+                  <span>评分</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="1"
+                    bind:value={planConfirmScore}
+                    on:change={() => void persistPlanConfirmPreference()}
+                  />
+                </label>
+              </div>
               <button class="btn ghost icon-btn-text" on:click={handleStop} disabled={!$generating}>
                 <Icon name="stop" className="ui-icon" />
                 <span>停止</span>
@@ -7277,6 +7351,45 @@
 
   .toolbar-cluster.core {
     flex: 1;
+  }
+
+  .plan-confirm-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px dashed rgba(148, 163, 184, 0.3);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.52);
+  }
+
+  .plan-confirm-label {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  .plan-confirm-select,
+  .plan-confirm-score input {
+    height: 28px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.84);
+    color: #e2e8f0;
+    font-size: 12px;
+    padding: 0 8px;
+  }
+
+  .plan-confirm-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #94a3b8;
+    font-size: 11px;
+  }
+
+  .plan-confirm-score input {
+    width: 52px;
+    text-align: center;
   }
 
   .toolbar-advanced-toggle {

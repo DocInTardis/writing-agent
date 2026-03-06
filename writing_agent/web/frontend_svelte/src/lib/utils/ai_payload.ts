@@ -16,6 +16,12 @@ export type ContextPolicyPayload = {
   prompt_budget_ratio: number
 }
 
+export type PlanConfirmPayload = {
+  decision: 'approved' | 'interrupted'
+  score: number
+  note: string
+}
+
 type SanitizeTextOptions = {
   trim?: boolean
   collapseWhitespace?: boolean
@@ -35,6 +41,7 @@ type BuildGeneratePayloadInput = {
   contextPolicy?: unknown
   resumeSections?: unknown
   cursorAnchor?: unknown
+  planConfirm?: unknown
 }
 
 const CONTROL_CHAR_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g
@@ -46,6 +53,7 @@ const DEFAULT_SELECTION_TEXT_MAX_CHARS = 16000
 const DEFAULT_RESUME_SECTIONS_MAX_ITEMS = 64
 const DEFAULT_RESUME_SECTION_MAX_CHARS = 120
 const DEFAULT_CURSOR_ANCHOR_MAX_CHARS = 260
+const DEFAULT_PLAN_CONFIRM_NOTE_MAX_CHARS = 300
 
 export const DIAGRAM_PROMPT_MAX_CHARS = 2400
 
@@ -57,6 +65,12 @@ export const DEFAULT_CONTEXT_POLICY: ContextPolicyPayload = {
   window_min_chars: 240,
   window_max_chars: 1200,
   prompt_budget_ratio: 0.3
+}
+
+export const DEFAULT_PLAN_CONFIRM: PlanConfirmPayload = {
+  decision: 'approved',
+  score: 0,
+  note: ''
 }
 
 function asBoundedInt(raw: unknown, bounds: { min: number; max: number }): number | null {
@@ -83,6 +97,25 @@ function normalizeComposeMode(raw: unknown): ComposeMode {
     return mode
   }
   return 'auto'
+}
+
+function normalizePlanConfirm(raw: unknown): PlanConfirmPayload {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ...DEFAULT_PLAN_CONFIRM }
+  }
+  const row = raw as Record<string, unknown>
+  const decisionRaw = String(row.decision || '').trim().toLowerCase()
+  const decision: PlanConfirmPayload['decision'] =
+    decisionRaw === 'interrupted' || decisionRaw === 'stop' || decisionRaw === 'reject'
+      ? 'interrupted'
+      : 'approved'
+  const score = clampNumber(row.score, 0, 0, 5)
+  const note = sanitizeAiInputText(row.note, { trim: true, maxChars: DEFAULT_PLAN_CONFIRM_NOTE_MAX_CHARS })
+  return {
+    decision,
+    score,
+    note
+  }
 }
 
 export function sanitizeAiInputText(raw: unknown, opts: SanitizeTextOptions = {}): string {
@@ -233,6 +266,8 @@ export function buildGenerateRequestPayload(input: BuildGeneratePayloadInput): R
   if (cursorAnchor) {
     payload.cursor_anchor = cursorAnchor
   }
+
+  payload.plan_confirm = normalizePlanConfirm(input.planConfirm)
 
   return payload
 }
