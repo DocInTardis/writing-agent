@@ -47,6 +47,7 @@ class GenerationService:
         instruction: str,
         plan_steps: list[str],
         text: str,
+        hard_constraints: dict | None = None,
     ) -> tuple[str, str]:
         system = (
             "You are a constrained document revision assistant.\n"
@@ -61,6 +62,22 @@ class GenerationService:
             if len(plan_rows) >= 12:
                 break
         plan_block = "\n".join(plan_rows) if plan_rows else "<step>no-explicit-plan</step>"
+        hard = dict(hard_constraints or {})
+        req_h2_rows = []
+        for title in hard.get("required_h2") or []:
+            clean_title = cls._xml_escape(title)
+            if clean_title:
+                req_h2_rows.append(f"<required_h2>{clean_title}</required_h2>")
+        req_h2_block = "\n".join(req_h2_rows) if req_h2_rows else "<required_h2>none</required_h2>"
+        hard_block = (
+            "<hard_requirements>\n"
+            f"<min_chars>{int(hard.get('min_chars') or 0)}</min_chars>\n"
+            f"<min_refs>{int(hard.get('min_refs') or 0)}</min_refs>\n"
+            f"<min_tables>{int(hard.get('min_tables') or 0)}</min_tables>\n"
+            f"<min_figures>{int(hard.get('min_figures') or 0)}</min_figures>\n"
+            f"{req_h2_block}\n"
+            "</hard_requirements>"
+        )
         user = (
             "<task>revise_full_document</task>\n"
             "<constraints>\n"
@@ -69,9 +86,11 @@ class GenerationService:
             "- Preserve heading structure unless instruction explicitly asks to change it.\n"
             "- Preserve markers like [[TABLE:...]] and [[FIGURE:...]] when present.\n"
             "- Do not include analysis, explanation, or JSON.\n"
+            "- Hard requirements must be satisfied before finishing output.\n"
             "</constraints>\n"
             f"<revision_request>\n{cls._xml_escape(instruction)}\n</revision_request>\n"
             f"<execution_plan>\n{plan_block}\n</execution_plan>\n"
+            f"{hard_block}\n"
             f"<original_document>\n{cls._xml_escape(text)}\n</original_document>\n"
             "Return only one block:\n"
             "<revised_markdown>\n"
@@ -90,6 +109,143 @@ class GenerationService:
         if alt:
             return str(alt.group(1) or "").strip()
         return text.strip()
+
+    @staticmethod
+    def _compact_len(text: str) -> int:
+        return len(re.sub(r"\s+", "", str(text or "")))
+
+    @classmethod
+    def _revision_candidate_metrics(
+        cls,
+        app_v2,
+        *,
+        text: str,
+        required_h2: list[str],
+        min_chars: int,
+        min_refs: int,
+        min_tables: int,
+        min_figures: int,
+    ) -> dict:
+        src = str(text or "")
+        chars = cls._compact_len(src)
+        sections = []
+        try:
+            sections = list(app_v2._extract_sections(src, prefer_levels=(2, 3)) or [])
+        except Exception:
+            sections = []
+
+        def _norm(value: str) -> str:
+            try:
+                return str(app_v2._normalize_heading_text(value or "")).strip()
+            except Exception:
+                return re.sub(r"\s+", "", str(value or "")).strip().lower()
+
+        section_tokens = {_norm(getattr(sec, "title", "")) for sec in sections if str(getattr(sec, "title", "")).strip()}
+        required_tokens = [_norm(x) for x in (required_h2 or []) if _norm(x)]
+        covered = sum(1 for tok in required_tokens if tok in section_tokens)
+        coverage = 1.0 if not required_tokens else (covered / float(len(required_tokens)))
+        missing_required_h2 = []
+        if required_tokens:
+            missing_required_h2 = [str(x) for x in (required_h2 or []) if _norm(x) and _norm(x) not in section_tokens]
+
+        refs_count = len(re.findall(r"(?m)^\s*\[\d+\]\s+", src))
+        table_markers = len(re.findall(r"\[\[TABLE:", src))
+        figure_markers = len(re.findall(r"\[\[FIGURE:", src))
+
+        def _ratio(value: int, target: int) -> float:
+            if target <= 0:
+                return 1.0
+            return min(1.0, float(value) / float(target))
+
+        score = (
+            0.35 * _ratio(chars, max(1, min_chars))
+            + 0.25 * coverage
+            + 0.2 * _ratio(refs_count, min_refs)
+            + 0.1 * _ratio(table_markers, min_tables)
+            + 0.1 * _ratio(figure_markers, min_figures)
+        ) * 100.0
+
+        return {
+            "chars": int(chars),
+            "required_h2_total": int(len(required_tokens)),
+            "required_h2_covered": int(covered),
+            "required_h2_coverage": round(coverage, 4),
+            "missing_required_h2": missing_required_h2,
+            "refs_count": int(refs_count),
+            "table_markers": int(table_markers),
+            "figure_markers": int(figure_markers),
+            "quality_score": round(score, 2),
+        }
+
+    @classmethod
+    def validate_revision_candidate(
+        cls,
+        app_v2,
+        *,
+        candidate_text: str,
+        base_text: str,
+        hard_constraints: dict,
+    ) -> dict:
+        min_chars = max(120, int(hard_constraints.get("min_chars") or 0))
+        required_h2 = [str(x).strip() for x in (hard_constraints.get("required_h2") or []) if str(x).strip()]
+        min_refs = max(0, int(hard_constraints.get("min_refs") or 0))
+        min_tables = max(0, int(hard_constraints.get("min_tables") or 0))
+        min_figures = max(0, int(hard_constraints.get("min_figures") or 0))
+        epsilon = max(0.0, float(hard_constraints.get("epsilon") or 0.0))
+
+        before = cls._revision_candidate_metrics(
+            app_v2,
+            text=base_text,
+            required_h2=required_h2,
+            min_chars=min_chars,
+            min_refs=min_refs,
+            min_tables=min_tables,
+            min_figures=min_figures,
+        )
+        after = cls._revision_candidate_metrics(
+            app_v2,
+            text=candidate_text,
+            required_h2=required_h2,
+            min_chars=min_chars,
+            min_refs=min_refs,
+            min_tables=min_tables,
+            min_figures=min_figures,
+        )
+
+        reasons: list[str] = []
+        if after["chars"] < min_chars:
+            reasons.append(f"chars_below_min:{after['chars']}<{min_chars}")
+        if required_h2 and float(after["required_h2_coverage"]) < 1.0:
+            reasons.append(
+                "required_h2_coverage_insufficient:"
+                + ",".join(str(x) for x in (after.get("missing_required_h2") or [])[:8])
+            )
+        if after["refs_count"] < min_refs:
+            reasons.append(f"refs_below_min:{after['refs_count']}<{min_refs}")
+        if after["table_markers"] < min_tables:
+            reasons.append(f"tables_below_min:{after['table_markers']}<{min_tables}")
+        if after["figure_markers"] < min_figures:
+            reasons.append(f"figures_below_min:{after['figure_markers']}<{min_figures}")
+
+        delta = float(after["quality_score"]) - float(before["quality_score"])
+        if delta < (-epsilon):
+            reasons.append(f"quality_score_regressed:{delta:.2f}<-{epsilon:.2f}")
+
+        return {
+            "passed": len(reasons) == 0,
+            "reasons": reasons,
+            "score_delta": round(delta, 2),
+            "before": before,
+            "after": after,
+            "hard_constraints": {
+                "min_chars": min_chars,
+                "required_h2": required_h2,
+                "min_refs": min_refs,
+                "min_tables": min_tables,
+                "min_figures": min_figures,
+                "epsilon": epsilon,
+            },
+        }
 
     async def generate_stream(self, doc_id: str, request: Request) -> StreamingResponse:
         """Stream generation endpoint delegated to runtime implementation."""
@@ -1004,6 +1160,10 @@ class GenerationService:
         analysis = app_v2._run_message_analysis(session, instruction)
         analysis_instruction = str(analysis.get("rewritten_query") or instruction).strip() or instruction
         model = app_v2.os.environ.get("WRITING_AGENT_REVISE_MODEL", "").strip() or settings.model
+        hard_constraints = dict(
+            app_v2._revision_hard_constraints(session, analysis_instruction, base_text)  # type: ignore[attr-defined]
+            or {}
+        )
 
         decision = app_v2._revision_decision_with_model(
             base_url=settings.base_url,
@@ -1063,6 +1223,7 @@ class GenerationService:
             instruction=analysis_instruction,
             plan_steps=plan_steps,
             text=text,
+            hard_constraints=hard_constraints,
         )
         buf: list[str] = []
         for delta in client.chat_stream(system=system, user=user, temperature=0.25):
@@ -1090,11 +1251,44 @@ class GenerationService:
             current_text=base_text,
             base_text=base_text,
         )
+        validation = self.validate_revision_candidate(
+            app_v2,
+            candidate_text=text,
+            base_text=base_text,
+            hard_constraints=hard_constraints,
+        )
+        if not bool(validation.get("passed")):
+            out = {
+                "ok": 1,
+                "text": base_text,
+                "doc_ir": app_v2._safe_doc_ir_payload(base_text),
+                "applied": False,
+                "revision_meta": {
+                    "ok": False,
+                    "error_code": "E_REVISION_HARD_GATE_REJECTED",
+                    "selection_source": "full_document_fallback",
+                    "reasons": list(validation.get("reasons") or []),
+                    "score_delta": float(validation.get("score_delta") or 0.0),
+                    "validation": validation,
+                },
+            }
+            if revision_status:
+                out["revision_meta"]["selection_status"] = dict(revision_status)
+            return out
         app_v2._set_doc_text(session, text)
         app_v2.store.put(session)
         out = {"ok": 1, "text": text, "doc_ir": session.doc_ir or {}}
+        fallback_meta = {
+            "ok": True,
+            "error_code": "",
+            "selection_source": "full_document_fallback",
+            "reasons": list(validation.get("reasons") or []),
+            "score_delta": float(validation.get("score_delta") or 0.0),
+            "validation": validation,
+        }
         if revision_status:
-            out["revision_meta"] = revision_status
+            fallback_meta["selection_status"] = dict(revision_status)
+        out["revision_meta"] = fallback_meta
         return out
 
 

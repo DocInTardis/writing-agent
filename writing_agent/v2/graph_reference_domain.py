@@ -17,6 +17,30 @@ def _escape_prompt_text(raw: object) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _default_key_points_for_title(title: str, *, section_type: str, is_reference: bool) -> list[str]:
+    if is_reference:
+        return ["来源可核验", "编号与格式规范"]
+    t = str(title or "")
+    if section_type == "intro":
+        return ["研究背景与问题定义", "本文贡献与结构安排"]
+    if section_type == "method":
+        return ["方法流程与关键步骤", "参数设置与实现细节"]
+    if section_type == "conclusion":
+        return ["主要结论归纳", "局限性与后续工作"]
+    if re.search(r"(实验|结果|评估|ablation|benchmark)", t, flags=re.IGNORECASE):
+        return ["实验设置与指标", "结果对比与误差分析"]
+    return ["本节核心问题陈述", "关键论证与结论"]
+
+
+def _default_evidence_queries_for_title(title: str, *, is_reference: bool) -> list[str]:
+    if is_reference:
+        return []
+    t = str(title or "").strip()
+    if not t:
+        return ["核心术语 综述"]
+    return [f"{t} 研究进展", f"{t} 评价指标"]
+
+
 def default_plan_map(
     *,
     sections: list[str],
@@ -53,6 +77,22 @@ def default_plan_map(
         target_row = base_targets.get(sec)
         min_tables = int(target_row.min_tables) if target_row else 0
         min_figures = int(target_row.min_figures) if target_row else 0
+        is_ref = is_reference_section(title)
+        key_points = _default_key_points_for_title(title, section_type=section_type, is_reference=is_ref)
+        evidence_queries = _default_evidence_queries_for_title(title, is_reference=is_ref)
+        figures: list[dict] = []
+        tables: list[dict] = []
+        if re.search(r"(方法|实现|架构|流程|method|implementation|architecture)", title, flags=re.IGNORECASE):
+            figures = [{"type": "flow", "caption": f"{title}流程图"}]
+            min_figures = max(min_figures, 1)
+        if re.search(r"(实验|结果|评估|数据|analysis|result|benchmark)", title, flags=re.IGNORECASE):
+            tables = [{"caption": f"{title}结果对比", "columns": ["指标", "数值"]}]
+            min_tables = max(min_tables, 1)
+        if is_ref:
+            figures = []
+            tables = []
+            min_tables = 0
+            min_figures = 0
         plan[sec] = plan_section_cls(
             title=title,
             target_chars=target,
@@ -60,10 +100,10 @@ def default_plan_map(
             max_chars=max_chars,
             min_tables=min_tables,
             min_figures=min_figures,
-            key_points=[],
-            figures=[],
-            tables=[],
-            evidence_queries=[],
+            key_points=key_points,
+            figures=figures,
+            tables=tables,
+            evidence_queries=evidence_queries,
         )
     return plan
 

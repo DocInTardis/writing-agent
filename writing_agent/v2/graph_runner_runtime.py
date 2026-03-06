@@ -22,6 +22,96 @@ def _runtime_escape_prompt_text(raw: object) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+_WEEKLY_FAST_PLAN_SECTIONS = [
+    "本周工作",
+    "问题与风险",
+    "下周计划",
+    "需协助事项",
+]
+
+_ACADEMIC_FAST_PLAN_SECTIONS = [
+    "摘要",
+    "关键词",
+    "引言",
+    "系统设计与实现",
+    "实验与结果分析",
+    "结论",
+    "参考文献",
+]
+
+
+def _fast_plan_sections_for_instruction(instruction: str) -> list[str]:
+    """Pick fallback sections for fast-plan without leaking weekly templates into academic tasks."""
+    default_sections = [str(x).strip() for x in (_default_outline_from_instruction(instruction) or []) if str(x).strip()]
+    doc_type = _resolve_doc_type_for_prompt(instruction)
+    if doc_type == "weekly":
+        return default_sections or list(_WEEKLY_FAST_PLAN_SECTIONS)
+
+    weekly_tokens = {"this week work", "next week plan", "support needed", "本周工作", "下周计划", "需协助事项"}
+    filtered = [x for x in default_sections if x.lower() not in weekly_tokens]
+    return filtered or list(_ACADEMIC_FAST_PLAN_SECTIONS)
+
+
+def _validate_plan_detail(
+    *,
+    instruction: str,
+    sections: list[str],
+    plan_map: dict,
+) -> tuple[bool, list[str], dict]:
+    reasons: list[str] = []
+    detail_rows: list[dict] = []
+    evidence_total = 0
+    doc_type = _resolve_doc_type_for_prompt(instruction)
+    if doc_type != "academic":
+        return True, reasons, {"doc_type": doc_type}
+
+    method_or_experiment_without_media: list[str] = []
+    for sec in sections:
+        title = _section_title(sec) or sec
+        if _is_reference_section(title):
+            continue
+        plan = plan_map.get(sec)
+        if not plan:
+            reasons.append("plan_detail_missing_section")
+            continue
+        key_points = [str(x).strip() for x in (getattr(plan, "key_points", []) or []) if str(x).strip()]
+        evidence_queries = [str(x).strip() for x in (getattr(plan, "evidence_queries", []) or []) if str(x).strip()]
+        tables = list(getattr(plan, "tables", []) or [])
+        figures = list(getattr(plan, "figures", []) or [])
+        evidence_total += len(evidence_queries)
+        detail_rows.append(
+            {
+                "title": title,
+                "key_points": len(key_points),
+                "evidence_queries": len(evidence_queries),
+                "tables": len(tables),
+                "figures": len(figures),
+            }
+        )
+        if len(key_points) < 2:
+            reasons.append(f"plan_detail_key_points_insufficient:{title}")
+        if re.search(r"(方法|实验|实现|结果|评估|method|experiment|implementation|result)", title, flags=re.IGNORECASE):
+            if not tables and not figures:
+                method_or_experiment_without_media.append(title)
+
+    if evidence_total < 2:
+        reasons.append("plan_detail_evidence_queries_insufficient")
+    if method_or_experiment_without_media:
+        reasons.append(
+            "plan_detail_method_or_experiment_missing_media:"
+            + ",".join(method_or_experiment_without_media[:8])
+        )
+    # De-duplicate while preserving order.
+    uniq_reasons: list[str] = []
+    seen: set[str] = set()
+    for reason in reasons:
+        if reason in seen:
+            continue
+        seen.add(reason)
+        uniq_reasons.append(reason)
+    return len(uniq_reasons) == 0, uniq_reasons, {"doc_type": doc_type, "details": detail_rows, "evidence_total": evidence_total}
+
+
 def run_generate_graph(
     *,
     instruction: str,
@@ -119,6 +209,26 @@ def run_generate_graph(
         row = nonlocal_yield.pop(0)
         yield {"event": "prompt_route", "stage": row.get("stage", ""), "metadata": row.get("metadata", {})}
     _record_phase_timing(run_id, {"phase": "ANALYSIS", "event": "end", "duration_s": time.time() - analysis_start_ts})
+    try:
+        analysis_payload = {
+            "event": "analysis",
+            "topic": str((analysis or {}).get("topic") or ""),
+            "doc_type": str((analysis or {}).get("doc_type") or ""),
+            "audience": str((analysis or {}).get("audience") or ""),
+            "style": str((analysis or {}).get("style") or ""),
+            "keywords": [str(x).strip() for x in ((analysis or {}).get("keywords") or []) if str(x).strip()][:12],
+            "must_include": [str(x).strip() for x in ((analysis or {}).get("must_include") or []) if str(x).strip()][:20],
+            "constraints": [str(x).strip() for x in ((analysis or {}).get("constraints") or []) if str(x).strip()][:20],
+            "confidence": float((analysis or {}).get("_confidence_score") or 0.0),
+            "schema_valid": bool((analysis or {}).get("_schema_valid")),
+            "needs_clarification": bool((analysis or {}).get("_needs_clarification")),
+            "clarification_questions": [
+                str(x).strip() for x in ((analysis or {}).get("_clarification_questions") or []) if str(x).strip()
+            ][:5],
+        }
+        yield analysis_payload
+    except Exception:
+        pass
     analysis_summary = _format_analysis_summary(analysis, fallback=instruction)
     if analysis_summary:
         yield {"event": "delta", "delta": "Analysis completed with structured key points."}
@@ -166,15 +276,7 @@ def run_generate_graph(
     fast_plan = fast_plan_raw in {"1", "true", "yes", "on"}
     if not sections:
         if fast_plan:
-            sections = _default_outline_from_instruction(instruction) or [
-                "摘要",
-                "关键词",
-                "引言",
-                "系统设计与实现",
-                "实验与结果分析",
-                "结论",
-                "参考文献",
-            ]
+            sections = _fast_plan_sections_for_instruction(instruction)
         else:
             plan_list_start = time.time()
             sections = _plan_sections_list_with_model(
@@ -271,11 +373,12 @@ def run_generate_graph(
         plan_map = _default_plan_map(sections=sections, base_targets=base_targets, total_chars=total_chars)
     else:
         plan_detail_start = time.time()
+        plan_instruction = analysis_summary or instruction
         plan_raw = _plan_sections_with_model(
             base_url=settings.base_url,
             model=agg_model,
             title=title,
-            instruction=analysis_summary or instruction,
+            instruction=plan_instruction,
             sections=sections,
             total_chars=total_chars,
             trace_hook=_capture_prompt_trace,
@@ -290,6 +393,64 @@ def run_generate_graph(
             base_targets=base_targets,
             total_chars=total_chars,
         )
+        plan_ok, plan_reasons, plan_meta = _validate_plan_detail(
+            instruction=instruction,
+            sections=sections,
+            plan_map=plan_map,
+        )
+        if not plan_ok:
+            yield {
+                "event": "plan_detail_retry",
+                "reasons": list(plan_reasons),
+                "meta": dict(plan_meta or {}),
+                "attempt": 1,
+            }
+            retry_instruction = (
+                f"{plan_instruction}\n"
+                "请修复规划细化字段：每节至少2条key_points；全文至少2条evidence_queries；"
+                "方法/实验类章节必须至少包含table或figure计划。"
+            )
+            retry_raw = _plan_sections_with_model(
+                base_url=settings.base_url,
+                model=agg_model,
+                title=title,
+                instruction=retry_instruction,
+                sections=sections,
+                total_chars=total_chars,
+                trace_hook=_capture_prompt_trace,
+            )
+            while nonlocal_yield:
+                row = nonlocal_yield.pop(0)
+                yield {"event": "prompt_route", "stage": row.get("stage", ""), "metadata": row.get("metadata", {})}
+            plan_map_retry = _normalize_plan_map(
+                plan_raw=retry_raw,
+                sections=sections,
+                base_targets=base_targets,
+                total_chars=total_chars,
+            )
+            retry_ok, retry_reasons, retry_meta = _validate_plan_detail(
+                instruction=instruction,
+                sections=sections,
+                plan_map=plan_map_retry,
+            )
+            if not retry_ok:
+                reason = retry_reasons[0] if retry_reasons else "plan_detail_validation_failed"
+                quality_snapshot = {
+                    "status": "failed",
+                    "reason": reason,
+                    "plan_detail_reasons": retry_reasons,
+                    "plan_detail_meta": retry_meta,
+                }
+                yield {
+                    "event": "final",
+                    "text": "",
+                    "problems": list(retry_reasons),
+                    "status": "failed",
+                    "failure_reason": reason,
+                    "quality_snapshot": quality_snapshot,
+                }
+                return
+            plan_map = plan_map_retry
     try:
         struct_plan = {"title": title, "total_chars": total_chars, "sections": []}
         for sec in sections:
@@ -642,7 +803,103 @@ def run_generate_graph(
     if strict_json:
         missing = [sec for sec in sections if not (section_text.get(sec) or "").strip()]
         if missing:
-            raise ValueError(f"strict_json: empty sections: {', '.join([_section_title(s) or s for s in missing])}")
+            yield {
+                "event": "strict_json_recovery",
+                "attempt": 1,
+                "missing_sections": [(_section_title(s) or s) for s in missing],
+                "strategy": "targeted_regeneration",
+            }
+            for sec in missing:
+                sec_title = _section_title(sec) or sec
+                plan = plan_map.get(sec)
+                sec_t = targets.get(sec) or SectionTargets(
+                    weight=1.0,
+                    min_paras=config.min_section_paragraphs,
+                    min_chars=800,
+                    max_chars=0,
+                    min_tables=0,
+                    min_figures=0,
+                )
+                model = section_models.get(sec) or main_model
+                if installed and model not in installed:
+                    model = settings.model
+                evidence = evidence_map.get(sec) or {}
+                evidence_summary = str(evidence.get("summary") or "").strip()
+                allowed_urls = evidence.get("allowed_urls") or []
+                parent_title = parent_map.get(sec) or ""
+                sec_label = f"{parent_title} / {sec_title}" if parent_title else sec_title
+                plan_hint = _format_plan_hint(plan)
+                recover_queue: queue.Queue[dict] = queue.Queue()
+                try:
+                    repaired = _generate_section_stream(
+                        base_url=settings.base_url,
+                        model=model,
+                        title=title,
+                        section=sec_label,
+                        parent_section=parent_title,
+                        instruction=instruction,
+                        analysis_summary=analysis_summary or instruction,
+                        evidence_summary=evidence_summary,
+                        allowed_urls=allowed_urls,
+                        plan_hint=plan_hint,
+                        min_paras=max(2, int(sec_t.min_paras or config.min_section_paragraphs)),
+                        min_chars=max(200, int(sec_t.min_chars or 200)),
+                        max_chars=max(0, int(sec_t.max_chars or 0)),
+                        min_tables=max(0, int(sec_t.min_tables or 0)),
+                        min_figures=max(0, int(sec_t.min_figures or 0)),
+                        out_queue=recover_queue,
+                        reference_items=reference_sources,
+                        text_store=text_store,
+                    )
+                    if repaired and str(repaired).strip():
+                        section_text[sec] = str(repaired).strip()
+                except Exception:
+                    pass
+            missing = [sec for sec in sections if not (section_text.get(sec) or "").strip()]
+        if missing:
+            yield {
+                "event": "strict_json_recovery",
+                "attempt": 2,
+                "missing_sections": [(_section_title(s) or s) for s in missing],
+                "strategy": "minimal_fallback_fill",
+            }
+            for sec in missing:
+                sec_t = targets.get(sec) or SectionTargets(
+                    weight=1.0,
+                    min_paras=config.min_section_paragraphs,
+                    min_chars=800,
+                    max_chars=0,
+                    min_tables=0,
+                    min_figures=0,
+                )
+                fallback_text = _fast_fill_section(
+                    sec,
+                    min_paras=max(2, int(sec_t.min_paras or config.min_section_paragraphs)),
+                    min_chars=max(220, min(900, int(sec_t.min_chars or 320))),
+                    min_tables=max(0, int(sec_t.min_tables or 0)),
+                    min_figures=max(0, int(sec_t.min_figures or 0)),
+                )
+                if fallback_text and str(fallback_text).strip():
+                    section_text[sec] = str(fallback_text).strip()
+            missing = [sec for sec in sections if not (section_text.get(sec) or "").strip()]
+        if missing:
+            missing_titles = [(_section_title(s) or s) for s in missing]
+            reason = "strict_json_missing_sections"
+            quality_snapshot = {
+                "status": "failed",
+                "reason": reason,
+                "missing_sections": missing_titles,
+                "strict_json_recovery_attempts": 2,
+            }
+            yield {
+                "event": "final",
+                "text": "",
+                "problems": [reason] + missing_titles,
+                "status": "failed",
+                "failure_reason": f"{reason}:{','.join(missing_titles)}",
+                "quality_snapshot": quality_snapshot,
+            }
+            return
     else:
         for sec in sections:
             if not (section_text.get(sec) or "").strip():

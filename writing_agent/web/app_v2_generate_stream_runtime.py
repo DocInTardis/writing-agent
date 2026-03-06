@@ -74,6 +74,11 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
     def iter_events():
         truncate_reason_codes: set[str] = set()
+        trace_context: dict[str, object] = {
+            "route_path": "",
+            "fallback_trigger": "",
+            "fallback_recovered": False,
+        }
 
         def _with_reason_codes(payload: dict) -> dict:
             out = dict(payload or {})
@@ -81,8 +86,25 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                 out["truncate_reason_codes"] = sorted(truncate_reason_codes)
             return out
 
-        def _with_terminal(payload: dict) -> dict:
+        def _with_trace_context(payload: dict) -> dict:
             out = dict(payload or {})
+            merged_trace = dict(trace_context)
+            existing_trace = out.get("trace_context")
+            if isinstance(existing_trace, dict):
+                merged_trace.update({k: v for k, v in existing_trace.items() if v not in (None, "")})
+            out["trace_context"] = merged_trace
+            meta = out.get("graph_meta")
+            if isinstance(meta, dict):
+                merged_meta = dict(meta)
+                meta_trace = merged_meta.get("trace_context")
+                if isinstance(meta_trace, dict):
+                    merged_trace.update({k: v for k, v in meta_trace.items() if v not in (None, "")})
+                merged_meta["trace_context"] = dict(merged_trace)
+                out["graph_meta"] = merged_meta
+            return out
+
+        def _with_terminal(payload: dict) -> dict:
+            out = _with_trace_context(dict(payload or {}))
             meta = out.get("graph_meta") if isinstance(out.get("graph_meta"), dict) else {}
             status_raw = str(out.get("status") or meta.get("terminal_status") or "success").strip().lower()
             status = status_raw if status_raw in {"success", "failed", "interrupted"} else "success"
@@ -490,6 +512,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                 "on",
             }
             if use_route_graph and "run_generate_graph_dual_engine" in globals():
+                trace_context["route_path"] = "route_graph"
                 if route_graph_metrics_domain.should_inject_route_graph_failure(phase="generate_stream"):
                     raise RuntimeError("E_INJECTED_ROUTE_GRAPH_FAILURE")
                 out = run_generate_graph_dual_engine(
@@ -553,7 +576,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         }
                         if graph_meta:
                             payload["graph_meta"] = graph_meta
-                        yield emit("final", _with_reason_codes(payload))
+                        yield emit("final", _with_terminal(payload))
                         _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
                         _record_route_metric(
                             "route_graph_success",
@@ -602,6 +625,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         )
                         return
             else:
+                trace_context["route_path"] = "legacy_graph"
                 gen = run_generate_graph(
                     instruction=instruction,
                     current_text=graph_current_text,
@@ -669,6 +693,8 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         if last_section_at is not None and time.time() - last_section_at > section_stall_s:
                             raise TimeoutError("section stalled")
         except Exception as e:
+            trace_context["fallback_trigger"] = route_graph_metrics_domain.extract_error_code(e, default="E_GRAPH_FAILED")
+            trace_context["fallback_recovered"] = False
             if isinstance(e, TimeoutError) or "timeout" in str(e).lower() or "stalled" in str(e).lower():
                 truncate_reason_codes.add("timeout_fallback")
             _record_route_metric(
@@ -706,6 +732,8 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     elif event.get("event") == "result":
                         final_text = event.get("text", "")
                 if final_text:
+                    trace_context["route_path"] = "single_pass_stream"
+                    trace_context["fallback_recovered"] = True
                     failover_meta = {
                         "path": "single_pass_stream",
                         "trace_id": "",
@@ -747,6 +775,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         fallback_recovered=True,
                     )
             except Exception as ee:
+                trace_context["fallback_recovered"] = False
                 _record_route_metric(
                     "fallback_failed",
                     path="single_pass_stream",
@@ -757,6 +786,9 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                 yield emit("error", {"message": f"generation failed: {e}; fallback failed: {ee}"})
         if (final_text is None or len(final_text.strip()) < 20) and not skip_insufficient_failover:
             truncate_reason_codes.add("insufficient_output_fallback")
+            if not str(trace_context.get("fallback_trigger") or "").strip():
+                trace_context["fallback_trigger"] = "E_TEXT_INSUFFICIENT"
+            trace_context["fallback_recovered"] = False
             _record_route_metric(
                 "graph_insufficient",
                 path="route_graph" if use_route_graph else "legacy_graph",
@@ -782,6 +814,8 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                     elif event.get("event") == "result":
                         final_text = event.get("text", "")
                 if final_text:
+                    trace_context["route_path"] = "single_pass_stream"
+                    trace_context["fallback_recovered"] = True
                     failover_meta = {
                         "path": "single_pass_stream",
                         "trace_id": "",
@@ -826,6 +860,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                         fallback_recovered=True,
                     )
             except Exception as e:
+                trace_context["fallback_recovered"] = False
                 _record_route_metric(
                     "fallback_failed",
                     path="single_pass_stream",

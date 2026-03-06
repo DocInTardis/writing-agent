@@ -312,8 +312,15 @@ def _strip_ack_sections_text(text: str, *, allow_ack: bool) -> str:
 
 
 def _default_outline_from_instruction(text: str) -> list[str]:
-    _ = text
-    # Disabled: default weekly heuristics previously caused planning drift.
+    src = str(text or "")
+    if re.search(r"(周报|weekly|this week|next week)", src, flags=re.IGNORECASE):
+        return [
+            "本周工作",
+            "问题与风险",
+            "下周计划",
+            "需协助事项",
+        ]
+    # Academic/technical intents should not inherit weekly defaults.
     return []
 
 

@@ -127,7 +127,9 @@ def test_generate_keeps_legacy_graph_when_route_graph_disabled(monkeypatch):
     body = resp.json()
     assert body.get("ok") == 1
     assert legacy_called["v"] is True
-    assert "graph_meta" not in body
+    graph_meta = body.get("graph_meta") or {}
+    assert str(graph_meta.get("terminal_status") or "success") == "success"
+    assert graph_meta.get("engine_failover") is False
 
 
 def test_generate_route_graph_enabled_but_quick_edit_shortcut_has_no_graph_meta(monkeypatch):
@@ -199,7 +201,10 @@ def test_generate_route_graph_falls_back_to_single_pass_when_dual_raises(monkeyp
     assert str(body.get("text") or "").strip()
     assert seen["dual"] is True
     assert seen["single"] is True
-    assert "graph_meta" not in body
+    graph_meta = body.get("graph_meta") or {}
+    assert graph_meta.get("engine_failover") is True
+    assert graph_meta.get("needs_review") is True
+    assert str(graph_meta.get("failure_reason") or "").startswith("engine_failover_")
 
 
 def test_generate_stream_uses_route_graph_when_enabled(monkeypatch):
@@ -284,7 +289,8 @@ def test_generate_stream_keeps_legacy_graph_when_route_graph_disabled(monkeypatc
     assert resp.status_code == 200
     assert "event: final" in body
     assert legacy_called["v"] is True
-    assert '"graph_meta"' not in body
+    assert '"graph_meta"' in body
+    assert '"route_path": "legacy_graph"' in body
 
 
 def test_generate_stream_route_graph_falls_back_when_dual_raises(monkeypatch):
@@ -325,7 +331,10 @@ def test_generate_stream_route_graph_falls_back_when_dual_raises(monkeypatch):
 
     assert resp.status_code == 200
     assert "event: final" in body
-    assert '"graph_meta"' not in body
+    assert '"graph_meta"' in body
+    assert '"trace_context"' in body
+    assert '"route_path": "single_pass_stream"' in body
+    assert '"fallback_recovered": true' in body
     assert seen["dual"] is True
     assert seen["single"] is True
 
@@ -477,7 +486,9 @@ def test_generate_route_graph_failure_injection_records_metrics_and_recovers(mon
     body = resp.json()
     assert body.get("ok") == 1
     assert str(body.get("text") or "").strip()
-    assert "graph_meta" not in body
+    graph_meta = body.get("graph_meta") or {}
+    assert graph_meta.get("engine_failover") is True
+    assert graph_meta.get("needs_review") is True
     # Failure is injected before dual engine invocation.
     assert called["dual"] is False
     assert called["single"] is True

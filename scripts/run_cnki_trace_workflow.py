@@ -182,8 +182,10 @@ def run(args: argparse.Namespace) -> int:
     # Force detailed legacy graph stream so planner/section events are available.
     os.environ["WRITING_AGENT_USE_ROUTE_GRAPH"] = "0"
     os.environ["WRITING_AGENT_FAST_GENERATE"] = "0"
+    os.environ["WRITING_AGENT_FAST_PLAN"] = "0"
     os.environ["WRITING_AGENT_FAST_CPU"] = "100"
     os.environ["WRITING_AGENT_FAST_MEM"] = "100"
+    os.environ["WRITING_AGENT_ENFORCE_INSTRUCTION_REQUIREMENTS"] = "1"
     os.environ["WRITING_AGENT_STREAM_EVENT_TIMEOUT_S"] = str(max(120, int(args.stream_timeout_s)))
     os.environ["WRITING_AGENT_STREAM_MAX_S"] = str(max(360, int(args.stream_timeout_s) * 2))
     os.environ["WRITING_AGENT_NONSTREAM_EVENT_TIMEOUT_S"] = str(max(120, int(args.stream_timeout_s)))
@@ -416,6 +418,15 @@ def run(args: argparse.Namespace) -> int:
             "failure_reason": str(final_payload.get("failure_reason") or ""),
             "quality_snapshot": dict(final_payload.get("quality_snapshot") or {}),
         },
+        "fallback_path": {
+            "route_path": str(
+                (final_payload.get("trace_context") or {}).get("route_path")
+                or (final_payload.get("graph_meta") or {}).get("path")
+                or "legacy_graph"
+            ),
+            "fallback_trigger": str((final_payload.get("trace_context") or {}).get("fallback_trigger") or ""),
+            "fallback_recovered": bool((final_payload.get("trace_context") or {}).get("fallback_recovered") is True),
+        },
     }
 
     (run_dir / "stage_summary.json").write_text(
@@ -457,7 +468,7 @@ def run(args: argparse.Namespace) -> int:
         revise_payload = {
             "instruction": revise_instruction,
             "text": current_text,
-            "allow_unscoped_fallback": True,
+            "allow_unscoped_fallback": False,
         }
         revise_resp = client.post(f"/api/doc/{doc_id}/revise", json=revise_payload)
         if revise_resp.status_code != 200:
@@ -563,6 +574,7 @@ def run(args: argparse.Namespace) -> int:
         "quality_rounds_file": str(run_dir / "quality_rounds.json"),
         "final_markdown_file": str(final_md_path),
         "final_docx_file": str(final_docx_path) if final_docx_path.exists() else "",
+        "fallback_path": dict(stage_summary.get("fallback_path") or {}),
     }
     (run_dir / "outcome.json").write_text(json.dumps(outcome, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -577,6 +589,9 @@ def run(args: argparse.Namespace) -> int:
     report_lines.append(f"- 失败原因: `{failure_reason or 'N/A'}`")
     report_lines.append(f"- 文档ID: `{doc_id}`")
     report_lines.append(f"- 最终质量分: `{quality.score}`")
+    report_lines.append(f"- 路由路径: `{(stage_summary.get('fallback_path') or {}).get('route_path') or ''}`")
+    report_lines.append(f"- 降级触发: `{(stage_summary.get('fallback_path') or {}).get('fallback_trigger') or 'N/A'}`")
+    report_lines.append(f"- 是否恢复: `{bool((stage_summary.get('fallback_path') or {}).get('fallback_recovered') is True)}`")
     report_lines.append("")
     report_lines.append("## 1. 对标来源（知网标题）")
     report_lines.append("")

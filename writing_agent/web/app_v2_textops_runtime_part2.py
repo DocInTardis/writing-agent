@@ -80,6 +80,7 @@ EXPORTED_FUNCTIONS = [
     "_extract_heading_candidates_from_text",
     "_heading_candidates_for_revision",
     "_postprocess_output_text",
+    "_revision_hard_constraints",
     "_citation_style_from_session",
     "_strict_doc_format_enabled",
     "_strict_citation_verify_enabled",
@@ -706,6 +707,50 @@ def _resolve_min_chars(session, instruction: str, text: str) -> int:
     if _is_longform_academic_intent(instruction, text, session=session):
         return 2800
     return 320
+
+
+def _revision_hard_constraints(session, instruction: str, text: str) -> dict:
+    prefs = (getattr(session, "generation_prefs", {}) or {}) if session is not None else {}
+    required_h2 = [str(x).strip() for x in (getattr(session, "template_required_h2", []) or []) if str(x).strip()]
+    if not required_h2:
+        required_h2 = _extract_required_sections_from_instruction(instruction)
+
+    min_chars = _resolve_min_chars(session, instruction, text)
+    try:
+        min_refs = int((prefs or {}).get("min_reference_count") or 0)
+    except Exception:
+        min_refs = 0
+    if min_refs <= 0 and _is_longform_academic_intent(instruction, text, session=session):
+        min_refs = 8
+
+    try:
+        min_tables = int((prefs or {}).get("min_tables") or 0)
+    except Exception:
+        min_tables = 0
+    try:
+        min_figures = int((prefs or {}).get("min_figures") or 0)
+    except Exception:
+        min_figures = 0
+
+    source = f"{instruction}\n{text}".lower()
+    if ("表" in source or "table" in source) and min_tables <= 0:
+        min_tables = 1
+    if ("图" in source or "figure" in source) and min_figures <= 0:
+        min_figures = 1
+
+    try:
+        epsilon = float((prefs or {}).get("revision_quality_epsilon") or 3.0)
+    except Exception:
+        epsilon = 3.0
+
+    return {
+        "min_chars": max(120, int(min_chars)),
+        "required_h2": required_h2,
+        "min_refs": max(0, int(min_refs)),
+        "min_tables": max(0, int(min_tables)),
+        "min_figures": max(0, int(min_figures)),
+        "epsilon": max(0.0, float(epsilon)),
+    }
 
 
 def _strip_chatty_tail(text: str) -> str:
