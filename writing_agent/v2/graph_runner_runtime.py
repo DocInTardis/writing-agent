@@ -279,13 +279,21 @@ def run_generate_graph(
             sections = _fast_plan_sections_for_instruction(instruction)
         else:
             plan_list_start = time.time()
-            sections = _plan_sections_list_with_model(
-                base_url=settings.base_url,
-                model=agg_model,
-                title=title,
-                instruction=analysis_summary or instruction,
-                trace_hook=_capture_prompt_trace,
-            )
+            try:
+                sections = _plan_sections_list_with_model(
+                    base_url=settings.base_url,
+                    model=agg_model,
+                    title=title,
+                    instruction=analysis_summary or instruction,
+                    trace_hook=_capture_prompt_trace,
+                )
+            except Exception as exc:
+                sections = _fast_plan_sections_for_instruction(instruction)
+                yield {
+                    "event": "plan_sections_fallback",
+                    "reason": f"plan_sections_error:{str(exc)[:180]}",
+                    "sections": [(_section_title(s) or s) for s in sections],
+                }
             while nonlocal_yield:
                 row = nonlocal_yield.pop(0)
                 yield {"event": "prompt_route", "stage": row.get("stage", ""), "metadata": row.get("metadata", {})}
