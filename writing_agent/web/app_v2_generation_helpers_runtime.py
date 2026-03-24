@@ -14,7 +14,6 @@ import os
 from pathlib import Path
 import time
 from collections.abc import Iterable
-from functools import wraps
 from urllib.parse import quote
 from urllib.request import Request as UrlRequest, urlopen
 
@@ -50,61 +49,29 @@ from writing_agent.web.model_runtime_support import (
     recommended_stream_timeouts,
     run_with_heartbeat,
 )
+from writing_agent.web.runtime_bridge import build_runtime_skip_names, bind_runtime_namespace, install_exported_functions
 
-_BIND_SKIP_NAMES = {
-    "__builtins__",
-    "__cached__",
-    "__doc__",
-    "__file__",
-    "__loader__",
-    "__name__",
-    "__package__",
-    "__spec__",
-    "_BIND_SKIP_NAMES",
-    "_ORIGINAL_FUNCS",
-    "bind",
-    "install",
-    "_proxy_factory",
-}
+_BIND_SKIP_NAMES = build_runtime_skip_names("_BIND_SKIP_NAMES", "_ORIGINAL_FUNCS", "bind", "install")
 _ORIGINAL_FUNCS: dict[str, object] = {}
 
 
 def bind(namespace: dict) -> None:
-    for key, value in namespace.items():
-        if key in _BIND_SKIP_NAMES:
-            continue
-        if callable(value) and bool(getattr(value, "_wa_runtime_proxy", False)):
-            if str(getattr(value, "_wa_runtime_proxy_target_module", "")) == __name__:
-                original = _ORIGINAL_FUNCS.get(key)
-                if callable(original):
-                    globals()[key] = original
-                continue
-        local = globals().get(key)
-        if key in globals() and local is value:
-            continue
-        globals()[key] = value
-
-
-def _proxy_factory(fn_name: str, namespace: dict):
-    fn = globals()[fn_name]
-
-    @wraps(fn)
-    def _proxy(*args, **kwargs):
-        bind(namespace)
-        return fn(*args, **kwargs)
-
-    _proxy._wa_runtime_proxy = True
-    _proxy._wa_runtime_proxy_target_module = __name__
-    _proxy._wa_runtime_proxy_target_name = fn_name
-    return _proxy
+    bind_runtime_namespace(
+        globals(),
+        namespace,
+        skip_names=_BIND_SKIP_NAMES,
+        original_funcs=_ORIGINAL_FUNCS,
+    )
 
 
 def install(namespace: dict) -> None:
-    bind(namespace)
-    for fn_name in EXPORTED_FUNCTIONS:
-        _ORIGINAL_FUNCS.setdefault(fn_name, globals().get(fn_name))
-    for fn_name in EXPORTED_FUNCTIONS:
-        namespace[fn_name] = _proxy_factory(fn_name, namespace)
+    install_exported_functions(
+        globals(),
+        namespace,
+        exported_functions=EXPORTED_FUNCTIONS,
+        bind_fn=bind,
+        original_funcs=_ORIGINAL_FUNCS,
+    )
 
 
 EXPORTED_FUNCTIONS = [

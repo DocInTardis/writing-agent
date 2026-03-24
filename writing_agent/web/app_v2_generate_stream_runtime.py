@@ -15,28 +15,14 @@ from writing_agent.workflows import (
 )
 from writing_agent.workflows.orchestration_backend import record_orchestration_metric
 from writing_agent.web.domains import route_graph_metrics_domain
+from writing_agent.web.runtime_bridge import build_runtime_skip_names, bind_runtime_namespace
 
 
-_BIND_SKIP_NAMES = {
-    "__builtins__",
-    "__cached__",
-    "__doc__",
-    "__file__",
-    "__loader__",
-    "__name__",
-    "__package__",
-    "__spec__",
-    "_BIND_SKIP_NAMES",
-    "bind",
-    "api_generate_stream",
-}
+_BIND_SKIP_NAMES = build_runtime_skip_names("_BIND_SKIP_NAMES", "bind", "api_generate_stream")
 
 
 def bind(namespace: dict) -> None:
-    for key, value in namespace.items():
-        if key in _BIND_SKIP_NAMES:
-            continue
-        globals()[key] = value
+    bind_runtime_namespace(globals(), namespace, skip_names=_BIND_SKIP_NAMES)
 
 
 async def api_generate_stream(doc_id: str, request: Request) -> StreamingResponse:

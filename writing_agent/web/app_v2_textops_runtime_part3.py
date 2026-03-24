@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import time
 import uuid
-from functools import wraps
 from typing import Any
 
 from fastapi import Request
@@ -35,25 +34,13 @@ from writing_agent.web.domains import (
     section_edit_ops_domain,
     version_state_domain,
 )
+from writing_agent.web.runtime_bridge import build_runtime_skip_names, bind_runtime_namespace, install_exported_functions
 from writing_agent.web.text_export import convert_to_latex as _convert_to_latex_base
 from writing_agent.web.text_export import default_title as _default_title_base
 from writing_agent.web.text_export import extract_title as _extract_title_base
 from writing_agent.web.text_export import render_blocks_to_html as _render_blocks_to_html_base
 
-_BIND_SKIP_NAMES = {
-    "__builtins__",
-    "__cached__",
-    "__doc__",
-    "__file__",
-    "__loader__",
-    "__name__",
-    "__package__",
-    "__spec__",
-    "_BIND_SKIP_NAMES",
-    "_proxy_factory",
-    "bind",
-    "install",
-}
+_BIND_SKIP_NAMES = build_runtime_skip_names("_BIND_SKIP_NAMES", "bind", "install")
 
 
 FALLBACK_DEFAULT_SECTIONS = [
@@ -112,30 +99,16 @@ EXPORTED_FUNCTIONS = [
 
 
 def bind(namespace: dict) -> None:
-    for key, value in namespace.items():
-        if key in _BIND_SKIP_NAMES:
-            continue
-        globals()[key] = value
-
-
-def _proxy_factory(fn_name: str, namespace: dict):
-    fn = globals()[fn_name]
-
-    @wraps(fn)
-    def _proxy(*args, **kwargs):
-        bind(namespace)
-        return fn(*args, **kwargs)
-
-    _proxy._wa_runtime_proxy = True
-    _proxy._wa_runtime_proxy_target_module = __name__
-    _proxy._wa_runtime_proxy_target_name = fn_name
-    return _proxy
+    bind_runtime_namespace(globals(), namespace, skip_names=_BIND_SKIP_NAMES)
 
 
 def install(namespace: dict) -> None:
-    bind(namespace)
-    for fn_name in EXPORTED_FUNCTIONS:
-        namespace[fn_name] = _proxy_factory(fn_name, namespace)
+    install_exported_functions(
+        globals(),
+        namespace,
+        exported_functions=EXPORTED_FUNCTIONS,
+        bind_fn=bind,
+    )
 
 
 def _format_reference_items(sources: list[dict[str, Any]]) -> list[str]:

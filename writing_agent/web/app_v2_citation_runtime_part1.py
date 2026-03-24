@@ -5,7 +5,6 @@ This module belongs to `writing_agent.web` in the writing-agent codebase.
 
 from __future__ import annotations
 
-from functools import wraps
 import json
 import os
 import re
@@ -16,77 +15,46 @@ from pathlib import Path
 from urllib.request import Request as UrlRequest, urlopen
 
 from fastapi import HTTPException, Request
+from writing_agent.web.runtime_bridge import (
+    bind_runtime_namespace,
+    build_runtime_skip_names,
+    install_matching_callables,
+    matches_private_local_callable,
+    state_key_matches_prefixes,
+    sync_prefixed_state_from_namespace,
+    sync_prefixed_state_to_namespace,
+)
 
-_BIND_SKIP_NAMES = {
-    "__builtins__",
-    "__cached__",
-    "__doc__",
-    "__file__",
-    "__loader__",
-    "__name__",
-    "__package__",
-    "__spec__",
+_BIND_SKIP_NAMES = build_runtime_skip_names(
     "_BIND_SKIP_NAMES",
     "_STATE_PREFIXES",
+    "_ORIGINAL_FUNCS",
     "bind",
     "install",
-    "_proxy_factory",
     "_sync_state_from_namespace",
     "_sync_state_to_namespace",
     "_is_state_key",
-}
+)
 _STATE_PREFIXES = ("_CITATION_VERIFY_", "_DEBUG_")
 _ORIGINAL_FUNCS: dict[str, object] = {}
 
 def _is_state_key(name: object) -> bool:
-    key = str(name or "")
-    return any(key.startswith(prefix) for prefix in _STATE_PREFIXES)
+    return state_key_matches_prefixes(name, prefixes=_STATE_PREFIXES)
 
 def _sync_state_from_namespace(namespace: dict) -> None:
-    for key, value in namespace.items():
-        if _is_state_key(key):
-            globals()[key] = value
-    for key, value in list(globals().items()):
-        if _is_state_key(key):
-            namespace.setdefault(key, value)
+    sync_prefixed_state_from_namespace(globals(), namespace, prefixes=_STATE_PREFIXES)
 
 def _sync_state_to_namespace(namespace: dict) -> None:
-    for key, value in list(globals().items()):
-        if _is_state_key(key):
-            namespace[key] = value
+    sync_prefixed_state_to_namespace(globals(), namespace, prefixes=_STATE_PREFIXES)
 
 def bind(namespace: dict) -> None:
-    for key, value in namespace.items():
-        if key in _BIND_SKIP_NAMES:
-            continue
-        if callable(value) and bool(getattr(value, "_wa_runtime_proxy", False)):
-            if str(getattr(value, "_wa_runtime_proxy_target_module", "")) == __name__:
-                # Restore original implementation when namespace holds this module's proxy.
-                original = _ORIGINAL_FUNCS.get(key)
-                if callable(original):
-                    globals()[key] = original
-                continue
-        local = globals().get(key)
-        if key in globals() and local is value:
-            continue
-        globals()[key] = value
-    _sync_state_from_namespace(namespace)
-
-def _proxy_factory(fn_name: str, namespace: dict):
-    fn = globals()[fn_name]
-
-    @wraps(fn)
-    def _proxy(*args, **kwargs):
-        bind(namespace)
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            _sync_state_to_namespace(namespace)
-
-    _proxy._wa_runtime_proxy = True
-    _proxy._wa_runtime_proxy_target_module = __name__
-    _proxy._wa_runtime_proxy_target_name = fn_name
-    return _proxy
+    bind_runtime_namespace(
+        globals(),
+        namespace,
+        skip_names=_BIND_SKIP_NAMES,
+        original_funcs=_ORIGINAL_FUNCS,
+        state_from_namespace=_sync_state_from_namespace,
+    )
 
 def _normalize_citation_items(items: object) -> dict[str, Citation]:
     citations: dict[str, Citation] = {}
@@ -974,18 +942,23 @@ def _safe_citation_verify_metrics_payload() -> dict:
     )
 
 def install(namespace: dict) -> None:
-    bind(namespace)
-    _sync_state_to_namespace(namespace)
-    for fn_name, fn in list(globals().items()):
-        if fn_name in {
-            "bind",
-            "install",
-            "_proxy_factory",
-            "_sync_state_from_namespace",
-            "_sync_state_to_namespace",
-            "_is_state_key",
-        }:
-            continue
-        if fn_name.startswith("_") and callable(fn) and str(getattr(fn, "__module__", "")) == __name__:
-            _ORIGINAL_FUNCS.setdefault(fn_name, fn)
-            namespace[fn_name] = _proxy_factory(fn_name, namespace)
+    install_matching_callables(
+        globals(),
+        namespace,
+        bind_fn=bind,
+        predicate=lambda fn_name, fn: matches_private_local_callable(
+            fn_name,
+            fn,
+            module_name=__name__,
+            excluded_names={
+                "bind",
+                "install",
+                "_sync_state_from_namespace",
+                "_sync_state_to_namespace",
+                "_is_state_key",
+            },
+        ),
+        original_funcs=_ORIGINAL_FUNCS,
+        before_install=_sync_state_to_namespace,
+        after_call=_sync_state_to_namespace,
+    )
