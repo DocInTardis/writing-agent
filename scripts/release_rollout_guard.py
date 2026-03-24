@@ -13,22 +13,19 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+
+_safe_int = _report_support.safe_int
+_safe_float = _report_support.safe_float
+_load_json = _report_support.load_json_dict_or_none
+_check_row = _report_support.check_row
+
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 _TRUTHY = {"1", "true", "yes", "on"}
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
 
 
 def _safe_bool(value: Any, default: bool = False) -> bool:
@@ -42,26 +39,6 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
 
 def _is_semver(text: str) -> bool:
     return bool(SEMVER_RE.match(str(text or "").strip()))
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    return raw if isinstance(raw, dict) else None
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str) -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "warn"),
-    }
 
 
 def _normalize_history(store: dict[str, Any]) -> list[dict[str, Any]]:

@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+try:
     from scripts import audit_chain
 except Exception:
     _AUDIT_CHAIN_PATH = Path(__file__).with_name("audit_chain.py")
@@ -24,14 +29,7 @@ except Exception:
     _AUDIT_SPEC.loader.exec_module(audit_chain)
 
 
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "enforce") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "enforce"),
-    }
+_check_row = _report_support.check_row
 
 
 def main() -> int:

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from glob import glob
 from pathlib import Path
 from typing import Any
 
@@ -31,8 +32,12 @@ def load_json_dict_or_none(path: Path) -> dict[str, Any] | None:
 
 
 def latest_report(pattern: str, *, root: Path | None = None) -> Path | None:
-    base = root if root is not None else Path(".")
-    rows = sorted(base.glob(pattern), key=lambda path: path.stat().st_mtime if path.exists() else 0.0)
+    pattern_text = str(pattern or "").strip()
+    if not pattern_text:
+        return None
+    if root is not None and not Path(pattern_text).is_absolute():
+        pattern_text = str(root / pattern_text)
+    rows = sorted((Path(path) for path in glob(pattern_text)), key=lambda path: path.stat().st_mtime if path.exists() else 0.0)
     if not rows:
         return None
     return rows[-1]

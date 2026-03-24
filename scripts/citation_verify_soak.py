@@ -16,19 +16,14 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-
-def _safe_int(value: Any, default: int) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
 
 
-def _safe_float(value: Any, default: float) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
+_safe_int = _report_support.safe_int
+_safe_float = _report_support.safe_float
 
 
 def _percentile(values: list[float], p: float) -> float:

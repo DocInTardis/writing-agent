@@ -33,6 +33,7 @@ def test_latest_report_returns_newest_match(tmp_path: Path) -> None:
     os.utime(newer, (2000, 2000))
 
     assert report_support.latest_report("report_*.json", root=tmp_path) == newer
+    assert report_support.latest_report((tmp_path / "report_*.json").as_posix()) == newer
 
 
 def test_event_helpers_normalize_rows_and_pick_latest_text() -> None:

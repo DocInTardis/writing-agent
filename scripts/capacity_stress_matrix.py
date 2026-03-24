@@ -17,6 +17,16 @@ from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+
+_safe_int = _report_support.safe_int
+_safe_float = _report_support.safe_float
+_load_json = _report_support.load_json_dict_or_none
+
 
 @dataclass
 class StepResult:
@@ -44,30 +54,6 @@ def _run_cmd(*, step_id: str, cmd: list[str], cwd: str = ".", env: dict[str, str
         command=list(cmd),
         cwd=str(cwd),
     )
-
-
-def _safe_int(value: Any, default: int) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
-
-
-def _safe_float(value: Any, default: float) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    return raw if isinstance(raw, dict) else None
 
 
 def _wait_app_ready(base_url: str, *, timeout_s: float) -> None:

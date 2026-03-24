@@ -16,12 +16,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
 
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
+
+_safe_int = _report_support.safe_int
+_check_row = _report_support.check_row
 
 
 def _sha256(path: Path) -> str:
@@ -40,16 +42,6 @@ def _latest_paths(pattern: str, *, limit: int) -> list[Path]:
     if take <= 0:
         return []
     return rows[-take:]
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "warn") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "warn"),
-    }
 
 
 def _canonical_json(payload: dict[str, Any]) -> str:

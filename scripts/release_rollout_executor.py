@@ -18,6 +18,11 @@ from pathlib import Path
 from typing import Any
 from scripts import release_rollout_template_utils as rollout_template_utils
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 VERSION_RE = re.compile(r'__version__\s*=\s*"([^"]+)"')
 _TRUTHY = {"1", "true", "yes", "on"}
@@ -30,17 +35,13 @@ except Exception:
         raise
     audit_chain = importlib.util.module_from_spec(_AUDIT_SPEC)
     _AUDIT_SPEC.loader.exec_module(audit_chain)
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
+
+_safe_int = _report_support.safe_int
+_safe_float = _report_support.safe_float
+_load_json = _report_support.load_json_dict_or_none
+_check_row = _report_support.check_row
+_latest_report = _report_support.latest_report
 
 def _safe_bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, bool):
@@ -53,15 +54,6 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
 def _is_semver(text: str) -> bool:
     return bool(SEMVER_RE.match(str(text or "").strip()))
 
-def _load_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    return raw if isinstance(raw, dict) else None
-
 def _load_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
@@ -71,15 +63,6 @@ def _load_text(path: Path) -> str:
 def _extract_app_version(path: Path) -> str:
     m = VERSION_RE.search(_load_text(path))
     return str(m.group(1)).strip() if m else ""
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str) -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "warn"),
-    }
 
 def _empty_store() -> dict[str, Any]:
     return {
@@ -188,12 +171,6 @@ def _append_history(
     )
     store["history"] = rows[-300:]
     store["updated_at"] = now
-
-def _latest_report(pattern: str) -> Path | None:
-    rows = sorted((Path(p) for p in glob.glob(pattern)), key=lambda p: p.stat().st_mtime if p.exists() else 0.0)
-    if not rows:
-        return None
-    return rows[-1]
 
 def traffic_template_placeholders() -> list[str]:
     return rollout_template_utils.traffic_template_placeholders()
