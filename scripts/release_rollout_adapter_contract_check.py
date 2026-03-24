@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+try:
     from scripts import release_rollout_executor
 except Exception:
     _EXECUTOR_PATH = Path(__file__).with_name("release_rollout_executor.py")
@@ -24,14 +29,8 @@ except Exception:
     _SPEC.loader.exec_module(release_rollout_executor)
 
 
-def _load_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    return raw if isinstance(raw, dict) else None
+_load_json = _report_support.load_json_dict_or_none
+_check_row = _report_support.check_row
 
 
 def _safe_bool(value: Any, default: bool = False) -> bool:
@@ -41,16 +40,6 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
     if not text:
         return bool(default)
     return text in {"1", "true", "yes", "on"}
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "enforce") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "enforce"),
-    }
 
 
 def _validate_adapter_row(

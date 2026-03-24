@@ -13,29 +13,16 @@ import time
 from pathlib import Path
 from typing import Any
 
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    return raw if isinstance(raw, dict) else None
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
 
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
+_load_json = _report_support.load_json_dict_or_none
+_safe_float = _report_support.safe_float
+_safe_int = _report_support.safe_int
+_check_row = _report_support.check_row
 
 
 def _normalize_text(value: Any) -> str:
@@ -60,16 +47,6 @@ def _stable_json_sha256(payload: dict[str, Any] | None) -> str:
     except Exception:
         return ""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "enforce") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "enforce"),
-    }
 
 
 def main() -> int:

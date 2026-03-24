@@ -13,6 +13,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+
+_load_json_dict = _report_support.load_json_dict
+_check_row = _report_support.check_row
+
 
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 _VERSION_RE = re.compile(r'__version__\s*=\s*"([^"]+)"')
@@ -42,26 +51,6 @@ def _load_text(path: Path) -> str:
 def _extract_version(path: Path) -> str:
     m = _VERSION_RE.search(_load_text(path))
     return str(m.group(1)).strip() if m else ""
-
-
-def _load_json_dict(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return raw if isinstance(raw, dict) else {}
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "enforce") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "enforce"),
-    }
 
 
 def _infer_from_version(*, cases: list[dict[str, Any]], to_version: str) -> str:

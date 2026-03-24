@@ -17,37 +17,20 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+
+_safe_int = _report_support.safe_int
+_load_json_dict = _report_support.load_json_dict
+_check_row = _report_support.check_row
+
 
 _FENCE_RE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 _PATH_HINT_RE = re.compile(r"[A-Za-z0-9_.-]+[/\\][A-Za-z0-9_.\-/*\\]+")
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
-
-
-def _load_json_dict(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return raw if isinstance(raw, dict) else {}
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "enforce") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "enforce"),
-    }
 
 
 def _collect_docs(globs_in: list[str]) -> list[Path]:

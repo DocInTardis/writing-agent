@@ -12,6 +12,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+
+_check_row = _report_support.check_row
+
 MOJIBAKE_HINTS = (
     "锟",
     "鈥",
@@ -30,16 +38,6 @@ MOJIBAKE_HINTS = (
     "绗",
     "澶",
 )
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "warn") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "warn"),
-    }
 
 
 def _iter_markdown_files(root: Path) -> list[Path]:

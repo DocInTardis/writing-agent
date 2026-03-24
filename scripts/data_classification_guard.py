@@ -14,19 +14,16 @@ import time
 from pathlib import Path
 from typing import Any
 
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
 
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
+_safe_int = _report_support.safe_int
+_safe_float = _report_support.safe_float
+_check_row = _report_support.check_row
+_load_json_dict = _report_support.load_json_dict
 
 
 def _mask(value: str) -> str:
@@ -36,26 +33,6 @@ def _mask(value: str) -> str:
     if len(text) <= 8:
         return text[:1] + "***" + text[-1:]
     return text[:3] + "***" + text[-2:]
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "enforce") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "enforce"),
-    }
-
-
-def _load_json_dict(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return raw if isinstance(raw, dict) else {}
 
 
 def _collect_files(pattern: str) -> list[Path]:

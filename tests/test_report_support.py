@@ -51,3 +51,29 @@ def test_event_helpers_normalize_rows_and_pick_latest_text() -> None:
     assert report_support.safe_float("bad", 2.0) == 2.0
     assert report_support.safe_int("4") == 4
     assert report_support.safe_int("bad", 7) == 7
+
+
+def test_check_row_supports_keyword_and_positional_calls() -> None:
+    keyword_row = report_support.check_row(
+        check_id="keyword",
+        ok=True,
+        value=1,
+        expect="ok",
+        mode="warn",
+    )
+    positional_row = report_support.check_row("positional", False, 2, "expect", "enforce")
+
+    assert keyword_row == {
+        "id": "keyword",
+        "ok": True,
+        "value": 1,
+        "expect": "ok",
+        "mode": "warn",
+    }
+    assert positional_row == {
+        "id": "positional",
+        "ok": False,
+        "value": 2,
+        "expect": "expect",
+        "mode": "enforce",
+    }

@@ -15,6 +15,16 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+
+_load_json = _report_support.load_json_dict_or_none
+_safe_float = _report_support.safe_float
+_check_row = _report_support.check_row
+
 
 _MAPPINGS: list[dict[str, Any]] = [
     {
@@ -46,23 +56,6 @@ _MAPPINGS: list[dict[str, Any]] = [
         "min_abs_change_to_flag": 0.02,
     },
 ]
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    return raw if isinstance(raw, dict) else None
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
 
 
 def _normalize_text(value: Any) -> str:
@@ -137,16 +130,6 @@ def _drift_direction(*, kind: str, current_value: float, next_value: float) -> s
     if is_max:
         return "relax" if next_value > current_value else "tighten"
     return "relax" if next_value < current_value else "tighten"
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str) -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "warn"),
-    }
 
 
 def main() -> int:

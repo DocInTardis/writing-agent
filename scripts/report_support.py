@@ -71,3 +71,13 @@ def latest_text_field(events: list[dict[str, Any]], key: str) -> str:
         if text:
             return text
     return ""
+
+
+def check_row(check_id: str, ok: bool, value: Any, expect: str, mode: str = "enforce") -> dict[str, Any]:
+    return {
+        "id": str(check_id),
+        "ok": bool(ok),
+        "value": value,
+        "expect": str(expect),
+        "mode": str(mode or "enforce"),
+    }

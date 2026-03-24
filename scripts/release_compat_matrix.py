@@ -13,14 +13,17 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
+
+
+_safe_int = _report_support.safe_int
+_load_json = _report_support.load_json
+_check_row = _report_support.check_row
+
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
 
 
 def _safe_bool(value: Any, default: bool = False) -> bool:
@@ -59,28 +62,6 @@ def _schema_compare(left: str, right: str) -> int | None:
     if lhs > rhs:
         return 1
     return 0
-
-
-def _load_json(path: Path) -> dict[str, Any] | list[Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if isinstance(raw, (dict, list)):
-        return raw
-    return None
-
-
-def _check_row(*, check_id: str, ok: bool, value: Any, expect: str, mode: str = "enforce") -> dict[str, Any]:
-    return {
-        "id": str(check_id),
-        "ok": bool(ok),
-        "value": value,
-        "expect": str(expect),
-        "mode": str(mode or "enforce"),
-    }
 
 
 def _default_state_dict(target_schema: str) -> dict[str, Any]:
