@@ -9,7 +9,7 @@ help:
 	@echo "  install-dev     Install runtime + dev dependencies"
 	@echo "  test            Run test suite"
 	@echo "  build-frontend  Build Svelte frontend assets"
-	@echo "  guards          Run architecture/size/complexity guards"
+	@echo "  guards          Run repo hygiene + architecture/size/complexity guards"
 	@echo "  preflight       Run release preflight checks (quick mode)"
 	@echo "  compile         Compile python modules to verify syntax"
 	@echo "  clean-cache     Remove local python cache directories"
@@ -27,6 +27,7 @@ build-frontend:
 	npm --prefix writing_agent/web/frontend_svelte run build
 
 guards:
+	$(PYTHON) scripts/guard_repo_hygiene.py --config security/repo_hygiene_policy.json --root .
 	$(PYTHON) scripts/guard_file_line_limits.py --config security/file_line_limits.json --root .
 	$(PYTHON) scripts/guard_function_complexity.py --config security/function_complexity_limits.json --root .
 	$(PYTHON) scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json --root .

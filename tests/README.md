@@ -1,17 +1,24 @@
 # Test Layout
 
-## Layering
+## Layers
 
-- `tests/unit/`：纯函数/模块级测试
-- `tests/integration/`：服务集成测试
-- `tests/e2e/`：端到端占位或真实场景测试
-- `tests/export/`：导出专项测试
-- `tests/ui/`：前端与工作台流程测试
+- `tests/unit/`
+  - Fast, isolated tests for pure functions and local modules.
+- `tests/integration/`
+  - Service and API integration tests.
+- `tests/export/`
+  - Export-path verification for Markdown and DOCX behavior.
+- `tests/ui/`
+  - Frontend and workbench flow validation.
+- `tests/e2e/`
+  - End-to-end scenarios that exercise larger product flows.
 
 ## Fixtures
 
-- `tests/fixtures/`：统一测试数据
+- `tests/fixtures/`
+  - Versioned sample inputs, golden files, and reusable datasets.
 
-## Legacy
+## Rule
 
-- `tests/legacy/`：历史脚本化测试，默认不参与 `pytest -q tests`
+Do not keep deprecated or one-off test scripts in the repository.
+If a test is still valuable, promote it into one of the maintained test layers above.

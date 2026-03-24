@@ -1,17 +1,30 @@
 # Scripts Directory
 
-该目录存放命令行脚本，分为两类：
+This directory contains maintained operational tooling only.
 
-- `scripts/*.py`：生产门禁、发布治理、运维检查脚本（可进入 CI）
-- `scripts/dev/*.py`：开发调试脚本（默认不作为正式发布门禁）
+## What Belongs Here
 
-## 常用脚本
+- Guardrails and repository hygiene checks.
+- Release and rollout tooling.
+- Repeatable quality and regression utilities.
+- Supported launchers such as `start.ps1` and `start_desktop.ps1`.
 
-- `release_preflight.py`：发布前综合检查
-- `guard_file_line_limits.py`：文件行数门禁
-- `guard_function_complexity.py`：函数复杂度门禁
-- `guard_architecture_boundaries.py`：分层边界门禁
-- `golden_export_regression.py`：导出链路回归
-- `node_gateway_rollout_monitor.py`：Node AI Gateway 灰度指标汇总
+## Common Scripts
 
-- `run_quality_suite.py`???????/???/?? + Ruff + Vulture ???????
+- `guard_repo_hygiene.py`
+  - Prevents generated output roots and scratch files from leaking into the repository.
+- `guard_file_line_limits.py`
+  - Enforces file size limits for large Python modules.
+- `guard_function_complexity.py`
+  - Enforces function complexity thresholds.
+- `guard_architecture_boundaries.py`
+  - Enforces web-layer dependency boundaries.
+- `release_preflight.py`
+  - Runs the main release readiness checks.
+- `run_quality_suite.py`
+  - Aggregates key quality checks for local development.
+
+## Placement Rule
+
+Do not keep one-off repair scripts, local debugging helpers, or machine-specific utilities here.
+If a script is not maintained, not tested, or not part of a repeatable workflow, it should stay out of the repository.

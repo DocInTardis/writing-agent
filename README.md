@@ -19,15 +19,22 @@
 |- engine/                              # Rust editor/render core workspace
 |- gateway/                             # Node AI gateway
 |- tests/                               # Unit / integration / e2e / ui tests
+|  `- fixtures/                         # Versioned sample inputs and golden fixtures
 |- scripts/                             # Guardrails, release, and ops scripts
 |- docs/                                # Architecture and runbooks
 |- security/                            # Policy-as-code configs
 |- templates/                           # Prompt and few-shot assets
 |- infra/                               # Terraform resources
+|- .data/                               # Local-only runtime outputs (ignored)
 |- pyproject.toml                       # Python packaging metadata
 |- requirements.txt                     # Runtime dependencies
 `- requirements-dev.txt                 # Development dependencies
 ```
+
+Local hygiene rules:
+- Generated run outputs belong in `.data/out/`.
+- Versioned evaluation inputs belong in `tests/fixtures/`.
+- Temporary scratch roots such as `deliverables/`, `artifacts/`, `tmp/`, and `data/` are local-only and must not be committed.
 
 ## Quick Start
 
@@ -92,6 +99,7 @@ Equivalent direct commands:
 python scripts/guard_file_line_limits.py --config security/file_line_limits.json --root .
 python scripts/guard_function_complexity.py --config security/function_complexity_limits.json --root .
 python scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json --root .
+python scripts/guard_repo_hygiene.py --config security/repo_hygiene_policy.json --root .
 python scripts/release_preflight.py --quick
 ```
 

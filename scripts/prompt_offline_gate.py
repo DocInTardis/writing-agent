@@ -132,7 +132,7 @@ def evaluate(rows: list[dict[str, Any]], *, registry: PromptRegistry) -> EvalSum
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Offline prompt quality gate evaluator")
-    parser.add_argument("--input", default="deliverables/prompt_offline_eval_cases.jsonl")
+    parser.add_argument("--input", default="tests/fixtures/prompt_offline_eval_cases.jsonl")
     parser.add_argument("--registry", default=".data/prompt_registry/prompts.json")
     parser.add_argument("--out", default=".data/out/prompt_offline_eval_gate.json")
     args = parser.parse_args(argv)

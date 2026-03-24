@@ -44,7 +44,7 @@ Run release preflight quick path:
 ## 4) Operations Essentials
 
 - Runbook: `docs/OPERATIONS_RUNBOOK.md`
-- Decoupling refactor execution plan: `docs/DECOUPLING_REFACTOR_EXECUTION_PLAN_20260225_CN.md`
+- Structure guide: `docs/PROJECT_STRUCTURE.md`
 - Release engineering: `docs/RELEASE_ENGINEERING.md`
 - Release and rollback execution: `docs/RELEASE_AND_ROLLBACK.md`
 - Privacy and classification controls: `docs/PRIVACY_DATA_CLASSIFICATION.md`

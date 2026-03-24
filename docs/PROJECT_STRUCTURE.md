@@ -1,73 +1,113 @@
 # Project Structure Guide
 
-本文档用于帮助新开发者快速定位代码职责，避免在超大文件中迷失。
+This document defines where code, fixtures, policies, and generated outputs belong.
+It is intentionally strict: the repository should stay source-first, while runtime output stays local.
 
-## 1. Core Runtime
+## 1. Top-Level Layout
 
-- `writing_agent/v2/`
-- 职责：写作编排主流程、文档解析/格式化、RAG 调用链路。
-- 关键入口：
-- `writing_agent/v2/graph_runner.py`
-- `writing_agent/v2/doc_format.py`
-- `writing_agent/v2/rag/retrieve.py`
-
-## 2. State Engine
-
-- `writing_agent/state_engine/`
-- 职责：图执行定义、双引擎调度、checkpoint 与 replay。
-- 关键入口：
-- `writing_agent/state_engine/graph_contracts.py`
-- `writing_agent/state_engine/dual_engine.py`
-
-## 3. Web/API Layer
-
+- `writing_agent/`
+  - Main Python application code.
+  - Keep business logic here, not in `scripts/`.
 - `writing_agent/web/`
-- 职责：FastAPI 路由、服务边界、领域逻辑、前端资源。
-- 分层约定：
-- `web/api/*_flow.py`：仅编排请求流程与响应组装
-- `web/services/*_service.py`：业务服务接口层
-- `web/domains/*_domain.py`：纯领域逻辑
-- `web/frontend_svelte/`：前端工作台
+  - FastAPI entrypoints, service layer, domain layer, templates, and frontend assets.
+- `writing_agent/v2/`
+  - Core generation graph, prompt routing, document transformation, and RAG runtime.
+- `engine/`
+  - Rust workspace for editor and rendering support.
+- `gateway/`
+  - Node-based AI gateway.
+- `scripts/`
+  - Guardrails, release tooling, operational checks, and automation entrypoints.
+- `tests/`
+  - Unit, integration, export, UI, and end-to-end tests.
+- `tests/fixtures/`
+  - Versioned sample inputs, golden outputs, and small evaluation datasets.
+- `security/`
+  - Policy-as-code JSON files that drive guards and release checks.
+- `docs/`
+  - Architecture notes, runbooks, and process documentation.
+- `templates/`
+  - Prompt templates and reusable writing assets.
+- `infra/`
+  - Infrastructure definitions such as Terraform.
 
-## 4. LLM Adapter Layer
+## 2. Web Layer Boundaries
 
-- `writing_agent/llm/`
-- 职责：provider 抽象、模型路由、AI SDK 语义适配、工具调用协议。
-- 关键入口：
-- `writing_agent/llm/factory.py`
-- `writing_agent/llm/model_router.py`
-- `writing_agent/llm/ai_sdk_adapter.py`
+- `writing_agent/web/app.py`, `writing_agent/web/app_v2.py`
+  - Composition roots only.
+  - Responsible for route registration, bootstrapping, and runtime wiring.
+- `writing_agent/web/api/`
+  - Request orchestration and response shaping.
+  - Should not own durable business rules.
+- `writing_agent/web/services/`
+  - Cross-cutting business services used by API flows.
+- `writing_agent/web/domains/`
+  - Pure domain logic and decision rules.
 
-## 5. Document Export Layer
+These layer boundaries are enforced by `security/architecture_boundaries.json` and `scripts/guard_architecture_boundaries.py`.
 
-- `writing_agent/document/`
-- 职责：导出构建、样式/目录/字段写入、HTML 到 DOCX 转换。
-- 关键入口：
-- `writing_agent/document/v2_report_docx.py`
-- `writing_agent/document/docx_builder.py`
+## 3. What Gets Versioned
 
-## 6. Quality & Governance
+Keep these in git:
 
-- `scripts/`：检查与发布流程
-- `security/`：门禁配置
-- `tests/`：测试体系（unit/integration/e2e）
+- Source code.
+- Tests and fixtures.
+- Policies under `security/`.
+- Documentation under `docs/`.
+- Stable templates and sample assets that are required to run tests or the product.
 
-## 7. Node Gateway
+Do not keep these in git:
 
-- `gateway/node_ai_gateway/`：Node 侧 AI Gateway（Vercel AI SDK 官方 npm 包）
-- 职责：提供 `stream-text` / `generate-object` / `tool-call` HTTP 边界能力
+- One-off run outputs.
+- Temporary dumps and scratch files.
+- Local caches, logs, checkpoints, and metrics.
+- Ad hoc exported documents created during debugging.
 
-## 8. Legacy Scripts
+## 4. Local-Only Output Roots
 
-- `scripts/dev/`：历史调试脚本
-- `tests/legacy/`：历史脚本化测试（默认不参与 CI 主测试）
+Generated local output belongs in these ignored locations:
 
-## 9. Reading Order (Recommended)
+- `.data/`
+  - Runtime caches, metrics, checkpoints, audit files, exports, and local state.
+- `.data/out/`
+  - Default home for generated reports from scripts and preflight tools.
+- `artifacts/`
+  - Temporary local artifacts when a script explicitly needs a scratch root.
+- `tmp/`
+  - Disposable investigation dumps.
+- `data/`
+  - Local-only scratch data, never versioned.
+
+The repository must not track files under `deliverables/`, `artifacts/`, `tmp/`, `data/`, or `_misc_root/`.
+
+## 5. Placement Rules
+
+- If a file is needed by a test or a reproducible evaluation, put it in `tests/fixtures/`.
+- If a file is only the result of a run, put it in `.data/out/`.
+- If a script is production-facing or used in CI, keep it in `scripts/`.
+- If a script is ad hoc, one-off, or machine-specific, do not keep it in the repository unless it is promoted into maintained tooling.
+- If a document records process or architecture, keep it in `docs/`.
+- If a JSON file acts as policy input to a guard, keep it in `security/`.
+
+## 6. Repository Hygiene Guards
+
+Run these checks before merging structural changes:
+
+```powershell
+python scripts/guard_repo_hygiene.py --config security/repo_hygiene_policy.json --root .
+python scripts/guard_file_line_limits.py --config security/file_line_limits.json --root .
+python scripts/guard_function_complexity.py --config security/function_complexity_limits.json --root .
+python scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json --root .
+```
+
+`guard_repo_hygiene.py` is the first line of defense against root clutter and committed generated output.
+
+## 7. Recommended Reading Order
 
 1. `writing_agent/launch.py`
 2. `writing_agent/web/app_v2.py`
-3. `writing_agent/web/api/generation_flow.py`
-4. `writing_agent/web/services/generation_service.py`
-5. `writing_agent/v2/graph_runner.py`
-6. `writing_agent/v2/rag/retrieve.py`
+3. `writing_agent/web/api/`
+4. `writing_agent/web/services/`
+5. `writing_agent/web/domains/`
+6. `writing_agent/v2/graph_runner.py`
 7. `writing_agent/document/v2_report_docx.py`

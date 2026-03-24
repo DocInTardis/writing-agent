@@ -16,6 +16,8 @@ Thumbs.db
 *.pdf
 .data/
 artifacts/
+deliverables/
+data/
 dist/
 build/
 *.egg-info/
@@ -33,13 +35,4 @@ writing_agent/web/frontend_svelte/dist/
 tmp/
 .claude/
 .qoder/
-_misc_root/.venv/
-_misc_root/.pytest_cache/
-_misc_root/*.png
-_misc_root/*.log
-_misc_root/*.err
-_misc_root/*.out
-_misc_root/*.txt
-_misc_root/*.py
-_misc_root/.tmp_*
 *.corrupt_backup

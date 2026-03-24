@@ -10,7 +10,8 @@ Param(
 
 $ErrorActionPreference = "Stop"
 
-Set-Location $PSScriptRoot
+$repoRoot = Split-Path $PSScriptRoot -Parent
+Set-Location $repoRoot
 
 function Load-CodexAuthOpenAIKey {
   if ($env:WRITING_AGENT_OPENAI_API_KEY -and $env:WRITING_AGENT_OPENAI_API_KEY.Trim().Length -gt 0) {

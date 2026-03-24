@@ -1,0 +1,23 @@
+{
+  "description": "Prevent generated outputs and scratch roots from polluting the repository.",
+  "forbidden_roots": [
+    "deliverables",
+    "artifacts",
+    "tmp",
+    "data"
+  ],
+  "forbidden_globs": [
+    ".tmp_*",
+    "*.corrupt_backup",
+    "_misc_root/**",
+    "scripts/dev/**",
+    "tests/legacy/**",
+    "writing_agent/web/frontend_poc/**",
+    "docs/**/*.json",
+    "docs/**/*.docx",
+    ".pytest_cache/**",
+    ".ruff_cache/**",
+    "**/__pycache__/**"
+  ],
+  "allow": []
+}
