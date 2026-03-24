@@ -12,48 +12,18 @@ import time
 from pathlib import Path
 from typing import Any
 
-
-def _load_json(path: Path) -> dict[str, Any] | list[Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if isinstance(raw, (dict, list)):
-        return raw
-    return None
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
 
 
-def _latest_report(pattern: str) -> Path | None:
-    rows = sorted(Path(".").glob(pattern), key=lambda p: p.stat().st_mtime if p.exists() else 0.0)
-    if not rows:
-        return None
-    return rows[-1]
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
-
-
-def _normalize_events(raw: dict[str, Any] | list[Any] | None) -> list[dict[str, Any]]:
-    if isinstance(raw, list):
-        return [row for row in raw if isinstance(row, dict)]
-    if isinstance(raw, dict):
-        events = raw.get("events")
-        if isinstance(events, list):
-            return [row for row in events if isinstance(row, dict)]
-    return []
+_load_json = _report_support.load_json
+_latest_report = _report_support.latest_report
+_safe_float = _report_support.safe_float
+_safe_int = _report_support.safe_int
+_normalize_events = _report_support.normalize_events
+_latest_text_field = _report_support.latest_text_field
 
 
 def _recent_events(events: list[dict[str, Any]], *, now_ts: float, window_minutes: float) -> list[dict[str, Any]]:
@@ -68,17 +38,6 @@ def _recent_events(events: list[dict[str, Any]], *, now_ts: float, window_minute
             rows.append(event)
     rows.sort(key=lambda row: _safe_float(row.get("ts"), 0.0))
     return rows
-
-
-def _latest_text_field(events: list[dict[str, Any]], key: str) -> str:
-    target = str(key or "").strip()
-    if not target:
-        return ""
-    for row in reversed(events):
-        value = str((row if isinstance(row, dict) else {}).get(target) or "").strip()
-        if value:
-            return value
-    return ""
 
 
 def _status_is_webhook_failure(status: str) -> bool:

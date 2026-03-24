@@ -13,57 +13,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
-def _load_json(path: Path) -> dict[str, Any] | list[Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if isinstance(raw, (dict, list)):
-        return raw
-    return None
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
 
 
-def _latest_report(pattern: str) -> Path | None:
-    rows = sorted(Path(".").glob(pattern), key=lambda p: p.stat().st_mtime if p.exists() else 0.0)
-    if not rows:
-        return None
-    return rows[-1]
-
-
-def _normalize_events(raw: dict[str, Any] | list[Any] | None) -> list[dict[str, Any]]:
-    if isinstance(raw, list):
-        return [row for row in raw if isinstance(row, dict)]
-    if isinstance(raw, dict):
-        events = raw.get("events")
-        if isinstance(events, list):
-            return [row for row in events if isinstance(row, dict)]
-    return []
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
+_load_json = _report_support.load_json
+_latest_report = _report_support.latest_report
+_normalize_events = _report_support.normalize_events
+_safe_float = _report_support.safe_float
+_latest_event_text = _report_support.latest_text_field
 
 
 def _first_non_empty(*values: Any) -> str:
     for value in values:
         text = str(value or "").strip()
-        if text:
-            return text
-    return ""
-
-
-def _latest_event_text(events: list[dict[str, Any]], key: str) -> str:
-    target = str(key or "").strip()
-    if not target:
-        return ""
-    for row in reversed(events):
-        text = str((row if isinstance(row, dict) else {}).get(target) or "").strip()
         if text:
             return text
     return ""

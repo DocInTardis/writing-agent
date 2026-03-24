@@ -34,29 +34,17 @@ except Exception:
     audit_chain = importlib.util.module_from_spec(_AUDIT_SPEC)
     _AUDIT_SPEC.loader.exec_module(audit_chain)
 
-
-def _load_json(path: Path) -> dict[str, Any] | list[Any] | None:
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if isinstance(raw, (dict, list)):
-        return raw
-    return None
+try:
+    from scripts import report_support as _report_support
+except Exception:
+    import report_support as _report_support
 
 
-def _load_json_dict(path: Path) -> dict[str, Any]:
-    raw = _load_json(path)
-    return raw if isinstance(raw, dict) else {}
-
-
-def _latest_report(pattern: str) -> Path | None:
-    rows = sorted(Path(".").glob(pattern), key=lambda p: p.stat().st_mtime if p.exists() else 0.0)
-    if not rows:
-        return None
-    return rows[-1]
+_load_json = _report_support.load_json
+_load_json_dict = _report_support.load_json_dict
+_latest_report = _report_support.latest_report
+_safe_float = _report_support.safe_float
+_safe_int = _report_support.safe_int
 
 
 def _latest_incident_report() -> Path | None:
@@ -402,20 +390,6 @@ def _apply_oncall_target(
         "feishu_webhook_url": out_feishu,
         "email_to": out_email,
     }, applied
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return int(default)
 
 
 def _rule_time_match(rule: dict[str, Any], incident: dict[str, Any]) -> bool:
