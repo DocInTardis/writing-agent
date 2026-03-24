@@ -1,0 +1,73 @@
+{
+  "count": 3,
+  "png_renderer_available": true,
+  "avg_score": 100.0,
+  "min_score": 100,
+  "max_score": 100,
+  "passed_count": 3,
+  "review_count": 0,
+  "drop_count": 0,
+  "items": [
+    {
+      "index": 1,
+      "type": "architecture",
+      "caption": "智能写作代理系统总体架构",
+      "png_rendered": true,
+      "score": 100,
+      "grade": "A",
+      "passed": true,
+      "recommendation": "keep",
+      "breakdown": {
+        "type": 25,
+        "caption": 20,
+        "data": 40,
+        "consistency": 11,
+        "render": 15
+      },
+      "issues": [],
+      "svg_file": "D:\\codes\\writing-agent\\deliverables\\codex_full_monitored_20260315_011701\\figure_assets\\fig_001_智能写作代理系统总体架构.svg",
+      "png_file": "D:\\codes\\writing-agent\\deliverables\\codex_full_monitored_20260315_011701\\figure_assets\\fig_001_智能写作代理系统总体架构.png"
+    },
+    {
+      "index": 2,
+      "type": "flow",
+      "caption": "核心业务流程流程图",
+      "png_rendered": true,
+      "score": 100,
+      "grade": "A",
+      "passed": true,
+      "recommendation": "keep",
+      "breakdown": {
+        "type": 25,
+        "caption": 20,
+        "data": 40,
+        "consistency": 11,
+        "render": 15
+      },
+      "issues": [],
+      "svg_file": "D:\\codes\\writing-agent\\deliverables\\codex_full_monitored_20260315_011701\\figure_assets\\fig_002_核心业务流程流程图.svg",
+      "png_file": "D:\\codes\\writing-agent\\deliverables\\codex_full_monitored_20260315_011701\\figure_assets\\fig_002_核心业务流程流程图.png"
+    },
+    {
+      "index": 3,
+      "type": "architecture",
+      "caption": "智能写作代理关键技术实现架构",
+      "png_rendered": true,
+      "score": 100,
+      "grade": "A",
+      "passed": true,
+      "recommendation": "keep",
+      "breakdown": {
+        "type": 25,
+        "caption": 20,
+        "data": 40,
+        "consistency": 11,
+        "render": 15
+      },
+      "issues": [],
+      "svg_file": "D:\\codes\\writing-agent\\deliverables\\codex_full_monitored_20260315_011701\\figure_assets\\fig_003_智能写作代理关键技术实现架构.svg",
+      "png_file": "D:\\codes\\writing-agent\\deliverables\\codex_full_monitored_20260315_011701\\figure_assets\\fig_003_智能写作代理关键技术实现架构.png"
+    }
+  ],
+  "output_dir": "D:\\codes\\writing-agent\\deliverables\\codex_full_monitored_20260315_011701\\figure_assets"
+}

@@ -11,7 +11,28 @@ from typing import Any, Iterable
 
 import requests
 
+
+def _http_pool_size() -> int:
+    raw = str(os.environ.get("WRITING_AGENT_HTTP_POOL_SIZE", "16")).strip()
+    try:
+        return max(4, int(raw))
+    except Exception:
+        return 16
+
+
+def _build_session() -> requests.Session:
+    session = requests.Session()
+    try:
+        pool = _http_pool_size()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=0)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+    except Exception:
+        pass
+    return session
+
 from writing_agent.llm.provider import LLMProvider, LLMProviderError
+from writing_agent.llm.providers._sse import iter_sse_data_lines, repair_utf8_mojibake
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -20,6 +41,7 @@ class OpenAICompatibleProvider(LLMProvider):
         self.api_key = str(api_key)
         self.model = str(model)
         self.timeout_s = float(timeout_s)
+        self._session = _build_session()
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -27,11 +49,22 @@ class OpenAICompatibleProvider(LLMProvider):
             "Content-Type": "application/json",
         }
 
+    @staticmethod
+    def _raise_http_error(resp: requests.Response) -> None:
+        if resp.status_code < 400:
+            return
+        status = int(resp.status_code)
+        if status in {401, 403}:
+            raise LLMProviderError(f"api_auth_failed:http_{status}")
+        if status in {408, 429, 500, 502, 503, 504}:
+            raise LLMProviderError(f"api_provider_unreachable:http_{status}")
+        raise LLMProviderError(f"api_provider_request_failed:http_{status}")
+
     def is_running(self) -> bool:
         if not self.base_url or not self.api_key:
             return False
         try:
-            resp = requests.get(f"{self.base_url}/models", headers=self._headers(), timeout=self.timeout_s)
+            resp = self._session.get(f"{self.base_url}/models", headers=self._headers(), timeout=self.timeout_s)
             return resp.status_code < 500
         except Exception:
             return False
@@ -50,8 +83,8 @@ class OpenAICompatibleProvider(LLMProvider):
             payload.update(options)
         url = f"{self.base_url}/chat/completions"
         try:
-            resp = requests.post(url, headers=self._headers(), json=payload, timeout=self.timeout_s)
-            resp.raise_for_status()
+            resp = self._session.post(url, headers=self._headers(), json=payload, timeout=self.timeout_s)
+            self._raise_http_error(resp)
             raw = resp.json()
         except Exception as exc:
             raise LLMProviderError(str(exc)) from exc
@@ -60,7 +93,7 @@ class OpenAICompatibleProvider(LLMProvider):
         if isinstance(choices, list) and choices:
             first = choices[0] if isinstance(choices[0], dict) else {}
             msg = first.get("message") if isinstance(first.get("message"), dict) else {}
-            return str(msg.get("content") or "")
+            return repair_utf8_mojibake(str(msg.get("content") or ""))
         return ""
 
     def chat_stream(
@@ -84,13 +117,9 @@ class OpenAICompatibleProvider(LLMProvider):
             payload.update(options)
         url = f"{self.base_url}/chat/completions"
         try:
-            with requests.post(url, headers=self._headers(), json=payload, timeout=self.timeout_s, stream=True) as resp:
-                resp.raise_for_status()
-                for raw in resp.iter_lines(decode_unicode=True):
-                    line = str(raw or "").strip()
-                    if not line or not line.startswith("data:"):
-                        continue
-                    data = line[5:].strip()
+            with self._session.post(url, headers=self._headers(), json=payload, timeout=self.timeout_s, stream=True) as resp:
+                self._raise_http_error(resp)
+                for data in iter_sse_data_lines(resp):
                     if data == "[DONE]":
                         break
                     try:
@@ -102,7 +131,7 @@ class OpenAICompatibleProvider(LLMProvider):
                         continue
                     delta = choices[0].get("delta") if isinstance(choices[0], dict) else {}
                     if isinstance(delta, dict):
-                        text = str(delta.get("content") or "")
+                        text = repair_utf8_mojibake(str(delta.get("content") or ""))
                         if text:
                             yield text
         except Exception as exc:
@@ -113,8 +142,8 @@ class OpenAICompatibleProvider(LLMProvider):
         payload = {"model": em_model, "input": str(prompt or "")}
         url = f"{self.base_url}/embeddings"
         try:
-            resp = requests.post(url, headers=self._headers(), json=payload, timeout=self.timeout_s)
-            resp.raise_for_status()
+            resp = self._session.post(url, headers=self._headers(), json=payload, timeout=self.timeout_s)
+            self._raise_http_error(resp)
             raw = resp.json()
         except Exception as exc:
             raise LLMProviderError(str(exc)) from exc

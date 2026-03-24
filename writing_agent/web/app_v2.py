@@ -4,32 +4,34 @@ This module belongs to `writing_agent.web` in the writing-agent codebase.
 """
 
 from __future__ import annotations
-import io
+
 import json
 import logging
 import os
 import queue
 import re
-import shutil
 import sqlite3
 import subprocess
 import threading
 import time
-import traceback
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from difflib import SequenceMatcher
-from dataclasses import dataclass
-from typing import Iterable
 from pathlib import Path
-from urllib.parse import quote, urlsplit, urlunsplit
-from urllib.request import Request as UrlRequest, urlopen
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
-from fastapi.responses import FileResponse
+
+from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from writing_agent.quality.ai_rate import estimate_ai_rate
+from writing_agent.quality.plagiarism import compare_against_references
+from writing_agent.models import Citation
+from writing_agent.v2.doc_format import parse_report_text
+from writing_agent.v2.figure_render import render_figure_svg
+from writing_agent.v2.rag.crossref import search_crossref
+from writing_agent.v2.rag.openalex import search_openalex
+from writing_agent.web.block_edit import apply_block_edit
+from writing_agent.web.html_sanitize import sanitize_html
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -37,21 +39,17 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
 from writing_agent.document import ExportPrefs, V2ReportDocxExporter
-from writing_agent.agents.citations import CitationAgent
-from writing_agent.models import Citation, CitationStyle
-from writing_agent.llm import OllamaClient, OllamaError, get_default_provider, get_ollama_settings
-from writing_agent.storage import InMemoryStore, VersionNode
-from writing_agent.mcp_client import fetch_mcp_resource
-from writing_agent.web.html_sanitize import sanitize_html
-from writing_agent.web.block_edit import apply_block_edit
-from writing_agent.web.generation_lock import DocGenerationState
+from writing_agent.llm import OllamaClient, get_ollama_settings
+from writing_agent.observability import get_bridge
+from writing_agent.storage import InMemoryStore
 from writing_agent.web.domains import (
     citation_alert_domain,
     citation_render_domain,
     doc_state_domain,
-    export_settings_domain,
     export_quality_domain,
+    export_settings_domain,
     export_structure_domain,
     fallback_content_domain,
     heading_candidates_domain,
@@ -59,10 +57,11 @@ from writing_agent.web.domains import (
     heading_glue_domain,
     instruction_requirements_domain,
     length_target_domain,
+    plagiarism_domain,
     prefs_analysis_domain,
     prefs_extract_domain,
-    plagiarism_domain,
     revision_edit_runtime_domain,
+    route_graph_metrics_domain,
     section_edit_ops_domain,
     version_state_domain,
 )
@@ -79,45 +78,9 @@ from writing_agent.web.generate_request import (
     try_format_only_update as _try_format_only_update_base,
     try_handle_format_only_request as _try_handle_format_only_request_base,
 )
-from writing_agent.web.text_export import (
-    convert_to_latex as _convert_to_latex_base,
-    default_title as _default_title_base,
-    esc_html as _esc_base,
-    extract_title as _extract_title_base,
-    render_blocks_to_html as _render_blocks_to_html_base,
-)
-from writing_agent.v2.doc_format import parse_report_text, _split_heading_glue as _split_heading_glue_v2
-from writing_agent.v2.doc_ir import (
-    from_dict as doc_ir_from_dict,
-    from_text as doc_ir_from_text,
-    to_dict as doc_ir_to_dict,
-    to_parsed as doc_ir_to_parsed,
-    to_text as doc_ir_to_text,
-    apply_ops as doc_ir_apply_ops,
-    Operation as DocIROperation,
-    diff_blocks as doc_ir_diff,
-    build_index as doc_ir_build_index,
-    render_block_text as doc_ir_render_block_text,
-)
-from writing_agent.v2.figure_render import render_figure_svg
-from writing_agent.v2.graph_runner import (
-    GenerateConfig,
-    run_generate_graph,
-    run_generate_graph_dual_engine,
-    _sanitize_output_text,
-    _merge_sections_text,
-    _generic_fill_paragraph,
-    _format_reference_items,
-    _is_reference_section,
-    _plan_title,
-)
-from writing_agent.v2.rust_bridge import try_rust_docx_export, try_rust_import
-from writing_agent.v2.rag.arxiv import download_arxiv_pdf, search_arxiv
-from writing_agent.v2.rag.crossref import search_crossref
-from writing_agent.v2.rag.openalex import search_openalex
-from writing_agent.quality.plagiarism import compare_against_references
-from writing_agent.quality.ai_rate import estimate_ai_rate
-from writing_agent.observability import get_bridge
+from writing_agent.web.generation_lock import DocGenerationState
+
+
 def _start_ollama_serve() -> None:
     creationflags = 0
     if os.name == "nt":
@@ -267,16 +230,35 @@ def _record_stream_timing(*, total_s: float, max_gap_s: float) -> None:
     data["runs"] = runs[-30:]
     _save_stream_metrics(data)
 from writing_agent.web import app_v2_generation_helpers_runtime as _generation_helpers_runtime
+
 _generation_helpers_runtime.install(globals())
 
+from writing_agent.v2.graph_runner import (
+    GenerateConfig,
+    _format_reference_items,
+    _generic_fill_paragraph,
+    _is_reference_section,
+    _merge_sections_text,
+    _plan_title,
+    _sanitize_output_text,
+    run_generate_graph,
+    run_generate_graph_dual_engine,
+)
+from writing_agent.v2.doc_ir import Operation as DocIROperation
+from writing_agent.v2.doc_ir import apply_ops as doc_ir_apply_ops
+from writing_agent.v2.doc_ir import build_index as doc_ir_build_index
+from writing_agent.v2.doc_ir import diff_blocks as doc_ir_diff
+from writing_agent.v2.doc_ir import from_dict as doc_ir_from_dict
+from writing_agent.v2.doc_ir import from_text as doc_ir_from_text
+from writing_agent.v2.doc_ir import render_block_text as doc_ir_render_block_text
+from writing_agent.v2.doc_ir import to_dict as doc_ir_to_dict
+from writing_agent.v2.doc_ir import to_parsed as doc_ir_to_parsed
+from writing_agent.v2.doc_ir import to_text as doc_ir_to_text
 from writing_agent.v2.rag.index import RagIndex
 from writing_agent.v2.rag.search import search_papers
-from writing_agent.v2.rag.retrieve import retrieve_context
-from writing_agent.v2.rag.search import build_rag_context, search_papers
 from writing_agent.v2.rag.store import RagStore
-from writing_agent.v2.rag.user_library import UserLibrary, _extract_text
-from writing_agent.v2.rag import search_arxiv
-from writing_agent.v2.template_parse import prepare_template_file, parse_template_file
+from writing_agent.v2.rag.user_library import UserLibrary
+
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 def _static_mtime(path: Path) -> float:
@@ -355,6 +337,11 @@ _CITATION_VERIFY_ALERT_EVENTS_PATH = DATA_DIR / "citation_verify_alert_events.js
 _CITATION_VERIFY_ALERT_EVENTS_LOCK = threading.Lock()
 _CITATION_VERIFY_METRICS_TRENDS_PATH = DATA_DIR / "citation_verify_metrics_trends.json"
 _CITATION_VERIFY_METRICS_TRENDS_LOCK = threading.Lock()
+_CITATION_VERIFY_METRICS_TRENDS_CACHE_ROWS: list[dict] | None = None
+_CITATION_VERIFY_METRICS_TRENDS_CACHE_PATH = ""
+_CITATION_VERIFY_METRICS_TRENDS_CACHE_MTIME_NS = -1
+_CITATION_VERIFY_METRICS_TRENDS_DIRTY = False
+_CITATION_VERIFY_METRICS_TRENDS_LAST_WRITE_AT = 0.0
 _CITATION_VERIFY_ALERT_NOTIFY_STATE: dict[str, object] = {
     "severity": "ok",
     "signature": "",
@@ -814,7 +801,7 @@ def root() -> RedirectResponse:
     session.generation_prefs = {
         "purpose": "毕业设计/课程报告",
         "quality_profile": "academic_cnki_default",
-        "figure_types": ["flow", "er", "sequence", "bar", "line"],
+        "figure_types": ["flow", "architecture", "er", "sequence", "bar", "line", "pie", "timeline"],
         "table_types": ["summary", "metrics", "compare"],
         "min_reference_count": 8,
         "min_h2_count": 3,
@@ -877,10 +864,13 @@ def workbench_page(request: Request, doc_id: str) -> HTMLResponse:
     resp.headers["Cache-Control"] = "no-store"
     return resp
 from writing_agent.web import app_v2_forwarders_runtime as _forwarders_runtime
+
 _forwarders_runtime.install(globals())
 
-from writing_agent.web import app_v2_citation_runtime_part1 as _citation_runtime_part1
-from writing_agent.web import app_v2_citation_runtime_part2 as _citation_runtime_part2
+from writing_agent.web import (
+    app_v2_citation_runtime_part1 as _citation_runtime_part1,
+    app_v2_citation_runtime_part2 as _citation_runtime_part2,
+)
 
 _citation_runtime_part1.install(globals())
 _citation_runtime_part2.install(globals())
@@ -890,22 +880,27 @@ def api_doc_delete(doc_id: str) -> dict:
 
     return doc_delete(doc_id)
 from writing_agent.web import app_v2_export_intent_runtime as _export_intent_runtime
+
 _export_intent_runtime.install(globals())
 
 _ANALYSIS_INFLIGHT: dict[str, float] = {}
 _ANALYSIS_LOCK = threading.Lock()
 
-from writing_agent.web import app_v2_textops_runtime_part1 as _textops_runtime_part1
-from writing_agent.web import app_v2_textops_runtime_part2 as _textops_runtime_part2
+from writing_agent.web import (
+    app_v2_textops_runtime_part1 as _textops_runtime_part1,
+    app_v2_textops_runtime_part2 as _textops_runtime_part2,
+    app_v2_textops_runtime_part3 as _textops_runtime_part3,
+)
 
 _textops_runtime_part1.install(globals())
 _textops_runtime_part2.install(globals())
+_textops_runtime_part3.install(globals())
 
 _HEADING_EQUIV_ALIASES: dict[str, set[str]] = heading_equivalence_domain.HEADING_EQUIV_ALIASES
 
 _FAST_REPORT_SECTIONS = ["背景", "本周工作", "下周计划", "风险与需协助", "风险与协助", "风险与需支持"]
 
-# === 鐗堟湰鏍?API ===
+# === ??? API ===
 
 _FLOW_ROUTERS_REGISTERED = False
 

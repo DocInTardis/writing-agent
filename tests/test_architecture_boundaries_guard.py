@@ -71,6 +71,17 @@ def test_architecture_guard_allows_allowlisted_edge(tmp_path: Path) -> None:
     assert result["violation_count"] == 0
 
 
+def test_architecture_guard_globstar_matches_root_level_layer_file(tmp_path: Path) -> None:
+    _write(tmp_path / "pkg" / "api" / "routes.py", "from pkg.app import app\n")
+    _write(tmp_path / "pkg" / "app.py", "app = object()\n")
+    policy = _policy()
+    policy["include"] = ["pkg/**/*.py"]
+    policy["layers"]["api"]["path_patterns"] = ["pkg/api/**/*.py"]
+    result = evaluate(tmp_path, policy)
+    assert result["ok"] is False
+    assert result["violation_count"] == 1
+
+
 def test_repo_architecture_policy_is_valid_and_green() -> None:
     root = Path(__file__).resolve().parents[1]
     policy = load_policy(root / "security" / "architecture_boundaries.json")

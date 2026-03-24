@@ -194,7 +194,7 @@ def test_generate_uses_session_text_when_request_text_is_empty(monkeypatch):
 
     def _fake_graph(**kwargs):
         seen["current_text"] = str(kwargs.get("current_text") or "")
-        yield {"event": "final", "text": "# Kept\n\n## A\nok", "problems": []}
+        yield {"event": "final", "text": "# Kept\n\n## A\nthis is long enough to skip fallback generation", "problems": []}
 
     monkeypatch.setattr(app_v2, "run_generate_graph", _fake_graph)
 

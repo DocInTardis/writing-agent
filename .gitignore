@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tmp/
 .coverage
 coverage.xml
 htmlcov/
@@ -28,6 +29,8 @@ writing_agent/web/frontend_svelte/dist/
 .env
 .env.*
 !.env.example
+.tmp_*
+tmp/
 .claude/
 .qoder/
 _misc_root/.venv/

@@ -3,6 +3,7 @@ import os
 import re
 import zipfile
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from types import SimpleNamespace
 
 from docx import Document
@@ -10,6 +11,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from fastapi.testclient import TestClient
 
 import writing_agent.web.app_v2 as app_v2
+from writing_agent.v2.figure_render import export_rendered_figure_assets, figure_png_renderer_available
 
 
 def _create_session(client: TestClient) -> str:
@@ -129,6 +131,10 @@ def test_export_docx_strict_validation():
     assert any("Results" in p for p in paragraphs)
     assert any("Metrics Summary" in p for p in paragraphs)
     assert any("Flow Chart" in p for p in paragraphs)
+    if figure_png_renderer_available():
+        assert len(doc.inline_shapes) >= 1
+    else:
+        assert any("\u56fe\u50cf\u751f\u6210\u5931\u8d25" in p for p in paragraphs)
 
     tables = doc.tables
     assert len(tables) >= 1
@@ -291,7 +297,7 @@ def test_docx_export_supports_dynamic_toc_when_clickable_disabled(monkeypatch) -
     client = TestClient(app_v2.app)
     doc_id = _create_session(client)
     payload = {
-        "text": "# 鏍囬\n\n## 绗竴绔?缁\n\n姝ｆ枃\n\n### 1.1 鑳屾櫙\n\n姝ｆ枃",
+        "text": "# ??\n\n## ??? ??\n\n??\n\n### 1.1 ??\n\n??",
         "generation_prefs": {"include_cover": True, "include_toc": True, "page_numbers": True, "export_gate_policy": "off"},
     }
     save = client.post(f"/api/doc/{doc_id}/save", json=payload)
@@ -646,3 +652,74 @@ def test_docx_export_uses_fallback_when_first_validation_fails(monkeypatch) -> N
     resp = _download_docx(client, doc_id)
     assert resp.headers.get("X-Docx-Repair") == "fallback_no_toc_header_pagenum"
     assert calls["n"] >= 2
+
+
+def test_export_rendered_figure_assets_writes_manifest_and_files(tmp_path) -> None:
+    text = "\n\n".join(
+        [
+            "# Sample Report",
+            "## Results",
+            '[[FIGURE:{"type":"flow","caption":"Flow Chart","data":{"nodes":["Start","Process","End"]}}]]',
+        ]
+    )
+    out_dir = tmp_path / "figure_assets"
+    manifest = export_rendered_figure_assets(text, out_dir)
+    assert manifest.get("count") == 1
+    assert Path(manifest.get("output_dir") or out_dir).exists()
+    manifest_file = out_dir / "manifest.json"
+    assert manifest_file.exists()
+    item = (manifest.get("items") or [])[0]
+    svg_path = Path(str(item.get("svg_file") or ""))
+    assert svg_path.exists()
+    assert "<svg" in svg_path.read_text(encoding="utf-8")
+    if figure_png_renderer_available():
+        assert bool(item.get("png_rendered")) is True
+        png_path = Path(str(item.get("png_file") or ""))
+        assert png_path.exists()
+        assert png_path.stat().st_size > 0
+    else:
+        assert bool(item.get("png_rendered")) is False
+        assert str(item.get("png_file") or "") == ""
+
+
+
+def test_docx_export_preserves_misplaced_figure_after_references_heading() -> None:
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    text = "\n".join(
+        [
+            "# Title",
+            "",
+            "## Method",
+            "",
+            "Main body paragraph before references.",
+            "",
+            '[[FIGURE:{"type":"architecture","caption":"Architecture Before References","data":{"nodes":["A","B","C"],"edges":[["A","B"],["B","C"]]}}]]',
+            "",
+            "## References",
+            "",
+            "Misplaced body paragraph after references heading.",
+            "",
+            '[[FIGURE:{"type":"flow","caption":"Flow After References","data":{"nodes":["Start","Step","End"],"edges":[["Start","Step"],["Step","End"]]}}]]',
+            "",
+            "[1] Doe. Sample Study. Journal, 2024.",
+        ]
+    )
+    payload = {
+        "text": text,
+        "generation_prefs": {"export_gate_policy": "off", "strict_doc_format": False, "strict_citation_verify": False},
+    }
+
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+    resp = _download_docx(client, doc_id)
+    doc = Document(io.BytesIO(resp.content))
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
+    combined = "\n".join(paragraphs)
+
+    assert "Misplaced body paragraph after references heading." in combined
+    assert any("Architecture Before References" in p for p in paragraphs)
+    assert any("Flow After References" in p for p in paragraphs)
+    assert any("[1] Doe. Sample Study. Journal, 2024." in p for p in paragraphs)
+    if figure_png_renderer_available():
+        assert len(doc.inline_shapes) >= 2

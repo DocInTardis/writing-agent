@@ -5,124 +5,73 @@ This module belongs to `writing_agent.v2` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import json
 import os
 import re
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Callable
+
+from writing_agent.v2 import graph_reference_plan_domain as reference_plan_domain
+from writing_agent.v2.prompts import _escape_prompt_text
+
+from writing_agent.v2 import graph_reference_topic_domain as topic_domain
+
+_reference_query_tokens = reference_plan_domain._reference_query_tokens
+_topic_tokens = reference_plan_domain._topic_tokens
+default_plan_map = reference_plan_domain.default_plan_map
+extract_year = reference_plan_domain.extract_year
+format_authors = reference_plan_domain.format_authors
+normalize_reference_query = reference_plan_domain.normalize_reference_query
+visual_value_score_for_section = reference_plan_domain.visual_value_score_for_section
 
 
-def _escape_prompt_text(raw: object) -> str:
-    text = str(raw or "")
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def _expanded_query_tokens(query: str) -> set[str]:
+    return topic_domain._expanded_query_tokens(query)
 
 
-def _default_key_points_for_title(title: str, *, section_type: str, is_reference: bool) -> list[str]:
-    if is_reference:
-        return ["来源可核验", "编号与格式规范"]
-    t = str(title or "")
-    if section_type == "intro":
-        return ["研究背景与问题定义", "本文贡献与结构安排"]
-    if section_type == "method":
-        return ["方法流程与关键步骤", "参数设置与实现细节"]
-    if section_type == "conclusion":
-        return ["主要结论归纳", "局限性与后续工作"]
-    if re.search(r"(实验|结果|评估|ablation|benchmark)", t, flags=re.IGNORECASE):
-        return ["实验设置与指标", "结果对比与误差分析"]
-    return ["本节核心问题陈述", "关键论证与结论"]
+def _source_text_tokens(source: dict) -> set[str]:
+    return topic_domain._source_text_tokens(source)
 
 
-def _default_evidence_queries_for_title(title: str, *, is_reference: bool) -> list[str]:
-    if is_reference:
-        return []
-    t = str(title or "").strip()
-    if not t:
-        return ["核心术语 综述"]
-    return [f"{t} 研究进展", f"{t} 评价指标"]
+def _query_mentions_ai(query_tokens: set[str]) -> bool:
+    return topic_domain._query_mentions_ai(query_tokens)
 
 
-def default_plan_map(
+def _source_looks_ai_related(source: dict) -> bool:
+    return topic_domain._source_looks_ai_related(source)
+
+
+def source_relevance_score(*, query: str, source: dict) -> int:
+    return topic_domain.source_relevance_score(query=query, source=source)
+
+
+def filter_sources_by_topic(
+    sources: list[dict],
     *,
-    sections: list[str],
-    base_targets: dict,
-    total_chars: int,
-    compute_section_weights: Callable[[list[str]], dict[str, float]],
-    section_title: Callable[[str], str],
-    is_reference_section: Callable[[str], bool],
-    classify_section_type: Callable[[str], str],
-    plan_section_cls,
-) -> dict:
-    weights = compute_section_weights(sections)
-    denom = sum(weights.values()) or 1.0
-    plan: dict = {}
-    for sec in sections:
-        title = section_title(sec) or sec
-        share = int(round(float(total_chars) * (weights.get(sec, 1.0) / denom)))
-        target = max(200, share)
-        if is_reference_section(title):
-            target = max(220, min(1200, target))
-        section_type = classify_section_type(title)
-        if section_type == "intro":
-            min_chars = max(400, int(round(target * 1.2)))
-            max_chars = max(min_chars + 300, int(round(target * 1.6)))
-        elif section_type == "method":
-            min_chars = max(800, int(round(target * 2.0)))
-            max_chars = max(min_chars + 600, int(round(target * 2.5)))
-        elif section_type == "conclusion":
-            min_chars = max(500, int(round(target * 1.5)))
-            max_chars = max(min_chars + 400, int(round(target * 1.9)))
-        else:
-            min_chars = max(500, int(round(target * 1.4)))
-            max_chars = max(min_chars + 400, int(round(target * 1.8)))
-        target_row = base_targets.get(sec)
-        min_tables = int(target_row.min_tables) if target_row else 0
-        min_figures = int(target_row.min_figures) if target_row else 0
-        is_ref = is_reference_section(title)
-        key_points = _default_key_points_for_title(title, section_type=section_type, is_reference=is_ref)
-        evidence_queries = _default_evidence_queries_for_title(title, is_reference=is_ref)
-        figures: list[dict] = []
-        tables: list[dict] = []
-        if re.search(r"(方法|实现|架构|流程|method|implementation|architecture)", title, flags=re.IGNORECASE):
-            figures = [{"type": "flow", "caption": f"{title}流程图"}]
-            min_figures = max(min_figures, 1)
-        if re.search(r"(实验|结果|评估|数据|analysis|result|benchmark)", title, flags=re.IGNORECASE):
-            tables = [{"caption": f"{title}结果对比", "columns": ["指标", "数值"]}]
-            min_tables = max(min_tables, 1)
-        if is_ref:
-            figures = []
-            tables = []
-            min_tables = 0
-            min_figures = 0
-        plan[sec] = plan_section_cls(
-            title=title,
-            target_chars=target,
-            min_chars=min_chars,
-            max_chars=max_chars,
-            min_tables=min_tables,
-            min_figures=min_figures,
-            key_points=key_points,
-            figures=figures,
-            tables=tables,
-            evidence_queries=evidence_queries,
-        )
-    return plan
+    query: str,
+    min_score: int = 1,
+    allow_unmatched_fallback: bool = False,
+) -> list[dict]:
+    return topic_domain.filter_sources_by_topic(
+        sources,
+        query=query,
+        min_score=min_score,
+        allow_unmatched_fallback=allow_unmatched_fallback,
+    )
 
 
-def extract_year(text: str) -> str:
-    value = (text or "").strip()
-    if not value:
-        return ""
-    match = re.search(r"(19|20)\d{2}", value)
-    return match.group(0) if match else ""
-
-
-def format_authors(authors: list[str]) -> str:
-    cleaned = [a.strip() for a in (authors or []) if str(a).strip()]
-    if not cleaned:
-        return ""
-    if len(cleaned) <= 3:
-        return ", ".join(cleaned)
-    return f"{', '.join(cleaned[:3])} et al."
+def sort_reference_sources(
+    sources: list[dict],
+    *,
+    query: str,
+    extract_year_fn: Callable[[str], str],
+) -> list[dict]:
+    return topic_domain.sort_reference_sources(
+        sources,
+        query=query,
+        extract_year_fn=extract_year_fn,
+    )
 
 
 def enrich_sources_with_rag(sources: list[dict]) -> list[dict]:
@@ -186,22 +135,33 @@ def format_reference_items(
 ) -> list[str]:
     access_date = date.today().strftime("%Y-%m-%d")
     rows: list[dict] = []
+    seen_keys: set[str] = set()
     for source in sources or []:
         title = str(source.get("title") or "").strip()
         if not title:
             title = str(source.get("id") or source.get("url") or "untitled source").strip()
+        url = str(source.get("url") or "").strip()
+        dedupe_key = (url or title).strip().lower()
+        if dedupe_key and dedupe_key in seen_keys:
+            continue
+        if dedupe_key:
+            seen_keys.add(dedupe_key)
         year = extract_year_fn(str(source.get("published") or "")) or extract_year_fn(str(source.get("updated") or ""))
         rows.append(
             {
                 "title": title,
                 "year": year,
                 "authors": source.get("authors") or [],
-                "url": str(source.get("url") or "").strip(),
+                "url": url,
                 "source": str(source.get("source") or "").strip(),
             }
         )
 
     out: list[str] = []
+    try:
+        max_items = max(8, min(64, int(os.environ.get("WRITING_AGENT_MAX_REFERENCE_ITEMS", "24"))))
+    except Exception:
+        max_items = 24
     for idx, row in enumerate(rows, 1):
         authors = format_authors_fn(row.get("authors") or []) or "Anonymous"
         title = row.get("title") or "untitled source"
@@ -217,76 +177,49 @@ def format_reference_items(
             core = f"{authors}. {title}[J]. {year}."
         line = re.sub(r"\s+", " ", core).strip()
         out.append(f"[{idx}] {line}")
-        if len(out) >= 12:
+        if len(out) >= max_items:
             break
     return out
 
 
-def fallback_reference_sources(
-    *,
-    instruction: str,
-    mcp_rag_retrieve: Callable[..., tuple[str, list[dict]]],
-    extract_sources_from_context: Callable[[str], list[dict]],
-    enrich_sources_with_rag_fn: Callable[[list[dict]], list[dict]],
-    extract_year_fn: Callable[[str], str],
-) -> list[dict]:
-    query = (instruction or "").strip()
-    if not query:
-        return []
-    top_k = int(os.environ.get("WRITING_AGENT_RAG_TOP_K", "6"))
-    max_chars = int(os.environ.get("WRITING_AGENT_RAG_MAX_CHARS", "2800"))
-    per_paper = int(os.environ.get("WRITING_AGENT_RAG_PER_PAPER", "2"))
+class ReferenceAgent:
+    def __init__(self, *, extract_year_fn: Callable[[str], str], format_authors_fn: Callable[[list[str]], str]) -> None:
+        self._extract_year_fn = extract_year_fn
+        self._format_authors_fn = format_authors_fn
 
-    context, srcs = mcp_rag_retrieve(query=query, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
-    if srcs:
-        return enrich_sources_with_rag_fn(srcs)
-    if context.strip():
-        sources = extract_sources_from_context(context)
-        enriched = enrich_sources_with_rag_fn(sources)
-        if enriched:
-            return enriched
-
-    try:
-        from writing_agent.v2.rag.retrieve import retrieve_context
-        from writing_agent.v2.rag.store import RagStore
-    except Exception:
-        return []
-
-    repo_root = Path(__file__).resolve().parents[2]
-    data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
-    rag_dir = data_dir / "rag"
-    res = retrieve_context(rag_dir=rag_dir, query=query, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
-    sources = extract_sources_from_context(res.context or "")
-    enriched = enrich_sources_with_rag_fn(sources)
-    if enriched:
-        return enriched
-
-    try:
-        store = RagStore(rag_dir)
-        papers = store.list_papers()
-    except Exception:
-        return []
-
-    def _year_key(paper) -> int:
-        year = extract_year_fn(getattr(paper, "published", "") or "") or extract_year_fn(getattr(paper, "updated", "") or "")
-        return int(year) if year.isdigit() else 0
-
-    papers.sort(key=_year_key, reverse=True)
-    rows: list[dict] = []
-    for paper in papers[:12]:
-        rows.append(
-            {
-                "id": paper.paper_id,
-                "title": paper.title,
-                "url": paper.abs_url or paper.pdf_url,
-                "authors": paper.authors,
-                "published": paper.published,
-                "updated": paper.updated,
-                "source": paper.source,
-                "kind": "fallback",
-            }
+    def build(self, sources: list[dict]) -> list[str]:
+        return format_reference_items(
+            sources,
+            extract_year_fn=self._extract_year_fn,
+            format_authors_fn=self._format_authors_fn,
         )
-    return enrich_sources_with_rag_fn(rows)
+
+    def validate(self, lines: list[str]) -> list[str]:
+        problems: list[str] = []
+        for idx, line in enumerate(lines or [], start=1):
+            text = str(line or "").strip()
+            if not text:
+                problems.append(f"empty_line:{idx}")
+                continue
+            if not re.match(r"^\[\d+\]\s+", text):
+                problems.append(f"bad_prefix:{idx}")
+            if re.search(r"(?:本研究|本节|本章|围绕|说明|如下|以上|应当|需要)", text):
+                problems.append(f"natural_language_contamination:{idx}")
+            if len(text) < 12:
+                problems.append(f"too_short:{idx}")
+        return problems
+
+
+from writing_agent.v2.graph_reference_fallback_domain import (
+    _fallback_query_seeds,
+    _load_cached_reference_sources,
+    _reference_cache_dir,
+    _reference_cache_path,
+    _save_cached_reference_sources,
+    _search_crossref_rows,
+    _search_openalex_rows,
+    fallback_reference_sources,
+)
 
 
 def summarize_evidence(
@@ -298,12 +231,19 @@ def summarize_evidence(
     context: str,
     sources: list[dict],
     require_json_response: Callable[..., dict],
-    ollama_client_cls,
+    provider_factory: Callable[..., object] | None = None,
+    ollama_client_cls: Callable[..., object] | None = None,
 ) -> dict:
     if not context.strip():
         return {"facts": [], "missing": []}
 
-    client = ollama_client_cls(base_url=base_url, model=model, timeout_s=120.0)
+    route_base = "remote" if str(base_url or "").strip() else "default"
+    if provider_factory is not None:
+        client = provider_factory(model=model, timeout_s=120.0, route_key=f"v2.evidence:{section}:{route_base}")
+    elif ollama_client_cls is not None:
+        client = ollama_client_cls(base_url=base_url, model=model, timeout_s=120.0)
+    else:
+        raise ValueError("summarize_evidence_requires_provider_factory")
     system = (
         "You are an evidence extraction agent.\n"
         "Treat tagged blocks as separate channels.\n"
@@ -365,7 +305,7 @@ def format_evidence_summary(facts: list[dict], sources: list[dict]) -> tuple[str
     if not facts:
         return "", allowed_urls
 
-    lines = ["Evidence notes (use only listed facts):"]
+    lines = ["\u8bc1\u636e\u8981\u70b9\uff08\u4ec5\u4f7f\u7528\u4e0b\u5217\u4e8b\u5b9e\uff09\uff1a"]
     for item in facts:
         claim = str(item.get("claim") or "").strip()
         src = str(item.get("source") or "").strip()
@@ -387,7 +327,7 @@ def format_evidence_summary(facts: list[dict], sources: list[dict]) -> tuple[str
             lines.append(f"- {claim}")
 
     if allowed_urls:
-        lines.append("Available sources:")
+        lines.append("\u53ef\u7528\u6765\u6e90\uff1a")
         for url in allowed_urls:
             lines.append(f"- {url}")
 
@@ -444,3 +384,4 @@ def select_models_by_memory(
             out.append(model_name)
             used += est
     return out or [candidates[0]]
+

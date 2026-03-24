@@ -12,6 +12,40 @@ $ErrorActionPreference = "Stop"
 
 Set-Location $PSScriptRoot
 
+function Load-CodexAuthOpenAIKey {
+  if ($env:WRITING_AGENT_OPENAI_API_KEY -and $env:WRITING_AGENT_OPENAI_API_KEY.Trim().Length -gt 0) {
+    return
+  }
+  try {
+    $authPath = Join-Path $env:USERPROFILE ".codex\auth.json"
+    if (-not (Test-Path $authPath)) { return }
+    $raw = Get-Content $authPath -Raw -ErrorAction Stop
+    if (-not $raw) { return }
+    $obj = $raw | ConvertFrom-Json -ErrorAction Stop
+    $k = [string]$obj.OPENAI_API_KEY
+    if ($k -and $k.Trim().Length -gt 0) {
+      $env:WRITING_AGENT_OPENAI_API_KEY = $k.Trim()
+    }
+  } catch {
+    # keep startup resilient; key can still be supplied via env
+  }
+}
+
+# Force GPT provider/model defaults for this launcher (all runtime stages).
+$env:WRITING_AGENT_LLM_PROVIDER = "openai"
+if (-not $env:WRITING_AGENT_OPENAI_BASE_URL) { $env:WRITING_AGENT_OPENAI_BASE_URL = "https://api.openai.com/v1" }
+Load-CodexAuthOpenAIKey
+$env:WRITING_AGENT_OPENAI_MODEL = "gpt-5.4"
+$env:WRITING_AGENT_MODEL = "gpt-5.4"
+$env:WRITING_AGENT_AGG_MODEL = "gpt-5.4"
+$env:WRITING_AGENT_WORKER_MODELS = "gpt-5.4"
+$env:WRITING_AGENT_DRAFT_MAIN_MODEL = "gpt-5.4"
+$env:WRITING_AGENT_DRAFT_SUPPORT_MODEL = "gpt-5.4"
+$env:WRITING_AGENT_OPENAI_TIMEOUT_S = "180"
+$env:WRITING_AGENT_USE_OLLAMA = "0"
+$env:WRITING_AGENT_RAG_USE_EMBEDDINGS = "0"
+$SkipPull = $true
+
 if (-not $SkipInstall) {
   function Invoke-PipInstall([string]$Index) {
     if ($Index -and $Index.Trim().Length -gt 0) {
@@ -127,10 +161,8 @@ if (-not $SkipPull) {
 
 $env:WRITING_AGENT_HOST = $HostAddress
 $env:WRITING_AGENT_PORT = "$Port"
-if (-not $env:WRITING_AGENT_USE_OLLAMA) { $env:WRITING_AGENT_USE_OLLAMA = "1" }
-if (-not $env:WRITING_AGENT_WORKERS) { $env:WRITING_AGENT_WORKERS = "2" }
-if (-not $env:WRITING_AGENT_WORKER_MODELS) { $env:WRITING_AGENT_WORKER_MODELS = "qwen2.5:1.5b,qwen2.5:3b" }
-if (-not $env:WRITING_AGENT_AGG_MODEL) { $env:WRITING_AGENT_AGG_MODEL = "qwen2.5:7b" }
+if (-not $env:WRITING_AGENT_USE_OLLAMA) { $env:WRITING_AGENT_USE_OLLAMA = "0" }
+if (-not $env:WRITING_AGENT_WORKERS) { $env:WRITING_AGENT_WORKERS = "4" }
 if (-not $env:WRITING_AGENT_ANALYSIS_TIMEOUT_S) { $env:WRITING_AGENT_ANALYSIS_TIMEOUT_S = "45" }
 if (-not $env:WRITING_AGENT_EDIT_PLAN_ENABLE) { $env:WRITING_AGENT_EDIT_PLAN_ENABLE = "1" }
 if (-not $env:WRITING_AGENT_EDIT_PLAN_TIMEOUT_S) { $env:WRITING_AGENT_EDIT_PLAN_TIMEOUT_S = "20" }
@@ -140,12 +172,11 @@ if (-not $env:WRITING_AGENT_EDIT_PLAN_METRICS_PATH) { $env:WRITING_AGENT_EDIT_PL
 if (-not $env:WRITING_AGENT_EDIT_PLAN_METRICS_MAX_BYTES) { $env:WRITING_AGENT_EDIT_PLAN_METRICS_MAX_BYTES = "2097152" }
 if (-not $env:WRITING_AGENT_EXTRACT_TIMEOUT_S) { $env:WRITING_AGENT_EXTRACT_TIMEOUT_S = "20" }
 if (-not $env:WRITING_AGENT_PLAN_TIMEOUT_S) { $env:WRITING_AGENT_PLAN_TIMEOUT_S = "45" }
-if (-not $env:WRITING_AGENT_DRAFT_MAX_MODELS) { $env:WRITING_AGENT_DRAFT_MAX_MODELS = "2" }
-if (-not $env:WRITING_AGENT_DRAFT_MAIN_MODEL) { $env:WRITING_AGENT_DRAFT_MAIN_MODEL = "qwen2.5:1.5b" }
-if (-not $env:WRITING_AGENT_DRAFT_SUPPORT_MODEL) { $env:WRITING_AGENT_DRAFT_SUPPORT_MODEL = "qwen2.5:3b" }
-if (-not $env:WRITING_AGENT_DRAFT_PARALLEL) { $env:WRITING_AGENT_DRAFT_PARALLEL = "0" }
+if (-not $env:WRITING_AGENT_DRAFT_MAX_MODELS) { $env:WRITING_AGENT_DRAFT_MAX_MODELS = "1" }
+if (-not $env:WRITING_AGENT_DRAFT_PARALLEL) { $env:WRITING_AGENT_DRAFT_PARALLEL = "1" }
+if (-not $env:WRITING_AGENT_PER_MODEL_CONCURRENCY) { $env:WRITING_AGENT_PER_MODEL_CONCURRENCY = "3" }
 if (-not $env:WRITING_AGENT_RAG_ENABLED) { $env:WRITING_AGENT_RAG_ENABLED = "1" }
-if (-not $env:WRITING_AGENT_EMBED_MODEL) { $env:WRITING_AGENT_EMBED_MODEL = "bge-m3:latest" }
+if (-not $env:WRITING_AGENT_EMBED_MODEL) { $env:WRITING_AGENT_EMBED_MODEL = "" }
 if (-not $env:WRITING_AGENT_RAG_MAX_CHARS) { $env:WRITING_AGENT_RAG_MAX_CHARS = "6000" }
 if (-not $env:WRITING_AGENT_RAG_TOP_K) { $env:WRITING_AGENT_RAG_TOP_K = "8" }
 if (-not $env:WRITING_AGENT_RAG_PER_PAPER) { $env:WRITING_AGENT_RAG_PER_PAPER = "3" }

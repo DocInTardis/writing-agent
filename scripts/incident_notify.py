@@ -774,6 +774,7 @@ def main() -> int:
     channels: list[dict[str, Any]] = []
     routed_channels: list[str] = []
     dead_letter_path = ""
+    allow_dead_letter_only = bool(args.only_when_escalated and mode != "replay" and not configured_any and not bool(args.strict))
 
     if not should_skip:
         channels, routed_channels = _notify_once(
@@ -802,14 +803,14 @@ def main() -> int:
         ok = True
         reason = "no_escalation"
     elif not channels:
-        ok = False
+        ok = bool(allow_dead_letter_only)
         reason = "no_channel_selected"
     else:
         ok = all(bool(row.get("ok")) for row in channels)
         if not ok:
             reason = "channel_failed"
 
-    if (not ok) and not should_skip:
+    if ((not ok) or (reason == "no_channel_selected" and allow_dead_letter_only)) and not should_skip:
         dead_path = _dead_letter_write(
             dead_letter_dir=dead_letter_dir,
             payload=notify_payload,
@@ -832,6 +833,7 @@ def main() -> int:
         "routed_channels": routed_channels,
         "channels": channels,
         "dead_letter_path": dead_letter_path,
+        "delivery_deferred": bool(reason == "no_channel_selected" and allow_dead_letter_only),
         "oncall_roster": {
             "path": oncall_roster_path.as_posix(),
             "loaded": bool(oncall_roster_raw),

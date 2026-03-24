@@ -1,0 +1,27 @@
+"""Runtime helpers for section segmentation and parallel drafting."""
+
+from __future__ import annotations
+
+from writing_agent.v2 import graph_runner_runtime_segment_config_domain as config_domain
+from writing_agent.v2 import graph_runner_runtime_segment_execute_domain as execute_domain
+from writing_agent.v2 import graph_runner_runtime_segment_plan_domain as plan_domain
+
+_section_runtime_module = config_domain._section_runtime_module
+_meta_firewall_scan = config_domain._meta_firewall_scan
+_is_reference_section = config_domain._is_reference_section
+_generate_section_stream = config_domain._generate_section_stream
+_section_body_len = config_domain._section_body_len
+_section_segment_enabled = config_domain._section_segment_enabled
+_section_segment_threshold_chars = config_domain._section_segment_threshold_chars
+_section_segment_target_chars = config_domain._section_segment_target_chars
+_section_segment_max_segments = config_domain._section_segment_max_segments
+_split_integer_budget = config_domain._split_integer_budget
+_split_list_evenly = config_domain._split_list_evenly
+_is_segment_candidate_title = config_domain._is_segment_candidate_title
+_collect_section_segment_hints = plan_domain._collect_section_segment_hints
+_plan_section_segments = plan_domain._plan_section_segments
+_drain_segment_trace_events = execute_domain._drain_segment_trace_events
+_assemble_section_segment_texts = execute_domain._assemble_section_segment_texts
+_draft_section_with_optional_segments = execute_domain._draft_section_with_optional_segments
+
+__all__ = [name for name in globals() if not name.startswith("__")]

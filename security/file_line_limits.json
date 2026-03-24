@@ -18,6 +18,7 @@
     "writing_agent/document/v2_report_docx.py": 800,
     "scripts/ui_content_validation_runner.py": 1000,
     "scripts/release_preflight.py": 400,
-    "scripts/release_rollout_executor.py": 1100
+    "scripts/release_rollout_executor.py": 1100,
+    "scripts/high_quality_docx_batch.py": 1200
   }
 }

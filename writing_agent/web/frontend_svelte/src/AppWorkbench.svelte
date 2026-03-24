@@ -76,6 +76,7 @@
   let progressStart = 0
   let progressEvents: number[] = []
   let sectionFailures: { section: string; reason: string }[] = []
+  let sectionOriginalitySummary: OriginalitySummary | null = null
   type PendingGenerateConfirmation = {
     requestPayload: Record<string, unknown>
     note: string
@@ -117,6 +118,34 @@
     engine: string
     route_id: string
     route_entry: string
+  }
+  type OriginalityRiskRow = {
+    section: string
+    section_id: string
+    title: string
+    phases: string[]
+    checked_event_count: number
+    failed_event_count: number
+    rewrite_count: number
+    retry_count: number
+    cache_rejected_count: number
+    fast_draft_rejected_count: number
+    latest_passed: boolean
+    max_repeat_sentence_ratio: number
+    max_formulaic_opening_ratio: number
+    max_source_overlap_ratio: number
+  }
+  type OriginalitySummary = {
+    enabled: boolean
+    eventCount: number
+    checkedSectionCount: number
+    failedSectionCount: number
+    failedSectionRatio: number
+    rewriteCount: number
+    retryCount: number
+    cacheRejectedCount: number
+    fastDraftRejectedCount: number
+    rows: OriginalityRiskRow[]
   }
   type WorkbenchSurface = 'chat' | 'library' | 'editor' | 'canvas'
   type WorkspaceMode = 'editor' | 'library' | 'collab'
@@ -436,6 +465,50 @@
     const engine = meta.engine || 'legacy'
     const trace = meta.trace_id ? meta.trace_id.slice(0, 8) : '-'
     return `route=${routeId}; entry=${routeEntry}; engine=${engine}; trace=${trace}`
+  }
+
+  function normalizeOriginalitySummary(raw: unknown): OriginalitySummary | null {
+    if (!raw || typeof raw !== 'object') return null
+    const obj = raw as Record<string, unknown>
+    const rowsRaw = Array.isArray(obj.rows) ? obj.rows : []
+    const rows: OriginalityRiskRow[] = rowsRaw
+      .filter((row) => row && typeof row === 'object')
+      .map((row) => {
+        const item = row as Record<string, unknown>
+        return {
+          section: String(item.section || '').trim(),
+          section_id: String(item.section_id || '').trim(),
+          title: String(item.title || item.section || '').trim(),
+          phases: Array.isArray(item.phases) ? item.phases.map((v) => String(v || '').trim()).filter(Boolean) : [],
+          checked_event_count: Number(item.checked_event_count || 0),
+          failed_event_count: Number(item.failed_event_count || 0),
+          rewrite_count: Number(item.rewrite_count || 0),
+          retry_count: Number(item.retry_count || 0),
+          cache_rejected_count: Number(item.cache_rejected_count || 0),
+          fast_draft_rejected_count: Number(item.fast_draft_rejected_count || 0),
+          latest_passed: Boolean(item.latest_passed ?? true),
+          max_repeat_sentence_ratio: Number(item.max_repeat_sentence_ratio || 0),
+          max_formulaic_opening_ratio: Number(item.max_formulaic_opening_ratio || 0),
+          max_source_overlap_ratio: Number(item.max_source_overlap_ratio || 0)
+        }
+      })
+    return {
+      enabled: Boolean(obj.enabled ?? false),
+      eventCount: Number(obj.event_count || 0),
+      checkedSectionCount: Number(obj.checked_section_count || 0),
+      failedSectionCount: Number(obj.failed_section_count || 0),
+      failedSectionRatio: Number(obj.failed_section_ratio || 0),
+      rewriteCount: Number(obj.rewrite_count || 0),
+      retryCount: Number(obj.retry_count || 0),
+      cacheRejectedCount: Number(obj.cache_rejected_count || 0),
+      fastDraftRejectedCount: Number(obj.fast_draft_rejected_count || 0),
+      rows
+    }
+  }
+
+  function summarizeOriginalitySummary(summary: OriginalitySummary | null) {
+    if (!summary) return '原创性热采样未启用'
+    return `已检查 ${summary.checkedSectionCount} 节 · 风险 ${summary.failedSectionCount} 节 · 重写 ${summary.rewriteCount} 次 · 重试 ${summary.retryCount} 次`
   }
 
   function focusAssistantInput() {
@@ -2700,6 +2773,14 @@
             }
             if (data.text) {
               const txt = String(data.text || '')
+    const qualitySnapshot =
+      data.quality_snapshot && typeof data.quality_snapshot === 'object'
+        ? (data.quality_snapshot as Record<string, unknown>)
+        : null
+    sectionOriginalitySummary = normalizeOriginalitySummary(qualitySnapshot?.section_originality_hot_sample)
+    if (sectionOriginalitySummary) {
+      pushThought('原创性热采样', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
+    }
               sourceText.set(txt)
               lastSavedText = txt
               partialSavedSnapshot = txt
@@ -3304,6 +3385,7 @@
     progressEvents = []
     maxEventGap = 0
     sectionFailures = []
+    sectionOriginalitySummary = null
     pushThought('启动', '开始生成', new Date().toLocaleTimeString())
     aborter = new AbortController()
 
@@ -3485,6 +3567,14 @@
           }
           if (event === 'final') {
             const txt = String(data.text || '')
+            const qualitySnapshot =
+              data.quality_snapshot && typeof data.quality_snapshot === 'object'
+                ? (data.quality_snapshot as Record<string, unknown>)
+                : null
+            sectionOriginalitySummary = normalizeOriginalitySummary(qualitySnapshot?.section_originality_hot_sample)
+            if (sectionOriginalitySummary) {
+              pushThought('原创性热采样', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
+            }
             const graphMeta = normalizeGraphMeta(data.graph_meta)
             const terminalStatusRaw = String(data.status || (data.graph_meta && (data.graph_meta as any).terminal_status) || 'success')
               .trim()
@@ -3718,6 +3808,62 @@
       const msg = err instanceof Error ? err.message : '章节重试失败'
       docStatus.set(`重试失败: ${msg}`)
       pushToast(`章节重试失败: ${msg}`, 'bad')
+    } finally {
+      generating.set(false)
+    }
+  }
+
+  async function reviseRiskSection(section: string) {
+    const id = $docId
+    const target = sanitizeAiInputText(section, { trim: true, maxChars: 120 })
+    if (!id || !target || $generating) return
+    runEditorCommand('commit')
+    await saveDoc().catch(() => {})
+    generating.set(true)
+    docStatus.set(`正在修订${target}`)
+    try {
+      const resp = await fetch(`/api/doc/${id}/revise`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instruction:
+            '仅重写指定章节，降低模板化和重复表达，保留原有论点、证据、引用与章节位置，不要改动其他章节，不要输出解释或元指令。',
+          text: $sourceText || '',
+          doc_ir: $docIr,
+          target_section: target,
+          allow_unscoped_fallback: false
+        })
+      })
+      if (!resp.ok) {
+        throw new Error(await resp.text())
+      }
+      const data = await resp.json()
+      const revisedText = String(data.text || '')
+      const revisionMeta =
+        data.revision_meta && typeof data.revision_meta === 'object'
+          ? (data.revision_meta as Record<string, unknown>)
+          : null
+      if (revisedText) {
+        sourceText.set(revisedText)
+        docStatus.set('已修订')
+        appendChat('system', `已按风险定向修订章节：${target}`)
+      }
+      if (data.doc_ir && typeof data.doc_ir === 'object') {
+        const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
+        docIr.set(normalized)
+        docIrDirty.set(false)
+      } else if (revisedText) {
+        docIrDirty.set(true)
+      }
+      if (revisionMeta) {
+        pushThought('定向修订', `${target} · ${summarizeRevisionStatus(revisionMeta)}`, new Date().toLocaleTimeString())
+      }
+      pushToast(`已完成风险章节修订: ${target}`, 'ok')
+      saveDoc().catch(() => {})
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '修订失败'
+      docStatus.set(`修订失败: ${msg}`)
+      pushToast(`修订失败: ${msg}`, 'bad')
     } finally {
       generating.set(false)
     }
@@ -4238,6 +4384,32 @@
             <div class="failure-row">
               <span>{f.section}</span>
               <button class="btn ghost" on:click={() => retrySection(f.section)}>重试</button>
+            </div>
+          {/each}
+        </section>
+      {/if}
+
+      {#if sectionOriginalitySummary && (sectionOriginalitySummary.checkedSectionCount > 0 || sectionOriginalitySummary.rows.length > 0)}
+        <section class="section-failures originality-panel">
+          <div class="panel-title">原创性风险热区</div>
+          <div class="panel-sub">{summarizeOriginalitySummary(sectionOriginalitySummary)}</div>
+          {#each sectionOriginalitySummary.rows as row}
+            <div class="risk-row">
+              <div>
+                <div class="risk-title">{row.title || row.section}</div>
+                <div class="risk-metrics">
+                  <span>失败 {row.failed_event_count}</span>
+                  <span>重写 {row.rewrite_count}</span>
+                  <span>重试 {row.retry_count}</span>
+                  <span>套话率 {Math.round(row.max_formulaic_opening_ratio * 100)}%</span>
+                </div>
+              </div>
+              <div class="risk-actions">
+                <span class:ok={row.latest_passed} class:bad={!row.latest_passed} class="risk-badge">
+                  {row.latest_passed ? '已通过' : '待处理'}
+                </span>
+                <button class="btn ghost" on:click={() => reviseRiskSection(row.title || row.section)}>定向修订</button>
+              </div>
             </div>
           {/each}
         </section>
@@ -5410,6 +5582,62 @@
     justify-content: space-between;
     align-items: center;
     font-size: 12px;
+  }
+
+  .originality-panel {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.28);
+  }
+
+  .risk-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    padding: 10px 0;
+    border-top: 1px dashed rgba(148, 163, 184, 0.24);
+  }
+
+  .risk-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .risk-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+    color: rgba(15, 23, 42, 0.72);
+    margin-top: 4px;
+  }
+
+  .risk-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .risk-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    background: rgba(255, 255, 255, 0.56);
+  }
+
+  .risk-badge.ok {
+    color: #166534;
+    border-color: rgba(34, 197, 94, 0.32);
+    background: rgba(220, 252, 231, 0.72);
+  }
+
+  .risk-badge.bad {
+    color: #991b1b;
+    border-color: rgba(239, 68, 68, 0.32);
+    background: rgba(254, 226, 226, 0.76);
   }
 
   .doc-stage {
@@ -6746,6 +6974,37 @@
     color: rgba(254, 202, 202, 0.94);
   }
 
+  .originality-panel {
+    background: rgba(95, 62, 14, 0.34);
+    border-color: rgba(251, 191, 36, 0.32);
+    color: #fde68a;
+  }
+
+  .risk-row {
+    border-top-color: rgba(251, 191, 36, 0.22);
+  }
+
+  .risk-metrics {
+    color: rgba(253, 230, 138, 0.78);
+  }
+
+  .risk-badge {
+    background: rgba(17, 24, 39, 0.45);
+    color: rgba(226, 232, 240, 0.92);
+  }
+
+  .risk-badge.ok {
+    color: #bbf7d0;
+    background: rgba(20, 83, 45, 0.46);
+    border-color: rgba(34, 197, 94, 0.28);
+  }
+
+  .risk-badge.bad {
+    color: #fecaca;
+    background: rgba(127, 29, 29, 0.48);
+    border-color: rgba(248, 113, 113, 0.3);
+  }
+
   .panel-title {
     color: #eef5ff;
     letter-spacing: 0.025em;
@@ -7179,11 +7438,18 @@
   }
 
   .workspace.mode-library {
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: 252px minmax(0, 1fr);
   }
 
   .workspace.mode-library .side-panel {
     display: none;
+  }
+
+  .workspace.mode-library .nav-rail {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 0;
+    transition: none;
   }
 
   .library-mode-stage {
@@ -7276,46 +7542,6 @@
   .workspace.mode-collab .nav-rail,
   .workspace.mode-collab .library-command-bar {
     display: none;
-  }
-
-  .workspace.mode-library .nav-rail {
-    width: 72px;
-    padding: 10px 6px;
-    transition: width 0.18s ease;
-  }
-
-  .workspace.mode-library .nav-rail:hover,
-  .workspace.mode-library .nav-rail:focus-within {
-    width: 252px;
-  }
-
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-search,
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-tip,
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-group-head em,
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-summary,
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-tags,
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-time,
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-upload-btn span,
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-reset span,
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .nav-btn span {
-    display: none;
-  }
-
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .rail-library {
-    overflow: hidden;
-  }
-
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card {
-    min-height: auto;
-    padding: 8px;
-  }
-
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-cover {
-    display: none;
-  }
-
-  .workspace.mode-library .nav-rail:not(:hover):not(:focus-within) .library-card-title {
-    font-size: 11px;
   }
 
   .doc-toolbar,
@@ -7675,4 +7901,5 @@
     }
   }
 </style>
+
 

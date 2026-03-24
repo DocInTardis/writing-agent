@@ -16,5 +16,147 @@
     "max_parameters": 12,
     "max_cyclomatic": 60
   },
-  "overrides": {}
+  "overrides": {},
+  "file_overrides": {
+    "writing_agent/state_engine/dual_engine.py": {
+      "max_function_lines": 130,
+      "max_parameters": 5,
+      "max_cyclomatic": 40
+    },
+    "writing_agent/v2/diagram_design.py": {
+      "max_function_lines": 90,
+      "max_parameters": 5,
+      "max_cyclomatic": 80
+    },
+    "writing_agent/v2/figure_render_quality_data_domain.py": {
+      "max_function_lines": 200,
+      "max_parameters": 3,
+      "max_cyclomatic": 80
+    },
+    "writing_agent/v2/final_validator_gate_domain.py": {
+      "max_function_lines": 240,
+      "max_parameters": 7,
+      "max_cyclomatic": 145
+    },
+    "writing_agent/v2/final_validator_reference_metrics_domain.py": {
+      "max_function_lines": 130,
+      "max_parameters": 2,
+      "max_cyclomatic": 35
+    },
+    "writing_agent/v2/final_validator_result_domain.py": {
+      "max_function_lines": 80,
+      "max_parameters": 1,
+      "max_cyclomatic": 65
+    },
+    "writing_agent/v2/graph_reference_fallback_domain.py": {
+      "max_function_lines": 140,
+      "max_parameters": 5,
+      "max_cyclomatic": 50
+    },
+    "writing_agent/v2/graph_runner_analysis_domain.py": {
+      "max_function_lines": 120,
+      "max_parameters": 5,
+      "max_cyclomatic": 65
+    },
+    "writing_agent/v2/graph_runner_post_domain.py": {
+      "max_function_lines": 50,
+      "max_parameters": 18,
+      "max_cyclomatic": 9
+    },
+    "writing_agent/v2/graph_runner_post_text_adapter_domain.py": {
+      "max_function_lines": 30,
+      "max_parameters": 18,
+      "max_cyclomatic": 5
+    },
+    "writing_agent/v2/graph_runner_runtime_analysis_domain.py": {
+      "max_function_lines": 210,
+      "max_parameters": 13,
+      "max_cyclomatic": 70
+    },
+    "writing_agent/v2/graph_runner_runtime_finalize_domain.py": {
+      "max_function_lines": 60,
+      "max_parameters": 19,
+      "max_cyclomatic": 15
+    },
+    "writing_agent/v2/graph_runner_runtime_plan_contract_domain.py": {
+      "max_function_lines": 260,
+      "max_parameters": 15,
+      "max_cyclomatic": 75
+    },
+    "writing_agent/v2/graph_runner_runtime_plan_sections_domain.py": {
+      "max_function_lines": 170,
+      "max_parameters": 14,
+      "max_cyclomatic": 60
+    },
+    "writing_agent/v2/graph_runner_runtime_section_domain.py": {
+      "max_function_lines": 150,
+      "max_parameters": 19,
+      "max_cyclomatic": 35
+    },
+    "writing_agent/v2/graph_runner_runtime_segment_execute_domain.py": {
+      "max_function_lines": 140,
+      "max_parameters": 9,
+      "max_cyclomatic": 25
+    },
+    "writing_agent/v2/graph_runner_runtime_session_domain.py": {
+      "max_function_lines": 440,
+      "max_parameters": 10,
+      "max_cyclomatic": 240
+    },
+    "writing_agent/v2/graph_section_continue_prompt_domain.py": {
+      "max_function_lines": 90,
+      "max_parameters": 14,
+      "max_cyclomatic": 20
+    },
+    "writing_agent/v2/graph_section_continue_runtime_domain.py": {
+      "max_function_lines": 150,
+      "max_parameters": 25,
+      "max_cyclomatic": 20
+    },
+    "writing_agent/v2/graph_section_continue_segment_execute_domain.py": {
+      "max_function_lines": 230,
+      "max_parameters": 25,
+      "max_cyclomatic": 30
+    },
+    "writing_agent/v2/graph_section_draft_domain.py": {
+      "max_function_lines": 230,
+      "max_parameters": 12,
+      "max_cyclomatic": 85
+    },
+    "writing_agent/v2/graph_section_postprocess_apply_domain.py": {
+      "max_function_lines": 120,
+      "max_parameters": 15,
+      "max_cyclomatic": 55
+    },
+    "writing_agent/web/domains/export_structure_domain.py": {
+      "max_function_lines": 210,
+      "max_parameters": 14,
+      "max_cyclomatic": 55
+    },
+    "writing_agent/web/domains/revision_edit_plan_domain.py": {
+      "max_function_lines": 120,
+      "max_parameters": 7,
+      "max_cyclomatic": 100
+    },
+    "writing_agent/web/domains/revision_selected_edit_domain.py": {
+      "max_function_lines": 360,
+      "max_parameters": 11,
+      "max_cyclomatic": 40
+    },
+    "writing_agent/web/services/citation_resolve_alerts_domain.py": {
+      "max_function_lines": 160,
+      "max_parameters": 7,
+      "max_cyclomatic": 60
+    },
+    "writing_agent/web/services/citation_service.py": {
+      "max_function_lines": 170,
+      "max_parameters": 6,
+      "max_cyclomatic": 60
+    },
+    "writing_agent/web/services/generation_service.py": {
+      "max_function_lines": 160,
+      "max_parameters": 11,
+      "max_cyclomatic": 35
+    }
+  }
 }

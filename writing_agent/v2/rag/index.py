@@ -30,6 +30,8 @@ class RagChunk:
     text: str
     embedding_b64: str = ""
     dim: int = 0
+    embedding_codec: str = "f32"
+    embedding_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,9 @@ class RagIndex:
         chunk_overlap: int = 120,
     ) -> list[RagChunk]:
         self.ensure()
+        store_raw_content = _rag_store_raw_content()
+        store_pdf_chunks = _rag_store_pdf_chunks()
+        embed_codec = _embed_codec()
         embed_model = _embed_model_name() if embed else ""
         embed_client = _make_embed_client(embed_model) if embed_model else None
 
@@ -69,16 +74,38 @@ class RagIndex:
         if paper.summary.strip():
             base_text = (base_text + "\n\n" + paper.summary.strip()).strip()
         for i, c in enumerate(chunk_text(text=base_text, max_chars=chunk_max_chars, overlap=chunk_overlap), start=1):
-            chunks.append(_make_chunk(paper, kind="abstract", idx=i, text=c, embed_client=embed_client, embed_model=embed_model))
+            chunks.append(
+                _make_chunk(
+                    paper,
+                    kind="abstract",
+                    idx=i,
+                    text=_prepare_chunk_text(c, store_raw_content=store_raw_content),
+                    embed_text=c,
+                    embed_client=embed_client,
+                    embed_model=embed_model,
+                    embed_codec=embed_codec,
+                )
+            )
 
         # Optional PDF chunks
         pdf_path = Path(paper.pdf_path)
-        if pdf_path.exists():
+        if store_pdf_chunks and pdf_path.exists():
             max_pages = int(os.environ.get("WRITING_AGENT_RAG_PDF_MAX_PAGES", "12"))
             pdf_text = extract_pdf_text(pdf_path, max_pages=max_pages)
             if pdf_text:
                 for i, c in enumerate(chunk_text(text=pdf_text, max_chars=chunk_max_chars, overlap=chunk_overlap), start=1):
-                    chunks.append(_make_chunk(paper, kind="pdf", idx=i, text=c, embed_client=embed_client, embed_model=embed_model))
+                    chunks.append(
+                        _make_chunk(
+                            paper,
+                            kind="pdf",
+                            idx=i,
+                            text=_prepare_chunk_text(c, store_raw_content=store_raw_content),
+                            embed_text=c,
+                            embed_client=embed_client,
+                            embed_model=embed_model,
+                            embed_codec=embed_codec,
+                        )
+                    )
 
         # Rewrite index file: remove existing chunks of this paper_id, then append.
         existing = self.load_chunks()
@@ -99,6 +126,8 @@ class RagIndex:
         chunk_overlap: int = 120,
     ) -> list[RagChunk]:
         self.ensure()
+        store_raw_content = _rag_store_raw_content()
+        embed_codec = _embed_codec()
         pid = (paper_id or "").strip()
         if not pid:
             return []
@@ -113,9 +142,11 @@ class RagIndex:
         for i, c in enumerate(chunk_text(text=base_text, max_chars=chunk_max_chars, overlap=chunk_overlap), start=1):
             emb_b64 = ""
             dim = 0
+            codec = "f32"
+            scale = 1.0
             if embed_client and embed_model:
                 vec = embed_client.embeddings(prompt=c, model=embed_model)
-                emb_b64, dim = _encode_vec(vec)
+                emb_b64, dim, codec, scale = _encode_vec(vec, codec=embed_codec)
             chunks.append(
                 RagChunk(
                     chunk_id=f"{safe_paper_key(pid)}:text:{i:03d}",
@@ -123,9 +154,11 @@ class RagIndex:
                     title=title or "",
                     abs_url=abs_url or "",
                     kind="text",
-                    text=c,
+                    text=_prepare_chunk_text(c, store_raw_content=store_raw_content),
                     embedding_b64=emb_b64,
                     dim=dim,
+                    embedding_codec=codec,
+                    embedding_scale=scale,
                 )
             )
 
@@ -145,6 +178,19 @@ class RagIndex:
         if removed:
             self._write_chunks(kept)
         return removed
+
+    def compact(self) -> int:
+        chunks = self.load_chunks()
+        deduped: dict[str, RagChunk] = {}
+        for chunk in chunks:
+            key = str(chunk.chunk_id or "").strip()
+            if not key:
+                continue
+            deduped[key] = chunk
+        compacted = list(deduped.values())
+        compacted.sort(key=lambda row: (str(row.paper_id or ""), str(row.kind or ""), str(row.chunk_id or "")))
+        self._write_chunks(compacted)
+        return len(compacted)
 
     def rebuild(self, *, embed: bool = True) -> int:
         rag = RagStore(self.rag_dir)
@@ -179,6 +225,8 @@ class RagIndex:
                     text=str(obj.get("text") or ""),
                     embedding_b64=str(obj.get("embedding_b64") or ""),
                     dim=int(obj.get("dim") or 0),
+                    embedding_codec=str(obj.get("embedding_codec") or "f32"),
+                    embedding_scale=float(obj.get("embedding_scale") or 1.0),
                 )
             )
         return [c for c in out if c.chunk_id and c.paper_id and c.text]
@@ -217,7 +265,15 @@ class RagIndex:
             if q_vec is None:
                 score = kw
             else:
-                sim = _cosine_sim(q_vec, _decode_vec(c.embedding_b64, c.dim))
+                sim = _cosine_sim(
+                    q_vec,
+                    _decode_vec(
+                        c.embedding_b64,
+                        c.dim,
+                        codec=c.embedding_codec,
+                        scale=c.embedding_scale,
+                    ),
+                )
                 score = alpha * sim + (1.0 - alpha) * kw
             if score <= 0:
                 continue
@@ -260,6 +316,8 @@ class RagIndex:
                 "text": c.text,
                 "embedding_b64": c.embedding_b64,
                 "dim": c.dim,
+                "embedding_codec": c.embedding_codec,
+                "embedding_scale": c.embedding_scale,
             }
             lines.append(json.dumps(obj, ensure_ascii=False))
         self.index_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
@@ -271,16 +329,20 @@ def _make_chunk(
     kind: str,
     idx: int,
     text: str,
+    embed_text: str,
     embed_client: OllamaClient | None,
     embed_model: str,
+    embed_codec: str,
 ) -> RagChunk:
     paper_key = safe_paper_key(paper.paper_id)
     chunk_id = f"{paper_key}:{kind}:{idx:03d}"
     emb_b64 = ""
     dim = 0
+    codec = "f32"
+    scale = 1.0
     if embed_client and embed_model:
-        vec = embed_client.embeddings(prompt=text, model=embed_model)
-        emb_b64, dim = _encode_vec(vec)
+        vec = embed_client.embeddings(prompt=embed_text, model=embed_model)
+        emb_b64, dim, codec, scale = _encode_vec(vec, codec=embed_codec)
     return RagChunk(
         chunk_id=chunk_id,
         paper_id=paper.paper_id,
@@ -290,6 +352,8 @@ def _make_chunk(
         text=text,
         embedding_b64=emb_b64,
         dim=dim,
+        embedding_codec=codec,
+        embedding_scale=scale,
     )
 
 
@@ -325,17 +389,34 @@ def _embed_query(query: str, *, embed_model: str) -> list[float]:
     return client.embeddings(prompt=query, model=embed_model)
 
 
-def _encode_vec(vec: list[float]) -> tuple[str, int]:
-    arr = array("f", [float(x) for x in (vec or [])])
+def _encode_vec(vec: list[float], *, codec: str = "f32") -> tuple[str, int, str, float]:
+    values = [float(x) for x in (vec or [])]
+    codec_norm = str(codec or "").strip().lower()
+    if codec_norm == "i8" and values:
+        max_abs = max(abs(x) for x in values)
+        scale = max(max_abs / 127.0, 1e-8)
+        quantized = [int(max(-127, min(127, round(x / scale)))) for x in values]
+        arr_i8 = array("b", quantized)
+        raw_i8 = arr_i8.tobytes()
+        return base64.b64encode(raw_i8).decode("ascii"), len(arr_i8), "i8", float(scale)
+    arr = array("f", values)
     raw = arr.tobytes()
-    return base64.b64encode(raw).decode("ascii"), len(arr)
+    return base64.b64encode(raw).decode("ascii"), len(arr), "f32", 1.0
 
 
-def _decode_vec(b64: str, dim: int) -> list[float]:
+def _decode_vec(b64: str, dim: int, *, codec: str = "f32", scale: float = 1.0) -> list[float]:
     if not b64 or not dim:
         return []
     try:
         raw = base64.b64decode(b64.encode("ascii"))
+        if str(codec or "").strip().lower() == "i8":
+            arr_i8 = array("b")
+            arr_i8.frombytes(raw)
+            vals = list(arr_i8[:dim] if dim and len(arr_i8) >= dim else arr_i8)
+            step = float(scale or 1.0)
+            if step <= 0:
+                step = 1.0
+            return [float(v) * step for v in vals]
         arr = array("f")
         arr.frombytes(raw)
         if dim and len(arr) >= dim:
@@ -382,3 +463,65 @@ def _keyword_score(query: str, text: str, title: str) -> float:
         if c:
             score += 1.0 + math.log(1.0 + c)
     return score
+
+
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _rag_lite_mode() -> bool:
+    return _env_flag("WRITING_AGENT_RAG_LITE_MODE", default=False)
+
+
+def _rag_store_raw_content() -> bool:
+    raw = str(os.environ.get("WRITING_AGENT_RAG_STORE_RAW_CONTENT", "")).strip()
+    if raw:
+        return _env_flag("WRITING_AGENT_RAG_STORE_RAW_CONTENT", default=True)
+    return not _rag_lite_mode()
+
+
+def _rag_store_pdf_chunks() -> bool:
+    raw = str(os.environ.get("WRITING_AGENT_RAG_STORE_PDF_CHUNKS", "")).strip()
+    if raw:
+        return _env_flag("WRITING_AGENT_RAG_STORE_PDF_CHUNKS", default=True)
+    return not _rag_lite_mode()
+
+
+def _embed_codec() -> str:
+    raw = str(os.environ.get("WRITING_AGENT_RAG_EMBED_CODEC", "")).strip().lower()
+    if raw in {"f32", "i8"}:
+        return raw
+    return "i8" if _rag_lite_mode() else "f32"
+
+
+def _prepare_chunk_text(text: str, *, store_raw_content: bool) -> str:
+    src = str(text or "").strip()
+    if not src:
+        return ""
+    if store_raw_content:
+        limit = _rag_stored_text_max_chars(default_chars=2400)
+    else:
+        limit = _rag_stored_text_max_chars(default_chars=320)
+    return _trim_text(src, max_chars=limit)
+
+
+def _rag_stored_text_max_chars(*, default_chars: int) -> int:
+    raw = str(os.environ.get("WRITING_AGENT_RAG_STORED_TEXT_MAX_CHARS", "")).strip()
+    if raw:
+        try:
+            return max(120, min(8000, int(raw)))
+        except Exception:
+            pass
+    return max(120, min(8000, int(default_chars)))
+
+
+def _trim_text(text: str, *, max_chars: int) -> str:
+    src = str(text or "").strip()
+    if len(src) <= max_chars:
+        return src
+    clipped = src[:max_chars]
+    cut = max(clipped.rfind("。"), clipped.rfind("."), clipped.rfind("！"), clipped.rfind("!"), clipped.rfind("？"), clipped.rfind("?"))
+    if cut >= int(max_chars * 0.55):
+        return clipped[: cut + 1].strip()
+    return clipped.strip()

@@ -8,8 +8,9 @@ from __future__ import annotations
 import re
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from writing_agent.state_engine.checkpoint_store import CheckpointStore
 from writing_agent.state_engine.graph_contracts import (
@@ -21,7 +22,6 @@ from writing_agent.state_engine.graph_contracts import (
     validate_contract,
 )
 from writing_agent.state_engine.replay import deterministic_replay
-
 
 NodeHandler = Callable[[dict[str, Any]], dict[str, Any]]
 InterruptHandler = Callable[[str, dict[str, Any]], dict[str, Any]]
@@ -404,5 +404,5 @@ def should_use_langgraph() -> bool:
     """Environment switch for selecting graph backend."""
     import os
 
-    raw = str(os.environ.get("WRITING_AGENT_GRAPH_ENGINE", "native")).strip().lower()
+    raw = str(os.environ.get("WRITING_AGENT_GRAPH_ENGINE", "auto")).strip().lower()
     return raw in {"langgraph", "dual", "auto"}

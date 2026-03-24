@@ -19,6 +19,11 @@ def _prepare_alert_config_isolation(monkeypatch, tmp_path):
     monkeypatch.setattr(app_v2, "_CITATION_VERIFY_ALERTS_CONFIG_LOADED", False)
     monkeypatch.setattr(app_v2, "_CITATION_VERIFY_ALERT_EVENTS_PATH", events_path)
     monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_PATH", trends_path)
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_CACHE_ROWS", None)
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_CACHE_PATH", "")
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_CACHE_MTIME_NS", -1)
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_DIRTY", False)
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_LAST_WRITE_AT", 0.0)
     app_v2._citation_verify_alert_notify_state_reset()
     return path
 
@@ -367,6 +372,72 @@ def test_citation_verify_metrics_endpoint_alerts_trigger_on_thresholds(monkeypat
     assert "latency_p95_ms" in triggered_rules
     assert "error_rate_per_run" in triggered_rules
     assert "cache_delta_hit_rate" in triggered_rules
+
+
+def test_citation_verify_metrics_trend_flush_is_throttled(monkeypatch, tmp_path):
+    _prepare_alert_config_isolation(monkeypatch, tmp_path)
+    monkeypatch.setenv("WRITING_AGENT_CITATION_VERIFY_ALERTS", "0")
+    monkeypatch.setenv("WRITING_AGENT_CITATION_VERIFY_ALERT_NOTIFY", "0")
+    monkeypatch.setenv("WRITING_AGENT_CITATION_VERIFY_TREND_ENABLED", "1")
+    monkeypatch.setenv("WRITING_AGENT_CITATION_VERIFY_TREND_FLUSH_INTERVAL_S", "60")
+
+    clock = [1700000000.0]
+    monkeypatch.setattr(app_v2.time, "time", lambda: clock[0])
+    monkeypatch.setattr(
+        app_v2,
+        "_citation_verify_cache_snapshot",
+        lambda: {
+            "size": 1,
+            "ttl_s": 3600.0,
+            "max_entries": 2048,
+            "hit": 1,
+            "miss": 0,
+            "set": 1,
+            "expired": 0,
+            "evicted": 0,
+        },
+    )
+    monkeypatch.setattr(
+        app_v2,
+        "_citation_verify_observe_snapshot",
+        lambda *args, **kwargs: {
+            "window_s": 1800.0,
+            "max_runs": 240,
+            "runs": 2,
+            "elapsed_ms": {"avg": 120.0, "p50": 110.0, "p95": 160.0, "max": 200.0},
+            "items": {"total": 6, "avg": 3.0, "p50": 3.0, "p95": 3.0, "max": 3},
+            "workers": {"avg": 1.0, "max": 1},
+            "errors": {"total": 0, "rate_per_run": 0.0},
+            "cache_delta": {"hit": 2, "miss": 0, "set": 1, "expired": 0, "evicted": 0, "hit_rate": 1.0},
+            "recent": [],
+        },
+    )
+
+    client = _client()
+    trends_path = tmp_path / "citation_verify_metrics_trends.json"
+
+    resp1 = client.get("/api/metrics/citation_verify")
+    assert resp1.status_code == 200
+    body1 = resp1.json()
+    assert body1.get("trend", {}).get("total") == 1
+    persisted1 = json.loads(trends_path.read_text(encoding="utf-8"))
+    assert len(persisted1.get("points") or []) == 1
+
+    clock[0] += 1.0
+    resp2 = client.get("/api/metrics/citation_verify")
+    assert resp2.status_code == 200
+    body2 = resp2.json()
+    assert body2.get("trend", {}).get("total") == 2
+    persisted2 = json.loads(trends_path.read_text(encoding="utf-8"))
+    assert len(persisted2.get("points") or []) == 1
+
+    clock[0] += 61.0
+    resp3 = client.get("/api/metrics/citation_verify")
+    assert resp3.status_code == 200
+    body3 = resp3.json()
+    assert body3.get("trend", {}).get("total") == 3
+    persisted3 = json.loads(trends_path.read_text(encoding="utf-8"))
+    assert len(persisted3.get("points") or []) == 3
 
 def test_citation_verify_alerts_config_endpoint_roundtrip(monkeypatch, tmp_path):
     path = _prepare_alert_config_isolation(monkeypatch, tmp_path)

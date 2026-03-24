@@ -1,0 +1,43 @@
+"""Doc format parsing helpers and marker repair utilities."""
+
+from __future__ import annotations
+
+from writing_agent.v2 import doc_format_parse_heading_domain as heading_domain
+from writing_agent.v2 import doc_format_parse_text_domain as text_domain
+
+_HEADING_RE = heading_domain._HEADING_RE
+_NUM_HEADING_RE = heading_domain._NUM_HEADING_RE
+_CN_NUM_HEADING_RE = heading_domain._CN_NUM_HEADING_RE
+_MARKER_RE = heading_domain._MARKER_RE
+_INLINE_MARKER_RE = heading_domain._INLINE_MARKER_RE
+_STRUCTURED_MARKER_START_RE = heading_domain._STRUCTURED_MARKER_START_RE
+_STRONG_PUNCT_RE = heading_domain._STRONG_PUNCT_RE
+_LIST_ITEM_PUNCT_RE = heading_domain._LIST_ITEM_PUNCT_RE
+_HEADING_GLUE_PREFIXES = heading_domain._HEADING_GLUE_PREFIXES
+_HEADING_GLUE_BODY_STARTERS = heading_domain._HEADING_GLUE_BODY_STARTERS
+_HEADING_GLUE_BODY_MARKERS = heading_domain._HEADING_GLUE_BODY_MARKERS
+_HEADING_GLUE_TRIM_SUFFIXES = heading_domain._HEADING_GLUE_TRIM_SUFFIXES
+
+_looks_like_numbered_list_item_heading = heading_domain._looks_like_numbered_list_item_heading
+_trim_left_delims = heading_domain._trim_left_delims
+_trim_right_delims = heading_domain._trim_right_delims
+_shift_repeated_tail = heading_domain._shift_repeated_tail
+_split_heading_colon_or_repeat = heading_domain._split_heading_colon_or_repeat
+_split_heading_prefix = heading_domain._split_heading_prefix
+_split_heading_number_marker = heading_domain._split_heading_number_marker
+_split_heading_markers = heading_domain._split_heading_markers
+_split_heading_starters = heading_domain._split_heading_starters
+_split_heading_glue = heading_domain._split_heading_glue
+
+_scan_json_object_end = text_domain._scan_json_object_end
+_repair_fragmented_structured_markers = text_domain._repair_fragmented_structured_markers
+_normalize_lines = text_domain._normalize_lines
+_default_title = text_domain._default_title
+_strip_inline_markers = text_domain._strip_inline_markers
+_derive_title_from_blocks = text_domain._derive_title_from_blocks
+_safe_json_loads = text_domain._safe_json_loads
+_join_text = text_domain._join_text
+_strip_headings = text_domain._strip_headings
+_strip_markers = text_domain._strip_markers
+
+__all__ = [name for name in globals() if not name.startswith("__")]

@@ -1,4 +1,4 @@
-﻿from writing_agent.state_engine.dual_engine import DualGraphEngine
+﻿from writing_agent.state_engine.dual_engine import DualGraphEngine, should_use_langgraph
 
 
 def test_dual_engine_native_runs_and_returns_state() -> None:
@@ -202,3 +202,42 @@ def test_dual_engine_resume_reuses_checkpoint_route() -> None:
     route2 = state2.get('_route') if isinstance(state2.get('_route'), dict) else {}
     assert route2.get('id') == 'resume_sections'
     assert route2.get('entry_node') == 'writer'
+
+
+
+def test_should_use_langgraph_defaults_to_auto_enabled(monkeypatch) -> None:
+    monkeypatch.delenv("WRITING_AGENT_GRAPH_ENGINE", raising=False)
+    assert should_use_langgraph() is True
+
+
+def test_should_use_langgraph_explicit_native_disables_langgraph(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_GRAPH_ENGINE", "native")
+    assert should_use_langgraph() is False
+
+
+def test_dual_engine_langgraph_failure_falls_back_to_native(monkeypatch) -> None:
+    engine = DualGraphEngine(use_langgraph=True)
+
+    def _boom_langgraph(**_kwargs):
+        raise RuntimeError("langgraph unavailable")
+
+    def _native(**_kwargs):
+        return ({"final_text": "native fallback"}, [{"metadata": {"engine": "native"}}])
+
+    monkeypatch.setattr(engine, "_run_langgraph", _boom_langgraph)
+    monkeypatch.setattr(engine, "_run_native", _native)
+
+    state, events = engine.run(
+        run_id='unit-dual-engine-langgraph-fallback',
+        payload={
+            'instruction': 'write',
+            'current_text': '',
+            'compose_mode': 'auto',
+            'resume_sections': [],
+            'format_only': False,
+        },
+        handlers={},
+    )
+
+    assert state.get('final_text') == 'native fallback'
+    assert ((events[0].get('metadata') or {}).get('engine')) == 'native'

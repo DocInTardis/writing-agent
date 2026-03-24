@@ -6,7 +6,7 @@
   export let docId = ''
   const dispatch = createEventDispatcher()
 
-  type Kind = 'flow' | 'er' | 'sequence' | 'timeline' | 'bar' | 'line' | 'pie'
+  type Kind = 'flow' | 'architecture' | 'er' | 'sequence' | 'timeline' | 'bar' | 'line' | 'pie'
   type PanelMode = 'studio' | 'json' | 'history'
 
   const kindOptions: Array<{ value: Kind; label: string }> = [
@@ -24,6 +24,11 @@
       '需求分析 -> 方案设计 -> 开发实现 -> 测试验收 -> 上线运营',
       '用户登录 -> 权限校验 -> 数据查询 -> 结果返回',
       '问题发现 -> 原因定位 -> 修复验证 -> 发布回归'
+    ],
+    architecture: [
+      '????, ????, ??????, ????, ????, ????, ????, ????',
+      '???/???/???/???/??? ?????????????',
+      '??????????, ???, ??, ????, ????, ???, ????'
     ],
     er: [
       '电商系统：用户、订单、商品、支付',
@@ -93,6 +98,7 @@
 
   function normalizeKind(raw: unknown): Kind {
     const v = String(raw || '').trim().toLowerCase()
+    if (v === 'architecture') return 'architecture'
     if (v === 'er') return 'er'
     if (v === 'sequence') return 'sequence'
     if (v === 'timeline') return 'timeline'

@@ -19,6 +19,11 @@ def _prepare_alert_config_isolation(monkeypatch, tmp_path):
     monkeypatch.setattr(app_v2, "_CITATION_VERIFY_ALERTS_CONFIG_LOADED", False)
     monkeypatch.setattr(app_v2, "_CITATION_VERIFY_ALERT_EVENTS_PATH", events_path)
     monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_PATH", trends_path)
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_CACHE_ROWS", None)
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_CACHE_PATH", "")
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_CACHE_MTIME_NS", -1)
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_DIRTY", False)
+    monkeypatch.setattr(app_v2, "_CITATION_VERIFY_METRICS_TRENDS_LAST_WRITE_AT", 0.0)
     app_v2._citation_verify_alert_notify_state_reset()
     return path
 

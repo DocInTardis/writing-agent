@@ -25,6 +25,8 @@ class OpenAlexWork:
     pdf_url: str
     categories: list[str]
     primary_category: str
+    cited_by_count: int = 0
+    publication_year: int = 0
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,8 @@ def _parse_work(obj: dict) -> OpenAlexWork:
 
     categories = _extract_concepts(obj.get("concepts"))
     primary_category = categories[0] if categories else ""
+    cited_by_count = int(obj.get("cited_by_count") or 0)
+    publication_year = int(obj.get("publication_year") or 0)
 
     pdf_url = _pick_pdf_url(obj)
 
@@ -115,6 +119,8 @@ def _parse_work(obj: dict) -> OpenAlexWork:
         pdf_url=pdf_url,
         categories=categories,
         primary_category=primary_category,
+        cited_by_count=cited_by_count,
+        publication_year=publication_year,
     )
 
 

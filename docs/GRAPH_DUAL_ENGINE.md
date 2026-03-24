@@ -18,7 +18,7 @@ Capabilities:
 - human-in-the-loop interrupt hook per node
 - route entries for compose_mode/resume_sections/format_only
 - route-driven entry branching (qa-only / writer-start / planner-full)
-- optional LangGraph backend (`WRITING_AGENT_GRAPH_ENGINE=langgraph|dual|auto`)
+- optional LangGraph backend (`WRITING_AGENT_GRAPH_ENGINE=langgraph|dual|auto`, default `auto` with native fallback)
 - route observability metadata (`trace_id` / `engine` / `route_id` / `route_entry`) returned as `graph_meta` on route-graph API path
 - workbench diagnostics chip and thought log consume `graph_meta` for online route tracing
 - route/fallback metrics (JSONL): `WRITING_AGENT_ROUTE_GRAPH_METRICS_ENABLE`, `WRITING_AGENT_ROUTE_GRAPH_METRICS_PATH`

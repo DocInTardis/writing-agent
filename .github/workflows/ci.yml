@@ -12,12 +12,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install Python quality dependencies
+        run: python -m pip install -r requirements-dev.txt
       - name: File line limits guard
         run: python scripts/guard_file_line_limits.py --config security/file_line_limits.json
       - name: Function complexity guard
         run: python scripts/guard_function_complexity.py --config security/function_complexity_limits.json
       - name: Architecture boundaries guard
         run: python scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json
+      - name: Managed Python quality suite
+        run: python scripts/run_quality_suite.py
 
   build-test:
     strategy:

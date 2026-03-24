@@ -2,58 +2,96 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+_AUTO_FETCH_LOCKS: dict[str, threading.Lock] = {}
+_AUTO_FETCH_LOCKS_GUARD = threading.Lock()
+_AUTO_FETCH_STATE: dict[str, float] = {}
+_RELATED_EXPAND_STATE: dict[str, float] = {}
+
+
+def _lock_for_rag_dir(rag_dir: Path) -> threading.Lock:
+    key = str(Path(rag_dir).resolve())
+    with _AUTO_FETCH_LOCKS_GUARD:
+        lock = _AUTO_FETCH_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _AUTO_FETCH_LOCKS[key] = lock
+        return lock
+
+
+def _env_enabled(name: str, *, default: bool = True) -> bool:
+    import os
+
+    raw = str(os.environ.get(name, "1" if default else "0")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 
 def auto_fetch_on_empty(*, rag_dir: Path, query: str, min_papers: int = 5) -> bool:
+    if not _env_enabled("WRITING_AGENT_RAG_AUTO_FETCH_ENABLED", default=True):
+        return False
     """
-    当RAG库为空或过少时，自动从arXiv/OpenAlex抓取相关论文
-    
+    ?RAG???????????arXiv/OpenAlex??????
+
     Args:
-        rag_dir: RAG数据目录
-        query: 用户查询
-        min_papers: 最小论文数阈值
-    
+        rag_dir: RAG????
+        query: ????
+        min_papers: ???????
+
     Returns:
-        是否成功补充数据
+        ????????
     """
     from writing_agent.v2.rag.store import RagStore
     from writing_agent.v2.rag.arxiv import search_arxiv
     from writing_agent.v2.rag.openalex import search_openalex
-    
-    store = RagStore(rag_dir)
-    existing = store.list_papers()
-    
-    if len(existing) >= min_papers:
-        return False
-    
-    logger.info(f"[auto-rag] 检测到RAG库仅{len(existing)}篇论文，自动补充中...")
-    
-    # 从查询中提取关键词
-    keywords = _extract_keywords(query)
-    
-    added = 0
-    # 先尝试OpenAlex（更快，无需下载PDF）
-    for kw in keywords[:3]:  # 最多3个关键词
-        try:
-            result = search_openalex(query=kw, max_results=5)
-            for work in result.works:
-                try:
-                    store.put_openalex_work(work, pdf_bytes=None)
-                    added += 1
-                    if len(existing) + added >= min_papers:
-                        break
-                except Exception as e:
-                    logger.warning(f"[auto-rag] 保存失败: {e}")
-            if len(existing) + added >= min_papers:
-                break
-        except Exception as e:
-            logger.warning(f"[auto-rag] OpenAlex查询失败: {e}")
-    
-    logger.info(f"[auto-rag] 自动补充{added}篇论文元数据")
-    return added > 0
+
+    cooldown_s = max(10.0, float(__import__('os').environ.get('WRITING_AGENT_RAG_AUTO_FETCH_COOLDOWN_S', '120') or 120))
+    key = str(Path(rag_dir).resolve())
+    fetch_lock = _lock_for_rag_dir(rag_dir)
+    with fetch_lock:
+        now = time.time()
+        last_run = float(_AUTO_FETCH_STATE.get(key) or 0.0)
+        if now - last_run < cooldown_s:
+            return False
+        _AUTO_FETCH_STATE[key] = now
+
+        store = RagStore(rag_dir)
+        existing = store.list_papers()
+
+        if len(existing) >= min_papers:
+            return False
+
+        logger.info(f"[auto-rag] ???RAG??{len(existing)}?????????...")
+
+        # ?????????
+        keywords = _extract_keywords(query)
+
+        added = 0
+        # ???OpenAlex????????PDF?
+        for kw in keywords[:3]:  # ??3????
+            try:
+                result = search_openalex(query=kw, max_results=5)
+                for work in result.works:
+                    try:
+                        store.put_openalex_work(work, pdf_bytes=None)
+                        added += 1
+                        if len(existing) + added >= min_papers:
+                            break
+                    except Exception as e:
+                        logger.warning(f"[auto-rag] ????: {e}")
+                if len(existing) + added >= min_papers:
+                    break
+            except Exception as e:
+                logger.warning(f"[auto-rag] OpenAlex????: {e}")
+                if "429" in str(e) or "Too Many Requests" in str(e):
+                    break
+
+        logger.info(f"[auto-rag] ????{added}??????")
+        return added > 0
+
 
 
 def _extract_keywords(query: str) -> list[str]:
@@ -79,54 +117,68 @@ def _extract_keywords(query: str) -> list[str]:
 
 
 def expand_with_related(*, rag_dir: Path, paper_ids: list[str], max_expand: int = 3) -> int:
+    if not _env_enabled("WRITING_AGENT_RAG_EXPAND_ENABLED", default=True):
+        return 0
     """
-    根据已有论文，扩展相关论文（基于标题/关键词相似）
-    
+    ??????????????????/??????
+
     Args:
-        rag_dir: RAG数据目录
-        paper_ids: 已有论文ID列表
-        max_expand: 每篇论文最多扩展数量
-    
+        rag_dir: RAG????
+        paper_ids: ????ID??
+        max_expand: ??????????
+
     Returns:
-        扩展的论文数量
+        ???????
     """
     from writing_agent.v2.rag.store import RagStore
     from writing_agent.v2.rag.openalex import search_openalex
-    
-    store = RagStore(rag_dir)
-    existing = {p.paper_id for p in store.list_papers()}
-    
-    added = 0
-    for pid in paper_ids[:5]:  # 最多基于5篇论文扩展
-        papers = store.list_papers()
-        paper = next((p for p in papers if p.paper_id == pid), None)
-        if not paper:
-            continue
-        
-        # 提取论文标题关键词
-        title_keywords = _extract_keywords(paper.title)
-        if not title_keywords:
-            continue
-        
-        query = ' '.join(title_keywords[:3])
-        try:
-            result = search_openalex(query=query, max_results=max_expand)
-            for work in result.works:
-                if work.paper_id in existing:
-                    continue
-                try:
-                    store.put_openalex_work(work, pdf_bytes=None)
-                    existing.add(work.paper_id)
-                    added += 1
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.warning(f"[auto-rag] 扩展失败: {e}")
-    
-    if added > 0:
-        logger.info(f"[auto-rag] 基于相关性扩展{added}篇论文")
-    
-    return added
+
+    cooldown_s = max(10.0, float(__import__('os').environ.get('WRITING_AGENT_RAG_EXPAND_COOLDOWN_S', '180') or 180))
+    key = str(Path(rag_dir).resolve())
+    fetch_lock = _lock_for_rag_dir(rag_dir)
+    with fetch_lock:
+        last_run = float(_RELATED_EXPAND_STATE.get(key) or 0.0)
+        now = time.time()
+        if now - last_run < cooldown_s:
+            return 0
+        _RELATED_EXPAND_STATE[key] = now
+
+        store = RagStore(rag_dir)
+        existing = {p.paper_id for p in store.list_papers()}
+
+        added = 0
+        for pid in paper_ids[:5]:  # ????5?????
+            papers = store.list_papers()
+            paper = next((p for p in papers if p.paper_id == pid), None)
+            if not paper:
+                continue
+
+            title_keywords = _extract_keywords(paper.title)
+            if not title_keywords:
+                continue
+
+            query = ' '.join(title_keywords[:3])
+            try:
+                result = search_openalex(query=query, max_results=max_expand)
+                for work in result.works:
+                    if work.paper_id in existing:
+                        continue
+                    try:
+                        store.put_openalex_work(work, pdf_bytes=None)
+                        existing.add(work.paper_id)
+                        added += 1
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.warning(f"[auto-rag] ????: {e}")
+                if "429" in str(e) or "Too Many Requests" in str(e):
+                    break
+
+        if added > 0:
+            logger.info(f"[auto-rag] ???????{added}???")
+
+        return added
+
 
 
 def use_user_docs_as_seed(*, rag_dir: Path, user_library_dir: Path) -> int:

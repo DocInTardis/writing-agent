@@ -96,3 +96,70 @@ def test_validate_plan_detail_rejects_empty_detail() -> None:
     assert any(str(r).startswith("plan_detail_method_or_experiment_missing_media") for r in reasons)
     assert isinstance(meta, dict)
 
+
+def test_stabilize_plan_map_minimums_repairs_method_media_and_key_points() -> None:
+    sections = ["Introduction", "Method", "Experiments", "References"]
+    base_targets = _base_targets_for(sections)
+    sparse_map = {
+        "Introduction": graph_runner_module.PlanSection(
+            title="Introduction",
+            target_chars=1000,
+            min_chars=600,
+            max_chars=1400,
+            min_tables=0,
+            min_figures=0,
+            key_points=[],
+            figures=[],
+            tables=[],
+            evidence_queries=[],
+        ),
+        "Method": graph_runner_module.PlanSection(
+            title="Method",
+            target_chars=1500,
+            min_chars=900,
+            max_chars=2200,
+            min_tables=0,
+            min_figures=0,
+            key_points=[],
+            figures=[],
+            tables=[],
+            evidence_queries=[],
+        ),
+        "Experiments": graph_runner_module.PlanSection(
+            title="Experiments",
+            target_chars=1700,
+            min_chars=900,
+            max_chars=2400,
+            min_tables=0,
+            min_figures=0,
+            key_points=[],
+            figures=[],
+            tables=[],
+            evidence_queries=[],
+        ),
+        "References": graph_runner_module.PlanSection(
+            title="References",
+            target_chars=600,
+            min_chars=300,
+            max_chars=900,
+            min_tables=0,
+            min_figures=0,
+            key_points=[],
+            figures=[],
+            tables=[],
+            evidence_queries=[],
+        ),
+    }
+    repaired = graph_runner_module._stabilize_plan_map_minimums(
+        plan_map=sparse_map,
+        sections=sections,
+        base_targets=base_targets,
+        total_chars=8000,
+    )
+    ok, reasons, _meta = runtime_module._validate_plan_detail(
+        instruction="Write an academic paper with method and experiments.",
+        sections=sections,
+        plan_map=repaired,
+    )
+    assert ok is True
+    assert reasons == []

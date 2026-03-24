@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from writing_agent.llm.factory import get_default_provider
+from writing_agent.llm.factory import get_default_provider, get_provider_name, get_provider_snapshot, mask_secret
 from writing_agent.llm.provider import LLMProviderError
-from writing_agent.llm.providers import NodeAIGatewayProvider, OllamaProvider
+from writing_agent.llm.providers import NodeAIGatewayProvider, OllamaProvider, OpenAICompatibleProvider
 
 
 def test_get_default_provider_returns_ollama_provider(monkeypatch) -> None:
@@ -73,3 +73,50 @@ def test_get_default_provider_node_without_url_falls_back_when_enabled(monkeypat
     )
     provider = get_default_provider()
     assert isinstance(provider, OllamaProvider)
+
+
+def test_get_default_provider_supports_openai_compatible(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_API_KEY", "sk-test-openai-123456")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_MODEL", "gpt-4o-mini")
+
+    provider = get_default_provider()
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert provider.base_url == "https://api.example.com/v1"
+    assert provider.model == "gpt-4o-mini"
+
+
+def test_provider_name_alias_openai_compatible(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai_compatible")
+    assert get_provider_name() == "openai"
+
+
+def test_provider_snapshot_masks_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_API_KEY", "sk-super-secret-abcdefg")
+    snap = get_provider_snapshot(model="gpt-5.4")
+    assert snap["provider"] == "openai"
+    assert snap["base_url"] == "https://api.example.com/v1"
+    assert snap["api_key_masked"].startswith("sk-s")
+    assert "secret" not in snap["api_key_masked"]
+    assert snap["model"] == "gpt-5.4"
+
+
+def test_mask_secret_handles_short_values() -> None:
+    assert mask_secret("") == ""
+    assert mask_secret("abc") == "***"
+
+
+
+def test_get_default_provider_reuses_cached_instance(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_PROVIDER_CACHE_ENABLED", "1")
+    monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_API_KEY", "sk-cache-test-123456")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_MODEL", "gpt-5.4")
+
+    first = get_default_provider()
+    second = get_default_provider()
+    assert first is second

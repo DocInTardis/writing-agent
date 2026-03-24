@@ -4,16 +4,13 @@ import writing_agent.v2.graph_aggregate_domain as aggregate_domain
 def test_aggregate_fix_stream_uses_tagged_prompt(monkeypatch):
     captured: dict[str, str] = {}
 
-    class _FakeClient:
-        def __init__(self, *args, **kwargs):
-            _ = args, kwargs
-
+    class _FakeProvider:
         def chat_stream(self, *, system: str, user: str, temperature: float = 0.2):
             _ = system, temperature
             captured["user"] = user
             yield "## A\n\nok"
 
-    monkeypatch.setattr(aggregate_domain, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(aggregate_domain, "get_default_provider", lambda **_kwargs: _FakeProvider())
 
     out = aggregate_domain.aggregate_fix_stream(
         base_url="http://test",
@@ -37,16 +34,13 @@ def test_aggregate_fix_stream_uses_tagged_prompt(monkeypatch):
 def test_repair_stream_uses_tagged_problem_block(monkeypatch):
     captured: dict[str, str] = {}
 
-    class _FakeClient:
-        def __init__(self, *args, **kwargs):
-            _ = args, kwargs
-
+    class _FakeProvider:
         def chat_stream(self, *, system: str, user: str, temperature: float = 0.2):
             _ = system, temperature
             captured["user"] = user
             yield "## A\n\nfixed"
 
-    monkeypatch.setattr(aggregate_domain, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(aggregate_domain, "get_default_provider", lambda **_kwargs: _FakeProvider())
 
     out = aggregate_domain.repair_stream(
         base_url="http://test",

@@ -1,0 +1,15 @@
+{
+  "docx_file": "D:\\codes\\writing-agent\\deliverables\\codex_full_with_figures_utf8_20260313_001914\\final_output_validated_renderfix.docx",
+  "save_status": 200,
+  "download_status": 200,
+  "paragraph_count": 151,
+  "table_count_docx": 20,
+  "inline_shapes": 5,
+  "media_file_count": 5,
+  "raw_table_marker_leaked": false,
+  "raw_figure_marker_leaked": false,
+  "figure_assets_dir": "D:\\codes\\writing-agent\\deliverables\\codex_full_with_figures_utf8_20260313_001914\\figure_assets_renderfix",
+  "figure_manifest_file": "D:\\codes\\writing-agent\\deliverables\\codex_full_with_figures_utf8_20260313_001914\\figure_assets_renderfix\\manifest.json",
+  "figure_score_avg": 100.0,
+  "figure_count": 5
+}

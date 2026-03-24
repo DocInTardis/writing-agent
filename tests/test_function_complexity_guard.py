@@ -90,6 +90,23 @@ def too_many(a, b, c, d, e, f):
     assert any(v["metric"] == "parameter_count" for v in result["violations"])
 
 
+def test_function_complexity_guard_globstar_matches_root_level_file(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "writing_agent" / "v2" / "root_level.py",
+        """
+def root_level_branch(x):
+    if x > 0:
+        return x
+    return 0
+""",
+    )
+    policy = _base_policy()
+    policy["include"] = ["writing_agent/v2/**/*.py"]
+    result = evaluate(tmp_path, policy)
+    assert result["ok"] is True
+    assert any(row["path"] == "writing_agent/v2/root_level.py" for row in result["checked"])
+
+
 def test_function_complexity_guard_detects_cyclomatic_violation_and_honors_override(tmp_path: Path) -> None:
     _write(
         tmp_path / "sample.py",
@@ -129,4 +146,7 @@ def test_repo_function_complexity_policy_is_valid_and_green() -> None:
     root = Path(__file__).resolve().parents[1]
     policy = load_policy(root / "security" / "function_complexity_limits.json")
     result = evaluate(root, policy)
+    checked_paths = {row["path"] for row in result["checked"]}
+    assert "writing_agent/state_engine/dual_engine.py" in checked_paths
+    assert "writing_agent/v2/doc_format.py" in checked_paths
     assert result["ok"] is True

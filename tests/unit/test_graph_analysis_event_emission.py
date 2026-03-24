@@ -5,19 +5,30 @@ from writing_agent.v2.graph_runner import GenerateConfig
 
 
 def test_run_generate_graph_emits_structured_analysis_event(monkeypatch):
-    class _DummyClient:
-        def __init__(self, *args, **kwargs):
-            _ = args, kwargs
+    class _DummyProvider:
+        def chat(self, *, system: str, user: str, temperature: float = 0.2, options=None) -> str:
+            _ = system, user, temperature, options
+            return "OK"
 
         def is_running(self) -> bool:
             return True
+
+        def chat_stream(self, *, system: str, user: str, temperature: float = 0.2, options=None):
+            _ = system, user, temperature, options
+            yield "OK"
+
+        def embeddings(self, *, prompt: str, model: str | None = None):
+            _ = prompt, model
+            return [0.0]
 
     monkeypatch.setattr(
         runtime_module,
         "get_ollama_settings",
         lambda: SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0),
     )
-    monkeypatch.setattr(runtime_module, "OllamaClient", _DummyClient)
+    monkeypatch.setattr(runtime_module, "get_default_provider", lambda **_kwargs: _DummyProvider())
+    monkeypatch.setattr(runtime_module, "get_provider_name", lambda: "ollama")
+    monkeypatch.setattr(runtime_module, "get_provider_snapshot", lambda **_kwargs: {"provider": "ollama"})
     monkeypatch.setattr(runtime_module, "_ollama_installed_models", lambda: [])
     monkeypatch.setattr(
         runtime_module,

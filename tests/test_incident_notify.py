@@ -348,3 +348,38 @@ def test_main_can_disable_oncall_roster_preference(monkeypatch, tmp_path: Path) 
     assert data["oncall_roster"]["loaded"] is True
     assert data["oncall_roster"]["used"] is False
     assert seen["webhook_url"] == "http://default.invalid/webhook"
+
+
+def test_main_allows_dead_letter_only_for_non_strict_escalation_without_channels(monkeypatch, tmp_path: Path) -> None:
+    incident_path = tmp_path / "incident_report_1.json"
+    incident_path.write_text(
+        json.dumps({"incident": {"incident_id": "INC-NO-CHANNEL", "severity": "critical", "escalation_level": "p1"}}),
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "incident_notify.json"
+    dead_dir = tmp_path / "dead_letter"
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "incident_notify.py",
+            "--incident-report",
+            incident_path.as_posix(),
+            "--only-when-escalated",
+            "--dead-letter-dir",
+            dead_dir.as_posix(),
+            "--out",
+            out_path.as_posix(),
+        ],
+    )
+
+    code = incident_notify.main()
+    data = json.loads(out_path.read_text(encoding="utf-8"))
+
+    assert code == 0
+    assert data["ok"] is True
+    assert data["skipped"] is False
+    assert data["reason"] == "no_channel_selected"
+    assert data["delivery_deferred"] is True
+    assert Path(str(data["dead_letter_path"])).exists()

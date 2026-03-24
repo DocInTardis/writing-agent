@@ -5,6 +5,15 @@ This module belongs to `writing_agent.web` in the writing-agent codebase.
 
 from __future__ import annotations
 
+from fastapi import HTTPException, Request
+from fastapi.responses import StreamingResponse
+
+from writing_agent.workflows import (
+    GenerateStreamDeps,
+    GenerateStreamRequest,
+    run_generate_stream_graph_with_fallback,
+)
+from writing_agent.workflows.orchestration_backend import record_orchestration_metric
 from writing_agent.web.domains import route_graph_metrics_domain
 
 
@@ -432,11 +441,7 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
                 workers=int(os.environ.get("WRITING_AGENT_WORKERS", "12")),  # tuned from 10 -> 12
             )
         final_text: str | None = None
-        problems: list[str] = []
-        graph_meta: dict | None = None
-        prompt_trace: list[dict] = []
-        use_route_graph = False
-        skip_insufficient_failover = False
+        route_metric_meta: dict[str, str] = {"route_id": "", "route_entry": "", "engine": ""}
 
         def _route_elapsed_ms() -> float:
             return max(0.0, (time.time() - start_ts) * 1000.0)
@@ -449,28 +454,18 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
             fallback_recovered: bool | None = None,
             error_code: str = "",
         ) -> None:
-            route_id = ""
-            route_entry = ""
-            engine = ""
-            if isinstance(graph_meta, dict):
-                route_id = str(graph_meta.get("route_id") or "")
-                route_entry = str(graph_meta.get("route_entry") or "")
-                engine = str(graph_meta.get("engine") or "")
-            route_graph_metrics_domain.record_route_graph_metric(
-                event,
+            record_orchestration_metric(
+                route_graph_metrics_domain.record_route_graph_metric,
+                event=event,
                 phase="generate_stream",
                 path=path,
-                route_id=route_id,
-                route_entry=route_entry,
-                engine=engine,
+                meta=route_metric_meta,
                 fallback_triggered=fallback_triggered,
                 fallback_recovered=fallback_recovered,
                 error_code=error_code,
                 elapsed_ms=_route_elapsed_ms(),
-                extra={
-                    "compose_mode": str(compose_mode or "").strip(),
-                    "resume_sections_count": int(len(resume_sections or [])),
-                },
+                compose_mode=compose_mode,
+                resume_sections=resume_sections,
             )
 
         overall_default_s, stall_default_s = _recommended_stream_timeouts()
@@ -499,377 +494,68 @@ async def api_generate_stream(doc_id: str, request: Request) -> StreamingRespons
         if section_stall_s > 0 and section_stall_s < stall_s:
             section_stall_s = stall_s
         start_ts = time.time()
-        max_gap_s = 0.0
-        try:
-            expand_outline = bool((session.generation_prefs or {}).get("expand_outline", False))
-            required_h2 = list(resume_sections) if resume_sections else list(session.template_required_h2 or [])
-            required_outline = [] if resume_sections else list(session.template_outline or [])
-            graph_current_text = "" if compose_mode == "overwrite" else (current_text or session.doc_text or "")
-            use_route_graph = str(os.environ.get("WRITING_AGENT_USE_ROUTE_GRAPH", "0")).strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }
-            if use_route_graph and "run_generate_graph_dual_engine" in globals():
-                trace_context["route_path"] = "route_graph"
-                if route_graph_metrics_domain.should_inject_route_graph_failure(phase="generate_stream"):
-                    raise RuntimeError("E_INJECTED_ROUTE_GRAPH_FAILURE")
-                out = run_generate_graph_dual_engine(
-                    instruction=instruction,
-                    current_text=graph_current_text,
-                    required_h2=required_h2,
-                    required_outline=required_outline,
-                    expand_outline=expand_outline,
-                    config=cfg,
-                    compose_mode=compose_mode,
-                    resume_sections=resume_sections,
-                    format_only=False,
-                    plan_confirm=plan_confirm,
-                )
-                if isinstance(out, dict):
-                    candidate = str(out.get("text") or "")
-                    terminal_status = str(out.get("terminal_status") or "").strip().lower()
-                    failure_reason = str(out.get("failure_reason") or "").strip()
-                    no_semantic_failover_reasons = {
-                        "analysis_needs_clarification",
-                        "analysis_guard_failed",
-                        "section_language_mismatch",
-                        "section_hierarchy_insufficient",
-                        "must_include_missing",
-                        "keyword_domain_mismatch",
-                        "missing_section_headings",
-                        "section_content_missing",
-                    }
-                    no_semantic_failover = (
-                        terminal_status in {"failed", "interrupted"}
-                        and failure_reason in no_semantic_failover_reasons
-                    )
-                    if candidate.strip():
-                        graph_meta = {
-                            "path": "route_graph",
-                            "trace_id": str(out.get("trace_id") or ""),
-                            "engine": str(out.get("engine") or ""),
-                            "route_id": str(out.get("route_id") or ""),
-                            "route_entry": str(out.get("route_entry") or ""),
-                            "terminal_status": str(out.get("terminal_status") or "success"),
-                            "failure_reason": str(out.get("failure_reason") or ""),
-                            "quality_snapshot": dict(out.get("quality_snapshot") or {}),
-                            "plan_feedback": dict(out.get("plan_feedback") or {}),
-                        }
-                        raw_prompt_trace = out.get("prompt_trace")
-                        if isinstance(raw_prompt_trace, list):
-                            prompt_trace = [dict(x) for x in raw_prompt_trace if isinstance(x, dict)]
-                            if prompt_trace:
-                                graph_meta["prompt_trace"] = prompt_trace[-24:]
-                        final_text = _postprocess_output_text(
-                            session,
-                            candidate,
-                            raw_instruction,
-                            current_text=graph_current_text,
-                        )
-                        problems = list(out.get("problems") or [])
-                        payload = {
-                            "text": final_text,
-                            "problems": problems,
-                            "doc_ir": _safe_doc_ir_payload(final_text),
-                        }
-                        if graph_meta:
-                            payload["graph_meta"] = graph_meta
-                        yield emit("final", _with_terminal(payload))
-                        _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
-                        _record_route_metric(
-                            "route_graph_success",
-                            path="route_graph",
-                            fallback_triggered=False,
-                            fallback_recovered=False,
-                        )
-                    elif no_semantic_failover:
-                        skip_insufficient_failover = True
-                        problems = [failure_reason] if failure_reason else list(out.get("problems") or [])
-                        graph_meta = {
-                            "path": "route_graph",
-                            "trace_id": str(out.get("trace_id") or ""),
-                            "engine": str(out.get("engine") or ""),
-                            "route_id": str(out.get("route_id") or ""),
-                            "route_entry": str(out.get("route_entry") or ""),
-                            "terminal_status": terminal_status or "failed",
-                            "failure_reason": failure_reason,
-                            "quality_snapshot": dict(out.get("quality_snapshot") or {}),
-                            "plan_feedback": dict(out.get("plan_feedback") or {}),
-                        }
-                        if prompt_trace:
-                            graph_meta["prompt_trace"] = prompt_trace[-24:]
-                        yield emit(
-                            "final",
-                            _with_reason_codes(
-                                _with_terminal(
-                                    {
-                                        "text": "",
-                                        "problems": problems,
-                                        "doc_ir": _safe_doc_ir_payload(""),
-                                        "graph_meta": graph_meta,
-                                        "status": terminal_status or "failed",
-                                        "failure_reason": failure_reason,
-                                        "quality_snapshot": dict(out.get("quality_snapshot") or {}),
-                                    }
-                                )
-                            ),
-                        )
-                        _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
-                        _record_route_metric(
-                            "route_graph_semantic_failed",
-                            path="route_graph",
-                            fallback_triggered=False,
-                            fallback_recovered=False,
-                        )
-                        return
-            else:
-                trace_context["route_path"] = "legacy_graph"
-                gen = run_generate_graph(
-                    instruction=instruction,
-                    current_text=graph_current_text,
-                    required_h2=required_h2,
-                    required_outline=required_outline,
-                    expand_outline=expand_outline,
-                    config=cfg,
-                )
-                last_section_at: float | None = None
-                last_event_at = start_ts
-                for ev in _iter_with_timeout(gen, per_event=stall_s, overall=overall_s):
-                    now = time.time()
-                    gap = now - last_event_at
-                    if gap > max_gap_s:
-                        max_gap_s = gap
-                    last_event_at = now
-                    if ev.get("event") == "prompt_route":
-                        meta = ev.get("metadata") if isinstance(ev.get("metadata"), dict) else {}
-                        prompt_trace.append(
-                            {
-                                "stage": str(ev.get("stage") or ""),
-                                "metadata": dict(meta),
-                            }
-                        )
-                        yield emit("prompt_route", ev)
-                        continue
-                    if ev.get("event") == "final":
-                        if not isinstance(graph_meta, dict):
-                            graph_meta = {
-                                "path": "legacy_graph",
-                                "trace_id": "",
-                                "engine": "legacy",
-                                "route_id": "",
-                                "route_entry": "",
-                            }
-                        if prompt_trace:
-                            graph_meta["prompt_trace"] = prompt_trace[-24:]
-                        final_text = _postprocess_output_text(
-                            session,
-                            str(ev.get("text") or ""),
-                            raw_instruction,
-                            current_text=graph_current_text,
-                        )
-                        problems = list(ev.get("problems") or [])
-                        payload = dict(ev)
-                        payload["text"] = final_text
-                        payload["doc_ir"] = _safe_doc_ir_payload(final_text)
-                        if graph_meta:
-                            payload["graph_meta"] = graph_meta
-                        if str(payload.get("event") or "").strip().lower() == "final":
-                            payload = _with_terminal(payload)
-                        yield emit(payload.get("event", "message"), payload)
-                        _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
-                        _record_route_metric(
-                            "legacy_graph_success",
-                            path="legacy_graph",
-                            fallback_triggered=False,
-                            fallback_recovered=False,
-                        )
-                        break
-                    yield emit(ev.get("event", "message"), ev)
-                    if ev.get("event") == "section" and ev.get("phase") == "delta":
-                        last_section_at = time.time()
-                    if section_stall_s > 0:
-                        if last_section_at is not None and time.time() - last_section_at > section_stall_s:
-                            raise TimeoutError("section stalled")
-        except Exception as e:
-            trace_context["fallback_trigger"] = route_graph_metrics_domain.extract_error_code(e, default="E_GRAPH_FAILED")
-            trace_context["fallback_recovered"] = False
-            if isinstance(e, TimeoutError) or "timeout" in str(e).lower() or "stalled" in str(e).lower():
-                truncate_reason_codes.add("timeout_fallback")
-            _record_route_metric(
-                "graph_failed",
-                path="route_graph" if use_route_graph else "legacy_graph",
-                fallback_triggered=True,
-                fallback_recovered=False,
-                error_code=route_graph_metrics_domain.extract_error_code(e, default="E_GRAPH_FAILED"),
-            )
+        expand_outline = bool((session.generation_prefs or {}).get("expand_outline", False))
+        required_h2 = list(resume_sections) if resume_sections else list(session.template_required_h2 or [])
+        required_outline = [] if resume_sections else list(session.template_outline or [])
+        graph_current_text = "" if compose_mode == "overwrite" else (current_text or session.doc_text or "")
+
+        def _log_graph_error(exc: Exception) -> None:
             try:
                 log_path = Path(".data/logs/graph_error.log")
                 log_path.parent.mkdir(parents=True, exist_ok=True)
                 log_path.write_text(
-                    f"{time.strftime('%Y-%m-%d %H:%M:%S')} graph_error: {e}\n{traceback.format_exc()}\n",
+                    f"{time.strftime('%Y-%m-%d %H:%M:%S')} graph_error: {exc}\n{traceback.format_exc()}\n",
                     encoding="utf-8",
                 )
             except Exception:
                 pass
-            # fallback to single-pass generation if streaming pipeline stalls
-            try:
-                # Use streaming version with heartbeat
-                final_text = None
-                saw_stream_delta = False
-                for event in _single_pass_generate_stream(
-                    session,
-                    instruction=instruction,
-                    current_text=current_text,
-                    target_chars=target_chars,
-                ):
-                    if event.get("event") == "heartbeat":
-                        yield emit("delta", {"delta": event.get("message", "")})
-                    elif event.get("event") == "section":
-                        saw_stream_delta = True
-                        yield emit("section", event)
-                    elif event.get("event") == "result":
-                        final_text = event.get("text", "")
-                if final_text:
-                    trace_context["route_path"] = "single_pass_stream"
-                    trace_context["fallback_recovered"] = True
-                    failover_meta = {
-                        "path": "single_pass_stream",
-                        "trace_id": "",
-                        "engine": "single_pass",
-                        "route_id": "",
-                        "route_entry": "",
-                        "engine_failover": True,
-                        "terminal_status": "interrupted",
-                        "needs_review": True,
-                    }
-                    if prompt_trace:
-                        failover_meta["prompt_trace"] = prompt_trace[-24:]
-                    final_text = _postprocess_output_text(
-                        session,
-                        final_text,
-                        raw_instruction,
-                        current_text=current_text,
-                    )
-                    # Check generation quality
-                    quality_issues = _check_generation_quality(final_text, target_chars)
-                    if not saw_stream_delta:
-                        yield emit("section", {"section": "fallback", "phase": "delta", "delta": final_text})
-                    yield emit(
-                        "final",
-                        _with_terminal(
-                            {
-                                "text": final_text,
-                                "problems": quality_issues,
-                                "doc_ir": _safe_doc_ir_payload(final_text),
-                                "graph_meta": failover_meta,
-                            }
-                        ),
-                    )
-                    _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
-                    _record_route_metric(
-                        "fallback_recovered",
-                        path="single_pass_stream",
-                        fallback_triggered=True,
-                        fallback_recovered=True,
-                    )
-            except Exception as ee:
-                trace_context["fallback_recovered"] = False
-                _record_route_metric(
-                    "fallback_failed",
-                    path="single_pass_stream",
-                    fallback_triggered=True,
-                    fallback_recovered=False,
-                    error_code=route_graph_metrics_domain.extract_error_code(ee, default="E_FALLBACK_FAILED"),
-                )
-                yield emit("error", {"message": f"generation failed: {e}; fallback failed: {ee}"})
-        if (final_text is None or len(final_text.strip()) < 20) and not skip_insufficient_failover:
-            truncate_reason_codes.add("insufficient_output_fallback")
-            if not str(trace_context.get("fallback_trigger") or "").strip():
-                trace_context["fallback_trigger"] = "E_TEXT_INSUFFICIENT"
-            trace_context["fallback_recovered"] = False
-            _record_route_metric(
-                "graph_insufficient",
-                path="route_graph" if use_route_graph else "legacy_graph",
-                fallback_triggered=True,
-                fallback_recovered=False,
-                error_code="E_TEXT_INSUFFICIENT",
-            )
-            # Fallback: single-pass generation to avoid empty output on stream failures.
-            try:
-                final_text = None
-                saw_stream_delta = False
-                for event in _single_pass_generate_stream(
-                    session,
-                    instruction=instruction,
-                    current_text=current_text,
-                    target_chars=target_chars,
-                ):
-                    if event.get("event") == "heartbeat":
-                        yield emit("delta", {"delta": event.get("message", "")})
-                    elif event.get("event") == "section":
-                        saw_stream_delta = True
-                        yield emit("section", event)
-                    elif event.get("event") == "result":
-                        final_text = event.get("text", "")
-                if final_text:
-                    trace_context["route_path"] = "single_pass_stream"
-                    trace_context["fallback_recovered"] = True
-                    failover_meta = {
-                        "path": "single_pass_stream",
-                        "trace_id": "",
-                        "engine": "single_pass",
-                        "route_id": "",
-                        "route_entry": "",
-                        "engine_failover": True,
-                        "terminal_status": "interrupted",
-                        "needs_review": True,
-                    }
-                    if prompt_trace:
-                        failover_meta["prompt_trace"] = prompt_trace[-24:]
-                    final_text = _postprocess_output_text(
-                        session,
-                        final_text,
-                        raw_instruction,
-                        current_text=current_text,
-                    )
-                    # Check generation quality
-                    quality_issues = _check_generation_quality(final_text, target_chars)
-                    if not saw_stream_delta:
-                        yield emit(
-                            "section",
-                            {"section": "fallback", "phase": "delta", "delta": final_text},
-                        )
-                    yield emit(
-                        "final",
-                        _with_terminal(
-                            {
-                                "text": final_text,
-                                "problems": quality_issues,
-                                "doc_ir": _safe_doc_ir_payload(final_text),
-                                "graph_meta": failover_meta,
-                            }
-                        ),
-                    )
-                    _record_stream_timing(total_s=time.time() - start_ts, max_gap_s=max_gap_s)
-                    _record_route_metric(
-                        "fallback_recovered",
-                        path="single_pass_stream",
-                        fallback_triggered=True,
-                        fallback_recovered=True,
-                    )
-            except Exception as e:
-                trace_context["fallback_recovered"] = False
-                _record_route_metric(
-                    "fallback_failed",
-                    path="single_pass_stream",
-                    fallback_triggered=True,
-                    fallback_recovered=False,
-                    error_code=route_graph_metrics_domain.extract_error_code(e, default="E_FALLBACK_FAILED"),
-                )
-                yield emit("error", {"message": f"generation failed and fallback failed: {e}"})
-                return
+
+        workflow_result = yield from run_generate_stream_graph_with_fallback(
+            request=GenerateStreamRequest(
+                session=session,
+                raw_instruction=raw_instruction,
+                instruction=instruction,
+                current_text=current_text,
+                graph_current_text=graph_current_text,
+                compose_mode=compose_mode,
+                resume_sections=resume_sections,
+                plan_confirm=plan_confirm,
+                cfg=cfg,
+                target_chars=target_chars,
+                required_h2=required_h2,
+                required_outline=required_outline,
+                expand_outline=expand_outline,
+                stall_s=stall_s,
+                overall_s=overall_s,
+                section_stall_s=section_stall_s,
+                start_ts=start_ts,
+                trace_context=trace_context,
+                truncate_reason_codes=truncate_reason_codes,
+                route_metric_meta=route_metric_meta,
+            ),
+            deps=GenerateStreamDeps(
+                environ=os.environ,
+                emit=emit,
+                with_terminal=_with_terminal,
+                with_reason_codes=_with_reason_codes,
+                record_route_metric=_record_route_metric,
+                record_stream_timing=_record_stream_timing,
+                extract_error_code=route_graph_metrics_domain.extract_error_code,
+                should_inject_route_graph_failure=route_graph_metrics_domain.should_inject_route_graph_failure,
+                run_generate_graph_dual_engine=globals().get("run_generate_graph_dual_engine"),
+                run_generate_graph=run_generate_graph,
+                iter_with_timeout=_iter_with_timeout,
+                postprocess_output_text=_postprocess_output_text,
+                safe_doc_ir_payload=_safe_doc_ir_payload,
+                single_pass_generate_stream=_single_pass_generate_stream,
+                check_generation_quality=_check_generation_quality,
+                log_graph_error=_log_graph_error,
+            ),
+        )
+        if isinstance(workflow_result, dict) and bool(workflow_result.get("stop")):
+            return
+        if isinstance(workflow_result, dict):
+            final_text = workflow_result.get("final_text")
         # Persist final text so refresh/reconnect keeps latest generated content.
         if final_text is not None:
             _set_doc_text(session, final_text)

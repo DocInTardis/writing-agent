@@ -8,6 +8,7 @@ from writing_agent.document import v2_report_docx_helpers as docx_helpers
 from writing_agent.v2 import graph_section_draft_domain as section_domain
 from writing_agent.v2 import graph_text_sanitize_domain as sanitize_domain
 from writing_agent.web import app_v2_textops_runtime_part2 as textops_part2
+from writing_agent.web.domains import section_edit_ops_domain
 from writing_agent.web.api.editing_flow import _normalize_inline_context_policy, _trim_inline_context
 
 
@@ -28,7 +29,7 @@ def test_inline_context_meta_contains_reason_codes() -> None:
 
 def test_reference_extract_conservative_mode_keeps_compound_item(monkeypatch) -> None:
     monkeypatch.setenv("WRITING_AGENT_REFERENCE_CONSERVATIVE_REPAIR", "1")
-    textops_part2.bind({"re": re, "os": os})
+    textops_part2.bind({"re": re, "os": os, "section_edit_ops_domain": section_edit_ops_domain})
     text = """
 ## 参考文献
 
@@ -69,17 +70,22 @@ class _DummyClient:
 
 def test_stream_structured_blocks_strict_json_on_by_default(monkeypatch) -> None:
     monkeypatch.delenv("WRITING_AGENT_STRICT_JSON", raising=False)
-    with pytest.raises(ValueError):
-        section_domain.stream_structured_blocks(
-            client=_DummyClient(),
-            system="s",
-            user="u",
-            out_queue=queue.Queue(),
-            section="H2::测试",
-            section_id="H2::测试",
-            is_reference=False,
-            num_predict=128,
-            deadline=10**12,
-            strict_json=True,
-            text_store=None,
-        )
+    q = queue.Queue()
+    out = section_domain.stream_structured_blocks(
+        client=_DummyClient(),
+        system="s",
+        user="u",
+        out_queue=q,
+        section="H2::测试",
+        section_id="H2::测试",
+        is_reference=False,
+        num_predict=128,
+        deadline=10**12,
+        strict_json=True,
+        text_store=None,
+    )
+    assert "this-is-not-json" in out
+    events = []
+    while not q.empty():
+        events.append(q.get_nowait())
+    assert any(str(ev.get("fallback_mode") or "") == "plain_text_recovery" for ev in events)

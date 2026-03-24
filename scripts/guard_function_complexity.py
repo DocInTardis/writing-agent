@@ -122,6 +122,22 @@ def _as_posix(path: Path) -> str:
     return path.as_posix()
 
 
+def _pattern_variants(pattern: str) -> list[str]:
+    marker = "**/"
+    seen = {str(pattern)}
+    pending = [str(pattern)]
+    while pending:
+        current = pending.pop()
+        idx = current.find(marker)
+        while idx >= 0:
+            collapsed = current[:idx] + current[idx + len(marker) :]
+            if collapsed not in seen:
+                seen.add(collapsed)
+                pending.append(collapsed)
+            idx = current.find(marker, idx + 1)
+    return list(seen)
+
+
 def load_policy(path: Path) -> dict:
     raw = json.loads(path.read_text(encoding="utf-8"))
     include = list(raw.get("include") or [])
@@ -140,8 +156,9 @@ def load_policy(path: Path) -> dict:
 
 def _matches_any(rel_path: str, patterns: list[str]) -> bool:
     for pat in patterns:
-        if fnmatch(rel_path, pat):
-            return True
+        for variant in _pattern_variants(str(pat or "")):
+            if fnmatch(rel_path, variant):
+                return True
     return False
 
 

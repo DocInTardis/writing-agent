@@ -74,6 +74,20 @@ def _normalize_path_like(token: str) -> str:
     return text
 
 
+def _path_for_existence_check(path_like: str) -> str:
+    text = _normalize_path_like(path_like)
+    if not text:
+        return ""
+    if "::" in text:
+        text = text.split("::", 1)[0]
+    if "#L" in text:
+        text = text.split("#L", 1)[0]
+    match = re.match(r"^(.*?\.(?:py|md|json|ya?ml|toml|txt|svelte|js|ts|tsx|jsx|css|html|tf))(?:[:#].*)?$", text)
+    if match:
+        return str(match.group(1) or "")
+    return text
+
+
 def _should_check_path(path_like: str, prefixes: list[str]) -> bool:
     text = str(path_like or "").strip()
     if not text:
@@ -84,7 +98,7 @@ def _should_check_path(path_like: str, prefixes: list[str]) -> bool:
 
 
 def _path_exists(path_like: str) -> bool:
-    text = str(path_like or "").strip()
+    text = _path_for_existence_check(path_like)
     if not text:
         return False
     if "*" in text or "?" in text:

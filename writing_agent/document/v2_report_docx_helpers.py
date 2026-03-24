@@ -5,30 +5,18 @@ This module belongs to `writing_agent.document` in the writing-agent codebase.
 
 from __future__ import annotations
 
-import io
-import json
 import os
 import re
-import xml.etree.ElementTree as ET
-from io import BytesIO
-from typing import Any
-from zipfile import ZipFile
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.oxml.text.paragraph import CT_P
-from docx.shared import Cm, Pt, RGBColor
+from docx.shared import Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
-from writing_agent.v2.doc_format import DocBlock, ParsedDoc
-from writing_agent.v2.figure_render import render_figure_svg
-
-try:
-    import cairosvg
-except Exception:  # pragma: no cover - optional dependency
-    cairosvg = None
+from writing_agent.document import v2_report_docx_content_helpers as content_helpers
+from writing_agent.v2.doc_format import DocBlock
 
 FIRST_LINE_INDENT_CM = 0.85
 
@@ -301,7 +289,7 @@ def _normalize_para(text: str) -> str:
 
 
 def _split_heading_tail(text: str) -> tuple[str, str]:
-    s = (text or "").strip()
+    s = _normalize_export_text(text, field="heading").strip()
     if not s:
         return "", ""
     if not _docx_aggressive_split_enabled():
@@ -414,8 +402,103 @@ def _split_paragraph_chunks(text: str) -> list[str]:
     return out
 
 
+_MOJIBAKE_PATTERNS = [
+    re.compile(r"(?:Ã.|Â.|â€|â€“|â€”|é«|æ；|ç；)", re.IGNORECASE),
+    re.compile(r"�"),
+]
+
+_HEADING_NORMALIZATION_TARGETS = (
+    "摘要",
+    "关键词",
+    "参考文献",
+    "引言",
+    "绪论",
+    "结论",
+    "标题",
+)
+
+
+def _mojibake_hit_count(text: str) -> int:
+    token = str(text or "")
+    if not token:
+        return 0
+    return sum(len(pattern.findall(token)) for pattern in _MOJIBAKE_PATTERNS)
+
+
+
+def _normalize_export_text(text: str, *, field: str = "") -> str:
+    s = str(text or "")
+    if not s:
+        return ""
+    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", s)
+    s = s.replace("\uFFFE", "").replace("\uFFFF", "")
+    compact = s.strip()
+    original_hits = _mojibake_hit_count(compact)
+
+    if field in {"heading", "section_title", "title"}:
+        for encoding in ("gb18030", "latin-1", "cp1252"):
+            try:
+                candidate = compact.encode(encoding).decode("utf-8")
+            except Exception:
+                continue
+            candidate = candidate.strip()
+            if any(candidate == marker or candidate.startswith(marker) for marker in _HEADING_NORMALIZATION_TARGETS):
+                compact = candidate
+                break
+
+    if _mojibake_hit_count(compact) > 0:
+        best = compact
+        best_hits = _mojibake_hit_count(compact)
+        for encoding in ("latin-1", "cp1252", "gb18030"):
+            try:
+                candidate = compact.encode(encoding).decode("utf-8")
+            except Exception:
+                continue
+            candidate = candidate.strip()
+            hits = _mojibake_hit_count(candidate)
+            if hits < best_hits:
+                best = candidate
+                best_hits = hits
+        compact = best
+    if original_hits > 0 and _mojibake_hit_count(compact) > original_hits:
+        return s.strip()
+    return compact.strip()
+
+
+
+def _looks_like_mojibake(text: str) -> bool:
+    token = str(text or "").strip()
+    if not token:
+        return False
+    return _mojibake_hit_count(token) > 0
+
+
+
+def _collect_export_mojibake_fragments(title: str, blocks: list[DocBlock], *, max_hits: int = 8) -> list[str]:
+    hits: list[str] = []
+    title_norm = _normalize_export_text(title, field="title")
+    if _looks_like_mojibake(title_norm):
+        hits.append(title_norm[:120])
+    for block in blocks or []:
+        block_type = str(getattr(block, "type", "") or "")
+        samples: list[str] = []
+        if block_type in {"heading", "paragraph"}:
+            samples.append(_normalize_export_text(str(getattr(block, "text", "") or ""), field=block_type))
+        caption = str(getattr(block, "caption", "") or "").strip()
+        if caption:
+            samples.append(_normalize_export_text(caption, field="caption"))
+        for sample in samples:
+            if not sample:
+                continue
+            if _looks_like_mojibake(sample):
+                hits.append(sample[:120])
+                if len(hits) >= max_hits:
+                    return hits
+    return hits
+
+
 def _sanitize_heading_text(text: str) -> str:
-    s = (text or "").strip()
+    s = _normalize_export_text(text, field="heading").strip()
     s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", s)
     s = s.replace("\uFFFE", "").replace("\uFFFF", "")
     s = _strip_inline_markers(s)
@@ -428,7 +511,7 @@ def _sanitize_heading_text(text: str) -> str:
 
 
 def _sanitize_paragraph_text(text: str) -> str:
-    s = (text or "").replace("`", "")
+    s = _normalize_export_text(text, field="paragraph").replace("`", "")
     s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", s)
     s = s.replace("\uFFFE", "").replace("\uFFFF", "")
     s = re.sub(r"(?m)^\s*#{2,}\s+", "", s)
@@ -494,7 +577,7 @@ def _promote_headings_if_no_h1(blocks: list[DocBlock]) -> list[DocBlock]:
 
 
 def _normalize_section_title(text: str) -> str:
-    s = (text or "").strip()
+    s = _normalize_export_text(text, field="section_title").strip()
     s = re.sub(r"^\d+(?:\.\d+)*\s*", "", s)
     s = re.sub(r"^[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+\u3001\s*", "", s)
     s = re.sub(r"^\u7b2c[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341]+[\u7ae0\u8282]\s*", "", s)
@@ -745,355 +828,20 @@ def _disable_update_fields(doc: Document) -> None:
         pass
 
 
-def _clear_doc_body(doc: Document) -> None:
-    body = doc.element.body  # type: ignore[attr-defined]
-    sects = [child for child in list(body) if child.tag.endswith("}sectPr")]
-    keep_sect = sects[-1] if sects else None
-    for child in list(body):
-        if child is keep_sect:
-            continue
-        body.remove(child)
 
-
-def _truncate_template_body(doc: Document) -> None:
-    _clear_doc_body(doc)
-
-
-def _ensure_min_figures(blocks: list[DocBlock]) -> list[DocBlock]:
-    raw = os.environ.get("WRITING_AGENT_EXPORT_MIN_FIGURES", "2").strip()
-    try:
-        min_figs = int(raw)
-    except Exception:
-        min_figs = 1
-    if min_figs <= 0:
-        return blocks
-    count = sum(1 for b in blocks if b.type == "figure")
-    if count >= min_figs:
-        return blocks
-
-    specs = [
-        {
-            "type": "flow",
-            "caption": "\u7cfb\u7edf\u5f00\u53d1\u6d41\u7a0b",
-            "data": {"nodes": ["\u9700\u6c42\u8c03\u7814", "\u6982\u8981\u8bbe\u8ba1", "\u8be6\u7ec6\u8bbe\u8ba1", "\u7f16\u7801\u6d4b\u8bd5", "\u90e8\u7f72\u8fd0\u7ef4"]},
-        },
-        {
-            "type": "bar",
-            "caption": "\u6a21\u5757\u5de5\u4f5c\u91cf\u5206\u5e03",
-            "data": {"labels": ["\u6838\u5fc3\u529f\u80fd", "\u6570\u636e\u5c42", "\u63a5\u53e3\u5c42", "\u754c\u9762\u5c42"], "values": [4, 3, 2, 1]},
-        },
-        {
-            "type": "line",
-            "caption": "\u5173\u952e\u6307\u6807\u8d8b\u52bf",
-            "data": {"labels": ["\u9636\u6bb51", "\u9636\u6bb52", "\u9636\u6bb53", "\u9636\u6bb54"], "series": {"name": "\u54cd\u5e94\u65f6\u95f4(ms)", "values": [220, 180, 150, 130]}},
-        },
-    ]
-
-    insert_points = [i + 1 for i, b in enumerate(blocks) if b.type == "heading"]
-    if not insert_points:
-        return blocks
-
-    out = list(blocks)
-    offset = 0
-    spec_idx = 0
-    for idx in insert_points:
-        if count >= min_figs:
-            break
-        out.insert(idx + offset, DocBlock(type="figure", figure=specs[spec_idx % len(specs)]))
-        count += 1
-        offset += 1
-        spec_idx += 1
-    while count < min_figs:
-        out.append(DocBlock(type="figure", figure=specs[spec_idx % len(specs)]))
-        count += 1
-        spec_idx += 1
-    return out
-
-
-def _ensure_min_tables(blocks: list[DocBlock]) -> list[DocBlock]:
-    raw = os.environ.get("WRITING_AGENT_EXPORT_MIN_TABLES", "2").strip()
-    try:
-        min_tables = int(raw)
-    except Exception:
-        min_tables = 1
-    if min_tables <= 0:
-        return blocks
-    count = sum(1 for b in blocks if b.type == "table")
-    if count >= min_tables:
-        return blocks
-
-    sample = {
-        "caption": "\u6307\u6807\u6c47\u603b",
-        "columns": ["\u6307\u6807", "\u8bf4\u660e", "\u53d6\u503c"],
-        "rows": [
-            ["\u53ef\u7528\u6027", "\u670d\u52a1\u7a33\u5b9a\u6027", "99.9%"],
-            ["\u54cd\u5e94\u65f6\u95f4", "\u5e73\u5747\u54cd\u5e94", "<200ms"],
-            ["\u5e76\u53d1\u80fd\u529b", "\u5cf0\u503c\u5e76\u53d1", "1000 QPS"],
-        ],
-    }
-
-    insert_points = [i + 1 for i, b in enumerate(blocks) if b.type == "heading"]
-    if not insert_points:
-        return blocks
-
-    out = list(blocks)
-    offset = 0
-    for idx in insert_points:
-        if count >= min_tables:
-            break
-        out.insert(idx + offset, DocBlock(type="table", table=sample))
-        count += 1
-        offset += 1
-    while count < min_tables:
-        out.append(DocBlock(type="table", table=sample))
-        count += 1
-    return out
-
-
-def _ensure_reference_section(blocks: list[DocBlock]) -> list[DocBlock]:
-    def _looks_like_reference_item(text: str) -> bool:
-        if re.search(r"(19|20)\d{2}", text):
-            return True
-        if re.search(r"(出版社|期刊|学报|杂志|Journal|Conference|Proceedings|Transactions|IEEE|ACM)", text, re.IGNORECASE):
-            return True
-        return False
-
-    content: list[DocBlock] = []
-    ref_lines: list[str] = []
-    in_ref = False
-    saw_reference_heading = False
-    for b in blocks:
-        if b.type == "heading":
-            raw_text = (b.text or "").strip()
-            if re.match(r"^\s*\[\d+\]\s*", raw_text):
-                if raw_text:
-                    ref_lines.append(raw_text)
-                continue
-            title = _normalize_section_title(_sanitize_heading_text(raw_text))
-            if _is_reference_title(title):
-                in_ref = True
-                saw_reference_heading = True
-                continue
-            if in_ref:
-                continue
-            content.append(b)
-            continue
-        if b.type == "paragraph":
-            text = (b.text or "").strip()
-            if in_ref:
-                if re.match(r"^\s*\[\d+\]\s*", text):
-                    if text:
-                        ref_lines.append(text)
-                continue
-            if re.match(r"^\s*\[\d+\]\s*", text):
-                if text:
-                    ref_lines.append(text)
-                continue
-        if in_ref:
-            continue
-        content.append(b)
-
-    refs: list[str] = []
-    for line in ref_lines:
-        m = re.match(r"^\s*\[(\d+)\]\s*(.+)$", line)
-        if m:
-            item = m.group(2).strip()
-        else:
-            item = line.strip()
-        if item and _looks_like_reference_item(item):
-            refs.append(item)
-
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for item in refs:
-        key = item.strip()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        deduped.append(key)
-
-    if saw_reference_heading or deduped:
-        content.append(DocBlock(type="heading", level=2, text="\u53c2\u8003\u6587\u732e"))
-        for item in deduped:
-            content.append(DocBlock(type="paragraph", text=item))
-    return content
-
-def _find_template_body_anchor(doc: Document):
-    body = doc.element.body  # type: ignore[attr-defined]
-    for child in body.iterchildren():
-        if not isinstance(child, CT_P):
-            continue
-        p = Paragraph(child, doc)
-        text = (p.text or "").strip()
-        if not text:
-            continue
-        style = ""
-        try:
-            style = str(p.style.name or "")
-        except Exception:
-            style = ""
-        if _is_toc_style(style) or _looks_like_toc_entry(text):
-            continue
-        if _is_heading_para(style, text):
-            return child
-    return None
-
-
-def _is_heading_para(style: str, text: str) -> bool:
-    s = style.lower()
-    if "heading 1" in s or "heading 2" in s or "heading 3" in s:
-        return True
-    if "标题 1" in style or "标题1" in style or "标题 2" in style or "标题2" in style or "标题 3" in style or "标题3" in style:
-        return True
-    if "自定义标题" in style:
-        return True
-    return _looks_like_heading_text(text)
-
-
-def _looks_like_heading_text(text: str) -> bool:
-    t = text.strip()
-    if re.match(r"^\s*第[一二三四五六七八九十百0-9]+[章节]\s*.*$", t):
-        return True
-    if re.match(r"^\s*\d+(?:\.\d+)+\s+.+$", t):
-        return True
-    if re.match(r"^\s*[一二三四五六七八九十]+、\s*.+$", t):
-        return True
-    if re.match(r"^\s*（[一二三四五六七八九十]+）\s*.+$", t):
-        return True
-    return False
-
-
-def _is_toc_style(style: str) -> bool:
-    s = (style or "").lower()
-    return ("toc" in s) or ("目录" in style)
-
-
-def _looks_like_toc_entry(text: str) -> bool:
-    t = (text or "").strip()
-    if not t:
-        return False
-    return bool(re.search(r"[\\.·…]{2,}\\s*\\d+$", t))
-
-
-def _detect_template_heading_styles(doc: Document) -> dict[int, str]:
-    names = {s.name for s in doc.styles if getattr(s, "name", None)}
-    lower_names = {str(name).lower(): name for name in names if name}
-    styles: dict[int, str] = {}
-    if "自定义标题 1" in names:
-        styles[1] = "自定义标题 1"
-    if "自定义标题1" in names:
-        styles[1] = "自定义标题1"
-    if "自定义标题 2" in names:
-        styles[2] = "自定义标题 2"
-    if "自定义标题2" in names:
-        styles[2] = "自定义标题2"
-    if "自定义标题 3" in names:
-        styles[3] = "自定义标题 3"
-    if "自定义标题3" in names:
-        styles[3] = "自定义标题3"
-    if "heading 1" in lower_names:
-        styles[1] = lower_names["heading 1"]
-    if "heading 2" in lower_names:
-        styles[2] = lower_names["heading 2"]
-    if "heading 3" in lower_names:
-        styles[3] = lower_names["heading 3"]
-    if not styles:
-        if "标题 1" in names:
-            styles[1] = "标题 1"
-        if "标题 2" in names:
-            styles[2] = "标题 2"
-        if "标题 3" in names:
-            styles[3] = "标题 3"
-    return styles
-
-
-def _save_doc(doc: Document) -> bytes:
-    import io
-
-    buf = io.BytesIO()
-    doc.save(buf)
-    return buf.getvalue()
-
-
-def _postprocess_toc_footer_numbers(docx_bytes: bytes) -> bytes:
-    from zipfile import ZipFile
-    import xml.etree.ElementTree as ET
-    import io
-
-    ns = {
-        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-        "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-    }
-
-    with ZipFile(io.BytesIO(docx_bytes), "r") as zin:
-        try:
-            doc_xml = zin.read("word/document.xml")
-            rels_xml = zin.read("word/_rels/document.xml.rels")
-        except Exception:
-            return docx_bytes
-
-        doc = ET.fromstring(doc_xml)
-        rels = ET.fromstring(rels_xml)
-        relmap = {
-            rel.attrib.get("Id"): rel.attrib.get("Target")
-            for rel in rels.findall(".//{http://schemas.openxmlformats.org/package/2006/relationships}Relationship")
-        }
-        footer_targets: set[str] = set()
-        for sect in doc.findall(".//w:sectPr", ns):
-            pg = sect.find("w:pgNumType", ns)
-            if pg is None:
-                continue
-            fmt = pg.attrib.get(f"{{{ns['w']}}}fmt")
-            if fmt != "upperRoman":
-                continue
-            for ref in sect.findall("w:footerReference", ns):
-                if ref.attrib.get(f"{{{ns['w']}}}type") != "default":
-                    continue
-                rid = ref.attrib.get(f"{{{ns['r']}}}id")
-                target = relmap.get(rid)
-                if target:
-                    footer_targets.add(f"word/{target}")
-
-        if not footer_targets:
-            return docx_bytes
-
-        def rewrite_footer(xml_bytes: bytes, instr: str) -> bytes:
-            root = ET.fromstring(xml_bytes)
-            for child in list(root):
-                root.remove(child)
-            p = ET.Element(f"{{{ns['w']}}}p")
-            ppr = ET.SubElement(p, f"{{{ns['w']}}}pPr")
-            jc = ET.SubElement(ppr, f"{{{ns['w']}}}jc")
-            jc.set(f"{{{ns['w']}}}val", "center")
-            r1 = ET.SubElement(p, f"{{{ns['w']}}}r")
-            fld_begin = ET.SubElement(r1, f"{{{ns['w']}}}fldChar")
-            fld_begin.set(f"{{{ns['w']}}}fldCharType", "begin")
-            r2 = ET.SubElement(p, f"{{{ns['w']}}}r")
-            instr_el = ET.SubElement(r2, f"{{{ns['w']}}}instrText")
-            instr_el.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-            instr_el.text = instr
-            r3 = ET.SubElement(p, f"{{{ns['w']}}}r")
-            fld_sep = ET.SubElement(r3, f"{{{ns['w']}}}fldChar")
-            fld_sep.set(f"{{{ns['w']}}}fldCharType", "separate")
-            r4 = ET.SubElement(p, f"{{{ns['w']}}}r")
-            t = ET.SubElement(r4, f"{{{ns['w']}}}t")
-            t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-            t.text = "I"
-            r5 = ET.SubElement(p, f"{{{ns['w']}}}r")
-            fld_end = ET.SubElement(r5, f"{{{ns['w']}}}fldChar")
-            fld_end.set(f"{{{ns['w']}}}fldCharType", "end")
-            root.append(p)
-            return ET.tostring(root, encoding="utf-8", xml_declaration=True)
-
-        out = io.BytesIO()
-        with ZipFile(out, "w") as zout:
-            for name in zin.namelist():
-                data = zin.read(name)
-                if name in footer_targets:
-                    data = rewrite_footer(data, "PAGE \\* ROMAN")
-                zout.writestr(name, data)
-        return out.getvalue()
-
+_clear_doc_body = content_helpers._clear_doc_body
+_truncate_template_body = content_helpers._truncate_template_body
+_ensure_min_figures = content_helpers._ensure_min_figures
+_ensure_min_tables = content_helpers._ensure_min_tables
+_ensure_reference_section = content_helpers._ensure_reference_section
+_find_template_body_anchor = content_helpers._find_template_body_anchor
+_is_heading_para = content_helpers._is_heading_para
+_looks_like_heading_text = content_helpers._looks_like_heading_text
+_is_toc_style = content_helpers._is_toc_style
+_looks_like_toc_entry = content_helpers._looks_like_toc_entry
+_detect_template_heading_styles = content_helpers._detect_template_heading_styles
+_save_doc = content_helpers._save_doc
+_postprocess_toc_footer_numbers = content_helpers._postprocess_toc_footer_numbers
 
 def _ensure_reference_citations(doc: Document) -> None:
     nums: set[int] = set()

@@ -56,6 +56,46 @@ def test_diagram_generate_uses_tagged_prompt_channels(monkeypatch):
     assert "&lt;/user_request&gt;" in user_prompt
 
 
+def test_diagram_generate_semantic_preferred_type_guides_prompt_and_fallback(monkeypatch):
+    session = _prepare_session()
+    captured: dict[str, str] = {}
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs):
+            _ = args, kwargs
+
+        def is_running(self) -> bool:
+            return True
+
+        def chat(self, *, system: str, user: str, temperature: float = 0.2):
+            _ = system, temperature
+            captured["user"] = user
+            return '{"type":"unknown_type","caption":"x","data":{"evil":1}}'
+
+    monkeypatch.setattr(
+        app_v2,
+        "get_ollama_settings",
+        lambda: SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0),
+    )
+    monkeypatch.setattr(app_v2, "OllamaClient", _FakeClient)
+
+    client = TestClient(app_v2.app)
+    resp = client.post(
+        f"/api/doc/{session.id}/diagram/generate",
+        json={
+            "prompt": "Research Timeline and milestone roadmap",
+            "kind": "flow",
+        },
+    )
+    assert resp.status_code == 200
+    spec = (resp.json() or {}).get("spec") or {}
+    assert spec.get("type") == "timeline"
+    events = (spec.get("data") or {}).get("events") or []
+    assert len(events) >= 2
+    user_prompt = captured.get("user") or ""
+    assert "<semantic_preferred_type>timeline</semantic_preferred_type>" in user_prompt
+
+
 def test_diagram_generate_invalid_llm_schema_falls_back(monkeypatch):
     session = _prepare_session()
 

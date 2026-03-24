@@ -712,32 +712,73 @@ def _require_admin_key(request: Request) -> None:
 
 def _citation_verify_metrics_trend_enabled() -> bool:
     return _coerce_bool(os.environ.get("WRITING_AGENT_CITATION_VERIFY_TREND_ENABLED", "1"), default=True)
-
-def _citation_verify_metrics_trends_max_entries() -> int:
-    raw = os.environ.get("WRITING_AGENT_CITATION_VERIFY_TREND_MAX_ENTRIES", "3000")
-    return _parse_bounded_int(raw, default=3000, min_value=200, max_value=50000)
-
+def _citation_verify_metrics_trends_cache_reset_locked(*, path: Path, rows: list[dict], mtime_ns: int, dirty: bool) -> list[dict]:
+    cache_rows = [dict(row) for row in list(rows or []) if isinstance(row, dict)]
+    globals().update({
+        "_CITATION_VERIFY_METRICS_TRENDS_CACHE_ROWS": list(cache_rows),
+        "_CITATION_VERIFY_METRICS_TRENDS_CACHE_PATH": path.as_posix(),
+        "_CITATION_VERIFY_METRICS_TRENDS_CACHE_MTIME_NS": int(mtime_ns),
+        "_CITATION_VERIFY_METRICS_TRENDS_DIRTY": bool(dirty),
+    })
+    return list(cache_rows)
+def _citation_verify_metrics_trends_cache_rows_locked(*, path: Path) -> list[dict] | None:
+    cache_path = str(globals().get("_CITATION_VERIFY_METRICS_TRENDS_CACHE_PATH") or "")
+    cache_rows = globals().get("_CITATION_VERIFY_METRICS_TRENDS_CACHE_ROWS")
+    if cache_path != path.as_posix() or not isinstance(cache_rows, list):
+        return None
+    if bool(globals().get("_CITATION_VERIFY_METRICS_TRENDS_DIRTY", False)):
+        return list(cache_rows)
+    current_mtime_ns = path.stat().st_mtime_ns if path.exists() else -1
+    cached_mtime_ns = int(globals().get("_CITATION_VERIFY_METRICS_TRENDS_CACHE_MTIME_NS", -1))
+    return list(cache_rows) if current_mtime_ns == cached_mtime_ns else None
 def _citation_verify_metrics_trends_load_locked() -> list[dict]:
     path = _CITATION_VERIFY_METRICS_TRENDS_PATH
+    cached = _citation_verify_metrics_trends_cache_rows_locked(path=path)
+    if cached is not None:
+        return cached
     if not path.exists():
-        return []
+        return _citation_verify_metrics_trends_cache_reset_locked(path=path, rows=[], mtime_ns=-1, dirty=False)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         logger.warning("failed to parse citation verify trend file: %s", str(path), exc_info=True)
-        return []
-    rows = raw.get("points") if isinstance(raw, dict) else None
-    if not isinstance(rows, list):
-        return []
-    return [dict(row) for row in rows if isinstance(row, dict)]
-
-def _citation_verify_metrics_trends_write_locked(rows: list[dict]) -> None:
+        mtime_ns = path.stat().st_mtime_ns if path.exists() else -1
+        return _citation_verify_metrics_trends_cache_reset_locked(path=path, rows=[], mtime_ns=mtime_ns, dirty=False)
+    rows = raw.get("points") if isinstance(raw, dict) and isinstance(raw.get("points"), list) else []
+    mtime_ns = path.stat().st_mtime_ns if path.exists() else -1
+    return _citation_verify_metrics_trends_cache_reset_locked(path=path, rows=rows, mtime_ns=mtime_ns, dirty=False)
+def _citation_verify_metrics_trends_write_locked(rows: list[dict], *, persist: bool = True) -> list[dict]:
     path = _CITATION_VERIFY_METRICS_TRENDS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    max_entries = _citation_verify_metrics_trends_max_entries()
-    data = {"points": list(rows or [])[-max_entries:]}
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
+    max_entries = _parse_bounded_int(
+        os.environ.get("WRITING_AGENT_CITATION_VERIFY_TREND_MAX_ENTRIES", "3000"),
+        default=3000,
+        min_value=200,
+        max_value=50000,
+    )
+    trimmed = list(rows or [])[-max_entries:]
+    if persist:
+        path.write_text(json.dumps({"points": trimmed}, ensure_ascii=False, indent=2), encoding="utf-8")
+        mtime_ns = path.stat().st_mtime_ns if path.exists() else -1
+        globals()["_CITATION_VERIFY_METRICS_TRENDS_LAST_WRITE_AT"] = float(time.time())
+        return _citation_verify_metrics_trends_cache_reset_locked(path=path, rows=trimmed, mtime_ns=mtime_ns, dirty=False)
+    cached_mtime_ns = int(globals().get("_CITATION_VERIFY_METRICS_TRENDS_CACHE_MTIME_NS", -1))
+    return _citation_verify_metrics_trends_cache_reset_locked(path=path, rows=trimmed, mtime_ns=cached_mtime_ns, dirty=True)
+def _citation_verify_metrics_trends_flush_if_due_locked(*, force: bool = False) -> list[dict]:
+    rows = _citation_verify_metrics_trends_load_locked()
+    if not bool(globals().get("_CITATION_VERIFY_METRICS_TRENDS_DIRTY", False)):
+        return rows
+    interval_s = _parse_bounded_float(
+        os.environ.get("WRITING_AGENT_CITATION_VERIFY_TREND_FLUSH_INTERVAL_S", "1.0"),
+        default=1.0,
+        min_value=0.0,
+        max_value=60.0,
+    )
+    last_write_at = float(globals().get("_CITATION_VERIFY_METRICS_TRENDS_LAST_WRITE_AT", 0.0) or 0.0)
+    now = float(time.time())
+    if not force and interval_s > 0 and last_write_at > 0 and (now - last_write_at) < interval_s:
+        return rows
+    return _citation_verify_metrics_trends_write_locked(rows, persist=True)
 def _citation_verify_metrics_trends_append(point: dict) -> dict:
     row = dict(point or {})
     row["id"] = str(row.get("id") or uuid.uuid4().hex)
@@ -747,20 +788,19 @@ def _citation_verify_metrics_trends_append(point: dict) -> dict:
     with _CITATION_VERIFY_METRICS_TRENDS_LOCK:
         rows = _citation_verify_metrics_trends_load_locked()
         rows.append(row)
-        _citation_verify_metrics_trends_write_locked(rows)
+        _citation_verify_metrics_trends_write_locked(rows, persist=False)
+        _citation_verify_metrics_trends_flush_if_due_locked()
     return row
-
 def _citation_verify_metrics_trends_snapshot(*, limit: int = 60) -> dict:
     size = _parse_bounded_int(limit, default=60, min_value=1, max_value=500)
     with _CITATION_VERIFY_METRICS_TRENDS_LOCK:
-        rows = _citation_verify_metrics_trends_load_locked()
+        rows = _citation_verify_metrics_trends_flush_if_due_locked()
     return {"enabled": _citation_verify_metrics_trend_enabled(), "total": len(rows), "limit": size, "points": list(rows[-size:])}
-
 def _citation_verify_metrics_trend_context(*, ts: float, limit: int = 12) -> dict:
     size = _parse_bounded_int(limit, default=12, min_value=1, max_value=120)
     target = float(ts or 0.0)
     with _CITATION_VERIFY_METRICS_TRENDS_LOCK:
-        rows = _citation_verify_metrics_trends_load_locked()
+        rows = _citation_verify_metrics_trends_flush_if_due_locked()
     if not rows:
         return {"total": 0, "limit": size, "before": 0, "after": 0, "points": []}
     if target <= 0:
@@ -777,11 +817,8 @@ def _citation_verify_metrics_trend_context(*, ts: float, limit: int = 12) -> dic
         elif row_ts > target:
             after += 1
     return {"total": len(rows), "limit": size, "before": before, "after": after, "points": nearest}
-
 def _citation_verify_alert_events_max_entries() -> int:
-    raw = os.environ.get("WRITING_AGENT_CITATION_VERIFY_ALERT_EVENTS_MAX", "800")
-    return _parse_bounded_int(raw, default=800, min_value=50, max_value=20000)
-
+    return _parse_bounded_int(os.environ.get("WRITING_AGENT_CITATION_VERIFY_ALERT_EVENTS_MAX", "800"), default=800, min_value=50, max_value=20000)
 def _citation_verify_alert_events_load_locked() -> list[dict]:
     path = _CITATION_VERIFY_ALERT_EVENTS_PATH
     if not path.exists():
@@ -795,14 +832,12 @@ def _citation_verify_alert_events_load_locked() -> list[dict]:
     if not isinstance(rows, list):
         return []
     return [dict(row) for row in rows if isinstance(row, dict)]
-
 def _citation_verify_alert_events_write_locked(rows: list[dict]) -> None:
     path = _CITATION_VERIFY_ALERT_EVENTS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     max_entries = _citation_verify_alert_events_max_entries()
     data = {"events": list(rows or [])[-max_entries:]}
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
 def _citation_verify_alert_events_append(event: dict) -> dict:
     row = dict(event or {})
     row["id"] = str(row.get("id") or uuid.uuid4().hex)
@@ -812,13 +847,11 @@ def _citation_verify_alert_events_append(event: dict) -> dict:
         rows.append(row)
         _citation_verify_alert_events_write_locked(rows)
     return row
-
 def _citation_verify_alert_events_snapshot(*, limit: int = 20) -> dict:
     size = _parse_bounded_int(limit, default=20, min_value=1, max_value=200)
     with _CITATION_VERIFY_ALERT_EVENTS_LOCK:
         rows = _citation_verify_alert_events_load_locked()
     return {"total": len(rows), "limit": size, "events": list(rows[-size:])}
-
 def _citation_verify_alert_event_get(event_id: str) -> dict | None:
     key = str(event_id or "").strip()
     if not key:
@@ -829,20 +862,10 @@ def _citation_verify_alert_event_get(event_id: str) -> dict | None:
         if str((row or {}).get("id") or "") == key:
             return dict(row)
     return None
-
 def _citation_verify_alert_signature(*, severity: str, triggered_ids: list[str], degraded: bool) -> str:
-    return citation_alert_domain.citation_verify_alert_signature(
-        severity=severity,
-        triggered_ids=triggered_ids,
-        degraded=degraded,
-    )
-
+    return citation_alert_domain.citation_verify_alert_signature(severity=severity, triggered_ids=triggered_ids, degraded=degraded)
 def _citation_verify_release_context() -> dict:
-    return citation_alert_domain.citation_verify_release_context(
-        correlation_id=str(os.environ.get("WRITING_AGENT_CORRELATION_ID", "") or ""),
-        release_candidate_id=str(os.environ.get("WRITING_AGENT_RELEASE_CANDIDATE_ID", "") or ""),
-    )
-
+    return citation_alert_domain.citation_verify_release_context(correlation_id=str(os.environ.get("WRITING_AGENT_CORRELATION_ID", "") or ""), release_candidate_id=str(os.environ.get("WRITING_AGENT_RELEASE_CANDIDATE_ID", "") or ""))
 def _citation_verify_alert_notify_state_reset() -> None:
     with _CITATION_VERIFY_ALERT_NOTIFY_LOCK:
         _CITATION_VERIFY_ALERT_NOTIFY_STATE.update(
@@ -856,15 +879,12 @@ def _citation_verify_alert_notify_state_reset() -> None:
                 "last_event_id": "",
             }
         )
-
 def _alert_notify_webhook(url: str, payload: dict, *, timeout_s: float) -> tuple[bool, str]:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = UrlRequest(str(url), data=body, headers={"Content-Type": "application/json"}, method="POST")
     with urlopen(req, timeout=float(timeout_s)) as resp:
         code = int(getattr(resp, "status", 0) or resp.getcode() or 0)
-    if 200 <= code < 300:
-        return True, f"http_{code}"
-    return False, f"http_{code}"
+    return (True, f"http_{code}") if 200 <= code < 300 else (False, f"http_{code}")
 
 def _maybe_notify_citation_verify_alerts(*, alerts: dict, degraded: bool, errors: list[str]) -> dict:
     return citation_alert_domain.maybe_notify_citation_verify_alerts(

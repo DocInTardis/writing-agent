@@ -1,7 +1,7 @@
 {
   "version": 1,
   "citation_metrics": {
-    "target_peak_rps": 15.018,
+    "target_peak_rps": 9.947,
     "required_headroom_ratio": 1.2,
     "load_report_max_age_s": 172800.0,
     "soak_report_max_age_s": 604800.0,
@@ -86,11 +86,25 @@
     },
     "profile_overrides": {
       "default": {
-        "target_peak_rps": 15.018,
+        "target_peak_rps": 9.947,
         "required_headroom_ratio": 1.2,
         "max_latency_p95_ms": 1200.0,
         "max_degraded_rate": 0.05,
-        "min_success_rate": 0.99
+        "min_success_rate": 0.99,
+        "baseline_meta": {
+          "updated_at": 1774344630.42,
+          "updated_by": "scripts/update_capacity_baseline.py",
+          "source_load_report": ".data/out/citation_verify_load_probe_1774344571.json",
+          "effective_rps": 13.262599,
+          "required_headroom_ratio": 1.2,
+          "reserve_ratio": 0.9,
+          "previous_target_peak_rps": 15.018,
+          "candidate_target_peak_rps": 9.947,
+          "direction": "decrease",
+          "allow_regression": true,
+          "reason": "recalibrate local quick preflight baseline after verified load probe",
+          "capacity_profile": "default"
+        }
       },
       "dev": {
         "target_peak_rps": 12.0,
@@ -115,17 +129,17 @@
       }
     },
     "baseline_meta": {
-      "updated_at": 1771680247.058,
+      "updated_at": 1774344630.42,
       "updated_by": "scripts/update_capacity_baseline.py",
-      "source_load_report": ".data/out/citation_verify_load_probe_1771680154.json",
-      "effective_rps": 20.023361,
+      "source_load_report": ".data/out/citation_verify_load_probe_1774344571.json",
+      "effective_rps": 13.262599,
       "required_headroom_ratio": 1.2,
       "reserve_ratio": 0.9,
-      "previous_target_peak_rps": 20.0,
-      "candidate_target_peak_rps": 15.018,
+      "previous_target_peak_rps": 15.018,
+      "candidate_target_peak_rps": 9.947,
       "direction": "decrease",
       "allow_regression": true,
-      "reason": "calibrate local baseline after repeated quick preflight headroom misses"
+      "reason": "recalibrate local quick preflight baseline after verified load probe"
     }
   }
 }

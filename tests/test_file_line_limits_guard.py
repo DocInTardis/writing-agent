@@ -42,6 +42,20 @@ def test_line_guard_detects_override_violation(tmp_path: Path) -> None:
     assert row["limit"] == 10
 
 
+def test_line_guard_globstar_matches_root_level_file(tmp_path: Path) -> None:
+    rel = "scripts/high_quality_docx_batch.py"
+    _write_lines(tmp_path / rel, 12)
+    policy = {
+        "include": ["scripts/**/*.py"],
+        "exclude": [],
+        "default_limits": {".py": 10},
+        "overrides": {},
+    }
+    result = evaluate(tmp_path, policy)
+    assert result["ok"] is False
+    assert [row["path"] for row in result["violations"]] == [rel]
+
+
 def test_repo_policy_covers_current_app_v2_size() -> None:
     root = Path(__file__).resolve().parents[1]
     policy_path = root / "security" / "file_line_limits.json"
@@ -61,3 +75,10 @@ def test_repo_policy_covers_current_large_script_sizes() -> None:
         limit = int(policy["overrides"][rel])
         lines = len((root / rel).read_text(encoding="utf-8-sig").splitlines())
         assert lines <= limit
+
+
+def test_repo_file_line_limits_policy_is_valid_and_green() -> None:
+    root = Path(__file__).resolve().parents[1]
+    policy = load_policy(root / "security" / "file_line_limits.json")
+    result = evaluate(root, policy)
+    assert result["ok"] is True

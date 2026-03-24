@@ -29,6 +29,7 @@ from fastapi.testclient import TestClient
 import writing_agent.web.app_v2 as app_v2
 from writing_agent.v2.doc_ir import from_text as doc_ir_from_text
 from writing_agent.v2.doc_ir import to_dict as doc_ir_to_dict
+from scripts.run_summary_utils import extract_section_originality_summary
 
 
 def compact_len(text: str) -> int:
@@ -190,6 +191,10 @@ def run(args: argparse.Namespace) -> int:
     os.environ["WRITING_AGENT_STREAM_MAX_S"] = str(max(360, int(args.stream_timeout_s) * 2))
     os.environ["WRITING_AGENT_NONSTREAM_EVENT_TIMEOUT_S"] = str(max(120, int(args.stream_timeout_s)))
     os.environ["WRITING_AGENT_NONSTREAM_MAX_S"] = str(max(360, int(args.stream_timeout_s) * 2))
+    # Align planning/analysis/model timeouts with stream budget to avoid cold-start false failures.
+    os.environ["WRITING_AGENT_PLAN_TIMEOUT_S"] = str(max(60, int(args.stream_timeout_s) // 2))
+    os.environ["WRITING_AGENT_ANALYSIS_TIMEOUT_S"] = str(max(60, int(args.stream_timeout_s) // 2))
+    os.environ["WRITING_AGENT_SECTION_TIMEOUT_S"] = str(max(180, int(args.stream_timeout_s)))
 
     run_dir = Path(args.out_dir).resolve() / f"cnki_trace_workflow_{now_stamp()}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -277,17 +282,36 @@ def run(args: argparse.Namespace) -> int:
     )
     per_event_s = max(60.0, float(args.stream_timeout_s))
     overall_s = max(300.0, float(args.stream_timeout_s) * 3.0)
-    for ev in app_v2._iter_with_timeout(generator, per_event=per_event_s, overall=overall_s):
-        payload = ev if isinstance(ev, dict) else {"_raw": str(ev)}
-        row = {
-            "seq": len(events) + 1,
-            "t_rel_s": round(time.time() - started, 3),
-            "event": str(payload.get("event") or "message"),
-            "payload": payload,
+    stream_error = ""
+    try:
+        for ev in app_v2._iter_with_timeout(generator, per_event=per_event_s, overall=overall_s):
+            payload = ev if isinstance(ev, dict) else {"_raw": str(ev)}
+            row = {
+                "seq": len(events) + 1,
+                "t_rel_s": round(time.time() - started, 3),
+                "event": str(payload.get("event") or "message"),
+                "payload": payload,
+            }
+            events.append(row)
+            if row["event"] == "final":
+                final_payload = payload
+    except Exception as exc:
+        stream_error = f"stream_exception:{exc.__class__.__name__}:{str(exc)[:300]}"
+        final_payload = {
+            "event": "final",
+            "text": "",
+            "status": "failed",
+            "failure_reason": stream_error,
+            "problems": [stream_error],
         }
-        events.append(row)
-        if row["event"] == "final":
-            final_payload = payload
+        events.append(
+            {
+                "seq": len(events) + 1,
+                "t_rel_s": round(time.time() - started, 3),
+                "event": "final",
+                "payload": final_payload,
+            }
+        )
 
     raw_events_path = run_dir / "raw_events.jsonl"
     with raw_events_path.open("w", encoding="utf-8") as f:
@@ -295,10 +319,18 @@ def run(args: argparse.Namespace) -> int:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     if not final_payload:
-        raise RuntimeError("graph generation finished without final payload")
+        final_payload = {
+            "event": "final",
+            "text": "",
+            "status": "failed",
+            "failure_reason": stream_error or "final_payload_missing",
+            "problems": [stream_error or "final_payload_missing"],
+        }
 
     current_text = str(final_payload.get("text") or "")
-    if not current_text.strip():
+    terminal_status = str(final_payload.get("status") or "success").strip().lower()
+    terminal_failure_reason = str(final_payload.get("failure_reason") or "").strip()
+    if (not current_text.strip()) and terminal_status not in {"failed", "interrupted"}:
         raise RuntimeError("final payload text is empty")
 
     # Extract stage-level artifacts.
@@ -393,6 +425,8 @@ def run(args: argparse.Namespace) -> int:
         }
     )
 
+    runtime_quality_snapshot = dict(final_payload.get("quality_snapshot") or {})
+    section_originality_hot_sample = extract_section_originality_summary(runtime_quality_snapshot)
     stage_summary = {
         "doc_id": doc_id,
         "event_count": len(events),
@@ -411,12 +445,14 @@ def run(args: argparse.Namespace) -> int:
         ],
         "quality_gate": {
             "problems": list(final_payload.get("problems") or []),
-            "quality_snapshot": dict(final_payload.get("quality_snapshot") or {}),
+            "quality_snapshot": runtime_quality_snapshot,
+            "section_originality_hot_sample": section_originality_hot_sample,
         },
         "terminal": {
             "status": str(final_payload.get("status") or ""),
             "failure_reason": str(final_payload.get("failure_reason") or ""),
-            "quality_snapshot": dict(final_payload.get("quality_snapshot") or {}),
+            "quality_snapshot": runtime_quality_snapshot,
+            "section_originality_hot_sample": section_originality_hot_sample,
         },
         "fallback_path": {
             "route_path": str(
@@ -450,9 +486,11 @@ def run(args: argparse.Namespace) -> int:
         }
     )
 
-    failed = False
-    failure_reason = ""
+    failed = terminal_status in {"failed", "interrupted"}
+    failure_reason = terminal_failure_reason or ("generation_" + terminal_status if failed else "")
     for ridx in range(1, int(args.max_revise_rounds) + 1):
+        if failed:
+            break
         if quality.passed:
             break
         revise_instruction = (

@@ -14,7 +14,28 @@ from typing import Any, Iterable
 
 import requests
 
+
+def _http_pool_size() -> int:
+    raw = str(os.environ.get("WRITING_AGENT_HTTP_POOL_SIZE", "16")).strip()
+    try:
+        return max(4, int(raw))
+    except Exception:
+        return 16
+
+
+def _build_session() -> requests.Session:
+    session = requests.Session()
+    try:
+        pool = _http_pool_size()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=0)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+    except Exception:
+        pass
+    return session
+
 from writing_agent.llm.provider import LLMProvider, LLMProviderError
+from writing_agent.llm.providers._sse import iter_sse_data_lines, repair_utf8_mojibake
 
 
 def _bool_env(raw: str | None, default: bool) -> bool:
@@ -66,6 +87,7 @@ class NodeAIGatewayProvider(LLMProvider):
         self._base = str(config.gateway_url or "").rstrip("/")
         self._timeout = float(config.timeout_s)
         self._retries = max(1, int(config.max_retries))
+        self._session = _build_session()
 
     def _headers(self, options: dict[str, Any] | None) -> dict[str, str]:
         opts = options or {}
@@ -83,7 +105,7 @@ class NodeAIGatewayProvider(LLMProvider):
         last_error: Exception | None = None
         for _ in range(self._retries):
             try:
-                resp = requests.post(url, headers=self._headers(options), json=payload, timeout=self._timeout)
+                resp = self._session.post(url, headers=self._headers(options), json=payload, timeout=self._timeout)
                 if resp.status_code >= 400:
                     data = _safe_json(resp)
                     raise LLMProviderError(_sanitize_gateway_error(data, resp.status_code))
@@ -122,7 +144,7 @@ class NodeAIGatewayProvider(LLMProvider):
         if not self._base:
             return False
         try:
-            resp = requests.get(f"{self._base}/health", timeout=min(5.0, self._timeout))
+            resp = self._session.get(f"{self._base}/health", timeout=min(5.0, self._timeout))
             return 200 <= resp.status_code < 300
         except Exception:
             return False
@@ -140,7 +162,7 @@ class NodeAIGatewayProvider(LLMProvider):
 
         def _call():
             data = self._request_json(path="/v1/stream-text", payload=payload, options=options)
-            return str(data.get("text") or "")
+            return repair_utf8_mojibake(str(data.get("text") or ""))
 
         def _fallback():
             if not self.fallback_provider:
@@ -169,7 +191,7 @@ class NodeAIGatewayProvider(LLMProvider):
 
         def _iter_gateway() -> Iterable[str]:
             url = f"{self._base}/v1/stream-text"
-            with requests.post(
+            with self._session.post(
                 url,
                 headers=self._headers(options),
                 json=payload,
@@ -179,18 +201,14 @@ class NodeAIGatewayProvider(LLMProvider):
                 if resp.status_code >= 400:
                     data = _safe_json(resp)
                     raise LLMProviderError(_sanitize_gateway_error(data, resp.status_code))
-                for raw in resp.iter_lines(decode_unicode=True):
-                    line = str(raw or "").strip()
-                    if not line or not line.startswith("data:"):
-                        continue
-                    json_part = line[5:].strip()
+                for json_part in iter_sse_data_lines(resp):
                     try:
                         event = json.loads(json_part)
                     except Exception:
                         continue
                     kind = str(event.get("type") or "")
                     if kind == "text-delta":
-                        delta = str(event.get("delta") or "")
+                        delta = repair_utf8_mojibake(str(event.get("delta") or ""))
                         if delta:
                             yield delta
                     elif kind == "error":

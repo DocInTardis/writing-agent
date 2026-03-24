@@ -5,6 +5,8 @@ This module belongs to `writing_agent.web` in the writing-agent codebase.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from difflib import SequenceMatcher
 from functools import wraps
 
 

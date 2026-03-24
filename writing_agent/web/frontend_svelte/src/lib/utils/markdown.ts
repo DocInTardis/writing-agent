@@ -86,7 +86,14 @@ export function renderMarkdown(text: string): string {
         // keep fallback caption
       }
       if (kind === 'figure') {
-        out.push(`<figure class="wa-figure" data-wa-figure="1"><div class="wa-figure-box">图</div><figcaption>${escapeHtml(caption)}</figcaption></figure>`)
+        let dataAttr = ''
+        try {
+          const parsed = JSON.parse(marker[2])
+          dataAttr = ` data-figure-spec="${escapeHtml(encodeURIComponent(JSON.stringify(parsed)))}"`
+        } catch {
+          dataAttr = ''
+        }
+        out.push(`<figure class="wa-figure" data-wa-figure="1"${dataAttr}><div class="wa-figure-box">&#22270;</div><figcaption>${escapeHtml(caption)}</figcaption></figure>`)
       } else {
         out.push(`<div class="wa-table" data-wa-table="1"><div class="wa-table-box">表</div><div class="wa-table-caption">${escapeHtml(caption)}</div></div>`)
       }
