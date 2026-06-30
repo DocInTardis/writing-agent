@@ -14,6 +14,9 @@ provides a deterministic router based on intent/doc_type/language/quality_profil
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -237,8 +240,9 @@ def get_prompt_config(agent_type: str, *, route: PromptRouteDecision | None = No
         try:
             if value is not None:
                 cfg = PromptConfig(temperature=float(value), max_tokens=cfg.max_tokens)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in prompts.py: %s", _exc, exc_info=True)
+
     return cfg
 
 

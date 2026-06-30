@@ -23,6 +23,9 @@ def test_build_continue_prompt_uses_tagged_channels_and_escape():
     assert "<section_id>" in user
     assert "<allowed_urls>" in user
     assert "<current_section_draft>" in user
+    assert "<originality_guidance>" in user
     assert "&lt;A&gt;" in user
     assert "&lt;/section_title&gt;" in user
     assert "&lt;x&gt;" in user
+    assert "Do not inherit retrieved/source sentence order" in user
+    assert "Add new substance instead of rephrasing the current draft" in user

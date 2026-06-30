@@ -756,6 +756,14 @@ def test_should_skip_semantic_failover_matches_known_reason_set() -> None:
     ) is False
 
 
+def test_should_skip_semantic_failover_can_be_overridden(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_ALLOW_SEMANTIC_FAILOVER", "1")
+    assert should_skip_semantic_failover(
+        terminal_status="failed",
+        failure_reason="analysis_needs_clarification",
+    ) is False
+
+
 
 def test_text_requires_failover_uses_trimmed_min_chars_threshold() -> None:
     assert text_requires_failover("   short   ", min_chars=20) is True

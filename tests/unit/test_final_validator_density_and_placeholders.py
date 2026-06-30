@@ -73,3 +73,29 @@ def test_validate_final_document_fails_on_empty_required_sections() -> None:
     assert out["passed"] is False
     assert out["structure_passed"] is False
     assert "Data Source and Retrieval Strategy" in list(out.get("empty_sections") or [])
+
+
+def test_validate_final_document_allows_h3_subsections_without_treating_them_as_unexpected() -> None:
+    text = (
+        "# Title\n\n"
+        "## Introduction\n\n"
+        "Intro body.\n\n"
+        "## Method\n\n"
+        "Method overview paragraph.\n\n"
+        "### Analytical Framework\n\n"
+        "Detailed method subsection.\n\n"
+        "## Conclusion\n\n"
+        "Conclusion body with a bounded inference[1].\n\n"
+        "## References\n\n"
+        "[1] Author A. Paper One[J]. Journal A, 2024."
+    )
+    out = validate_final_document(
+        title="Title",
+        text=text,
+        sections=["Introduction", "Method", "Conclusion", "References"],
+        problems=[],
+        rag_gate_dropped=[],
+    )
+    assert "Analytical Framework" not in list(out.get("unexpected_sections") or [])
+    assert "Analytical Framework" not in list(out.get("duplicate_sections") or [])
+    assert "Method" not in list(out.get("empty_sections") or [])

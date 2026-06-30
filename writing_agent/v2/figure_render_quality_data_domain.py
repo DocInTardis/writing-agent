@@ -107,6 +107,28 @@ def _figure_payload_has_meaningful_data(kind: str, data: dict | None) -> bool:
         return len(_as_list_safe(payload.get("events"))) >= 2
     if kind == "sequence":
         return len(_as_list_safe(payload.get("participants"))) >= 2 and len(_as_list_safe(payload.get("messages"))) >= 1
+    if kind == "state":
+        return len(_as_list_safe(payload.get("states"))) >= 2 and len(_as_list_safe(payload.get("transitions"))) >= 1
+    if kind == "class":
+        return len(_as_list_safe(payload.get("classes"))) >= 2
+    if kind == "gantt":
+        return len(_as_list_safe(payload.get("tasks"))) >= 2
+    if kind == "mindmap":
+        return len(_as_list_safe(payload.get("branches"))) >= 2
+    if kind == "quadrant":
+        return len(_as_list_safe(payload.get("items"))) >= 2
+    if kind == "radar":
+        return len(_as_list_safe(payload.get("axes"))) >= 3 and len(_as_list_safe(payload.get("series"))) >= 1
+    if kind == "scatter":
+        return len(_as_list_safe(payload.get("points"))) >= 2
+    if kind == "heatmap":
+        return len(_as_list_safe(payload.get("rows"))) >= 2 and len(_as_list_safe(payload.get("cols"))) >= 2
+    if kind == "funnel":
+        return len(_as_list_safe(payload.get("stages"))) >= 2
+    if kind == "sankey":
+        return len(_as_list_safe(payload.get("nodes"))) >= 2 and len(_as_list_safe(payload.get("links"))) >= 1
+    if kind == "swot":
+        return any(len(_as_list_safe(payload.get(key))) >= 1 for key in ("strengths", "weaknesses", "opportunities", "threats"))
     return False
 
 
@@ -304,6 +326,151 @@ def _score_figure_data(kind: str, data: dict, issues: list[str]) -> int:
             issues.append("sequence_messages_missing")
             score += 2
         return min(40, score)
+    if kind == "state":
+        states = _as_list_safe(payload.get("states"))
+        transitions = _as_list_safe(payload.get("transitions"))
+        if len(states) >= 4:
+            score += 22
+        elif len(states) >= 2:
+            score += 14
+        else:
+            issues.append("state_nodes_missing")
+            score += 4
+        if len(transitions) >= 3:
+            score += 18
+        elif len(transitions) >= 1:
+            score += 10
+        else:
+            issues.append("state_transitions_missing")
+            score += 3
+        return min(40, score)
+    if kind == "class":
+        classes = _as_list_safe(payload.get("classes"))
+        relations = _as_list_safe(payload.get("relations"))
+        if len(classes) >= 3:
+            score += 24
+        elif len(classes) >= 2:
+            score += 16
+        else:
+            issues.append("class_nodes_missing")
+            score += 4
+        if len(relations) >= 2:
+            score += 14
+        elif len(relations) == 1:
+            score += 8
+        else:
+            issues.append("class_relations_sparse")
+            score += 5
+        return min(40, score)
+    if kind == "gantt":
+        tasks = _as_list_safe(payload.get("tasks"))
+        if len(tasks) >= 4:
+            return 36
+        if len(tasks) >= 3:
+            return 28
+        if len(tasks) >= 2:
+            issues.append("gantt_tasks_sparse")
+            return 18
+        issues.append("gantt_tasks_missing")
+        return 6
+    if kind == "mindmap":
+        branches = _as_list_safe(payload.get("branches"))
+        if len(branches) >= 5:
+            return 34
+        if len(branches) >= 3:
+            return 26
+        if len(branches) >= 2:
+            issues.append("mindmap_sparse")
+            return 18
+        issues.append("mindmap_branches_missing")
+        return 6
+    if kind == "quadrant":
+        items = _as_list_safe(payload.get("items"))
+        if len(items) >= 4:
+            return 34
+        if len(items) >= 3:
+            return 26
+        if len(items) >= 2:
+            issues.append("quadrant_sparse")
+            return 18
+        issues.append("quadrant_items_missing")
+        return 6
+    if kind == "radar":
+        axes = _as_list_safe(payload.get("axes"))
+        series = _as_list_safe(payload.get("series"))
+        if len(axes) >= 5:
+            score += 22
+        elif len(axes) >= 3:
+            score += 14
+        else:
+            issues.append("radar_axes_missing")
+            score += 4
+        if len(series) >= 2:
+            score += 14
+        elif len(series) == 1:
+            score += 10
+        else:
+            issues.append("radar_series_missing")
+            score += 3
+        return min(40, score)
+    if kind == "scatter":
+        points = _as_list_safe(payload.get("points"))
+        if len(points) >= 6:
+            return 34
+        if len(points) >= 4:
+            return 26
+        if len(points) >= 2:
+            issues.append("scatter_points_sparse")
+            return 18
+        issues.append("scatter_points_missing")
+        return 6
+    if kind == "heatmap":
+        rows = _as_list_safe(payload.get("rows"))
+        cols = _as_list_safe(payload.get("cols"))
+        cells = len(rows) * len(cols)
+        if cells >= 16:
+            return 34
+        if cells >= 9:
+            return 26
+        if cells >= 4:
+            issues.append("heatmap_sparse")
+            return 18
+        issues.append("heatmap_cells_missing")
+        return 6
+    if kind == "funnel":
+        stages = _as_list_safe(payload.get("stages"))
+        if len(stages) >= 4:
+            return 34
+        if len(stages) >= 3:
+            return 26
+        if len(stages) >= 2:
+            issues.append("funnel_sparse")
+            return 18
+        issues.append("funnel_stages_missing")
+        return 6
+    if kind == "sankey":
+        nodes = _as_list_safe(payload.get("nodes"))
+        links = _as_list_safe(payload.get("links"))
+        if len(nodes) >= 4 and len(links) >= 4:
+            return 34
+        if len(nodes) >= 3 and len(links) >= 2:
+            return 26
+        if len(nodes) >= 2 and len(links) >= 1:
+            issues.append("sankey_sparse")
+            return 18
+        issues.append("sankey_flow_missing")
+        return 6
+    if kind == "swot":
+        non_empty = sum(1 for key in ("strengths", "weaknesses", "opportunities", "threats") if len(_as_list_safe(payload.get(key))) >= 1)
+        if non_empty == 4:
+            return 34
+        if non_empty >= 3:
+            return 26
+        if non_empty >= 2:
+            issues.append("swot_sparse")
+            return 18
+        issues.append("swot_sections_missing")
+        return 6
     raw_payload = str(payload or "").strip()
     if raw_payload:
         issues.append("unknown_data_shape")

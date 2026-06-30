@@ -11,6 +11,49 @@ from writing_agent.v2 import graph_section_continue_helpers_domain as helpers_do
 _escape_prompt_text = helpers_domain._escape_prompt_text
 
 
+def _section_originality_profile(section_title: str) -> str:
+    title = str(section_title or "").strip().lower()
+    if any(token in title for token in ["摘要", "abstract"]):
+        return "abstract"
+    if any(token in title for token in ["引言", "绪论", "introduction", "background"]):
+        return "introduction"
+    if any(token in title for token in ["方法", "method", "methodology", "数据来源", "research design", "materials"]):
+        return "method"
+    if any(token in title for token in ["结果", "discussion", "讨论", "分析", "results", "findings"]):
+        return "results"
+    if any(token in title for token in ["结论", "启示", "conclusion", "implication", "recommendation"]):
+        return "conclusion"
+    return "general"
+
+
+def _build_continue_originality_guidance(*, section: str, has_evidence_summary: bool, has_current_draft: bool) -> list[str]:
+    title = str(section or "").strip().lower()
+    profile = _section_originality_profile(section)
+    lines = [
+        "Add new substance instead of rephrasing the current draft with the same sentence skeleton.",
+        "Do not follow source snippets in their original sentence order; convert them into your own claim-evidence structure.",
+        "Prefer concrete actors, variables, process details, observed differences, and boundary conditions over generic recap sentences.",
+        "Vary paragraph openings and punctuation rhythm when extending the section.",
+    ]
+    if profile == "introduction":
+        lines.append("For introduction sections, continue by sharpening the research gap, object, or scope instead of adding another broad background paragraph.")
+    elif profile == "method":
+        lines.append("For method sections, extend with operational details such as sample boundary, variable definition, workflow step, or parameter choice.")
+    elif profile == "results":
+        lines.append("For results or discussion sections, extend with a new comparison, mechanism, anomaly, or boundary condition rather than a generic summary.")
+    elif profile == "conclusion":
+        lines.append("For conclusion sections, add implication or limitation details instead of repeating earlier findings in the same wording.")
+    elif profile == "abstract":
+        lines.append("For abstract sections, extend only with dense problem-method-result-implication content; avoid bridge sentences and padding.")
+    if has_evidence_summary:
+        lines.append("When evidence_summary is present, synthesize across multiple facts instead of serially paraphrasing a single source fragment.")
+    if has_current_draft:
+        lines.append("Extend the draft by opening a new analytical angle rather than repeating the previous paragraph's transition phrase.")
+    if any(token in title for token in ["结论", "discussion", "讨论", "分析", "results", "result"]):
+        lines.append("For interpretation-heavy sections, end additions with implication, comparison, or limitation instead of a generic wrap-up.")
+    return lines[:6]
+
+
 def _build_continue_prompt(
     *,
     title: str,
@@ -44,6 +87,11 @@ def _build_continue_prompt(
 
     escaped_urls = [str(u or "").strip() for u in allowed_urls if str(u or "").strip()]
     urls_block = "\n".join(f"- {_escape_prompt_text(u)}" for u in escaped_urls) if escaped_urls else "- (none)"
+    originality_guidance = _build_continue_originality_guidance(
+        section=section,
+        has_evidence_summary=bool(str(evidence_summary or "").strip()),
+        has_current_draft=bool(str(txt or "").strip()),
+    )
 
     user = (
         "<task>continue_section_draft</task>\n"
@@ -54,6 +102,11 @@ def _build_continue_prompt(
         "- Only output incremental blocks; do not rewrite existing draft blocks.\n"
         "- Output reader-facing academic prose only; no meta commentary, writing advice, or process narration.\n"
         "- Do not restate sentences from analysis_summary or plan_hint.\n"
+        "- Each added paragraph must contribute a concrete claim, observation, comparison, mechanism, or limitation.\n"
+        "- Prefer concrete evidence, actors, variables, process details, or boundary conditions over generic summary language.\n"
+        "- Avoid stock transitions and repeated openings such as 'This study...', 'First...', 'Second...', or 'In conclusion...' unless they add unique meaning.\n"
+        "- Do not inherit retrieved/source sentence order when extending the draft; reorganize evidence around your own analytical sequence.\n"
+        "- Do not continue with the same opener, discourse marker, or clause rhythm used in the previous paragraph.\n"
         "- Forbidden residue: should/must/recommendations, this section, this chapter, topic:, doc_type:, key points:, placeholder templates.\n"
         "- Forbidden placeholder examples: first define the research objective, describe the method path, explain inputs, outputs, and key parameters, construct the evidence chain from data source, metrics, and interpretation.\n"
         "</constraints>\n"
@@ -69,6 +122,8 @@ def _build_continue_prompt(
         user += f"<user_instruction>\n{_escape_prompt_text(instruction)}\n</user_instruction>\n"
     if plan_hint:
         user += f"<plan_hint>\n{_escape_prompt_text(plan_hint)}\n</plan_hint>\n"
+    if originality_guidance:
+        user += "<originality_guidance>\n" + "\n".join(f"- {_escape_prompt_text(item)}" for item in originality_guidance) + "\n</originality_guidance>\n"
 
     hints = [str(item).strip() for item in (dimension_hints or []) if str(item).strip()]
     if hints:

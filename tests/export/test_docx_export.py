@@ -15,7 +15,7 @@ from writing_agent.v2.figure_render import export_rendered_figure_assets, figure
 
 
 def _create_session(client: TestClient) -> str:
-    resp = client.get("/", follow_redirects=False)
+    resp = client.get("/new", follow_redirects=False)
     assert resp.status_code == 303
     location = resp.headers.get("location") or ""
     assert location.startswith("/workbench/")
@@ -442,6 +442,31 @@ def test_export_autofix_not_persisted_by_default(monkeypatch) -> None:
     _download_docx(client, doc_id)
     after = client.get(f"/api/doc/{doc_id}").json().get("text", "")
     assert after == before
+
+
+def test_download_docx_skips_empty_toc_placeholder() -> None:
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# Sample Report\n\nOnly one body paragraph without lower-level headings.\n",
+        "generation_prefs": {
+            "include_toc": True,
+            "include_cover": False,
+            "strict_doc_format": False,
+            "strict_citation_verify": False,
+            "export_gate_policy": "off",
+        },
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+
+    resp = _download_docx(client, doc_id)
+    doc = Document(io.BytesIO(resp.content))
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
+    combined = "\n".join(paragraphs)
+
+    assert "无目录项" not in combined
+    assert "Only one body paragraph without lower-level headings." in combined
 
 
 def test_clean_export_text_preserves_markdown_emphasis_and_list_markers() -> None:

@@ -12,6 +12,20 @@ _FONT_STACK = "Microsoft YaHei, PingFang SC, Hiragino Sans GB, Noto Sans CJK SC,
 _KIND_ALIASES = {
     "flowchart": "flow",
     "sequence_diagram": "sequence",
+    "state_diagram": "state",
+    "uml_state": "state",
+    "class_diagram": "class",
+    "uml_class": "class",
+    "gantt_chart": "gantt",
+    "mind_map": "mindmap",
+    "quadrant_chart": "quadrant",
+    "matrix_2x2": "quadrant",
+    "radar_chart": "radar",
+    "scatter_plot": "scatter",
+    "heatmap_chart": "heatmap",
+    "funnel_chart": "funnel",
+    "sankey_chart": "sankey",
+    "swot_chart": "swot",
     "architecture_diagram": "architecture",
     "arch": "architecture",
 }
@@ -21,6 +35,17 @@ _GENERIC_CAPTION_RE = re.compile(
 )
 _ARCHITECTURE_HINT_RE = re.compile(r"(架构|体系|框架|模块|平台|系统|architecture|framework|component)", re.IGNORECASE)
 _SEQUENCE_HINT_RE = re.compile(r"(时序|交互|调用链|sequence|lifeline|message)", re.IGNORECASE)
+_STATE_HINT_RE = re.compile(r"(状态|状态机|state|lifecycle|transition|审批状态)", re.IGNORECASE)
+_CLASS_HINT_RE = re.compile(r"(类图|类关系|class\b|uml|对象模型|领域模型|interface|inheritance)", re.IGNORECASE)
+_GANTT_HINT_RE = re.compile(r"(gantt|甘特|排期|计划表|schedule|milestone\s+plan|实施计划)", re.IGNORECASE)
+_MINDMAP_HINT_RE = re.compile(r"(思维导图|脑图|mind\s*map|主题发散|知识结构)", re.IGNORECASE)
+_QUADRANT_HINT_RE = re.compile(r"(四象限|2x2|2×2|矩阵图|priority matrix|quadrant)", re.IGNORECASE)
+_RADAR_HINT_RE = re.compile(r"(雷达图|radar|spider chart|能力画像|多维评估)", re.IGNORECASE)
+_SCATTER_HINT_RE = re.compile(r"(散点图|scatter|相关性|样本分布|outlier|cluster)", re.IGNORECASE)
+_HEATMAP_HINT_RE = re.compile(r"(热力图|heatmap|热点矩阵|强度分布)", re.IGNORECASE)
+_FUNNEL_HINT_RE = re.compile(r"(漏斗图|funnel|转化漏斗|收敛过程|筛选流程)", re.IGNORECASE)
+_SANKEY_HINT_RE = re.compile(r"(桑基图|sankey|流向图|流量分配|路径分流)", re.IGNORECASE)
+_SWOT_HINT_RE = re.compile(r"(swot|优势|劣势|机会|威胁|战略分析)", re.IGNORECASE)
 _FLOW_HINT_RE = re.compile(r"(流程|机制|路径|方法|workflow|process|pipeline|procedure)", re.IGNORECASE)
 _RETURN_LABEL_RE = re.compile(r"(\u8fd4\u56de|\u54cd\u5e94|\u7ed3\u679c|ack|response|result)", re.IGNORECASE)
 _ER_HINT_RE = re.compile(r"(\u5b9e\u4f53|\u5173\u7cfb|\u6570\u636e\u6a21\u578b|\u6570\u636e\u5e93\u8bbe\u8ba1|schema|entity|relation|er\b|table\b|\u5b57\u6bb5|\u4e3b\u952e|\u5916\u952e)", re.IGNORECASE)
@@ -28,7 +53,7 @@ _BAR_HINT_RE = re.compile(r"(\u5bf9\u6bd4|\u6bd4\u8f83|\u5206\u5e03|\u6392\u884c
 _LINE_HINT_RE = re.compile(r"(\u8d8b\u52bf|\u53d8\u5316|\u6ce2\u52a8|\u589e\u957f|\u6298\u7ebf|\bline\b|trend|change|growth|series)", re.IGNORECASE)
 _PIE_HINT_RE = re.compile(r"(\u5360\u6bd4|\u6784\u6210|\u6bd4\u4f8b|\u4efd\u989d|\u7ed3\u6784\u5206\u5e03|pie\b|share|composition|proportion|ratio)", re.IGNORECASE)
 _TIMELINE_HINT_RE = re.compile(r"(\u65f6\u95f4\u7ebf|\u6f14\u5316|\u5386\u7a0b|\u9636\u6bb5|timeline|roadmap|evolution|history|milestone)", re.IGNORECASE)
-_GENERIC_TYPE_WORDS_RE = re.compile(r"(\u56fe|\u56fe\u8868|figure|diagram|chart|\u6d41\u7a0b|\u67b6\u6784|\u65f6\u5e8f|timeline|trend|share|comparison|entity|relation)", re.IGNORECASE)
+_GENERIC_TYPE_WORDS_RE = re.compile(r"(\u56fe|\u56fe\u8868|figure|diagram|chart|\u6d41\u7a0b|\u67b6\u6784|\u65f6\u5e8f|state|class|gantt|mindmap|quadrant|radar|scatter|heatmap|funnel|sankey|swot|timeline|trend|share|comparison|entity|relation)", re.IGNORECASE)
 
 _LANE_PROFILES: list[dict[str, Any]] = [
     {"id": "access", "title": "接入层", "keywords": ["接入", "门户", "用户", "client", "gateway", "入口", "api", "认证"]},
@@ -134,8 +159,30 @@ def infer_preferred_diagram_kind(text: str) -> str:
         return ""
     if _ER_HINT_RE.search(raw):
         return "er"
+    if _MINDMAP_HINT_RE.search(raw):
+        return "mindmap"
+    if _QUADRANT_HINT_RE.search(raw):
+        return "quadrant"
+    if _RADAR_HINT_RE.search(raw):
+        return "radar"
+    if _SCATTER_HINT_RE.search(raw):
+        return "scatter"
+    if _HEATMAP_HINT_RE.search(raw):
+        return "heatmap"
+    if _FUNNEL_HINT_RE.search(raw):
+        return "funnel"
+    if _SANKEY_HINT_RE.search(raw):
+        return "sankey"
+    if _SWOT_HINT_RE.search(raw):
+        return "swot"
+    if _CLASS_HINT_RE.search(raw):
+        return "class"
+    if _STATE_HINT_RE.search(raw):
+        return "state"
     if _PIE_HINT_RE.search(raw):
         return "pie"
+    if _GANTT_HINT_RE.search(raw):
+        return "gantt"
     if _TIMELINE_HINT_RE.search(raw):
         return "timeline"
     if _LINE_HINT_RE.search(raw):
@@ -189,12 +236,34 @@ _phase_lanes = spec_domain._phase_lanes
 _normalize_lanes = spec_domain._normalize_lanes
 _normalize_flowish_data = spec_domain._normalize_flowish_data
 _normalize_sequence_data = spec_domain._normalize_sequence_data
+_normalize_state_data = spec_domain._normalize_state_data
+_normalize_class_data = spec_domain._normalize_class_data
+_normalize_gantt_data = spec_domain._normalize_gantt_data
+_normalize_mindmap_data = spec_domain._normalize_mindmap_data
+_normalize_quadrant_data = spec_domain._normalize_quadrant_data
+_normalize_radar_data = spec_domain._normalize_radar_data
+_normalize_scatter_data = spec_domain._normalize_scatter_data
+_normalize_heatmap_data = spec_domain._normalize_heatmap_data
+_normalize_funnel_data = spec_domain._normalize_funnel_data
+_normalize_sankey_data = spec_domain._normalize_sankey_data
+_normalize_swot_data = spec_domain._normalize_swot_data
 _extract_numeric_pairs = spec_domain._extract_numeric_pairs
 _extract_numbers = spec_domain._extract_numbers
 _extract_timeline_events = spec_domain._extract_timeline_events
 _suggest_flow_spec = spec_domain._suggest_flow_spec
 _suggest_architecture_spec = spec_domain._suggest_architecture_spec
 _suggest_sequence_spec = spec_domain._suggest_sequence_spec
+_suggest_state_spec = spec_domain._suggest_state_spec
+_suggest_class_spec = spec_domain._suggest_class_spec
+_suggest_gantt_spec = spec_domain._suggest_gantt_spec
+_suggest_mindmap_spec = spec_domain._suggest_mindmap_spec
+_suggest_quadrant_spec = spec_domain._suggest_quadrant_spec
+_suggest_radar_spec = spec_domain._suggest_radar_spec
+_suggest_scatter_spec = spec_domain._suggest_scatter_spec
+_suggest_heatmap_spec = spec_domain._suggest_heatmap_spec
+_suggest_funnel_spec = spec_domain._suggest_funnel_spec
+_suggest_sankey_spec = spec_domain._suggest_sankey_spec
+_suggest_swot_spec = spec_domain._suggest_swot_spec
 _suggest_er_spec = spec_domain._suggest_er_spec
 _suggest_bar_spec = spec_domain._suggest_bar_spec
 _suggest_line_spec = spec_domain._suggest_line_spec
@@ -208,6 +277,28 @@ def suggest_diagram_spec(kind: str, *, caption: str = "", prompt: str = "", sect
         return _suggest_architecture_spec(caption=caption, prompt=prompt, section_title=section_title)
     if normalized == "sequence":
         return _suggest_sequence_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "state":
+        return _suggest_state_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "class":
+        return _suggest_class_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "gantt":
+        return _suggest_gantt_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "mindmap":
+        return _suggest_mindmap_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "quadrant":
+        return _suggest_quadrant_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "radar":
+        return _suggest_radar_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "scatter":
+        return _suggest_scatter_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "heatmap":
+        return _suggest_heatmap_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "funnel":
+        return _suggest_funnel_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "sankey":
+        return _suggest_sankey_spec(caption=caption, prompt=prompt, section_title=section_title)
+    if normalized == "swot":
+        return _suggest_swot_spec(caption=caption, prompt=prompt, section_title=section_title)
     if normalized == "er":
         return _suggest_er_spec(caption=caption, prompt=prompt, section_title=section_title)
     if normalized == "bar":
@@ -231,7 +322,7 @@ def enrich_figure_spec(spec: dict[str, Any] | None, *, section_title: str = "", 
 
     if not kind:
         kind = inferred_kind
-    elif kind == "flow" and inferred_kind in {"bar", "line", "pie", "timeline", "er"}:
+    elif kind == "flow" and inferred_kind in {"bar", "line", "pie", "timeline", "gantt", "mindmap", "quadrant", "radar", "scatter", "heatmap", "funnel", "sankey", "swot", "er", "state", "class"}:
         if not _normalize_flowish_data(data, kind="flow").get("nodes"):
             kind = inferred_kind
 
@@ -240,7 +331,7 @@ def enrich_figure_spec(spec: dict[str, Any] | None, *, section_title: str = "", 
         if len(normalized.get("nodes") or []) < 2 and has_semantic_signal(semantic_seed):
             return suggest_diagram_spec(kind or inferred_kind or "flow", caption=caption, prompt=context_text or caption, section_title=section_title)
         payload["type"] = kind
-        payload["caption"] = caption or (section_title if section_title else ("System Architecture" if kind == "architecture" else "Process Diagram"))
+        payload["caption"] = caption or (section_title if section_title else ("系统架构图" if kind == "architecture" else "流程图"))
         payload["data"] = normalized
         return payload
     if kind == "sequence":
@@ -248,7 +339,95 @@ def enrich_figure_spec(spec: dict[str, Any] | None, *, section_title: str = "", 
         if len(normalized.get("participants") or []) < 2 and has_semantic_signal(semantic_seed):
             return suggest_diagram_spec("sequence", caption=caption, prompt=context_text or caption, section_title=section_title)
         payload["type"] = kind
-        payload["caption"] = caption or (section_title if section_title else "Sequence Diagram")
+        payload["caption"] = caption or (section_title if section_title else "时序图")
+        payload["data"] = normalized
+        return payload
+    if kind == "state":
+        normalized = _normalize_state_data(data)
+        if len(normalized.get("states") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("state", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "状态图")
+        payload["data"] = normalized
+        return payload
+    if kind == "class":
+        normalized = _normalize_class_data(data)
+        if len(normalized.get("classes") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("class", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "类图")
+        payload["data"] = normalized
+        return payload
+    if kind == "gantt":
+        normalized = _normalize_gantt_data(data)
+        if len(normalized.get("tasks") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("gantt", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "甘特图")
+        payload["data"] = normalized
+        return payload
+    if kind == "mindmap":
+        normalized = _normalize_mindmap_data(data)
+        if len(normalized.get("branches") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("mindmap", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "思维导图")
+        payload["data"] = normalized
+        return payload
+    if kind == "quadrant":
+        normalized = _normalize_quadrant_data(data)
+        if len(normalized.get("items") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("quadrant", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "四象限图")
+        payload["data"] = normalized
+        return payload
+    if kind == "radar":
+        normalized = _normalize_radar_data(data)
+        if len(normalized.get("axes") or []) < 3 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("radar", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "雷达图")
+        payload["data"] = normalized
+        return payload
+    if kind == "scatter":
+        normalized = _normalize_scatter_data(data)
+        if len(normalized.get("points") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("scatter", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "散点图")
+        payload["data"] = normalized
+        return payload
+    if kind == "heatmap":
+        normalized = _normalize_heatmap_data(data)
+        if len(normalized.get("rows") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("heatmap", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "热力图")
+        payload["data"] = normalized
+        return payload
+    if kind == "funnel":
+        normalized = _normalize_funnel_data(data)
+        if len(normalized.get("stages") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("funnel", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "漏斗图")
+        payload["data"] = normalized
+        return payload
+    if kind == "sankey":
+        normalized = _normalize_sankey_data(data)
+        if len(normalized.get("nodes") or []) < 2 and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("sankey", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "桑基图")
+        payload["data"] = normalized
+        return payload
+    if kind == "swot":
+        normalized = _normalize_swot_data(data)
+        if not any(normalized.get(key) for key in ("strengths", "weaknesses", "opportunities", "threats")) and has_semantic_signal(semantic_seed):
+            return suggest_diagram_spec("swot", caption=caption, prompt=context_text or caption, section_title=section_title)
+        payload["type"] = kind
+        payload["caption"] = caption or (section_title if section_title else "SWOT图")
         payload["data"] = normalized
         return payload
     if kind == "er":
@@ -256,7 +435,7 @@ def enrich_figure_spec(spec: dict[str, Any] | None, *, section_title: str = "", 
         if len(normalized.get("entities") or []) < 2 and has_semantic_signal(semantic_seed):
             return suggest_diagram_spec("er", caption=caption, prompt=context_text or caption, section_title=section_title)
         payload["type"] = kind
-        payload["caption"] = caption or (section_title if section_title else "Entity Relationship Graph")
+        payload["caption"] = caption or (section_title if section_title else "实体关系图")
         payload["data"] = normalized
         return payload
     if kind == "bar":
@@ -271,7 +450,7 @@ def enrich_figure_spec(spec: dict[str, Any] | None, *, section_title: str = "", 
         if min(len(labels), len(values)) < 2 and has_semantic_signal(semantic_seed):
             return suggest_diagram_spec("bar", caption=caption, prompt=context_text or caption, section_title=section_title)
         payload["type"] = kind
-        payload["caption"] = caption or (section_title if section_title else "Comparison Metrics")
+        payload["caption"] = caption or (section_title if section_title else "柱状图")
         payload["data"] = {"labels": labels[: len(values)], "values": values[: len(labels)]}
         return payload
     if kind == "line":
@@ -280,7 +459,7 @@ def enrich_figure_spec(spec: dict[str, Any] | None, *, section_title: str = "", 
         if (not labels or not series) and has_semantic_signal(semantic_seed):
             return suggest_diagram_spec("line", caption=caption, prompt=context_text or caption, section_title=section_title)
         payload["type"] = kind
-        payload["caption"] = caption or (section_title if section_title else "Trend Analysis")
+        payload["caption"] = caption or (section_title if section_title else "趋势分析图")
         payload["data"] = data
         return payload
     if kind == "pie":
@@ -288,7 +467,7 @@ def enrich_figure_spec(spec: dict[str, Any] | None, *, section_title: str = "", 
         if len(segments) < 2 and has_semantic_signal(semantic_seed):
             return suggest_diagram_spec("pie", caption=caption, prompt=context_text or caption, section_title=section_title)
         payload["type"] = kind
-        payload["caption"] = caption or (section_title if section_title else "Composition Share")
+        payload["caption"] = caption or (section_title if section_title else "占比分析图")
         payload["data"] = data
         return payload
     if kind == "timeline":
@@ -296,7 +475,7 @@ def enrich_figure_spec(spec: dict[str, Any] | None, *, section_title: str = "", 
         if len(events) < 2 and has_semantic_signal(semantic_seed):
             return suggest_diagram_spec("timeline", caption=caption, prompt=context_text or caption, section_title=section_title)
         payload["type"] = kind
-        payload["caption"] = caption or (section_title if section_title else "Research Timeline")
+        payload["caption"] = caption or (section_title if section_title else "时间线")
         payload["data"] = data
         return payload
     if has_semantic_signal(semantic_seed):
@@ -309,6 +488,17 @@ from writing_agent.v2 import diagram_design_render_domain as render_domain  # no
 _normalize_er_data = render_domain._normalize_er_data
 render_flow_or_architecture_svg = render_domain.render_flow_or_architecture_svg
 render_professional_sequence_svg = render_domain.render_professional_sequence_svg
+render_professional_state_svg = render_domain.render_professional_state_svg
+render_professional_class_svg = render_domain.render_professional_class_svg
+render_professional_gantt_svg = render_domain.render_professional_gantt_svg
+render_professional_mindmap_svg = render_domain.render_professional_mindmap_svg
+render_professional_quadrant_svg = render_domain.render_professional_quadrant_svg
+render_professional_radar_svg = render_domain.render_professional_radar_svg
+render_professional_scatter_svg = render_domain.render_professional_scatter_svg
+render_professional_heatmap_svg = render_domain.render_professional_heatmap_svg
+render_professional_funnel_svg = render_domain.render_professional_funnel_svg
+render_professional_sankey_svg = render_domain.render_professional_sankey_svg
+render_professional_swot_svg = render_domain.render_professional_swot_svg
 render_professional_er_svg = render_domain.render_professional_er_svg
 render_professional_bar_svg = render_domain.render_professional_bar_svg
 render_professional_line_svg = render_domain.render_professional_line_svg

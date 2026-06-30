@@ -30,6 +30,7 @@ def test_prompt_router_selects_weekly_suite_for_weekly_intent() -> None:
 
 def test_analyze_instruction_emits_prompt_route_trace(monkeypatch) -> None:
     captured: list[dict] = []
+    monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "ollama")
 
     class _FakeClient:
         def __init__(self, *args, **kwargs):
@@ -58,6 +59,8 @@ def test_analyze_instruction_emits_prompt_route_trace(monkeypatch) -> None:
 
 
 def test_generate_section_stream_emits_prompt_route_event(monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "ollama")
+
     class _FakeClient:
         def __init__(self, *args, **kwargs):
             _ = args, kwargs
@@ -153,5 +156,5 @@ def test_writer_prompt_keeps_global_guardrails_when_route_overrides_writer_syste
         rag_context=None,
         route=route,
     )
-    assert "\u4e25\u7981\u8f93\u51fa\u4efb\u4f55\u5199\u4f5c\u8fc7\u7a0b\u89e3\u91ca" in system
-    assert "\u529f\u80fd\u6027\u8bf4\u660e\u53e5" in system
+    assert "Never output process notes, prompt residue, or instruction echoes." in system
+    assert "Do not emit functional narration" in system

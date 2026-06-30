@@ -5,6 +5,19 @@ This module belongs to `writing_agent.document` in the writing-agent codebase.
 
 from __future__ import annotations
 
+from writing_agent.document._docx_compat import (
+    doc_body,
+    doc_element,
+    paragraph_p,
+    remove_paragraph,
+    run_rPr,
+    section_sectPr,
+    style_rPr,
+)
+
+import logging
+logger = logging.getLogger(__name__)
+
 import os
 import re
 from dataclasses import dataclass
@@ -192,6 +205,7 @@ class V2ReportDocxExporter:
             raise ValueError("docx_export_mojibake_detected: " + " | ".join(mojibake_hits[:4]))
         toc_entries = toc_support.collect_toc_entries(blocks, levels=max(1, min(4, int(prefs.toc_levels))))
         toc_anchors = toc_support.build_toc_anchor_entries(toc_entries, entry_factory=TocAnchorEntry)
+        should_include_toc = bool(prefs.include_toc and toc_anchors)
 
         header_text = (prefs.header_text or "").strip() or title
         footer_text = (prefs.footer_text or "").strip()
@@ -202,7 +216,7 @@ class V2ReportDocxExporter:
 
         if prefs.include_cover:
             self._add_cover(doc, title)
-            if prefs.include_toc:
+            if should_include_toc:
                 toc_section = self._new_section(doc, start_page_numbering=True, numbering_format="upperRoman")
                 self._add_toc(
                     doc,
@@ -214,7 +228,7 @@ class V2ReportDocxExporter:
             else:
                 main_section = self._new_section(doc, start_page_numbering=True, numbering_format="decimal")
         else:
-            if prefs.include_toc:
+            if should_include_toc:
                 toc_section = cover_section
                 docx_helpers._set_section_page_numbering(toc_section, start_at=1, numbering_format="upperRoman")
                 self._add_toc(
@@ -251,7 +265,7 @@ class V2ReportDocxExporter:
         docx_helpers._ensure_reference_citations(doc)
         docx_helpers._strip_cover_section_numbering(doc)
         buf = docx_helpers._save_doc(doc)
-        if prefs.page_numbers and prefs.include_toc and _toc_footer_postprocess_enabled():
+        if prefs.page_numbers and should_include_toc and _toc_footer_postprocess_enabled():
             buf = docx_helpers._postprocess_toc_footer_numbers(buf)
         return buf
 
@@ -290,11 +304,11 @@ class V2ReportDocxExporter:
         normal.paragraph_format.space_after = Pt(0)
         normal.paragraph_format.first_line_indent = Cm(FIRST_LINE_INDENT_CM)
         try:
-            r_pr = normal._element.get_or_add_rPr()  # type: ignore[attr-defined]
+            r_pr = style_rPr(normal)
             r_fonts = r_pr.get_or_add_rFonts()
             r_fonts.set(qn("w:eastAsia"), formatting.font_name_east_asia or "宋体")
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
 
         # Graduation-design-friendly heading defaults (can be overridden by user template later).
         try:
@@ -303,7 +317,7 @@ class V2ReportDocxExporter:
             h1.font.size = Pt(formatting.heading1_size_pt or 22)
             h1.font.bold = True
             h1.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            r_pr = h1._element.get_or_add_rPr()  # type: ignore[attr-defined]
+            r_pr = style_rPr(h1)
             r_pr.get_or_add_rFonts().set(
                 qn("w:eastAsia"),
                 formatting.heading1_font_name_east_asia or "黑体",
@@ -311,8 +325,9 @@ class V2ReportDocxExporter:
             h1.paragraph_format.space_before = Pt(17)
             h1.paragraph_format.space_after = Pt(16.5)
             h1.paragraph_format.line_spacing = 2.4
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
         try:
             h2 = doc.styles["Heading 2"]
             h2.font.name = formatting.heading2_font_name or formatting.font_name or "黑体"
@@ -321,7 +336,7 @@ class V2ReportDocxExporter:
             h2.paragraph_format.alignment = (
                 WD_ALIGN_PARAGRAPH.CENTER if _center_chapter_headings_enabled() else WD_ALIGN_PARAGRAPH.LEFT
             )
-            r_pr = h2._element.get_or_add_rPr()  # type: ignore[attr-defined]
+            r_pr = style_rPr(h2)
             r_pr.get_or_add_rFonts().set(
                 qn("w:eastAsia"),
                 formatting.heading2_font_name_east_asia or "黑体",
@@ -329,15 +344,16 @@ class V2ReportDocxExporter:
             h2.paragraph_format.space_before = Pt(13)
             h2.paragraph_format.space_after = Pt(13)
             h2.paragraph_format.line_spacing = 1.73
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
         try:
             h3 = doc.styles["Heading 3"]
             h3.font.name = formatting.heading3_font_name or formatting.font_name or "黑体"
             h3.font.size = Pt(formatting.heading3_size_pt or 16)
             h3.font.bold = True
             h3.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            r_pr = h3._element.get_or_add_rPr()  # type: ignore[attr-defined]
+            r_pr = style_rPr(h3)
             r_pr.get_or_add_rFonts().set(
                 qn("w:eastAsia"),
                 formatting.heading3_font_name_east_asia or "黑体",
@@ -345,8 +361,9 @@ class V2ReportDocxExporter:
             h3.paragraph_format.space_before = Pt(13)
             h3.paragraph_format.space_after = Pt(13)
             h3.paragraph_format.line_spacing = 1.73
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
         for i in range(1, 4):
             try:
                 toc_style_name = self._resolve_toc_style_name(doc, i)
@@ -360,27 +377,29 @@ class V2ReportDocxExporter:
                 toc_para.space_before = Pt(0)
                 toc_para.space_after = Pt(0)
                 toc_para.line_spacing = 1.5
-                r_pr = toc_style._element.get_or_add_rPr()  # type: ignore[attr-defined]
+                r_pr = style_rPr(toc_style)
                 r_pr.get_or_add_rFonts().set(qn("w:eastAsia"), formatting.font_name_east_asia or "瀹嬩綋")
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
 
     def _add_cover(self, doc: Document, title: str) -> None:
         p = doc.add_paragraph()
         try:
             p.style = "Title"
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(title)
         run.bold = True
         run.font.size = Pt(22)
         try:
             run.font.name = "黑体"
-            r_pr = run._element.get_or_add_rPr()  # type: ignore[attr-defined]
+            r_pr = run_rPr(run)
             r_pr.get_or_add_rFonts().set(qn("w:eastAsia"), "黑体")
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
         doc.add_paragraph("")
         doc.add_paragraph("")
         # The next section will start a new page; avoid double breaks here.
@@ -431,8 +450,9 @@ class V2ReportDocxExporter:
         try:
             sec.header.is_linked_to_previous = False
             sec.footer.is_linked_to_previous = False
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
         if start_page_numbering:
             docx_helpers._set_section_page_numbering(sec, start_at=1, numbering_format=numbering_format)
         return sec
@@ -446,10 +466,11 @@ class V2ReportDocxExporter:
             run = p.runs[0] if p.runs else p.add_run("")
             run.font.name = "宋体"
             run.font.size = Pt(9)
-            r_pr = run._element.get_or_add_rPr()  # type: ignore[attr-defined]
+            r_pr = run_rPr(run)
             r_pr.get_or_add_rFonts().set(qn("w:eastAsia"), "宋体")
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
         docx_helpers._add_bottom_border(p)
 
     def _set_footer_page_numbers(self, sec, footer_text: str = "", *, page_format: str | None = None) -> None:
@@ -458,16 +479,18 @@ class V2ReportDocxExporter:
                 return
             for p in list(footer.paragraphs):
                 try:
-                    p._element.getparent().remove(p._element)  # type: ignore[attr-defined]
-                except Exception:
-                    pass
+                    remove_paragraph(p)
+                except Exception as _exc:
+                    logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
             p = footer.add_paragraph()
             docx_helpers._force_paragraph_center(p)
             try:
                 p.paragraph_format.left_indent = Cm(0)
                 p.paragraph_format.first_line_indent = Cm(0)
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
             if footer_text:
                 p.add_run(footer_text)
             if page_format:
@@ -478,8 +501,9 @@ class V2ReportDocxExporter:
         _write_footer(getattr(sec, "footer", None))
         try:
             sec.different_first_page_header_footer = False
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
         docx_helpers._strip_non_default_header_footer_refs(sec)
 
     def _emit_content(
@@ -560,13 +584,15 @@ class V2ReportDocxExporter:
                     try:
                         p.paragraph_format.space_before = Pt(0)
                         p.paragraph_format.space_after = Pt(0)
-                    except Exception:
-                        pass
+                    except Exception as _exc:
+                        logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
                 try:
                     p.paragraph_format.left_indent = Cm(FIRST_LINE_INDENT_CM)
                     p.paragraph_format.first_line_indent = Cm(-FIRST_LINE_INDENT_CM)
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
                 docx_helpers._add_inline_runs(p, t)
             ref_buffer = []
 
@@ -614,8 +640,9 @@ class V2ReportDocxExporter:
                         try:
                             p.paragraph_format.space_before = Pt(0)
                             p.paragraph_format.space_after = Pt(0)
-                        except Exception:
-                            pass
+                        except Exception as _exc:
+                            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
                     continue
                 if bullet:
                     item = bullet.group(1).strip()
@@ -630,8 +657,9 @@ class V2ReportDocxExporter:
                         try:
                             p.paragraph_format.space_before = Pt(0)
                             p.paragraph_format.space_after = Pt(0)
-                        except Exception:
-                            pass
+                        except Exception as _exc:
+                            logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
                     continue
                 p = doc.add_paragraph()
                 if apply_para_format:
@@ -640,8 +668,9 @@ class V2ReportDocxExporter:
                         p.paragraph_format.first_line_indent = Cm(FIRST_LINE_INDENT_CM)
                         p.paragraph_format.space_before = Pt(0)
                         p.paragraph_format.space_after = Pt(0)
-                    except Exception:
-                        pass
+                    except Exception as _exc:
+                        logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
                 docx_helpers._add_inline_runs(p, t)
 
         for b in blocks:
@@ -771,8 +800,9 @@ class V2ReportDocxExporter:
                         pic_p.paragraph_format.space_after = Pt(0)
                         pic_p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
                         pic_p.paragraph_format.line_spacing = 1.0
-                    except Exception:
-                        pass
+                    except Exception as _exc:
+                        logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
+
                     run = pic_p.add_run()
                     try:
                         sec = doc.sections[0]

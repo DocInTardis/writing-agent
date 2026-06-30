@@ -40,7 +40,7 @@ def render_professional_bar_svg(caption: str, data: dict[str, Any]) -> str:
     plot_h = 320
     max_v = max(values) if values else 1.0
     max_v = max(1.0, max_v)
-    out = _chart_card(width, height, caption or "Bar Chart")
+    out = _chart_card(width, height, caption or "柱状图")
     out.append(f'<rect x="{left:.1f}" y="{top:.1f}" width="{plot_w:.1f}" height="{plot_h:.1f}" fill="#F8FAFC" stroke="#D6DEE6" stroke-width="1.0" rx="14" ry="14"/>')
     for grid in range(6):
         gy = top + plot_h - grid * (plot_h / 5)
@@ -98,7 +98,7 @@ def render_professional_line_svg(caption: str, data: dict[str, Any]) -> str:
     max_v = max(all_vals) if all_vals else 1.0
     if math.isclose(min_v, max_v):
         max_v = min_v + 1.0
-    out = _chart_card(width, height, caption or "Line Chart")
+    out = _chart_card(width, height, caption or "折线图")
     out.append(f'<rect x="{left:.1f}" y="{top:.1f}" width="{plot_w:.1f}" height="{plot_h:.1f}" fill="#F8FAFC" stroke="#D6DEE6" stroke-width="1.0" rx="14" ry="14"/>')
     for grid in range(6):
         gy = top + plot_h - grid * (plot_h / 5)
@@ -153,7 +153,7 @@ def render_professional_pie_svg(caption: str, data: dict[str, Any]) -> str:
     r = 138
     inner_r = 68
     colors = ["#2D5F8B", "#5B8A61", "#A66A3F", "#A97A12", "#7C8EA2", "#8C6BB1"]
-    out = _chart_card(width, height, caption or "Pie Chart")
+    out = _chart_card(width, height, caption or "饼图")
     out.append('<rect x="74" y="96" width="460" height="320" fill="#F8FAFC" stroke="#D6DEE6" stroke-width="1.0" rx="16" ry="16"/>')
     angle = -math.pi / 2
     for idx, (_label, value) in enumerate(segments):
@@ -208,7 +208,7 @@ def render_professional_timeline_svg(caption: str, data: dict[str, Any]) -> str:
     left = 90
     right = width - 90
     axis_y = 250
-    out = _chart_card(width, height, caption or "Timeline")
+    out = _chart_card(width, height, caption or "时间线")
     out.append(f'<line x1="{left:.1f}" y1="{axis_y:.1f}" x2="{right:.1f}" y2="{axis_y:.1f}" stroke="#6D8297" stroke-width="3.0"/>')
     count = len(events)
     for idx, event in enumerate(events):

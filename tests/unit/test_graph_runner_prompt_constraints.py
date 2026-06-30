@@ -54,8 +54,17 @@ def test_plan_sections_list_prompt_uses_tagged_channels(monkeypatch):
         captured["user"] = user
         return {"sections": ["Introduction", "Method", "Conclusion", "References"]}
 
+    import writing_agent.llm.factory as _factory
+    import writing_agent.v2.graph_runner_core_domain as _core_domain
+
+    monkeypatch.setenv("WRITING_AGENT_PROVIDER_CACHE_ENABLED", "0")
+    _fake_provider = _FakeClient()
     monkeypatch.setattr(graph_runner, "OllamaClient", _FakeClient)
     monkeypatch.setattr(graph_runner, "_require_json_response", _fake_require_json_response)
+    monkeypatch.setattr(_core_domain, "get_default_provider", lambda *args, **kwargs: _fake_provider)
+    monkeypatch.setattr(_factory, "get_default_provider", lambda *args, **kwargs: _fake_provider)
+    monkeypatch.setattr(_factory, "_build_openai_provider", lambda *args, **kwargs: _fake_provider)
+    monkeypatch.setattr(_factory, "_build_python_provider", lambda *args, **kwargs: _fake_provider)
 
     out = graph_runner._plan_sections_list_with_model(
         base_url="http://test",

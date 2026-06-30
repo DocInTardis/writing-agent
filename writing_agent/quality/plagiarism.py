@@ -141,6 +141,25 @@ def _evidence_blocks(source_text: str, reference_text: str, *, min_match_chars: 
     return out
 
 
+def _build_revision_advice(*, metrics: dict[str, Any], suspected: bool) -> list[str]:
+    advice: list[str] = []
+    containment = float(metrics.get("containment") or 0.0)
+    jaccard = float(metrics.get("jaccard_resemblance") or 0.0)
+    winnowing = float(metrics.get("winnowing_overlap") or 0.0)
+    longest = int(metrics.get("longest_match_chars") or 0)
+    if suspected or containment >= 0.35:
+        advice.append("优先重写证据后的分析句群，而不是只删句或只做同义词替换。")
+    if containment >= 0.45:
+        advice.append("当前文本对来源表述的覆盖度偏高，建议先脱离原文组织顺序，再按自己的论证结构重写。")
+    if longest >= 40:
+        advice.append("连续命中片段较长；必要直接引语请保留引号和出处，其余内容改写为你自己的分析。")
+    if max(jaccard, winnowing) >= 0.35:
+        advice.append("局部相似块较多，建议拆分段落并重组论证顺序，把来源事实转成比较、解释或限制。")
+    if not advice:
+        advice.append("当前未见明显高重合信号，但导出前仍建议与历史稿、样本文本或资料库做一次交叉扫描。")
+    return advice[:4]
+
+
 @dataclass
 class PlagiarismConfig:
     ngram_size: int = 7
@@ -157,14 +176,54 @@ class PlagiarismConfig:
         )
 
 
+@dataclass
+class PlagiarismWeights:
+    containment: float = 0.36
+    jaccard: float = 0.24
+    winnowing_overlap: float = 0.20
+    simhash_similarity: float = 0.12
+    sequence_ratio: float = 0.08
+
+    def normalized(self) -> "PlagiarismWeights":
+        raw = [
+            max(0.0, float(self.containment)),
+            max(0.0, float(self.jaccard)),
+            max(0.0, float(self.winnowing_overlap)),
+            max(0.0, float(self.simhash_similarity)),
+            max(0.0, float(self.sequence_ratio)),
+        ]
+        total = sum(raw)
+        if total <= 0:
+            return PlagiarismWeights()
+        return PlagiarismWeights(
+            containment=raw[0] / total,
+            jaccard=raw[1] / total,
+            winnowing_overlap=raw[2] / total,
+            simhash_similarity=raw[3] / total,
+            sequence_ratio=raw[4] / total,
+        )
+
+    def as_dict(self) -> dict[str, float]:
+        normalized = self.normalized()
+        return {
+            "containment": round(normalized.containment, 6),
+            "jaccard": round(normalized.jaccard, 6),
+            "winnowing_overlap": round(normalized.winnowing_overlap, 6),
+            "simhash_similarity": round(normalized.simhash_similarity, 6),
+            "sequence_ratio": round(normalized.sequence_ratio, 6),
+        }
+
+
 def compare_text_pair(
     source_text: str,
     reference_text: str,
     *,
     threshold: float = 0.35,
     config: PlagiarismConfig | None = None,
+    weights: PlagiarismWeights | None = None,
 ) -> dict[str, Any]:
     cfg = (config or PlagiarismConfig()).normalized()
+    score_weights = (weights or PlagiarismWeights()).normalized()
     th = _clamp_float(float(threshold), 0.05, 0.95)
 
     source_norm = _normalize_text(source_text)
@@ -190,6 +249,7 @@ def compare_text_pair(
                 "shared_ngrams": 0,
             },
             "evidence": [],
+            "revision_advice": ["文本为空或参考文本为空，无法形成有效比对。"],
         }
 
     source_grams = _char_ngrams(source_norm, cfg.ngram_size)
@@ -226,33 +286,37 @@ def compare_text_pair(
     # - lexical robustness from SimHash
     # - global sequence ratio as a tie-breaker signal
     score = (
-        0.36 * containment
-        + 0.24 * jaccard
-        + 0.20 * winnowing_overlap
-        + 0.12 * simhash_similarity
-        + 0.08 * seq_ratio
+        score_weights.containment * containment
+        + score_weights.jaccard * jaccard
+        + score_weights.winnowing_overlap * winnowing_overlap
+        + score_weights.simhash_similarity * simhash_similarity
+        + score_weights.sequence_ratio * seq_ratio
     )
     score = _clamp_float(score, 0.0, 1.0)
 
     evidence = _evidence_blocks(source_text, reference_text, min_match_chars=cfg.min_match_chars)
+    metrics = {
+        "source_chars": source_chars,
+        "reference_chars": ref_chars,
+        "jaccard_resemblance": round(jaccard, 4),
+        "containment": round(containment, 4),
+        "winnowing_overlap": round(winnowing_overlap, 4),
+        "simhash_similarity": round(simhash_similarity, 4),
+        "sequence_ratio": round(seq_ratio, 4),
+        "longest_match_chars": int(longest),
+        "longest_match_ratio": round(longest_ratio, 4),
+        "shared_ngrams": int(len(shared_grams)),
+    }
+    revision_advice = _build_revision_advice(metrics=metrics, suspected=bool(score >= th))
 
     return {
         "score": round(score, 4),
         "threshold": round(th, 4),
         "suspected": bool(score >= th),
-        "metrics": {
-            "source_chars": source_chars,
-            "reference_chars": ref_chars,
-            "jaccard_resemblance": round(jaccard, 4),
-            "containment": round(containment, 4),
-            "winnowing_overlap": round(winnowing_overlap, 4),
-            "simhash_similarity": round(simhash_similarity, 4),
-            "sequence_ratio": round(seq_ratio, 4),
-            "longest_match_chars": int(longest),
-            "longest_match_ratio": round(longest_ratio, 4),
-            "shared_ngrams": int(len(shared_grams)),
-        },
+        "metrics": metrics,
         "evidence": evidence,
+        "revision_advice": revision_advice,
+        "weights": score_weights.as_dict(),
     }
 
 
@@ -263,8 +327,10 @@ def compare_against_references(
     threshold: float = 0.35,
     top_k: int = 10,
     config: PlagiarismConfig | None = None,
+    weights: PlagiarismWeights | None = None,
 ) -> dict[str, Any]:
     cfg = (config or PlagiarismConfig()).normalized()
+    score_weights = (weights or PlagiarismWeights()).normalized()
     th = _clamp_float(float(threshold), 0.05, 0.95)
     k = max(1, min(100, int(top_k)))
     src = str(source_text or "")
@@ -278,7 +344,7 @@ def compare_against_references(
         ref_text = str(raw.get("text") or "")
         if not ref_text.strip():
             continue
-        one = compare_text_pair(src, ref_text, threshold=th, config=cfg)
+        one = compare_text_pair(src, ref_text, threshold=th, config=cfg, weights=score_weights)
         rows.append(
             {
                 "reference_id": rid,
@@ -288,6 +354,8 @@ def compare_against_references(
                 "suspected": bool(one.get("suspected")),
                 "metrics": one.get("metrics", {}),
                 "evidence": one.get("evidence", []),
+                "revision_advice": one.get("revision_advice", []),
+                "weights": one.get("weights", {}),
             }
         )
 
@@ -295,6 +363,8 @@ def compare_against_references(
     rows = rows[:k]
     max_score = max((float(x.get("score") or 0.0) for x in rows), default=0.0)
     flagged_count = sum(1 for x in rows if bool(x.get("suspected")))
+    top_metrics = rows[0].get("metrics", {}) if rows else {}
+    revision_advice = _build_revision_advice(metrics=top_metrics, suspected=bool(max_score >= th))
 
     return {
         "source_chars": len(_normalize_text(src)),
@@ -303,11 +373,13 @@ def compare_against_references(
         "flagged_count": int(flagged_count),
         "max_score": round(max_score, 4),
         "suspected": bool(max_score >= th),
+        "revision_advice": revision_advice,
         "results": rows,
         "config": {
             "ngram_size": cfg.ngram_size,
             "winnowing_k": cfg.winnowing_k,
             "winnowing_window": cfg.winnowing_window,
             "min_match_chars": cfg.min_match_chars,
+            "weights": score_weights.as_dict(),
         },
     }

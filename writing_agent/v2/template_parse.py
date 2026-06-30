@@ -5,6 +5,9 @@ This module belongs to `writing_agent.v2` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import re
 import shutil
 import subprocess
@@ -98,8 +101,8 @@ def _convert_doc_to_docx(path: Path, *, force: bool = False) -> Path | None:
                 finally:
                     if alt.exists():
                         alt.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in template_parse.py: %s", _exc, exc_info=True)
 
     try:
         in_path = str(src).replace("'", "''")

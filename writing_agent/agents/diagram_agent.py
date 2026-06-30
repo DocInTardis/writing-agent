@@ -5,6 +5,9 @@ This module belongs to `writing_agent.agents` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import re
 from dataclasses import dataclass
@@ -18,7 +21,8 @@ from writing_agent.diagrams.spec import (
     FlowNode,
     FlowchartSpec,
 )
-from writing_agent.llm import OllamaClient, get_ollama_settings
+from writing_agent.llm import OllamaClient, get_default_provider, get_ollama_settings
+from writing_agent.llm.provider_compat import provider_or_ollama
 
 
 def _escape_prompt_text(raw: object) -> str:
@@ -36,8 +40,9 @@ def _extract_json_dict(raw: object) -> dict | None:
     try:
         payload = json.loads(text)
         return payload if isinstance(payload, dict) else None
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in diagram_agent.py: %s", _exc, exc_info=True)
+
     m = re.search(r"\{[\s\S]*\}", text)
     if not m:
         return None
@@ -56,9 +61,8 @@ class DiagramRequest:
 
 class DiagramAgent:
     def generate(self, req: DiagramRequest) -> DiagramSpec:
-        settings = get_ollama_settings()
-        client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-        if not settings.enabled or not client.is_running():
+        provider = provider_or_ollama(globals())
+        if hasattr(provider, "is_running") and callable(provider.is_running) and not provider.is_running():
             return self._fallback(req)
 
         req_type = str(req.type or "").strip().lower()
@@ -100,7 +104,7 @@ class DiagramAgent:
                     "</retry_reason>\n"
                 )
             try:
-                raw = client.chat(system=system, user=attempt_user, temperature=0.2)
+                raw = provider.chat(system=system, user=attempt_user, temperature=0.2)
             except Exception:
                 continue
             payload = _extract_json_dict(raw)
@@ -115,7 +119,7 @@ class DiagramAgent:
                 ErEntity(name="Order", attributes=["id(PK)", "user_id(FK)", "total", "created_at"]),
             ]
             relations = [ErRelation(left="User", right="Order", label="places", cardinality="1..N")]
-            return DiagramSpec(type="er", title="ER Diagram", caption="ER diagram (fallback)", er=ErSpec(entities=entities, relations=relations))
+            return DiagramSpec(type="er", title="实体关系图", caption="实体关系图（回退）", er=ErSpec(entities=entities, relations=relations))
 
         nodes = [
             FlowNode(id="start", text="Start"),
@@ -130,7 +134,7 @@ class DiagramAgent:
             FlowEdge(src="plan", dst="review"),
             FlowEdge(src="review", dst="export"),
         ]
-        return DiagramSpec(type="flowchart", title="Flowchart", caption="Flowchart (fallback)", flowchart=FlowchartSpec(nodes=nodes, edges=edges))
+        return DiagramSpec(type="flowchart", title="流程图", caption="流程图（回退）", flowchart=FlowchartSpec(nodes=nodes, edges=edges))
 
     def _from_json(self, data: dict) -> DiagramSpec:
         t = str(data.get("type") or "").strip().lower()
@@ -139,7 +143,7 @@ class DiagramAgent:
         if t not in {"flowchart", "er"}:
             t = "flowchart"
 
-        title = str(data.get("title") or "").strip() or ("ER Diagram" if t == "er" else "Flowchart")
+        title = str(data.get("title") or "").strip() or ("实体关系图" if t == "er" else "流程图")
         caption = str(data.get("caption") or "").strip() or title
 
         if t == "er":
@@ -200,4 +204,3 @@ class DiagramAgent:
             for idx in range(len(nodes) - 1):
                 edges.append(FlowEdge(src=nodes[idx].id, dst=nodes[idx + 1].id))
         return DiagramSpec(type="flowchart", title=title, caption=caption, flowchart=FlowchartSpec(nodes=nodes, edges=edges))
-

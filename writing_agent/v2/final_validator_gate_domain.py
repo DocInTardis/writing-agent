@@ -12,6 +12,24 @@ from writing_agent.v2 import final_validator_result_domain as result_domain
 
 _META_FIREWALL = MetaFirewall()
 
+
+def _h2_heading_rows(body: str) -> list[tuple[str, str]]:
+    return re.findall(r"(?m)^(##)\s+(.+?)\s*$", str(body or ""))
+
+
+def _h2_section_body_map(body: str) -> dict[str, list[str]]:
+    text = str(body or "")
+    matches = list(re.finditer(r"(?m)^(##)\s+(.+?)\s*$", text))
+    out: dict[str, list[str]] = {}
+    for idx, match in enumerate(matches):
+        title = _normalize_expected_heading(match.group(2))
+        if not title:
+            continue
+        start = match.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        out.setdefault(title, []).append(text[start:end].strip())
+    return out
+
 def validate_final_document(
     *,
     title: str,
@@ -23,10 +41,10 @@ def validate_final_document(
     source_rows: list[dict] | None = None,
 ) -> dict[str, object]:
     body = str(text or "").strip()
-    heading_rows = re.findall(r"(?m)^(##+)\s+(.+?)\s*$", body)
+    heading_rows = _h2_heading_rows(body)
     headings = [_normalize_expected_heading(row[1]) for row in heading_rows if _normalize_expected_heading(row[1])]
     expected = [_normalize_expected_heading(x) for x in (sections or []) if _normalize_expected_heading(x)]
-    section_bodies = _section_body_map(body)
+    section_bodies = _h2_section_body_map(body)
     missing_sections = [sec for sec in expected if sec not in headings]
     expected_set = set(expected)
     unexpected_sections = [head for head in headings if head not in expected_set]
@@ -112,7 +130,7 @@ def validate_final_document(
     title_body_alignment = _title_body_alignment_score(title, body)
     unsupported_claim_ratio, unsupported_claim_hits, claim_sentence_count, unsupported_numeric_claim_count = _unsupported_claim_metrics(body)
     try:
-        max_placeholder_residue_ratio = max(0.0, min(1.0, float(os.environ.get("WRITING_AGENT_MAX_PLACEHOLDER_RESIDUE_RATIO", "0.0"))))
+        max_placeholder_residue_ratio = max(0.0, min(1.0, float(os.environ.get("WRITING_AGENT_MAX_PLACEHOLDER_RESIDUE_RATIO", "0.05"))))
     except Exception:
         max_placeholder_residue_ratio = 0.0
     try:

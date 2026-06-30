@@ -8,7 +8,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
+from writing_agent.llm import OllamaClient, OllamaError, get_default_provider, get_ollama_settings
+from writing_agent.llm.provider_compat import provider_or_ollama
 from writing_agent.models import DraftDocument, OutlineNode, Paragraph, ReportRequest, SectionDraft
 
 
@@ -123,11 +124,8 @@ class WritingAgent:
         return picked
 
     def _write_section_llm(self, req: ReportRequest, title: str, notes: str, cite_keys: list[str]) -> list[str] | None:
-        settings = get_ollama_settings()
-        if not settings.enabled:
-            return None
-        client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-        if not client.is_running():
+        provider = provider_or_ollama(globals())
+        if hasattr(provider, "is_running") and callable(provider.is_running) and not provider.is_running():
             return None
 
         cite_rule = "不要凭空创造引用键。"
@@ -171,7 +169,7 @@ class WritingAgent:
         )
 
         try:
-            text = client.chat(system=system, user=user, temperature=0.3).strip()
+            text = provider.chat(system=system, user=user, temperature=0.3).strip()
         except OllamaError:
             return None
 
@@ -183,11 +181,8 @@ class WritingAgent:
         return paras[:4]
 
     def _rewrite_paragraph_llm(self, req: ReportRequest, paragraph: str) -> str | None:
-        settings = get_ollama_settings()
-        if not settings.enabled:
-            return None
-        client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-        if not client.is_running():
+        provider = provider_or_ollama(globals())
+        if hasattr(provider, "is_running") and callable(provider.is_running) and not provider.is_running():
             return None
 
         system = (
@@ -211,7 +206,7 @@ class WritingAgent:
         )
 
         try:
-            out = client.chat(system=system, user=user, temperature=0.2).strip()
+            out = provider.chat(system=system, user=user, temperature=0.2).strip()
         except OllamaError:
             return None
         return out or None

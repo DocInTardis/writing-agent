@@ -7,7 +7,7 @@ import pytest
 from writing_agent.document import v2_report_docx_helpers as docx_helpers
 from writing_agent.v2 import graph_section_draft_domain as section_domain
 from writing_agent.v2 import graph_text_sanitize_domain as sanitize_domain
-from writing_agent.web import app_v2_textops_runtime_part2 as textops_part2
+from writing_agent.web.legacy_fragments import textops_part2
 from writing_agent.web.domains import section_edit_ops_domain
 from writing_agent.web.api.editing_flow import _normalize_inline_context_policy, _trim_inline_context
 

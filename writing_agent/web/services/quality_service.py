@@ -20,13 +20,13 @@ class QualityService:
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
-        source_text = app_v2._safe_doc_text(session)
-        if not str(source_text or "").strip():
-            raise app_v2.HTTPException(status_code=400, detail="document is empty")
 
         data = await request.json()
         if not isinstance(data, dict):
             raise app_v2.HTTPException(status_code=400, detail="body must be object")
+        source_text = str(data.get("text") or "").strip() or app_v2._safe_doc_text(session)
+        if not str(source_text or "").strip():
+            raise app_v2.HTTPException(status_code=400, detail="document is empty")
 
         threshold = plagiarism_domain.clamp_plagiarism_threshold(data.get("threshold"), default=0.35)
         top_k = max(1, min(100, int(data.get("top_k") or 10)))
@@ -95,6 +95,7 @@ class QualityService:
                 "confidence": payload.get("confidence"),
                 "signals": payload.get("signals", {}),
                 "evidence": payload.get("evidence", []),
+                "improvement_actions": payload.get("improvement_actions", []),
                 "note": payload.get("note", ""),
             },
         )
@@ -118,13 +119,13 @@ class QualityService:
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
-        source_text = app_v2._safe_doc_text(session)
-        if not str(source_text or "").strip():
-            raise app_v2.HTTPException(status_code=400, detail="document is empty")
 
         data = await request.json()
         if not isinstance(data, dict):
             raise app_v2.HTTPException(status_code=400, detail="body must be object")
+        source_text = str(data.get("text") or "").strip() or app_v2._safe_doc_text(session)
+        if not str(source_text or "").strip():
+            raise app_v2.HTTPException(status_code=400, detail="document is empty")
 
         threshold = plagiarism_domain.clamp_plagiarism_threshold(data.get("threshold"), default=0.35)
         top_k = max(1, min(200, int(data.get("top_k") or 30)))
@@ -161,6 +162,14 @@ class QualityService:
             threshold=threshold,
             top_k=top_k,
         )
+        previous_latest = app_v2._get_internal_pref(session, app_v2._PLAGIARISM_SCAN_KEY, {}) or {}
+        previous_max_score = previous_latest.get("max_score") if isinstance(previous_latest, dict) else None
+        progress_summary = plagiarism_domain.build_plagiarism_progress_summary(
+            current_max_score=scan_report.get("max_score"),
+            previous_max_score=previous_max_score,
+            threshold=threshold,
+            flagged_count=scan_report.get("flagged_count"),
+        )
 
         payload = {
             "doc_id": doc_id,
@@ -172,6 +181,8 @@ class QualityService:
             "flagged_count": scan_report.get("flagged_count"),
             "max_score": scan_report.get("max_score"),
             "suspected": scan_report.get("suspected"),
+            "revision_advice": scan_report.get("revision_advice", []),
+            "progress_summary": progress_summary,
             "results": scan_report.get("results", []),
             "config": scan_report.get("config", {}),
             "options": {
@@ -206,6 +217,8 @@ class QualityService:
                 "max_score": payload.get("max_score"),
                 "total_references": payload.get("total_references"),
                 "suspected": payload.get("suspected"),
+                "revision_advice": payload.get("revision_advice", []),
+                "progress_summary": payload.get("progress_summary", {}),
                 "paths": payload.get("paths", {}),
             },
         )

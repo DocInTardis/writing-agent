@@ -1,4 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
+
+import logging
+logger = logging.getLogger(__name__)
 
 import re
 import unicodedata
@@ -142,24 +145,24 @@ def add_toc(
     toc_field_lock_enabled: bool,
     toc_clickable_links_enabled: bool,
 ) -> None:
+    toc_entries = list(entries or [])
+    if not toc_entries:
+        return
+
     heading = doc.add_paragraph()
     try:
         heading.style = "TOC Heading"
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_toc.py: %s", _exc, exc_info=True)
+
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     _apply_toc_heading_style(heading, "目录")
 
-    toc_entries = list(entries or [])
     plain_entries = [
         (int(_entry_value(item, "level") or 1), str(_entry_value(item, "title") or ""))
         for item in toc_entries
     ]
     if toc_clickable_links_enabled:
-        if not toc_entries:
-            paragraph = doc.add_paragraph("无目录项")
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            return
         pages = estimate_toc_pages(plain_entries, list(blocks or []), start_page=1)
         for idx, entry in enumerate(toc_entries):
             level = max(1, min(4, int(_entry_value(entry, "level") or 1)))
@@ -172,26 +175,30 @@ def add_toc(
                 toc_style_name = resolve_toc_style_name(doc, level)
                 if toc_style_name:
                     paragraph.style = toc_style_name
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx_toc.py: %s", _exc, exc_info=True)
+
             try:
                 paragraph.paragraph_format.left_indent = Cm(max(0.0, float(level - 1) * 0.75))
                 paragraph.paragraph_format.first_line_indent = Cm(0)
                 paragraph.paragraph_format.space_before = Pt(0)
                 paragraph.paragraph_format.space_after = Pt(0)
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx_toc.py: %s", _exc, exc_info=True)
+
             try:
                 section = doc.sections[-1]
                 right_tab = section.page_width - section.left_margin - section.right_margin
                 tab_stops = paragraph.paragraph_format.tab_stops
                 try:
                     tab_stops.clear_all()
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    logger.debug("Ignored error in v2_report_docx_toc.py: %s", _exc, exc_info=True)
+
                 tab_stops.add_tab_stop(right_tab, WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx_toc.py: %s", _exc, exc_info=True)
+
             if anchor:
                 _add_internal_hyperlink(paragraph, title, anchor)
             else:
@@ -214,11 +221,6 @@ def add_toc(
         _add_field_simple(paragraph, instruction, preview, lock=toc_field_lock_enabled)
         return
 
-    if not toc_entries:
-        paragraph = doc.add_paragraph("无目录项")
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        return
-
     for entry in toc_entries:
         level = int(_entry_value(entry, "level") or 1)
         title = str(_entry_value(entry, "title") or "")
@@ -229,8 +231,9 @@ def add_toc(
             paragraph.paragraph_format.first_line_indent = Cm(0)
             paragraph.paragraph_format.space_before = Pt(0)
             paragraph.paragraph_format.space_after = Pt(0)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx_toc.py: %s", _exc, exc_info=True)
+
         _add_inline_runs(paragraph, title)
 
 

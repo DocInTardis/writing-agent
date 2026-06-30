@@ -9,23 +9,22 @@ from typing import Callable
 
 from writing_agent.llm import OllamaClient  # backward-compat for tests monkeypatching this symbol
 from writing_agent.llm.factory import get_default_provider
-from writing_agent.v2 import graph_aggregate_patch_domain, graph_aggregate_prompt_domain
 
 
 def split_sentences(text: str) -> list[str]:
-    return list(graph_aggregate_prompt_domain.split_sentences(text))
+    return list(split_sentences(text))
 
 
 def extract_key_points(text: str, *, max_points: int = 3, max_chars: int = 320) -> list[str]:
-    return list(graph_aggregate_prompt_domain.extract_key_points(text, max_points=max_points, max_chars=max_chars))
+    return list(extract_key_points(text, max_points=max_points, max_chars=max_chars))
 
 
 def extract_sections_from_text(text: str) -> dict[str, str]:
-    return dict(graph_aggregate_prompt_domain.extract_sections_from_text(text))
+    return dict(extract_sections_from_text(text))
 
 
 def _escape_prompt_text(raw: object) -> str:
-    return str(graph_aggregate_prompt_domain._escape_prompt_text(raw))
+    return str(_escape_prompt_text(raw))
 
 
 def _build_provider(*, model: str, timeout_s: float, route_key: str):
@@ -43,7 +42,7 @@ def build_aggregate_brief(
     section_title: Callable[[str], str],
 ) -> str:
     return str(
-        graph_aggregate_prompt_domain.build_aggregate_brief(
+        build_aggregate_brief(
             title=title,
             instruction=instruction,
             sections=sections,
@@ -60,11 +59,11 @@ def _build_provider(*, model: str, timeout_s: float, route_key: str):
 
 
 def extract_section_from_parsed(parsed, name: str) -> str:
-    return str(graph_aggregate_patch_domain.extract_section_from_parsed(parsed, name))
+    return str(extract_section_from_parsed(parsed, name))
 
 
 def blocks_to_text(blocks) -> str:
-    return str(graph_aggregate_patch_domain.blocks_to_text(blocks))
+    return str(blocks_to_text(blocks))
 
 
 def extract_transitions(
@@ -73,11 +72,11 @@ def extract_transitions(
     *,
     section_title: Callable[[str], str],
 ) -> dict[str, str]:
-    return dict(graph_aggregate_patch_domain.extract_transitions(patch_text, sections, section_title=section_title))
+    return dict(extract_transitions(patch_text, sections, section_title=section_title))
 
 
 def apply_section_updates(base_text: str, updates: dict[str, str], transitions: dict[str, str]) -> str:
-    return str(graph_aggregate_patch_domain.apply_section_updates(base_text, updates, transitions))
+    return str(apply_section_updates(base_text, updates, transitions))
 
 
 def apply_aggregate_patch(
@@ -88,7 +87,7 @@ def apply_aggregate_patch(
     section_title: Callable[[str], str],
 ) -> str:
     return str(
-        graph_aggregate_patch_domain.apply_aggregate_patch(
+        apply_aggregate_patch(
             base_text,
             patch_text,
             sections,
@@ -335,3 +334,182 @@ def repair_stream(
     for delta in client.chat_stream(system=system, user=user, temperature=0.2):
         buf.append(delta)
     return "".join(buf).strip() or draft
+
+def extract_section_from_parsed(parsed: ParsedDoc, name: str) -> str:
+    cur = None
+    buf: list[DocBlock] = []
+    for block in parsed.blocks:
+        if block.type == "heading" and int(block.level or 0) == 2:
+            cur = (block.text or "").strip()
+            continue
+        if cur == name:
+            buf.append(block)
+    if not buf:
+        return ""
+    return blocks_to_text(buf)
+
+
+def blocks_to_text(blocks: list[DocBlock]) -> str:
+    out: list[str] = []
+    for block in blocks:
+        if block.type == "paragraph":
+            text = (block.text or "").strip()
+            if text:
+                out.append(text)
+        elif block.type == "table":
+            out.append("[[TABLE:{}]]".format(json.dumps(block.table or {}, ensure_ascii=False)))
+        elif block.type == "figure":
+            out.append("[[FIGURE:{}]]".format(json.dumps(block.figure or {}, ensure_ascii=False)))
+    return "\n\n".join(out).strip()
+
+
+def extract_transitions(
+    patch_text: str,
+    sections: list[str],
+    *,
+    section_title: Callable[[str], str],
+) -> dict[str, str]:
+    transitions: dict[str, str] = {}
+    if not patch_text:
+        return transitions
+    allowed = {section_title(section) or section for section in sections if section}
+    for line in patch_text.splitlines():
+        m = re.match(r"^\s*[-*]?\s*([^>]+?)\s*->\s*([^:：]+?)[:：]\s*(.+)$", line)
+        if not m:
+            continue
+        frm = m.group(1).strip()
+        to = m.group(2).strip()
+        text = m.group(3).strip()
+        if not text or frm not in allowed or to not in allowed:
+            continue
+        transitions[frm] = text
+    return transitions
+
+
+def apply_section_updates(base_text: str, updates: dict[str, str], transitions: dict[str, str]) -> str:
+    src = (base_text or "").replace("\r\n", "\n").replace("\r", "\n")
+    matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", src))
+    if not matches:
+        return base_text
+    out: list[str] = []
+    cursor = 0
+    for i, match in enumerate(matches):
+        name = (match.group(1) or "").strip()
+        content_start = match.end()
+        if content_start < len(src) and src[content_start] == "\n":
+            content_start += 1
+        content_end = matches[i + 1].start() if i + 1 < len(matches) else len(src)
+        out.append(src[cursor:content_start])
+        body = src[content_start:content_end]
+        body_text = body.strip()
+        if name in updates:
+            body_text = updates[name].strip()
+        if name in transitions:
+            trans = transitions[name].strip()
+            if trans:
+                body_text = (body_text + "\n\n" + trans).strip() if body_text else trans
+        out.append(body_text + ("\n\n" if body_text else ""))
+        cursor = content_end
+    out.append(src[cursor:])
+    return "".join(out).strip() + "\n"
+
+
+def apply_aggregate_patch(
+    base_text: str,
+    patch_text: str,
+    sections: list[str],
+    *,
+    section_title: Callable[[str], str],
+) -> str:
+    if not patch_text.strip():
+        return base_text
+    parsed = parse_report_text(patch_text)
+    conclusion_text = extract_section_from_parsed(parsed, "结论")
+    transitions = extract_transitions(patch_text, sections, section_title=section_title)
+    updates: dict[str, str] = {}
+    if conclusion_text:
+        updates["结论"] = conclusion_text
+    if not updates and not transitions:
+        return base_text
+    return apply_section_updates(base_text, updates, transitions)
+
+def split_sentences(text: str) -> list[str]:
+    if not text:
+        return []
+    parts = re.split(r"(?<=[。！？!?])\s*", text)
+    return [p for p in parts if p and p.strip()]
+
+
+def extract_key_points(text: str, *, max_points: int = 3, max_chars: int = 320) -> list[str]:
+    src = (text or "").replace("\r", "")
+    src = re.sub(r"\[\[(?:FIGURE|TABLE)\s*:\s*\{[\s\S]*?\}\s*\]\]", "", src, flags=re.IGNORECASE)
+    paragraphs = [p.strip() for p in re.split(r"\n{2,}", src) if p.strip()]
+    points: list[str] = []
+    total = 0
+    for para in paragraphs:
+        for sent in split_sentences(para):
+            sentence = sent.strip()
+            if not sentence:
+                continue
+            if len(sentence) > 120:
+                sentence = sentence[:120] + "..."
+            if total + len(sentence) > max_chars:
+                return points
+            points.append(sentence)
+            total += len(sentence)
+            if len(points) >= max_points:
+                return points
+    return points
+
+
+def extract_sections_from_text(text: str) -> dict[str, str]:
+    src = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", src))
+    sections: dict[str, str] = {}
+    for i, match in enumerate(matches):
+        name = (match.group(1) or "").strip()
+        start = match.end()
+        if start < len(src) and src[start] == "\n":
+            start += 1
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(src)
+        sections[name] = src[start:end].strip()
+    return sections
+
+
+def _escape_prompt_text(raw: object) -> str:
+    text = str(raw or "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+
+def build_aggregate_brief(
+    title: str,
+    instruction: str,
+    sections: list[str],
+    section_text: dict[str, str],
+    merged_draft: str,
+    *,
+    section_level: Callable[[str], int],
+    section_title: Callable[[str], str],
+) -> str:
+    focus_map = extract_sections_from_text(merged_draft)
+    brief_lines = [
+        f"标题：{title}",
+        f"用户要求：{instruction}",
+        "",
+        "【结论原文】",
+        (focus_map.get("结论") or section_text.get("结论") or "").strip(),
+        "",
+        "【各章节关键要点】",
+    ]
+    for sec in sections:
+        if section_level(sec) > 2:
+            continue
+        content = (section_text.get(sec) or "").strip()
+        points = extract_key_points(content)
+        if not points:
+            continue
+        brief_lines.append(f"- {section_title(sec) or sec}：")
+        for point in points:
+            brief_lines.append(f"  - {point}")
+    return "\n".join([line for line in brief_lines if line is not None]).strip()

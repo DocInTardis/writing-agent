@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import re
@@ -22,7 +25,7 @@ def _runtime_json_cache_enabled() -> bool:
 
 
 def _default_evidence_pack(*, is_starved: bool = False, stub_mode: bool = False, reasons: list[str] | None = None) -> dict:
-    return {"summary": "", "sources": [], "allowed_urls": [], "data_starvation": {"is_starved": bool(is_starved), "stub_mode": bool(stub_mode), "reasons": list(reasons or [])}, "facts": [], "fact_gain_count": 0, "fact_density_score": 0.0, "online_hits": 0}
+    return {"summary": "", "sources": [], "allowed_urls": [], "data_starvation": {"is_starved": bool(is_starved), "stub_mode": bool(stub_mode), "reasons": list(reasons or [])}, "facts": [], "retrieved_evidence": [], "fact_gain_count": 0, "fact_density_score": 0.0, "online_hits": 0}
 
 
 def _normalize_evidence_pack(payload: object) -> dict:
@@ -33,6 +36,7 @@ def _normalize_evidence_pack(payload: object) -> dict:
     out["sources"] = [dict(x) for x in (payload.get("sources") or []) if isinstance(x, dict)]
     out["allowed_urls"] = [str(x).strip() for x in (payload.get("allowed_urls") or []) if str(x).strip()]
     out["facts"] = [dict(x) for x in (payload.get("facts") or []) if isinstance(x, dict)]
+    out["retrieved_evidence"] = [dict(x) for x in (payload.get("retrieved_evidence") or []) if isinstance(x, dict)]
     if not isinstance(out.get("data_starvation"), dict):
         out["data_starvation"] = {"is_starved": False, "stub_mode": False, "reasons": []}
     return out
@@ -70,9 +74,8 @@ def _runtime_json_cache_put(local_cache, key: str, payload: dict | list, *, meta
         return
     try:
         local_cache.put(key, json.dumps(payload, ensure_ascii=False), metadata=metadata or {})
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in graph_runner_runtime_cache_domain.py: %s", _exc, exc_info=True)
 
 def _load_evidence_pack_cached(*, local_cache, cache_lock, provider_name: str, model: str, instruction: str, section: str, analysis: dict | None, plan, base_url: str):
     cache_key = _runtime_json_cache_key(local_cache, "evidence_pack_v1", provider_name, model, instruction, section, analysis or {}, _serialize_plan_map({section: plan}))

@@ -10,6 +10,9 @@ def test_generate_section_stream_injects_available_sources_tag(monkeypatch):
         def __init__(self, *args, **kwargs):
             _ = args, kwargs
 
+    import writing_agent.llm.factory as _factory
+    monkeypatch.setenv("WRITING_AGENT_PROVIDER_CACHE_ENABLED", "0")
+    monkeypatch.setattr(_factory, "_build_python_provider", lambda *args, **kwargs: _FakeClient())
     monkeypatch.setattr(runtime, "OllamaClient", _FakeClient)
     monkeypatch.setattr(runtime, "_section_timeout_s", lambda: 3.0, raising=False)
     monkeypatch.setattr(runtime, "_section_title", lambda section: section, raising=False)

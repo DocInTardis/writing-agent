@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import re
@@ -50,8 +53,9 @@ def _load_phase_metrics() -> dict:
         data = json.loads(_PHASE_METRICS_PATH.read_text(encoding="utf-8"))
         if isinstance(data, dict) and isinstance(data.get("runs"), list):
             return data
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in graph_runner_policy_domain.py: %s", _exc, exc_info=True)
+
     return {"runs": []}
 
 

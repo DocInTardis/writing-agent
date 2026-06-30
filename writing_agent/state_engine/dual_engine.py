@@ -5,6 +5,9 @@ This module belongs to `writing_agent.state_engine` in the writing-agent codebas
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import re
 import time
 import uuid
@@ -69,8 +72,9 @@ class DualGraphEngine:
         if self.use_langgraph:
             try:
                 return self._run_langgraph(run_id=run_id, payload=payload, handlers=handlers, interrupts=interrupts or {}, resume=resume)
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in dual_engine.py: %s", _exc, exc_info=True)
+
         return self._run_native(run_id=run_id, payload=payload, handlers=handlers, interrupts=interrupts or {}, resume=resume)
 
     def _run_native(

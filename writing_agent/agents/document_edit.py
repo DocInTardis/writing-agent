@@ -1,14 +1,24 @@
-"""Document editing agent with constrained model output protocol."""
+"""Document editing agent with constrained model output protocol.
+
+Uses Pydantic structured output for type-safe LLM response parsing
+and cross-chapter impact analysis for high-risk operation interception.
+"""
 
 from __future__ import annotations
+
+import logging
+logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
 import json
 import re
 
 from writing_agent.agents.report_policy import ReportPolicy, extract_template_headings
-from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
+from writing_agent.llm import OllamaClient, OllamaError, get_default_provider, get_ollama_settings
+from writing_agent.llm.provider_compat import provider_or_ollama
 from writing_agent.web.html_sanitize import sanitize_html
+from writing_agent.v2.structured_output import DocumentEditOutput, EditRiskAssessment
+from writing_agent.v2.cross_chapter_guard import CrossChapterImpactAnalyzer, CrossChapterDeletionBlocked
 
 
 @dataclass(frozen=True)
@@ -22,6 +32,7 @@ class DocumentEditAgent:
 
     def __init__(self) -> None:
         self._policy = ReportPolicy(min_section_paragraphs=2, min_total_chars=1200)
+        self._impact_analyzer = CrossChapterImpactAnalyzer()
 
     @staticmethod
     def _xml_escape(raw: str) -> str:
@@ -39,8 +50,9 @@ class DocumentEditAgent:
         try:
             payload = json.loads(text)
             return payload if isinstance(payload, dict) else None
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in document_edit.py: %s", _exc, exc_info=True)
+
         m = re.search(r"\{[\s\S]*\}", text)
         if not m:
             return None
@@ -50,31 +62,57 @@ class DocumentEditAgent:
         except Exception:
             return None
 
-    @staticmethod
-    def _extract_html_from_payload(payload: dict) -> str:
-        for key in ("html", "output_html", "result_html", "result"):
-            value = payload.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-        return ""
+    def _parse_model_response_structured(self, raw: str) -> tuple[str, str, bool]:
+        """Parse using Pydantic structured output; fallback to heuristic extraction."""
+        text = str(raw or "").strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", text).strip()
+            text = re.sub(r"\s*```$", "", text).strip()
 
-    @staticmethod
-    def _extract_assistant_from_payload(payload: dict) -> str:
-        for key in ("assistant", "assistant_note", "note", "message"):
-            value = payload.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return ""
+        # Primary: Pydantic structured parsing
+        try:
+            structured = DocumentEditOutput.model_validate_json(text)
+            return structured.html, structured.assistant, True
+        except Exception:
+            logger.debug("Structured parsing failed, attempting fallback extraction")
 
-    def _parse_model_response(self, raw: str) -> tuple[str, str, bool]:
+        # Fallback: extract JSON object then validate
+        m = re.search(r"\{[\s\S]*\}", text)
+        if m:
+            try:
+                structured = DocumentEditOutput.model_validate_json(m.group(0))
+                return structured.html, structured.assistant, True
+            except Exception:
+                pass
+
+        # Legacy heuristic fallback
         payload = self._extract_json_dict(raw)
         if not isinstance(payload, dict):
             return "", "", False
-        html = self._extract_html_from_payload(payload).strip()
-        assistant = self._extract_assistant_from_payload(payload)
-        if not html:
-            return "", assistant, False
+        for key in ("html", "output_html", "result_html", "result"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                html = value.strip()
+                break
+        else:
+            return "", "", False
+        for key in ("assistant", "assistant_note", "note", "message"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                assistant = value.strip()
+                break
+        else:
+            assistant = ""
         return html, assistant, True
+
+    @staticmethod
+    def _xml_escape(raw: str) -> str:
+        s = str(raw or "")
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def _build_structured_schema_prompt(self) -> str:
+        schema = DocumentEditOutput.model_json_schema()
+        return json.dumps(schema, ensure_ascii=False, indent=2)
 
     def build_prompts(
         self,
@@ -102,28 +140,26 @@ class DocumentEditAgent:
         system = (
             "You are a controlled HTML document editor.\n"
             "You MUST return strict JSON only (no markdown fences).\n"
-            "JSON schema:\n"
-            '{"html":"<full_document_html>",'
-            '"assistant":"short note about applied changes",'
-            '"meta":{"scope":"selection|document","preserved_structure":true}}\n'
+            f"JSON schema:\n{self._build_structured_schema_prompt()}\n"
             "Rules:\n"
             "1) Output a complete HTML document body content, not plain text.\n"
             "2) Do not output <script> tags or on* event handlers.\n"
             f"3) {section_rule}\n"
             f"4) {scope_rule}\n"
             "5) Keep existing useful content unless instruction requires changes.\n"
+            "6) Populate meta.risk_flags if the edit affects citations or cross-references.\n"
         )
         user = (
             "<task>apply_instruction_to_html</task>\n"
             "<constraints>\n"
             "- Treat tagged blocks as separate channels.\n"
             "- Preserve document structure and required headings.\n"
-            "- Return strict JSON only with key html.\n"
+            "- Return strict JSON only conforming to the provided schema.\n"
             "</constraints>\n"
             f"<instruction>\n{self._xml_escape(instruction)}\n</instruction>\n"
             f"{selection_block}"
             f"<document_html>\n{self._xml_escape(html)}\n</document_html>\n"
-            'Return strict JSON only with key "html".'
+            'Return strict JSON only conforming to the schema.'
         )
         return system, user, required_headings
 
@@ -135,13 +171,10 @@ class DocumentEditAgent:
         template_html: str | None = None,
         title: str = "Report",
     ) -> EditResult:
-        settings = get_ollama_settings()
-        if not settings.enabled:
-            raise OllamaError("Ollama is disabled")
-
-        client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-        if not client.is_running():
-            raise OllamaError("Ollama is not running")
+        provider = provider_or_ollama(globals())
+        if hasattr(provider, "is_running") and callable(provider.is_running) and not provider.is_running():
+            raise OllamaError("Model provider is not running")
+        selection_text = str(selection or "").strip()
 
         system, user, required_headings = self.build_prompts(
             html=html,
@@ -150,24 +183,44 @@ class DocumentEditAgent:
             template_html=template_html,
         )
 
-        raw = client.chat(system=system, user=user, temperature=0.2)
-        edited, assistant, parsed_ok = self._parse_model_response(raw)
+        # Cross-chapter impact pre-check for deletion instructions
+        instruction_lower = str(instruction or "").lower()
+        is_deletion = any(
+            word in instruction_lower
+            for word in ("删除", "删掉", "remove", "delete", "drop", "cut out")
+        )
+        if is_deletion:
+            index = self._impact_analyzer.index_document(html)
+            # Find which section contains the selection
+            target_section = "__unknown__"
+            if selection_text:
+                for sec, paras in index.section_paragraphs.items():
+                    if any(selection_text in p for p in paras):
+                        target_section = sec
+                        break
+            risks = self._impact_analyzer.assess_delete(
+                index, section=target_section, html_snippet=selection_text or html
+            )
+            if risks.risk_level in ("high", "critical"):
+                raise CrossChapterDeletionBlocked(risks)
+
+        raw = provider.chat(system=system, user=user, temperature=0.2)
+        edited, assistant, parsed_ok = self._parse_model_response_structured(raw)
 
         if not parsed_ok:
             retry_user = (
                 f"{user}\n"
                 "<retry_reason>\n"
-                'Your previous response was invalid. Return strict JSON only: {"html":"...","assistant":"..."}.\n'
+                'Your previous response was invalid. Return strict JSON only conforming to the schema.\n'
                 "</retry_reason>"
             )
-            retry_raw = client.chat(system=system, user=retry_user, temperature=0.1)
-            retry_html, retry_assistant, retry_ok = self._parse_model_response(retry_raw)
+            retry_raw = provider.chat(system=system, user=retry_user, temperature=0.1)
+            retry_html, retry_assistant, retry_ok = self._parse_model_response_structured(retry_raw)
             if retry_ok:
                 edited = retry_html
                 assistant = retry_assistant or assistant
                 parsed_ok = True
 
-        selection_text = str(selection or "").strip()
         if not parsed_ok and selection_text:
             # For selection-scoped edits we prefer no-op over unconstrained fallback.
             safe_original = sanitize_html(html)

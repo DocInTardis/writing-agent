@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import threading
 import time
@@ -240,8 +243,9 @@ def _resolve_alerts_config_reset() -> dict:
         try:
             if path.exists():
                 path.unlink()
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in citation_resolve_alerts_domain.py: %s", _exc, exc_info=True)
+
         _RESOLVE_ALERTS_CONFIG_CACHE = None
         _RESOLVE_ALERTS_CONFIG_LOADED = True
     return defaults

@@ -12,8 +12,8 @@ from typing import Any
 
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]", flags=re.IGNORECASE)
-_SENT_SPLIT_RE = re.compile(r"[。！？!?；;]+|\n{2,}")
-_PUNCT_RE = re.compile(r"[。！？!?；;]")
+_SENT_SPLIT_RE = re.compile(r"[。！？!?]+|\n{2,}")
+_PUNCT_RE = re.compile(r"[。！？!?]")
 
 # Common discourse markers often overused in templated model outputs.
 _CONNECTORS = [
@@ -50,8 +50,7 @@ def _split_sentences(text: str, *, max_chars: int = 260_000) -> list[str]:
     src = str(text or "")
     if len(src) > max_chars:
         src = src[:max_chars]
-    parts = [x.strip() for x in _SENT_SPLIT_RE.split(src) if str(x or "").strip()]
-    return parts
+    return [item.strip() for item in _SENT_SPLIT_RE.split(src) if str(item or "").strip()]
 
 
 def _entropy_normalized(tokens: list[str]) -> float:
@@ -63,30 +62,27 @@ def _entropy_normalized(tokens: list[str]) -> float:
     if len(freq) <= 1:
         return 0.0
     total = float(len(tokens))
-    h = 0.0
+    entropy = 0.0
     for count in freq.values():
         p = float(count) / total
-        h -= p * math.log2(p)
-    h_max = math.log2(float(len(freq)))
-    if h_max <= 0:
+        entropy -= p * math.log2(p)
+    max_entropy = math.log2(float(len(freq)))
+    if max_entropy <= 0:
         return 0.0
-    return _clamp(h / h_max)
+    return _clamp(entropy / max_entropy)
 
 
 def _sentence_length_cv(sentences: list[str]) -> float:
     if not sentences:
         return 0.0
     lengths = [max(1, len(_TOKEN_RE.findall(sentence))) for sentence in sentences]
-    if not lengths:
+    if len(lengths) <= 1:
         return 0.0
     mean = sum(lengths) / len(lengths)
     if mean <= 0:
         return 0.0
-    if len(lengths) == 1:
-        return 0.0
-    var = sum((x - mean) ** 2 for x in lengths) / len(lengths)
-    std = math.sqrt(max(var, 0.0))
-    return float(std / mean)
+    variance = sum((value - mean) ** 2 for value in lengths) / len(lengths)
+    return float(math.sqrt(max(variance, 0.0)) / mean)
 
 
 def _repeated_ngram_ratio(tokens: list[str], n: int = 3) -> float:
@@ -101,7 +97,7 @@ def _repeated_ngram_ratio(tokens: list[str], n: int = 3) -> float:
         grams += 1
     if grams <= 0:
         return 0.0
-    repeated = sum(max(0, c - 1) for c in counts.values())
+    repeated = sum(max(0, count - 1) for count in counts.values())
     return float(repeated / grams)
 
 
@@ -112,8 +108,7 @@ def _dominant_punctuation_ratio(text: str) -> float:
     freq: dict[str, int] = {}
     for mark in marks:
         freq[mark] = int(freq.get(mark, 0)) + 1
-    top = max(freq.values()) if freq else 0
-    return float(top / len(marks)) if marks else 0.0
+    return float(max(freq.values()) / len(marks)) if freq else 0.0
 
 
 def _connector_density_per_1k(text: str) -> float:
@@ -122,14 +117,12 @@ def _connector_density_per_1k(text: str) -> float:
         return 0.0
     hits = 0
     for connector in _CONNECTORS:
-        if not connector:
-            continue
         hits += src.count(connector)
     return float(hits * 1000.0 / max(1, len(src)))
 
 
 def _template_heading_density(text: str) -> float:
-    lines = [x.strip() for x in str(text or "").splitlines() if x.strip()]
+    lines = [item.strip() for item in str(text or "").splitlines() if item.strip()]
     if not lines:
         return 0.0
     pattern = re.compile(r"^(#+\s+|\d+[.)、]\s*|[一二三四五六七八九十]+、)")
@@ -140,23 +133,112 @@ def _template_heading_density(text: str) -> float:
 @dataclass
 class AiRateConfig:
     threshold: float = 0.65
+    prior: float = 0.45
+    confidence_start_tokens: int = 40
+    confidence_full_tokens: int = 300
 
     def normalized_threshold(self) -> float:
         return _clamp(float(self.threshold), 0.05, 0.95)
+
+    def normalized_prior(self) -> float:
+        return _clamp(float(self.prior), 0.0, 1.0)
+
+    def normalized_confidence_start_tokens(self) -> int:
+        return max(0, int(self.confidence_start_tokens))
+
+    def normalized_confidence_full_tokens(self) -> int:
+        return max(self.normalized_confidence_start_tokens() + 1, int(self.confidence_full_tokens))
+
+
+@dataclass
+class AiRateWeights:
+    burstiness_low: float = 0.20
+    repetition_high: float = 0.20
+    connector_high: float = 0.16
+    punctuation_uniform: float = 0.14
+    entropy_low: float = 0.15
+    lexical_diversity_low: float = 0.10
+    template_density_high: float = 0.05
+
+    def normalized(self) -> "AiRateWeights":
+        raw = [
+            max(0.0, float(self.burstiness_low)),
+            max(0.0, float(self.repetition_high)),
+            max(0.0, float(self.connector_high)),
+            max(0.0, float(self.punctuation_uniform)),
+            max(0.0, float(self.entropy_low)),
+            max(0.0, float(self.lexical_diversity_low)),
+            max(0.0, float(self.template_density_high)),
+        ]
+        total = sum(raw)
+        if total <= 0:
+            return AiRateWeights()
+        return AiRateWeights(
+            burstiness_low=raw[0] / total,
+            repetition_high=raw[1] / total,
+            connector_high=raw[2] / total,
+            punctuation_uniform=raw[3] / total,
+            entropy_low=raw[4] / total,
+            lexical_diversity_low=raw[5] / total,
+            template_density_high=raw[6] / total,
+        )
+
+    def as_dict(self) -> dict[str, float]:
+        normalized = self.normalized()
+        return {
+            "burstiness_low": round(normalized.burstiness_low, 6),
+            "repetition_high": round(normalized.repetition_high, 6),
+            "connector_high": round(normalized.connector_high, 6),
+            "punctuation_uniform": round(normalized.punctuation_uniform, 6),
+            "entropy_low": round(normalized.entropy_low, 6),
+            "lexical_diversity_low": round(normalized.lexical_diversity_low, 6),
+            "template_density_high": round(normalized.template_density_high, 6),
+        }
+
+
+def _build_improvement_actions(
+    *,
+    score_burst: float,
+    score_repeat: float,
+    score_connector: float,
+    score_punct: float,
+    score_entropy: float,
+    score_lex: float,
+    score_template: float,
+    confidence: float,
+) -> list[str]:
+    actions: list[str] = []
+    if score_repeat >= 0.45:
+        actions.append("rewrite repeated sentence openings and repeated 3-gram fragments")
+    if max(score_connector, score_template) >= 0.45:
+        actions.append("reduce stacked connectors and replace template transitions with concrete claims")
+    if max(score_entropy, score_lex) >= 0.45:
+        actions.append("add concrete entities, variables, time ranges, outcomes, and limits")
+    if max(score_burst, score_punct) >= 0.45:
+        actions.append("mix shorter and longer sentences instead of keeping a uniform rhythm")
+    if confidence < 0.45:
+        actions.append("expand the valid prose body before interpreting the estimate")
+    if not actions:
+        actions.append("keep concrete reasoning, verified citations, and human review in the loop")
+    return actions[:5]
 
 
 def estimate_ai_rate(
     text: str,
     *,
     threshold: float = 0.65,
+    config: AiRateConfig | None = None,
+    weights: AiRateWeights | None = None,
 ) -> dict[str, Any]:
     src = str(text or "")
+    effective_config = config or AiRateConfig(threshold=threshold)
+    effective_weights = (weights or AiRateWeights()).normalized()
     tokens = _tokenize(src)
     sentences = _split_sentences(src)
     token_count = len(tokens)
     char_count = len(src.strip())
     sentence_count = len(sentences)
-    threshold_norm = AiRateConfig(threshold=threshold).normalized_threshold()
+    threshold_norm = effective_config.normalized_threshold()
 
     if token_count == 0 or char_count == 0:
         return {
@@ -177,9 +259,20 @@ def estimate_ai_rate(
                 "dominant_punctuation_ratio": 0.0,
                 "token_entropy_norm": 0.0,
                 "template_heading_density": 0.0,
+                "sub_scores": {
+                    "burstiness_low": 0.0,
+                    "repetition_high": 0.0,
+                    "connector_high": 0.0,
+                    "punctuation_uniform": 0.0,
+                    "entropy_low": 0.0,
+                    "lexical_diversity_low": 0.0,
+                    "template_density_high": 0.0,
+                },
             },
-            "evidence": ["文本为空，无法评估。"],
-            "note": "该结果仅为启发式估计，不能作为唯一判定依据。",
+            "evidence": ["text is empty"],
+            "improvement_actions": ["add substantive body text before running AI-risk estimation"],
+            "weights": effective_weights.as_dict(),
+            "note": "heuristic estimate only; not a final determination",
         }
 
     unique_tokens = len(set(tokens))
@@ -191,7 +284,6 @@ def estimate_ai_rate(
     entropy_norm = _entropy_normalized(tokens)
     template_density = _template_heading_density(src)
 
-    # Higher score means more model-like signal.
     score_burst = _clamp((0.52 - sentence_burstiness) / 0.52)
     score_repeat = _clamp((repeated_ratio - 0.02) / 0.20)
     score_connector = _clamp((connector_density - 1.8) / 6.0)
@@ -201,39 +293,39 @@ def estimate_ai_rate(
     score_template = _clamp((template_density - 0.20) / 0.40)
 
     raw_score = (
-        0.20 * score_burst
-        + 0.20 * score_repeat
-        + 0.16 * score_connector
-        + 0.14 * score_punct
-        + 0.15 * score_entropy
-        + 0.10 * score_lex
-        + 0.05 * score_template
+        effective_weights.burstiness_low * score_burst
+        + effective_weights.repetition_high * score_repeat
+        + effective_weights.connector_high * score_connector
+        + effective_weights.punctuation_uniform * score_punct
+        + effective_weights.entropy_low * score_entropy
+        + effective_weights.lexical_diversity_low * score_lex
+        + effective_weights.template_density_high * score_template
     )
     raw_score = _clamp(raw_score)
 
-    # Confidence grows with sample length; for short text keep estimate conservative
-    # but avoid collapsing to a fixed 0.5 for moderately short passages.
-    confidence = _clamp((token_count - 40) / 260)
-    prior = 0.45
+    confidence_start = effective_config.normalized_confidence_start_tokens()
+    confidence_full = effective_config.normalized_confidence_full_tokens()
+    confidence = _clamp((token_count - confidence_start) / max(1, confidence_full - confidence_start))
+    prior = effective_config.normalized_prior()
     ai_rate = _clamp(raw_score * confidence + prior * (1.0 - confidence))
 
     evidence: list[str] = []
     if score_repeat >= 0.6:
-        evidence.append("重复 n-gram 比例偏高，存在模板化复用特征。")
+        evidence.append("repeated n-gram ratio is high")
     if score_burst >= 0.6:
-        evidence.append("句长波动较低，节奏较均一。")
+        evidence.append("sentence-length variation is low")
     if score_connector >= 0.6:
-        evidence.append("连接词密度偏高，结构化过渡语较密集。")
+        evidence.append("connector density is high")
     if score_punct >= 0.6:
-        evidence.append("句末标点分布过于集中。")
+        evidence.append("punctuation distribution is overly uniform")
     if score_entropy >= 0.6:
-        evidence.append("词项熵偏低，词汇分布集中。")
+        evidence.append("token entropy is low")
     if score_lex >= 0.6:
-        evidence.append("词汇多样性偏低。")
+        evidence.append("lexical diversity is low")
     if token_count < 120:
-        evidence.append("文本较短，检测置信度有限。")
+        evidence.append("short sample; confidence is limited")
     if not evidence:
-        evidence.append("未观察到显著的单项异常信号。")
+        evidence.append("no dominant model-like signal observed")
 
     if ai_rate >= 0.78:
         risk_level = "high"
@@ -241,6 +333,17 @@ def estimate_ai_rate(
         risk_level = "medium"
     else:
         risk_level = "low"
+
+    improvement_actions = _build_improvement_actions(
+        score_burst=score_burst,
+        score_repeat=score_repeat,
+        score_connector=score_connector,
+        score_punct=score_punct,
+        score_entropy=score_entropy,
+        score_lex=score_lex,
+        score_template=score_template,
+        confidence=confidence,
+    )
 
     return {
         "ai_rate": round(ai_rate, 4),
@@ -271,5 +374,7 @@ def estimate_ai_rate(
             },
         },
         "evidence": evidence[:8],
-        "note": "该结果仅为启发式估计，不能作为唯一判定依据。",
+        "improvement_actions": improvement_actions,
+        "weights": effective_weights.as_dict(),
+        "note": "heuristic estimate only; not a final determination",
     }

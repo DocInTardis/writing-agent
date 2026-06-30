@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import re
 
-from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings
+from writing_agent.llm import OllamaClient, OllamaError, get_default_provider, get_ollama_settings
+from writing_agent.llm.provider_compat import provider_or_ollama
 from writing_agent.models import OutlineNode, ReportRequest
 from writing_agent.sections_catalog import section_catalog_text
 
@@ -96,12 +97,8 @@ class OutlineAgent:
         return root
 
     def _generate_outline_markdown_llm(self, req: ReportRequest) -> str | None:
-        settings = get_ollama_settings()
-        if not settings.enabled:
-            return None
-
-        client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-        if not client.is_running():
+        provider = provider_or_ollama(globals())
+        if hasattr(provider, "is_running") and callable(provider.is_running) and not provider.is_running():
             return None
 
         catalog = section_catalog_text()
@@ -146,7 +143,7 @@ class OutlineAgent:
         )
 
         try:
-            text = client.chat(system=system, user=user, temperature=0.2)
+            text = provider.chat(system=system, user=user, temperature=0.2)
         except OllamaError:
             return None
 

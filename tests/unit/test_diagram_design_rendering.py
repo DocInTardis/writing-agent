@@ -255,3 +255,228 @@ def test_render_figure_svg_timeline_uses_cards_and_axis() -> None:
     assert "Evidence" in svg
     assert "Cleaning" in svg
     assert 'stroke-dasharray="4,4"' in svg
+
+
+def test_resolve_requested_diagram_kind_can_pick_state_from_semantics() -> None:
+    kind = resolve_requested_diagram_kind("flow", caption="审批状态图", prompt="展示任务从草稿到发布的状态流转")
+    assert kind == "state"
+
+
+def test_resolve_requested_diagram_kind_can_pick_mindmap_from_semantics() -> None:
+    kind = resolve_requested_diagram_kind("flow", caption="论文主题思维导图", prompt="展示研究主题的背景、方法、实验与结论")
+    assert kind == "mindmap"
+
+
+def test_render_figure_svg_state_renders_states_and_transitions() -> None:
+    spec = {
+        "type": "state",
+        "caption": "Approval State",
+        "data": {
+            "states": [
+                {"id": "draft", "label": "Draft", "kind": "start"},
+                {"id": "review", "label": "Review"},
+                {"id": "done", "label": "Done", "kind": "end"},
+            ],
+            "transitions": [
+                {"from": "draft", "to": "review", "label": "submit"},
+                {"from": "review", "to": "done", "label": "approve"},
+            ],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "Approval State"
+    assert "Draft" in svg
+    assert "Review" in svg
+    assert "approve" in svg
+    assert "stateArrow" in svg
+
+
+def test_render_figure_svg_class_renders_cards_and_relations() -> None:
+    spec = {
+        "type": "class",
+        "caption": "Domain Classes",
+        "data": {
+            "classes": [
+                {"name": "Project", "attributes": ["id", "title"], "methods": ["create()"]},
+                {"name": "Document", "attributes": ["id", "status"], "methods": ["publish()"]},
+            ],
+            "relations": [{"from": "Project", "to": "Document", "label": "contains", "kind": "association"}],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "Domain Classes"
+    assert "Project" in svg
+    assert "Document" in svg
+    assert "contains" in svg
+    assert "classArrow" in svg
+
+
+def test_render_figure_svg_gantt_renders_tasks_and_statuses() -> None:
+    spec = {
+        "type": "gantt",
+        "caption": "Implementation Plan",
+        "data": {
+            "tasks": [
+                {"task": "Scoping", "start": "M1", "end": "M2", "status": "done"},
+                {"task": "Build", "start": "M2", "end": "M4", "status": "active"},
+                {"task": "Review", "start": "M4", "end": "M5", "status": "planned"},
+            ]
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "Implementation Plan"
+    assert "Scoping" in svg
+    assert "Build" in svg
+    assert "planned" in svg
+    assert "M1" in svg
+
+
+def test_render_figure_svg_mindmap_renders_center_and_branches() -> None:
+    spec = {
+        "type": "mindmap",
+        "caption": "Research Mind Map",
+        "data": {
+            "center": "Writing Agent",
+            "branches": [
+                {"label": "Background", "children": ["Gap", "Need"]},
+                {"label": "Method", "children": ["RAG", "Validation"]},
+                {"label": "Experiment", "children": ["Metrics"]},
+            ],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "Research Mind Map"
+    assert "Writing Agent" in svg
+    assert "Background" in svg
+    assert "RAG" in svg
+
+
+def test_render_figure_svg_quadrant_renders_matrix_items() -> None:
+    spec = {
+        "type": "quadrant",
+        "caption": "Priority Matrix",
+        "data": {
+            "x_axis": "Impact",
+            "y_axis": "Feasibility",
+            "items": [
+                {"label": "Core Feature", "x": 0.8, "y": 0.8},
+                {"label": "Backlog", "x": 0.2, "y": 0.2},
+            ],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "Priority Matrix"
+    assert "Impact" in svg
+    assert "Feasibility" in svg
+    assert "Core Feature" in svg
+    assert "Q1" in svg
+
+
+def test_render_figure_svg_radar_renders_axes_and_polygon() -> None:
+    spec = {
+        "type": "radar",
+        "caption": "Capability Profile",
+        "data": {
+            "axes": ["Quality", "Coverage", "Speed", "Cost"],
+            "series": [{"name": "Model A", "values": [82, 74, 88, 69]}],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "Capability Profile"
+    assert "Quality" in svg
+    assert "Model A" in svg
+    assert "polygon" in svg
+
+
+def test_render_figure_svg_scatter_renders_points_and_axes() -> None:
+    spec = {
+        "type": "scatter",
+        "caption": "Cost Performance Scatter",
+        "data": {
+            "x_label": "Cost",
+            "y_label": "Performance",
+            "points": [
+                {"label": "A", "x": 12, "y": 68, "group": "baseline"},
+                {"label": "B", "x": 44, "y": 86, "group": "improved"},
+            ],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "Cost Performance Scatter"
+    assert "Cost" in svg
+    assert "Performance" in svg
+    assert "A" in svg
+    assert "circle" in svg
+
+
+def test_render_figure_svg_heatmap_renders_matrix() -> None:
+    spec = {
+        "type": "heatmap",
+        "caption": "热力图",
+        "data": {
+            "rows": ["方法", "实验"],
+            "cols": ["风险", "优先级"],
+            "values": [[65, 82], [44, 73]],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "热力图"
+    assert "方法" in svg
+    assert "优先级" in svg
+    assert "82" in svg
+
+
+def test_render_figure_svg_funnel_renders_stages() -> None:
+    spec = {
+        "type": "funnel",
+        "caption": "漏斗图",
+        "data": {
+            "stages": [
+                {"label": "原始候选", "value": 120},
+                {"label": "筛选后", "value": 80},
+                {"label": "最终采用", "value": 30},
+            ]
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "漏斗图"
+    assert "原始候选" in svg
+    assert "30" in svg
+    assert "polygon" in svg
+
+
+def test_render_figure_svg_sankey_renders_nodes_and_links() -> None:
+    spec = {
+        "type": "sankey",
+        "caption": "桑基图",
+        "data": {
+            "nodes": ["输入", "处理", "输出"],
+            "links": [
+                {"source": "输入", "target": "处理", "value": 100},
+                {"source": "处理", "target": "输出", "value": 60},
+            ],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "桑基图"
+    assert "输入" in svg
+    assert "输出" in svg
+    assert "path" in svg
+
+
+def test_render_figure_svg_swot_renders_four_quadrants() -> None:
+    spec = {
+        "type": "swot",
+        "caption": "SWOT图",
+        "data": {
+            "strengths": ["效率高"],
+            "weaknesses": ["成本高"],
+            "opportunities": ["市场增长"],
+            "threats": ["竞争激烈"],
+        },
+    }
+    svg, caption = render_figure_svg(spec)
+    assert caption == "SWOT图"
+    assert "优势 Strengths" in svg
+    assert "威胁 Threats" in svg
+    assert "效率高" in svg

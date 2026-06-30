@@ -97,7 +97,7 @@ def render_professional_er_svg(caption: str, data: dict[str, Any]) -> str:
     rows = max(1, math.ceil(len(entities) / cols))
     height = 120 + rows * (max_card_h + 42)
     start_x = (width - (cols * card_w + (cols - 1) * gap_x)) / 2
-    out = _chart_card(width, height, caption or "ER Diagram")
+    out = _chart_card(width, height, caption or "实体关系图")
     positions: dict[str, dict[str, float]] = {}
     for idx, entity in enumerate(entities):
         row = idx // cols

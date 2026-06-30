@@ -73,7 +73,7 @@ def render_flow_or_architecture_svg(kind: str, caption: str, data: dict[str, Any
             positions[str(node["id"])] = {"x": x, "y": y, "w": node_w, "h": node_h, "cx": x + node_w / 2, "cy": y + node_h / 2}
         y_cursor += lane_h + 18
     height = int(max(320, y_cursor + 22))
-    out = [_svg_start(width, height, caption or ("System Architecture" if diagram_kind == "architecture" else "Process Diagram"))]
+    out = [_svg_start(width, height, caption or ("系统架构图" if diagram_kind == "architecture" else "流程图"))]
     for frame in lane_frames:
         out.append(f'<rect x="{frame["x"]:.1f}" y="{frame["y"]:.1f}" width="{frame["w"]:.1f}" height="{frame["h"]:.1f}" rx="18" ry="18" fill="{frame["fill"]}" stroke="#D6DEE6" stroke-width="1.0"/>')
         out.append(f'<rect x="{frame["x"]+14:.1f}" y="{frame["y"]+12:.1f}" width="108" height="24" rx="12" ry="12" fill="#E3EBF4" stroke="#C7D3DF" stroke-width="0.8"/>')
@@ -102,7 +102,7 @@ def render_professional_sequence_svg(caption: str, data: dict[str, Any]) -> str:
     y0 = 92
     message_gap = 44
     height = int(max(320, 150 + len(messages) * message_gap + 70))
-    out = [_svg_start(width, height, caption or "Sequence Diagram")]
+    out = [_svg_start(width, height, caption or "时序图")]
     for idx, participant in enumerate(participants):
         x = 40 + idx * band_w
         fill = "#FAFBFC" if idx % 2 == 0 else "#F4F7FA"

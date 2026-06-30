@@ -39,7 +39,7 @@ def test_dual_engine_interrupts_before_writer(monkeypatch) -> None:
 
 def test_plan_confirm_api_persists_and_interrupts_generate() -> None:
     client = TestClient(app_v2.app)
-    root = client.get("/", follow_redirects=False)
+    root = client.get("/new", follow_redirects=False)
     assert root.status_code == 303
     doc_id = _parse_doc_id(root)
     assert doc_id

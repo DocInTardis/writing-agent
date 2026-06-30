@@ -50,7 +50,7 @@ PROMPT_CONTRACT_MARKERS: dict[str, tuple[str, ...]] = {
         "<constraints>",
         "<user_request>",
     ),
-    "writing_agent/web/app_v2_generation_helpers_runtime.py": (
+    "writing_agent/web/legacy_fragments/generation_helpers.py": (
         "<task>full_document_generation</task>",
         "<constraints>",
     ),

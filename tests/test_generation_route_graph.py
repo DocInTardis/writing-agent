@@ -1,8 +1,10 @@
 import json
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 import writing_agent.web.app_v2 as app_v2
+import writing_agent.web.legacy_fragments.generation_stream as stream_runtime
 
 
 def _client() -> TestClient:
@@ -371,6 +373,106 @@ def test_generate_stream_route_graph_enabled_but_quick_edit_shortcut_has_no_grap
     assert "event: final" in body
     assert '"delta": "quick edit"' in body
     assert '"graph_meta"' not in body
+
+
+def test_generate_stream_prefers_single_pass_provider_mode_for_openai_responses(monkeypatch):
+    session = app_v2.store.create()
+    session.generation_prefs = {"quality_profile": "academic_cnki_default"}
+    app_v2.store.put(session)
+    _patch_generate_common(monkeypatch)
+    monkeypatch.setenv("WRITING_AGENT_PREFER_SINGLE_PASS_RESPONSES", "1")
+
+    monkeypatch.setattr(
+        stream_runtime,
+        "get_provider_snapshot",
+        lambda: {"provider": "openai", "wire_api": "responses", "base_url": "https://aixj.vip/v1"},
+    )
+    monkeypatch.setattr(
+        stream_runtime,
+        "_ensure_ollama_ready_iter",
+        lambda: (_ for _ in ()).throw(AssertionError("provider mode stream should bypass readiness prep")),
+    )
+    monkeypatch.setattr(
+        stream_runtime,
+        "final_validator",
+        SimpleNamespace(validate_final_document=lambda **_kwargs: {"passed": True}),
+    )
+
+    seen = {"single": False}
+
+    def _single_pass_generate_stream(*_args, **_kwargs):
+        seen["single"] = True
+        yield {"event": "result", "text": "# Title\n\n## 摘要\n正文[1]\n\n## 参考文献\n[1] Ref."}
+
+    monkeypatch.setattr(stream_runtime, "_single_pass_generate_stream", _single_pass_generate_stream)
+    monkeypatch.setattr(app_v2, "_single_pass_generate_stream", _single_pass_generate_stream)
+
+    client = _client()
+    with client.stream(
+        "POST",
+        f"/api/doc/{session.id}/generate/stream",
+        json={
+            "instruction": "write a full paper",
+            "text": "",
+            "compose_mode": "auto",
+        },
+    ) as resp:
+        body = resp.read().decode("utf-8", errors="ignore")
+
+    assert resp.status_code == 200
+    assert seen["single"] is True
+    assert "event: final" in body
+    assert '"path": "single_pass_provider_mode_stream"' in body
+    assert '"single_pass_provider_mode": true' in body
+    assert "model preparing" not in body
+
+
+def test_generate_stream_provider_mode_falls_through_when_validation_fails(monkeypatch):
+    session = app_v2.store.create()
+    session.generation_prefs = {"quality_profile": "academic_cnki_default"}
+    session.template_required_h2 = ["摘要", "关键词", "引言"]
+    app_v2.store.put(session)
+    _patch_generate_common(monkeypatch)
+    monkeypatch.setenv("WRITING_AGENT_PREFER_SINGLE_PASS_RESPONSES", "1")
+
+    monkeypatch.setattr(
+        stream_runtime,
+        "get_provider_snapshot",
+        lambda: {"provider": "openai", "wire_api": "responses", "base_url": "https://aixj.vip/v1"},
+    )
+    monkeypatch.setattr(
+        stream_runtime,
+        "_single_pass_generate_stream",
+        lambda *_args, **_kwargs: iter([{"event": "result", "text": "# 自动生成文档\n\n## 背景\n偏题内容"}]),
+    )
+    monkeypatch.setattr(
+        stream_runtime,
+        "final_validator",
+        SimpleNamespace(validate_final_document=lambda **_kwargs: {"passed": False}),
+    )
+    monkeypatch.setattr(app_v2, "_ensure_ollama_ready_iter", lambda: (True, ""))
+
+    def _legacy(**_kwargs):
+        yield {"event": "final", "text": "# Title\n\n## 摘要\nfallback text", "problems": []}
+
+    monkeypatch.setattr(app_v2, "run_generate_graph", _legacy)
+
+    client = _client()
+    with client.stream(
+        "POST",
+        f"/api/doc/{session.id}/generate/stream",
+        json={
+            "instruction": "write a full paper",
+            "text": "",
+            "compose_mode": "auto",
+        },
+    ) as resp:
+        body = resp.read().decode("utf-8", errors="ignore")
+
+    assert resp.status_code == 200
+    assert "event: final" in body
+    assert '"path": "single_pass_provider_mode_stream"' not in body
+    assert "model preparing" in body
 
 
 def test_generate_section_uses_route_graph_when_enabled(monkeypatch):

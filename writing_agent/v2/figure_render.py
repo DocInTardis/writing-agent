@@ -14,12 +14,23 @@ except Exception:  # pragma: no cover - optional dependency
 
 from writing_agent.v2.diagram_design import (
     enrich_figure_spec,
+    render_professional_class_svg,
     render_flow_or_architecture_svg,
     render_professional_bar_svg,
     render_professional_er_svg,
+    render_professional_funnel_svg,
+    render_professional_gantt_svg,
+    render_professional_heatmap_svg,
     render_professional_line_svg,
+    render_professional_mindmap_svg,
     render_professional_pie_svg,
+    render_professional_quadrant_svg,
+    render_professional_radar_svg,
+    render_professional_sankey_svg,
+    render_professional_scatter_svg,
     render_professional_sequence_svg,
+    render_professional_state_svg,
+    render_professional_swot_svg,
     render_professional_timeline_svg,
 )
 
@@ -45,6 +56,29 @@ _SUPPORTED_FIGURE_TYPES = {
     "timeline",
     "sequence",
     "sequence_diagram",
+    "state",
+    "state_diagram",
+    "class",
+    "class_diagram",
+    "gantt",
+    "gantt_chart",
+    "mindmap",
+    "mind_map",
+    "quadrant",
+    "quadrant_chart",
+    "matrix_2x2",
+    "radar",
+    "radar_chart",
+    "scatter",
+    "scatter_plot",
+    "heatmap",
+    "heatmap_chart",
+    "funnel",
+    "funnel_chart",
+    "sankey",
+    "sankey_chart",
+    "swot",
+    "swot_chart",
     "architecture",
     "architecture_diagram",
     "arch",
@@ -62,6 +96,18 @@ def _normalize_figure_type(spec: dict | None) -> str:
         "line_chart": "line",
         "pie_chart": "pie",
         "sequence_diagram": "sequence",
+        "state_diagram": "state",
+        "class_diagram": "class",
+        "gantt_chart": "gantt",
+        "mind_map": "mindmap",
+        "quadrant_chart": "quadrant",
+        "matrix_2x2": "quadrant",
+        "radar_chart": "radar",
+        "scatter_plot": "scatter",
+        "heatmap_chart": "heatmap",
+        "funnel_chart": "funnel",
+        "sankey_chart": "sankey",
+        "swot_chart": "swot",
         "architecture_diagram": "architecture",
         "arch": "architecture",
     }
@@ -130,21 +176,43 @@ def render_figure_svg(spec: dict) -> tuple[str, str]:
     payload = data if isinstance(data, dict) else {}
 
     if figure_type in {"flow", "flowchart", "architecture"}:
-        resolved = caption or ("System Architecture" if figure_type == "architecture" else "Flow Diagram")
+        resolved = caption or ("系统架构图" if figure_type == "architecture" else "流程图")
         return render_flow_or_architecture_svg(figure_type, caption, payload), resolved
     if figure_type == "er":
-        return render_professional_er_svg(caption, payload), caption or "ER Diagram"
+        return render_professional_er_svg(caption, payload), caption or "实体关系图"
     if figure_type in {"bar", "bar_chart"}:
-        return render_professional_bar_svg(caption, payload), caption or "Bar Chart"
+        return render_professional_bar_svg(caption, payload), caption or "柱状图"
     if figure_type in {"line", "line_chart"}:
-        return render_professional_line_svg(caption, payload), caption or "Line Chart"
+        return render_professional_line_svg(caption, payload), caption or "折线图"
     if figure_type in {"pie", "pie_chart"}:
-        return render_professional_pie_svg(caption, payload), caption or "Pie Chart"
+        return render_professional_pie_svg(caption, payload), caption or "饼图"
     if figure_type == "timeline":
-        return render_professional_timeline_svg(caption, payload), caption or "Timeline"
+        return render_professional_timeline_svg(caption, payload), caption or "时间线"
     if figure_type in {"sequence", "sequence_diagram"}:
-        return render_professional_sequence_svg(caption, payload), caption or "Sequence Diagram"
-    return _render_placeholder_svg(caption or f"Figure({figure_type or 'unknown'})"), caption or "Figure"
+        return render_professional_sequence_svg(caption, payload), caption or "时序图"
+    if figure_type in {"state", "state_diagram"}:
+        return render_professional_state_svg(caption, payload), caption or "状态图"
+    if figure_type in {"class", "class_diagram"}:
+        return render_professional_class_svg(caption, payload), caption or "类图"
+    if figure_type in {"gantt", "gantt_chart"}:
+        return render_professional_gantt_svg(caption, payload), caption or "甘特图"
+    if figure_type in {"mindmap", "mind_map"}:
+        return render_professional_mindmap_svg(caption, payload), caption or "思维导图"
+    if figure_type in {"quadrant", "quadrant_chart", "matrix_2x2"}:
+        return render_professional_quadrant_svg(caption, payload), caption or "四象限图"
+    if figure_type in {"radar", "radar_chart"}:
+        return render_professional_radar_svg(caption, payload), caption or "雷达图"
+    if figure_type in {"scatter", "scatter_plot"}:
+        return render_professional_scatter_svg(caption, payload), caption or "散点图"
+    if figure_type in {"heatmap", "heatmap_chart"}:
+        return render_professional_heatmap_svg(caption, payload), caption or "热力图"
+    if figure_type in {"funnel", "funnel_chart"}:
+        return render_professional_funnel_svg(caption, payload), caption or "漏斗图"
+    if figure_type in {"sankey", "sankey_chart"}:
+        return render_professional_sankey_svg(caption, payload), caption or "桑基图"
+    if figure_type in {"swot", "swot_chart"}:
+        return render_professional_swot_svg(caption, payload), caption or "SWOT图"
+    return _render_placeholder_svg(caption or f"图表({figure_type or 'unknown'})"), caption or "图表"
 
 
 def _svg_wrap(inner: str, w: int, h: int, label: str) -> str:

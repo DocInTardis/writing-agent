@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from writing_agent.v2 import section_contract_build_domain as build_domain
-from writing_agent.v2 import section_contract_evidence_domain as evidence_domain
-from writing_agent.v2 import section_contract_rules_domain as rules_domain
-from writing_agent.v2 import section_contract_slots_domain as slots_domain
+from writing_agent.v2 import section_contract_domain as _domain
+build_domain = _domain
+evidence_domain = _domain
+rules_domain = _domain
+slots_domain = _domain
 
 _ZH_ABSTRACT = "\u6458\u8981"
 _ZH_KEYWORDS = "\u5173\u952e\u8bcd"

@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import Request
 
+from writing_agent.v2 import resource_scheduler as _resource_scheduler
 from writing_agent.web.domains import section_edit_ops_domain
 from writing_agent.web.idempotency import IdempotencyStore, make_idempotency_key
 
@@ -498,10 +499,62 @@ def prepare_generation_config(
         margin = max(0.0, min(0.3, margin))
         internal_target = int(round(target_chars * (1.0 + margin)))
         cfg = app_v2.GenerateConfig(
-            workers=int(app_v2.os.environ.get("WRITING_AGENT_WORKERS", "12")),
+            workers=_resource_scheduler.recommended_workers(),
             min_total_chars=internal_target,
             max_total_chars=0,
         )
     else:
-        cfg = app_v2.GenerateConfig(workers=int(app_v2.os.environ.get("WRITING_AGENT_WORKERS", "12")))
+        cfg = app_v2.GenerateConfig(workers=_resource_scheduler.recommended_workers())
     return instruction, cfg, target_chars
+
+
+def provider_mode_required_sections(session: Any) -> list[str]:
+    """Return the ordered list of required section titles from session outline or required_h2."""
+    outline = list(getattr(session, "template_outline", []) or [])
+    outline_sections: list[str] = []
+    for item in outline:
+        if not isinstance(item, (list, tuple)) or len(item) < 2:
+            continue
+        title = str(item[1] or "").strip()
+        if title:
+            outline_sections.append(title)
+    if outline_sections:
+        return outline_sections
+    return [
+        str(item or "").strip()
+        for item in (getattr(session, "template_required_h2", []) or [])
+        if str(item or "").strip()
+    ]
+
+
+def provider_mode_validation_acceptable(validation: dict[str, Any]) -> bool:
+    """Lenient gate for single-pass provider mode results.
+
+    Returns True if the validation result is acceptable even when not fully passing
+    the strict final validator, as long as all structural and content checks pass.
+    """
+    if bool(validation.get("passed")):
+        return True
+    if not bool(validation.get("structure_passed")):
+        return False
+    if not bool(validation.get("section_order_passed", True)):
+        return False
+    if list(validation.get("missing_sections") or []):
+        return False
+    if list(validation.get("unexpected_sections") or []):
+        return False
+    if list(validation.get("duplicate_sections") or []):
+        return False
+    if list(validation.get("empty_sections") or []):
+        return False
+    if not bool(validation.get("meta_residue_zero", True)):
+        return False
+    if round(float(validation.get("title_body_alignment_score") or 0.0), 4) < 0.45:
+        return False
+    if round(float(validation.get("repeat_sentence_ratio") or 0.0), 4) > 0.08:
+        return False
+    if round(float(validation.get("instruction_mirroring_ratio") or 0.0), 4) > 0.08:
+        return False
+    if round(float(validation.get("placeholder_residue_ratio") or 0.0), 4) > 0.0:
+        return False
+    return True

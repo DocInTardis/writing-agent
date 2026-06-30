@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import re
@@ -113,8 +116,9 @@ def _plan_timeout_s() -> float:
     if raw:
         try:
             return max(5.0, float(raw))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_core_utils_domain.py: %s", _exc, exc_info=True)
+
     return 40.0
 
 
@@ -124,8 +128,9 @@ def _analysis_timeout_s() -> float:
     if raw:
         try:
             return max(3.0, float(raw))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_core_utils_domain.py: %s", _exc, exc_info=True)
+
     return 24.0
 
 
@@ -135,8 +140,9 @@ def _section_timeout_s() -> float:
     if raw:
         try:
             return max(10.0, float(raw))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_core_utils_domain.py: %s", _exc, exc_info=True)
+
     return 180.0
 
 

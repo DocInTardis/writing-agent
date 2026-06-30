@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Mapping, MutableMapping
 from typing import Any
 
@@ -54,6 +55,9 @@ def sync_trace_context(
 
 
 def should_skip_semantic_failover(*, terminal_status: str, failure_reason: str) -> bool:
+    override = str(os.environ.get("WRITING_AGENT_ALLOW_SEMANTIC_FAILOVER", "")).strip().lower()
+    if override in {"1", "true", "yes", "on"}:
+        return False
     status = str(terminal_status or "").strip().lower()
     reason = str(failure_reason or "").strip()
     return status in {"failed", "interrupted"} and reason in _NO_SEMANTIC_FAILOVER_REASONS

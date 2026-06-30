@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import ctypes
 import subprocess
 
@@ -89,8 +92,9 @@ def _get_memory_bytes() -> tuple[int, int]:
         st.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
         if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):  # type: ignore[attr-defined]
             return int(st.ullTotalPhys), int(st.ullAvailPhys)
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in graph_runner_post_models_domain.py: %s", _exc, exc_info=True)
+
     return 0, 0
 
 

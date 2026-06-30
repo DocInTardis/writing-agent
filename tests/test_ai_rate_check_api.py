@@ -51,6 +51,8 @@ def test_ai_rate_check_and_latest_endpoint():
     assert high.get("ok") == 1
     assert 0.0 <= float(high.get("ai_rate") or 0.0) <= 1.0
     assert isinstance(high.get("signals"), dict)
+    assert isinstance(high.get("improvement_actions"), list)
+    assert high.get("improvement_actions")
 
     resp_low = client.post(
         f"/api/doc/{low_like.id}/ai_rate/check",
@@ -68,3 +70,4 @@ def test_ai_rate_check_and_latest_endpoint():
     assert latest_body.get("has_latest") is True
     latest_payload = latest_body.get("latest") or {}
     assert float(latest_payload.get("ai_rate") or 0.0) == float(high.get("ai_rate") or 0.0)
+    assert latest_payload.get("improvement_actions") == high.get("improvement_actions")

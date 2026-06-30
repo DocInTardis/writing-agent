@@ -193,7 +193,7 @@ def _normalize_sequence_data(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         if not style and _base()._RETURN_LABEL_RE.search(label):
             style = "dashed"
-        messages_out.append({"from": frm, "to": to, "label": label or "message", "style": style or "solid"})
+        messages_out.append({"from": frm, "to": to, "label": label or "消息", "style": style or "solid"})
     if not messages_out and len(participants_out) >= 2:
         defaults = ["提交任务", "编排请求", "返回证据", "输出草稿", "返回结果"]
         for idx in range(len(participants_out) - 1):
@@ -271,7 +271,7 @@ def _extract_timeline_events(text: str) -> list[dict[str, str]]:
         return deduped[:8]
     tokens = _tokenize_parts(text)
     if len(tokens) >= 3:
-        return [{"time": f"Stage {idx+1}", "label": token} for idx, token in enumerate(tokens[:6])]
+        return [{"time": f"阶段{idx+1}", "label": token} for idx, token in enumerate(tokens[:6])]
     return []
 
 
@@ -314,7 +314,7 @@ def _suggest_architecture_spec(*, caption: str, prompt: str, section_title: str)
 def _suggest_sequence_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
     participants = _tokenize_parts(prompt)
     if len(participants) < 3:
-        participants = ["relates", "API??", "?????", "????", "????", "????", "????"]
+        participants = ["用户", "网关", "编排服务", "生成服务", "校核服务", "文档服务", "存储"]
     participants = participants[:8]
     default_labels = ["????", "?????", "????", "????", "????", "????", "????"]
     messages = []
@@ -328,22 +328,22 @@ def _suggest_sequence_spec(*, caption: str, prompt: str, section_title: str) -> 
             }
         )
     if len(participants) >= 3:
-        messages.append({"from": participants[-1], "to": participants[0], "label": "????", "style": "dashed"})
-    return {"type": "sequence", "caption": caption or section_title or "??????", "data": {"participants": participants, "messages": messages}}
+        messages.append({"from": participants[-1], "to": participants[0], "label": "返回结果", "style": "dashed"})
+    return {"type": "sequence", "caption": caption or section_title or "时序图", "data": {"participants": participants, "messages": messages}}
 
 
 def _suggest_er_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
     tokens = [token for token in _tokenize_parts(prompt or caption or section_title) if len(token) >= 2]
     if len(tokens) < 3:
-        tokens = ["User", "Project", "Document"]
+        tokens = ["用户", "项目", "文档"]
     entities = []
     for idx, token in enumerate(tokens[:5]):
         attrs = ["id", f"{_slug_id(token, f'e{idx+1}').lower()}_name", "status"]
         entities.append({"name": token, "attributes": attrs})
     relations = []
     for idx in range(len(entities) - 1):
-        relations.append({"left": entities[idx]["name"], "right": entities[idx + 1]["name"], "label": "relates", "cardinality": "1:N"})
-    return {"type": "er", "caption": caption or section_title or "Entity Relationship Graph", "data": {"entities": entities, "relations": relations}}
+        relations.append({"left": entities[idx]["name"], "right": entities[idx + 1]["name"], "label": "关联", "cardinality": "1:N"})
+    return {"type": "er", "caption": caption or section_title or "实体关系图", "data": {"entities": entities, "relations": relations}}
 
 
 def _suggest_bar_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
@@ -354,9 +354,9 @@ def _suggest_bar_spec(*, caption: str, prompt: str, section_title: str) -> dict[
     else:
         labels = _tokenize_parts(prompt or caption or section_title)[:5]
         if len(labels) < 3:
-            labels = ["Metric A", "Metric B", "Metric C", "Metric D"]
+            labels = ["指标A", "指标B", "指标C", "指标D"]
         values = [18 + idx * 6 for idx in range(len(labels))]
-    return {"type": "bar", "caption": caption or section_title or "Comparison Metrics", "data": {"labels": labels, "values": values}}
+    return {"type": "bar", "caption": caption or section_title or "柱状图", "data": {"labels": labels, "values": values}}
 
 
 def _suggest_line_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
@@ -369,8 +369,8 @@ def _suggest_line_spec(*, caption: str, prompt: str, section_title: str) -> dict
         values = [12, 18, 22, 27, 31]
     return {
         "type": "line",
-        "caption": caption or section_title or "Trend Analysis",
-        "data": {"labels": labels, "series": [{"name": "Series A", "values": values}]},
+        "caption": caption or section_title or "趋势分析图",
+        "data": {"labels": labels, "series": [{"name": "序列A", "values": values}]},
     }
 
 
@@ -383,22 +383,394 @@ def _suggest_pie_spec(*, caption: str, prompt: str, section_title: str) -> dict[
     else:
         labels = _tokenize_parts(prompt or caption or section_title)[:4]
         if len(labels) < 3:
-            labels = ["Dimension A", "Dimension B", "Dimension C", "Dimension D"]
+            labels = ["维度A", "维度B", "维度C", "维度D"]
         weights = [35, 28, 22, 15][: len(labels)]
         segments = [{"label": label, "value": weights[idx]} for idx, label in enumerate(labels)]
-    return {"type": "pie", "caption": caption or section_title or "Composition Share", "data": {"segments": segments}}
+    return {"type": "pie", "caption": caption or section_title or "占比分析图", "data": {"segments": segments}}
 
 
 def _suggest_timeline_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
     events = _extract_timeline_events(prompt or caption or section_title)
     if not events:
         events = [
-            {"time": "Stage 1", "label": "Problem Scoping"},
-            {"time": "Stage 2", "label": "Evidence Collection"},
-            {"time": "Stage 3", "label": "Analysis and Discussion"},
-            {"time": "Stage 4", "label": "Conclusion and Delivery"},
+            {"time": "阶段1", "label": "问题界定"},
+            {"time": "阶段2", "label": "证据收集"},
+            {"time": "阶段3", "label": "分析论证"},
+            {"time": "阶段4", "label": "结论交付"},
         ]
-    return {"type": "timeline", "caption": caption or section_title or "Research Timeline", "data": {"events": events}}
+    return {"type": "timeline", "caption": caption or section_title or "时间线", "data": {"events": events}}
+
+
+def _normalize_state_data(payload: dict[str, Any]) -> dict[str, Any]:
+    states_out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for idx, item in enumerate(payload.get("states") if isinstance(payload.get("states"), list) else []):
+        if isinstance(item, dict):
+            label = _clean_text(item.get("label") or item.get("name") or item.get("id") or f"State {idx+1}", max_chars=28)
+            state_id = _slug_id(_clean_text(item.get("id") or label, max_chars=24), f"s{idx+1}")
+            state_kind = _clean_text(item.get("kind"), max_chars=12).lower()
+        else:
+            label = _clean_text(item, max_chars=28)
+            state_id = _slug_id(label, f"s{idx+1}")
+            state_kind = ""
+        if not label or state_id in seen:
+            continue
+        seen.add(state_id)
+        node: dict[str, str] = {"id": state_id, "label": label}
+        if state_kind:
+            node["kind"] = state_kind
+        states_out.append(node)
+    transitions_out: list[dict[str, str]] = []
+    state_ids = {str(item["id"]) for item in states_out}
+    for item in payload.get("transitions") if isinstance(payload.get("transitions"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        src = _slug_id(_clean_text(item.get("from") or item.get("src"), max_chars=24), "")
+        dst = _slug_id(_clean_text(item.get("to") or item.get("dst"), max_chars=24), "")
+        label = _clean_text(item.get("label"), max_chars=24)
+        if src in state_ids and dst in state_ids:
+            edge = {"from": src, "to": dst}
+            if label:
+                edge["label"] = label
+            transitions_out.append(edge)
+    if not transitions_out and len(states_out) >= 2:
+        transitions_out = [{"from": states_out[idx]["id"], "to": states_out[idx + 1]["id"]} for idx in range(len(states_out) - 1)]
+    return {"states": states_out[:12], "transitions": transitions_out[:24]}
+
+
+def _normalize_class_data(payload: dict[str, Any]) -> dict[str, Any]:
+    classes_out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in payload.get("classes") if isinstance(payload.get("classes"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = _clean_text(item.get("name") or item.get("title"), max_chars=28)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        attrs = [_clean_text(attr, max_chars=26) for attr in (item.get("attributes") if isinstance(item.get("attributes"), list) else [])[:8]]
+        methods = [_clean_text(method, max_chars=26) for method in (item.get("methods") if isinstance(item.get("methods"), list) else [])[:8]]
+        classes_out.append({
+            "name": name,
+            "attributes": [attr for attr in attrs if attr],
+            "methods": [method for method in methods if method],
+        })
+    class_names = {str(item["name"]) for item in classes_out}
+    relations_out: list[dict[str, str]] = []
+    for item in payload.get("relations") if isinstance(payload.get("relations"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        src = _clean_text(item.get("from") or item.get("left"), max_chars=28)
+        dst = _clean_text(item.get("to") or item.get("right"), max_chars=28)
+        label = _clean_text(item.get("label"), max_chars=24)
+        kind = _clean_text(item.get("kind") or item.get("type"), max_chars=16).lower()
+        if src in class_names and dst in class_names:
+            relation = {"from": src, "to": dst}
+            if label:
+                relation["label"] = label
+            if kind:
+                relation["kind"] = kind
+            relations_out.append(relation)
+    return {"classes": classes_out[:8], "relations": relations_out[:16]}
+
+
+def _normalize_gantt_data(payload: dict[str, Any]) -> dict[str, Any]:
+    tasks_out: list[dict[str, str]] = []
+    for idx, item in enumerate(payload.get("tasks") if isinstance(payload.get("tasks"), list) else []):
+        if not isinstance(item, dict):
+            continue
+        task = _clean_text(item.get("task") or item.get("name") or item.get("label") or f"Task {idx+1}", max_chars=30)
+        start = _clean_text(item.get("start") or item.get("begin"), max_chars=16)
+        end = _clean_text(item.get("end") or item.get("finish"), max_chars=16)
+        owner = _clean_text(item.get("owner"), max_chars=18)
+        status = _clean_text(item.get("status"), max_chars=14)
+        if not task:
+            continue
+        row = {"task": task, "start": start or f"P{idx+1}", "end": end or f"P{idx+2}"}
+        if owner:
+            row["owner"] = owner
+        if status:
+            row["status"] = status
+        tasks_out.append(row)
+    return {"tasks": tasks_out[:12]}
+
+
+def _suggest_state_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    tokens = [token for token in _tokenize_parts(prompt or caption or section_title) if len(token) >= 2]
+    if len(tokens) < 3:
+        tokens = ["草稿", "审核中", "已通过", "已发布"]
+    states = []
+    for idx, token in enumerate(tokens[:6]):
+        state = {"id": _slug_id(token, f"s{idx+1}"), "label": token}
+        if idx == 0:
+            state["kind"] = "start"
+        elif idx == min(len(tokens[:6]) - 1, 5):
+            state["kind"] = "end"
+        states.append(state)
+    transitions = []
+    for idx in range(len(states) - 1):
+        transitions.append({"from": states[idx]["id"], "to": states[idx + 1]["id"], "label": "提交" if idx == 0 else "流转"})
+    return {"type": "state", "caption": caption or section_title or "状态图", "data": {"states": states, "transitions": transitions}}
+
+
+def _suggest_class_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    tokens = [token for token in _tokenize_parts(prompt or caption or section_title) if len(token) >= 2]
+    if len(tokens) < 3:
+        tokens = ["项目", "文档", "引用"]
+    classes = []
+    for idx, token in enumerate(tokens[:4]):
+        classes.append(
+            {
+                "name": token,
+                "attributes": ["id", f"{_slug_id(token, f'c{idx+1}').lower()}Name", "status"],
+                "methods": ["create()", "update()"],
+            }
+        )
+    relations = []
+    for idx in range(len(classes) - 1):
+        relations.append({"from": classes[idx]["name"], "to": classes[idx + 1]["name"], "label": "关联", "kind": "association"})
+    return {"type": "class", "caption": caption or section_title or "类图", "data": {"classes": classes, "relations": relations}}
+
+
+def _suggest_gantt_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    events = _extract_timeline_events(prompt or caption or section_title)
+    tasks: list[dict[str, str]] = []
+    if events:
+        for idx, item in enumerate(events[:6]):
+            tasks.append(
+                {
+                    "task": _clean_text(item.get("label"), max_chars=28),
+                    "start": _clean_text(item.get("time"), max_chars=16) or f"P{idx+1}",
+                    "end": f"P{idx+2}",
+                    "status": "planned" if idx < 2 else "active",
+                }
+            )
+    if len(tasks) < 3:
+        tasks = [
+            {"task": "问题界定", "start": "第1月", "end": "第2月", "status": "已完成"},
+            {"task": "证据收集", "start": "第2月", "end": "第3月", "status": "进行中"},
+            {"task": "系统实现", "start": "第3月", "end": "第4月", "status": "进行中"},
+            {"task": "评估与交付", "start": "第4月", "end": "第5月", "status": "计划中"},
+        ]
+    return {"type": "gantt", "caption": caption or section_title or "甘特图", "data": {"tasks": tasks}}
+
+
+def _normalize_mindmap_data(payload: dict[str, Any]) -> dict[str, Any]:
+    center = _clean_text(payload.get("center") or payload.get("root") or payload.get("topic"), max_chars=28)
+    branches_out: list[dict[str, Any]] = []
+    for item in payload.get("branches") if isinstance(payload.get("branches"), list) else []:
+        if isinstance(item, dict):
+            label = _clean_text(item.get("label") or item.get("name"), max_chars=24)
+            children = [_clean_text(child, max_chars=18) for child in (item.get("children") if isinstance(item.get("children"), list) else [])[:4]]
+            children = [child for child in children if child]
+        else:
+            label = _clean_text(item, max_chars=24)
+            children = []
+        if label:
+            branches_out.append({"label": label, "children": children})
+    return {"center": center, "branches": branches_out[:8]}
+
+
+def _normalize_quadrant_data(payload: dict[str, Any]) -> dict[str, Any]:
+    x_axis = _clean_text(payload.get("x_axis") or payload.get("xLabel"), max_chars=18) or "影响力"
+    y_axis = _clean_text(payload.get("y_axis") or payload.get("yLabel"), max_chars=18) or "可行性"
+    items_out: list[dict[str, Any]] = []
+    for item in payload.get("items") if isinstance(payload.get("items"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        label = _clean_text(item.get("label") or item.get("name"), max_chars=20)
+        if not label:
+            continue
+        try:
+            x = float(item.get("x", 0.5))
+            y = float(item.get("y", 0.5))
+        except Exception:
+            x = 0.5
+            y = 0.5
+        items_out.append({"label": label, "x": max(0.0, min(1.0, x)), "y": max(0.0, min(1.0, y)), "quadrant": _clean_text(item.get("quadrant"), max_chars=18)})
+    return {"x_axis": x_axis, "y_axis": y_axis, "items": items_out[:12]}
+
+
+def _normalize_radar_data(payload: dict[str, Any]) -> dict[str, Any]:
+    axes = [_clean_text(item, max_chars=18) for item in (payload.get("axes") if isinstance(payload.get("axes"), list) else [])[:8]]
+    axes = [item for item in axes if item]
+    series_out: list[dict[str, Any]] = []
+    for item in payload.get("series") if isinstance(payload.get("series"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = _clean_text(item.get("name") or item.get("label") or "序列", max_chars=18)
+        values: list[float] = []
+        for value in (item.get("values") if isinstance(item.get("values"), list) else [])[: len(axes) or 8]:
+            try:
+                values.append(max(0.0, min(100.0, float(value))))
+            except Exception:
+                continue
+        if name and values:
+            series_out.append({"name": name, "values": values})
+    return {"axes": axes, "series": series_out[:3]}
+
+
+def _normalize_scatter_data(payload: dict[str, Any]) -> dict[str, Any]:
+    x_label = _clean_text(payload.get("x_label") or payload.get("xLabel"), max_chars=18) or "X"
+    y_label = _clean_text(payload.get("y_label") or payload.get("yLabel"), max_chars=18) or "Y"
+    points_out: list[dict[str, Any]] = []
+    for item in payload.get("points") if isinstance(payload.get("points"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        label = _clean_text(item.get("label") or item.get("name"), max_chars=18)
+        try:
+            x = float(item.get("x"))
+            y = float(item.get("y"))
+        except Exception:
+            continue
+        points_out.append({"label": label, "x": x, "y": y, "group": _clean_text(item.get("group"), max_chars=16)})
+    return {"x_label": x_label, "y_label": y_label, "points": points_out[:24]}
+
+
+def _suggest_mindmap_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    tokens = [token for token in _tokenize_parts(prompt or caption or section_title) if len(token) >= 2]
+    center = caption or section_title or (tokens[0] if tokens else "研究主题")
+    branches = []
+    seed = tokens[1:] if len(tokens) > 1 else []
+    if not seed:
+        seed = ["背景", "方法", "实验", "结论"]
+    for token in seed[:6]:
+        branches.append({"label": token, "children": [f"{token} A", f"{token} B"] if len(token) <= 10 else []})
+    return {"type": "mindmap", "caption": caption or section_title or "思维导图", "data": {"center": center[:28], "branches": branches}}
+
+
+def _suggest_quadrant_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    tokens = [token for token in _tokenize_parts(prompt or caption or section_title) if len(token) >= 2]
+    if len(tokens) < 4:
+        tokens = ["核心事项", "快速收益", "研究风险", "待办事项"]
+    coords = [(0.75, 0.75), (0.25, 0.75), (0.75, 0.25), (0.25, 0.25)]
+    items = [{"label": token, "x": coords[idx][0], "y": coords[idx][1]} for idx, token in enumerate(tokens[:6])]
+    return {"type": "quadrant", "caption": caption or section_title or "四象限图", "data": {"x_axis": "影响力", "y_axis": "可行性", "items": items}}
+
+
+def _suggest_radar_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    axes = [token for token in _tokenize_parts(prompt or caption or section_title) if len(token) >= 2][:6]
+    if len(axes) < 4:
+        axes = ["质量", "覆盖度", "效率", "鲁棒性", "成本"]
+    values = [82, 74, 88, 79, 69][: len(axes)]
+    return {"type": "radar", "caption": caption or section_title or "雷达图", "data": {"axes": axes, "series": [{"name": "方案甲", "values": values}]}}
+
+
+def _suggest_scatter_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    points = [
+        {"label": "样本A", "x": 18, "y": 72, "group": "基线"},
+        {"label": "样本B", "x": 35, "y": 68, "group": "基线"},
+        {"label": "样本C", "x": 58, "y": 86, "group": "优化"},
+        {"label": "样本D", "x": 74, "y": 92, "group": "优化"},
+    ]
+    return {"type": "scatter", "caption": caption or section_title or "散点图", "data": {"x_label": "成本", "y_label": "性能", "points": points}}
+
+
+def _normalize_heatmap_data(payload: dict[str, Any]) -> dict[str, Any]:
+    rows = [_clean_text(item, max_chars=16) for item in (payload.get("rows") if isinstance(payload.get("rows"), list) else [])[:8]]
+    cols = [_clean_text(item, max_chars=16) for item in (payload.get("cols") if isinstance(payload.get("cols"), list) else [])[:8]]
+    rows = [item for item in rows if item]
+    cols = [item for item in cols if item]
+    values_in = payload.get("values") if isinstance(payload.get("values"), list) else []
+    values_out: list[list[float]] = []
+    for row in values_in[: len(rows) or 8]:
+        if not isinstance(row, list):
+            continue
+        row_out: list[float] = []
+        for value in row[: len(cols) or 8]:
+            try:
+                row_out.append(max(0.0, min(100.0, float(value))))
+            except Exception:
+                row_out.append(0.0)
+        if row_out:
+            values_out.append(row_out)
+    return {"rows": rows, "cols": cols, "values": values_out}
+
+
+def _normalize_funnel_data(payload: dict[str, Any]) -> dict[str, Any]:
+    stages_out: list[dict[str, float | str]] = []
+    for item in payload.get("stages") if isinstance(payload.get("stages"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        label = _clean_text(item.get("label") or item.get("name"), max_chars=20)
+        try:
+            value = float(item.get("value"))
+        except Exception:
+            continue
+        if label:
+            stages_out.append({"label": label, "value": max(0.0, value)})
+    return {"stages": stages_out[:8]}
+
+
+def _normalize_sankey_data(payload: dict[str, Any]) -> dict[str, Any]:
+    nodes = [_clean_text(item, max_chars=18) for item in (payload.get("nodes") if isinstance(payload.get("nodes"), list) else [])[:10]]
+    nodes = [item for item in nodes if item]
+    links_out: list[dict[str, float | str]] = []
+    for item in payload.get("links") if isinstance(payload.get("links"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        source = _clean_text(item.get("source") or item.get("from"), max_chars=18)
+        target = _clean_text(item.get("target") or item.get("to"), max_chars=18)
+        try:
+            value = float(item.get("value"))
+        except Exception:
+            continue
+        if source and target:
+            links_out.append({"source": source, "target": target, "value": max(0.0, value)})
+    return {"nodes": nodes, "links": links_out[:16]}
+
+
+def _normalize_swot_data(payload: dict[str, Any]) -> dict[str, Any]:
+    def _list(name: str) -> list[str]:
+        raw = payload.get(name) if isinstance(payload.get(name), list) else []
+        out = [_clean_text(item, max_chars=24) for item in raw[:6]]
+        return [item for item in out if item]
+
+    return {
+        "strengths": _list("strengths"),
+        "weaknesses": _list("weaknesses"),
+        "opportunities": _list("opportunities"),
+        "threats": _list("threats"),
+    }
+
+
+def _suggest_heatmap_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    rows = ["引言", "方法", "实验", "结论"]
+    cols = ["相关性", "密度", "风险", "优先级"]
+    values = [[68, 54, 22, 35], [72, 66, 28, 58], [85, 78, 36, 74], [60, 44, 20, 46]]
+    return {"type": "heatmap", "caption": caption or section_title or "热力图", "data": {"rows": rows, "cols": cols, "values": values}}
+
+
+def _suggest_funnel_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    stages = [
+        {"label": "原始候选", "value": 120},
+        {"label": "筛选后", "value": 86},
+        {"label": "验证通过", "value": 54},
+        {"label": "最终采用", "value": 28},
+    ]
+    return {"type": "funnel", "caption": caption or section_title or "漏斗图", "data": {"stages": stages}}
+
+
+def _suggest_sankey_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    nodes = ["需求输入", "检索增强", "内容生成", "人工校核", "最终交付"]
+    links = [
+        {"source": "需求输入", "target": "检索增强", "value": 100},
+        {"source": "需求输入", "target": "内容生成", "value": 80},
+        {"source": "检索增强", "target": "人工校核", "value": 60},
+        {"source": "内容生成", "target": "人工校核", "value": 75},
+        {"source": "人工校核", "target": "最终交付", "value": 58},
+    ]
+    return {"type": "sankey", "caption": caption or section_title or "桑基图", "data": {"nodes": nodes, "links": links}}
+
+
+def _suggest_swot_spec(*, caption: str, prompt: str, section_title: str) -> dict[str, Any]:
+    data = {
+        "strengths": ["生成效率高", "知识检索增强", "可扩展图表体系"],
+        "weaknesses": ["长文本校核成本高", "图表语义仍需提示"],
+        "opportunities": ["论文写作场景增长", "多模态能力融合"],
+        "threats": ["模型波动", "数据合规要求提高"],
+    }
+    return {"type": "swot", "caption": caption or section_title or "SWOT图", "data": data}
 
 
 

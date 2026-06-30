@@ -12,6 +12,10 @@ def _patch_common(monkeypatch):
         def is_running(self) -> bool:
             return True
 
+    import writing_agent.llm.factory as _factory
+    monkeypatch.setenv("WRITING_AGENT_PROVIDER_CACHE_ENABLED", "0")
+    monkeypatch.setattr(_factory, "_build_python_provider", lambda *args, **kwargs: _DummyClient())
+
     monkeypatch.setattr(
         runtime_module,
         "get_ollama_settings",

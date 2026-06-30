@@ -33,6 +33,23 @@ def check_generation_quality(text: str, target_chars: int = 0) -> list[str]:
 
     if stripped and stripped[-1] in [",", "，", "...", "…"]:
         issues.append("文档结尾不完整")
+
+    # Citation format check
+    import re as _re
+    bad_citations = _re.findall(r'\[\s*@\s*[\s\]]', text)
+    if bad_citations:
+        issues.append(f"引用格式异常：发现 {len(bad_citations)} 处不规范的引用标记")
+
+    # Coherence check: excessive short sentences or orphaned bullets
+    sentence_fragments = [ln for ln in lines if len(ln) < 10 and not ln.startswith("#")]
+    if len(sentence_fragments) > 5:
+        issues.append(f"逻辑连贯性警告：发现 {len(sentence_fragments)} 处过短句子，可能影响阅读连贯性")
+
+    # Grammar check: consecutive punctuation
+    consecutive_punct = _re.findall(r'[，。！？；：,;:!?\.]\s*[，。！？；：,;:!?\.]', text)
+    if consecutive_punct:
+        issues.append(f"标点使用异常：发现 {len(consecutive_punct)} 处连续标点")
+
     return issues
 
 

@@ -9,7 +9,7 @@ import writing_agent.web.app_v2 as app_v2
 
 
 def _create_session(client: TestClient) -> str:
-    resp = client.get("/", follow_redirects=False)
+    resp = client.get("/new", follow_redirects=False)
     assert resp.status_code == 303
     location = resp.headers.get("location") or ""
     assert location.startswith("/workbench/")

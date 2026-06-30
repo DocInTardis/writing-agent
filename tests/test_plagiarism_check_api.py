@@ -40,6 +40,8 @@ def test_plagiarism_check_detects_overlap_with_doc_reference():
     data = resp.json()
     assert data.get("ok") == 1
     assert data.get("total_references") == 1
+    assert isinstance(data.get("revision_advice"), list)
+    assert data.get("revision_advice")
     rows = data.get("results") or []
     assert len(rows) == 1
     row = rows[0]
@@ -48,6 +50,8 @@ def test_plagiarism_check_detects_overlap_with_doc_reference():
     assert bool(row.get("suspected")) is True
     metrics = row.get("metrics") or {}
     assert int(metrics.get("longest_match_chars") or 0) >= 30
+    assert isinstance(row.get("revision_advice"), list)
+    assert row.get("revision_advice")
 
 
 def test_plagiarism_check_with_manual_text_can_be_low_risk():
@@ -66,9 +70,10 @@ def test_plagiarism_check_with_manual_text_can_be_low_risk():
     )
     assert resp.status_code == 200
     data = resp.json()
+    assert isinstance(data.get("revision_advice"), list)
+    assert data.get("revision_advice")
     rows = data.get("results") or []
     assert len(rows) == 1
     row = rows[0]
     assert float(row.get("score") or 0.0) < 0.4
     assert bool(row.get("suspected")) is False
-

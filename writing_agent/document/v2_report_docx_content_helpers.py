@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+from writing_agent.document._docx_compat import (
+    doc_body,
+    doc_element,
+    paragraph_p,
+    remove_paragraph,
+    run_rPr,
+    section_sectPr,
+    style_rPr,
+)
+
 import io
 import os
 import re
@@ -48,7 +58,7 @@ def _is_reference_title(title: str) -> bool:
 
 
 def _clear_doc_body(doc: Document) -> None:
-    body = doc.element.body  # type: ignore[attr-defined]
+    body = doc_body(doc)
     sects = [child for child in list(body) if child.tag.endswith("}sectPr")]
     keep_sect = sects[-1] if sects else None
     for child in list(body):
@@ -226,7 +236,7 @@ def _ensure_reference_section(blocks: list[DocBlock]) -> list[DocBlock]:
     return content
 
 def _find_template_body_anchor(doc: Document):
-    body = doc.element.body  # type: ignore[attr-defined]
+    body = doc_body(doc)
     for child in body.iterchildren():
         if not isinstance(child, CT_P):
             continue

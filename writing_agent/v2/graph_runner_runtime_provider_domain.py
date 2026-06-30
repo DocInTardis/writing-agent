@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import os
 import queue
 import threading
@@ -109,8 +112,9 @@ def _provider_default_per_model_concurrency(provider_name: str) -> int:
     if raw:
         try:
             return max(1, min(16, int(raw)))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_runtime_provider_domain.py: %s", _exc, exc_info=True)
+
     if normalized == "openai":
         return 4
     if normalized == "ollama":
@@ -128,8 +132,9 @@ def _generation_slot_limit(provider_name: str, model: str) -> int:
     if raw:
         try:
             return max(1, int(raw))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_runtime_provider_domain.py: %s", _exc, exc_info=True)
+
     return _provider_default_per_model_concurrency(provider_name)
 
 
@@ -179,8 +184,9 @@ def _provider_default_evidence_workers(provider_name: str, *, sections_count: in
     if raw:
         try:
             return max(1, min(cap, int(raw)))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_runtime_provider_domain.py: %s", _exc, exc_info=True)
+
     base = _provider_default_per_model_concurrency(provider_name)
     return max(1, min(cap, base + 2))
 

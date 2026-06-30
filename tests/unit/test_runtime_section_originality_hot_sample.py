@@ -6,6 +6,11 @@ from types import SimpleNamespace
 
 from writing_agent.v2 import graph_runner_runtime as runtime_module
 from writing_agent.v2.graph_runner import GenerateConfig
+from writing_agent.v2.graph_runner_runtime_originality_domain import (
+    build_feedback,
+    evaluate_hot_sample,
+    rewrite_for_originality,
+)
 
 
 _BAD_FORMULAIC = (
@@ -107,11 +112,34 @@ class _PassiveProvider:
 
 
 class _RewriteProvider(_PassiveProvider):
+    last_user = ""
+
     def chat(self, *, system: str, user: str, temperature: float = 0.2, options=None) -> str:
         _ = system, temperature, options
+        type(self).last_user = user
         if "<task>rewrite_for_originality</task>" in user:
             return _GOOD_ORIGINAL
         return "OK"
+
+
+class _RuntimeApiStub:
+    def __init__(self, provider):
+        self._provider = provider
+
+    def _runtime_escape_prompt_text(self, text: str) -> str:
+        return str(text or "")
+
+    def get_default_provider(self, **_kwargs):
+        return self._provider
+
+    def _section_timeout_s(self) -> float:
+        return 3.0
+
+    def get_provider_name(self) -> str:
+        return "ollama"
+
+    def _call_with_generation_slot(self, *, fn, **_kwargs):
+        return fn()
 
 
 def test_runtime_rejects_fast_draft_when_originality_hot_sample_fails(monkeypatch):
@@ -139,6 +167,7 @@ def test_runtime_rejects_fast_draft_when_originality_hot_sample_fails(monkeypatc
     assert any(str(ev.get("event") or "") == "section_fast_draft_rejected" for ev in events if isinstance(ev, dict))
     hot_sample_events = [ev for ev in events if isinstance(ev, dict) and str(ev.get("event") or "") == "section_originality_hot_sample"]
     assert any(str(ev.get("phase") or "") == "fast_draft" and bool(ev.get("passed")) is False for ev in hot_sample_events)
+    assert any(str(ev.get("section_profile") or "") == "introduction" for ev in hot_sample_events)
     final = [ev for ev in events if isinstance(ev, dict) and str(ev.get("event") or "") == "final"][-1]
     final_text = str(final.get("text") or "")
     intro_body = _first_h2_body(final_text)
@@ -190,3 +219,135 @@ def test_runtime_rewrites_section_when_originality_hot_sample_fails(monkeypatch)
     assert int(originality.get("retry_count") or 0) == 0
     rows = list(originality.get("rows") or [])
     assert any("post_rewrite" in list(row.get("phases") or []) for row in rows)
+
+
+def test_evaluate_hot_sample_checks_middle_and_tail_for_formulaic_output(monkeypatch):
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_FORMULAIC_OPENING_RATIO", "0.20")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_REPEAT_RATIO", "0.20")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_SOURCE_OVERLAP_RATIO", "1.0")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_LOW_INFORMATION_RATIO", "1.0")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_TEMPLATE_PADDING_RATIO", "1.0")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_AI_RATE", "1.0")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_ORIGINALITY_HOT_SAMPLE_SENTENCES", "6")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_ORIGINALITY_HOT_SAMPLE_MIN_CHARS", "180")
+
+    text = (
+        "Village request logs show that service demand spikes around subsidy windows, while county audit records indicate slower closure in cross-agency cases. "
+        "Interview summaries further suggest that routing bottlenecks arise when village clerks and county reviewers rely on different verification thresholds. "
+        "These patterns show that coordination cost, not intake volume alone, shapes the observed response gap. "
+        + _BAD_FORMULAIC
+    )
+
+    metrics = evaluate_hot_sample(text=text, source_rows=[], section_title="Introduction")
+
+    assert metrics["checked"] is True
+    assert metrics["passed"] is False
+    assert metrics["section_profile"] == "introduction"
+    assert float(metrics["formulaic_opening_ratio"]) > float(metrics["max_formulaic_opening_ratio"])
+    assert metrics["formulaic_opening_hits"]
+
+
+def test_evaluate_hot_sample_produces_revision_actions(monkeypatch):
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_FORMULAIC_OPENING_RATIO", "0.20")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_REPEAT_RATIO", "0.20")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_SOURCE_OVERLAP_RATIO", "0.18")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_LOW_INFORMATION_RATIO", "1.0")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_TEMPLATE_PADDING_RATIO", "1.0")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_AI_RATE", "0.70")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_ORIGINALITY_HOT_SAMPLE_SENTENCES", "6")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_ORIGINALITY_HOT_SAMPLE_MIN_CHARS", "180")
+
+    source_rows = [
+        {
+            "title": "Audit summary",
+            "summary": "Village request logs indicate uneven seasonal demand and county workflow timestamps show cross-agency backlog during subsidy windows.",
+        }
+    ]
+    text = (
+        "Firstly, this study explains the target, path, and execution in a uniform way. "
+        "Secondly, this study explains the target, path, and execution in a uniform way. "
+        "Village request logs indicate uneven seasonal demand and county workflow timestamps show cross-agency backlog during subsidy windows. "
+        "Finally, this study explains the target, path, and execution in a uniform way."
+    )
+
+    metrics = evaluate_hot_sample(text=text, source_rows=source_rows, section_title="Results")
+
+    assert metrics["checked"] is True
+    assert metrics["section_profile"] == "results"
+    assert isinstance(metrics.get("ai_improvement_actions"), list)
+    assert metrics.get("ai_improvement_actions")
+    assert isinstance(metrics.get("source_revision_advice"), list)
+    assert metrics.get("source_revision_advice")
+    feedback = build_feedback(metrics)
+    assert "Originality correction:" in feedback
+    assert any(item in feedback for item in metrics.get("ai_improvement_actions", []))
+
+
+def test_rewrite_prompt_includes_runtime_revision_actions(monkeypatch):
+    monkeypatch.setenv("WRITING_AGENT_SECTION_ORIGINALITY_REWRITE_ENABLED", "1")
+    provider = _RewriteProvider()
+    runtime_api = _RuntimeApiStub(provider)
+    source_rows = [
+        {
+            "title": "Traceability note",
+            "summary": "Village request logs indicate uneven seasonal demand and county workflow timestamps reveal cross-agency backlog.",
+        }
+    ]
+    metrics = evaluate_hot_sample(
+        text=(
+            "This study maps service demand across villages using archived request logs and annual statistics. "
+            "This study compares response latency across counties using audited workflow timestamps and completion records. "
+            "Village request logs indicate uneven seasonal demand and county workflow timestamps reveal cross-agency backlog."
+        ),
+        source_rows=source_rows,
+        section_title="Introduction",
+    )
+
+    rewritten, changed = rewrite_for_originality(
+        runtime_api,
+        section_key="intro",
+        section_id="intro",
+        section_title="Introduction",
+        model="m",
+        draft_text=_BAD_FORMULAIC,
+        metrics=metrics,
+        source_rows=source_rows,
+        out_queue=None,
+    )
+
+    assert changed is True
+    assert rewritten == _GOOD_ORIGINAL
+    assert "<ai_revision_actions>" in _RewriteProvider.last_user
+    assert "<source_revision_actions>" in _RewriteProvider.last_user
+    assert any(action in _RewriteProvider.last_user for action in metrics.get("ai_improvement_actions", []))
+    assert any(action in _RewriteProvider.last_user for action in metrics.get("source_revision_advice", []))
+
+
+def test_evaluate_hot_sample_uses_section_specific_threshold_profiles(monkeypatch):
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_FORMULAIC_OPENING_RATIO", "0.34")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_REPEAT_RATIO", "0.20")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_SOURCE_OVERLAP_RATIO", "0.18")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_LOW_INFORMATION_RATIO", "0.22")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_TEMPLATE_PADDING_RATIO", "0.12")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_HOT_SAMPLE_MAX_AI_RATE", "0.72")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_ORIGINALITY_HOT_SAMPLE_SENTENCES", "6")
+    monkeypatch.setenv("WRITING_AGENT_SECTION_ORIGINALITY_HOT_SAMPLE_MIN_CHARS", "180")
+
+    text = (
+        "This study maps service demand across villages using archived request logs and annual statistics. "
+        "This study compares response latency across counties using audited workflow timestamps and completion records. "
+        "This study examines actor coordination through task routing data, signed confirmations, and error traces. "
+        "This study evaluates governance transparency with traceability indicators, dispute logs, and review outcomes."
+    )
+
+    abstract_metrics = evaluate_hot_sample(text=text, source_rows=[], section_title="Abstract")
+    method_metrics = evaluate_hot_sample(text=text, source_rows=[], section_title="研究方法")
+    results_metrics = evaluate_hot_sample(text=text, source_rows=[], section_title="结果与分析")
+
+    assert abstract_metrics["section_profile"] == "abstract"
+    assert method_metrics["section_profile"] == "method"
+    assert results_metrics["section_profile"] == "results"
+    assert float(abstract_metrics["max_formulaic_opening_ratio"]) < float(method_metrics["max_formulaic_opening_ratio"])
+    assert float(results_metrics["max_formulaic_opening_ratio"]) < 0.34
+    assert float(method_metrics["max_source_overlap_ratio"]) >= 0.22
+    assert float(abstract_metrics["max_ai_rate"]) < float(method_metrics["max_ai_rate"])

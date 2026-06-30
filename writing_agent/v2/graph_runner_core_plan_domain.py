@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import re
@@ -42,8 +45,9 @@ def _plan_sections_with_model(
                     "metadata": prompt_meta,
                 }
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_core_plan_domain.py: %s", _exc, exc_info=True)
+
     system, user = base.PromptBuilder.build_planner_prompt(
         title=title,
         total_chars=total_chars,
@@ -86,8 +90,9 @@ def _plan_sections_list_with_model(
                     "metadata": route_meta,
                 }
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_core_plan_domain.py: %s", _exc, exc_info=True)
+
     profile = str(os.environ.get("WRITING_AGENT_QUALITY_PROFILE", "").strip() or "academic_cnki_default")
     include_abstract_keywords = profile == "academic_cnki_default"
     extra_rule = (

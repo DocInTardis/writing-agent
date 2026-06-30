@@ -4,8 +4,12 @@
 """
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import hashlib
 import json
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,13 +27,15 @@ class CacheEntry:
 
 class LocalCache:
     """本地JSON缓存,支持LRU淘汰和TTL过期"""
-    
+
     def __init__(self, cache_dir: Path, max_size: int = 500, ttl_seconds: float = 86400 * 7):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
         self.index_path = self.cache_dir / "index.json"
+        self._lock = threading.Lock()
+        self._dirty = False
         self._load_index()
     
     def _load_index(self) -> None:
@@ -41,13 +47,14 @@ class LocalCache:
             self.index = data if isinstance(data, dict) else {}
         except Exception:
             self.index = {}
-    
+
     def _save_index(self) -> None:
         try:
             self.index_path.write_text(json.dumps(self.index, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-    
+            self._dirty = False
+        except Exception as _exc:
+            logger.debug("Ignored error in cache.py: %s", _exc, exc_info=True)
+
     def _make_key(self, *args: str) -> str:
         """生成缓存键"""
         combined = "|".join([str(a) for a in args if a])
@@ -55,79 +62,78 @@ class LocalCache:
     
     def get(self, key: str) -> str | None:
         """获取缓存,自动处理过期"""
-        entry = self.index.get(key)
-        if not entry:
-            return None
-        
-        created_at = float(entry.get("created_at", 0))
-        if time.time() - created_at > self.ttl_seconds:
-            # 过期删除
-            self.index.pop(key, None)
+        with self._lock:
+            entry = self.index.get(key)
+            if not entry:
+                return None
+
+            created_at = float(entry.get("created_at", 0))
+            if time.time() - created_at > self.ttl_seconds:
+                self.index.pop(key, None)
+                cache_file = self.cache_dir / f"{key}.txt"
+                try:
+                    cache_file.unlink(missing_ok=True)
+                except Exception as _exc:
+                    logger.debug("Ignored error in cache.py: %s", _exc, exc_info=True)
+
+                self._save_index()
+                return None
+
             cache_file = self.cache_dir / f"{key}.txt"
+            if not cache_file.exists():
+                self.index.pop(key, None)
+                self._dirty = True
+                return None
+
             try:
-                cache_file.unlink(missing_ok=True)
+                value = cache_file.read_text(encoding="utf-8")
+                # 只更新内存中的命中统计，不立即刷盘（由 put/evict 触发持久化）
+                entry["hits"] = int(entry.get("hits", 0)) + 1
+                entry["last_hit"] = time.time()
+                self._dirty = True
+                return value
             except Exception:
-                pass
-            self._save_index()
-            return None
-        
-        cache_file = self.cache_dir / f"{key}.txt"
-        if not cache_file.exists():
-            self.index.pop(key, None)
-            self._save_index()
-            return None
-        
-        try:
-            value = cache_file.read_text(encoding="utf-8")
-            # 更新命中次数
-            entry["hits"] = int(entry.get("hits", 0)) + 1
-            entry["last_hit"] = time.time()
-            self.index[key] = entry
-            self._save_index()
-            return value
-        except Exception:
-            return None
+                return None
     
     def put(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """存入缓存,自动LRU淘汰"""
-        # 检查大小,LRU淘汰
-        if len(self.index) >= self.max_size:
-            self._evict_lru()
-        
-        cache_file = self.cache_dir / f"{key}.txt"
-        try:
-            cache_file.write_text(value, encoding="utf-8")
-        except Exception:
-            return
-        
-        self.index[key] = {
-            "created_at": time.time(),
-            "hits": 0,
-            "last_hit": time.time(),
-            "metadata": metadata or {},
-        }
-        self._save_index()
+        with self._lock:
+            if len(self.index) >= self.max_size:
+                self._evict_lru()
+
+            cache_file = self.cache_dir / f"{key}.txt"
+            try:
+                cache_file.write_text(value, encoding="utf-8")
+            except Exception:
+                return
+
+            self.index[key] = {
+                "created_at": time.time(),
+                "hits": 0,
+                "last_hit": time.time(),
+                "metadata": metadata or {},
+            }
+            self._save_index()
     
     def _evict_lru(self) -> None:
-        """淘汰最少使用的10%缓存"""
+        """淘汰最少使用的10%缓存（调用方持锁）"""
         if not self.index:
             return
-        
-        # 按(命中次数,最后命中时间)排序,淘汰底部10%
+
         sorted_keys = sorted(
             self.index.keys(),
             key=lambda k: (self.index[k].get("hits", 0), self.index[k].get("last_hit", 0))
         )
-        
+
         evict_count = max(1, len(sorted_keys) // 10)
         for key in sorted_keys[:evict_count]:
             self.index.pop(key, None)
             cache_file = self.cache_dir / f"{key}.txt"
             try:
                 cache_file.unlink(missing_ok=True)
-            except Exception:
-                pass
-        
+            except Exception as _exc:
+                logger.debug("Ignored error in cache.py: %s", _exc, exc_info=True)
+
         self._save_index()
     
     def get_section(self, section_title: str, instruction: str, min_chars: int) -> str | None:
@@ -143,24 +149,22 @@ class LocalCache:
     def clear_expired(self) -> int:
         """清理过期缓存"""
         now = time.time()
-        expired = []
-        for key, entry in self.index.items():
-            created_at = float(entry.get("created_at", 0))
-            if now - created_at > self.ttl_seconds:
-                expired.append(key)
-        
-        for key in expired:
-            self.index.pop(key, None)
-            cache_file = self.cache_dir / f"{key}.txt"
-            try:
-                cache_file.unlink(missing_ok=True)
-            except Exception:
-                pass
-        
-        if expired:
-            self._save_index()
-        
-        return len(expired)
+        with self._lock:
+            expired = [
+                key for key, entry in self.index.items()
+                if now - float(entry.get("created_at", 0)) > self.ttl_seconds
+            ]
+            for key in expired:
+                self.index.pop(key, None)
+                cache_file = self.cache_dir / f"{key}.txt"
+                try:
+                    cache_file.unlink(missing_ok=True)
+                except Exception as _exc:
+                    logger.debug("Ignored error in cache.py: %s", _exc, exc_info=True)
+
+            if expired:
+                self._save_index()
+            return len(expired)
     
     def stats(self) -> dict:
         """缓存统计"""
@@ -200,9 +204,9 @@ class AcademicPhraseCache:
                 json.dumps(self.phrases, ensure_ascii=False, indent=2),
                 encoding="utf-8"
             )
-        except Exception:
-            pass
-    
+        except Exception as _exc:
+            logger.debug("Ignored error in cache.py: %s", _exc, exc_info=True)
+
     def _default_phrases(self) -> dict:
         """默认学术表达模板"""
         return {

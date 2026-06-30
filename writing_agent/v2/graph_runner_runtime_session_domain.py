@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import os
 import queue
 import threading
@@ -289,7 +292,7 @@ def run_generate_graph_impl(
             except Exception:
                 draft = ""
             if draft:
-                hot = evaluate_hot_sample(text=draft, source_rows=source_rows)
+                hot = evaluate_hot_sample(text=draft, source_rows=source_rows, section_title=sec_title)
                 originality.emit_metrics(out_queue=local_q, section=sec, section_id=sec_id, title=sec_title, metrics=hot, phase="fast_draft")
                 if bool(hot.get("checked")) and (not bool(hot.get("passed", True))):
                     originality.record_action(section=sec, section_id=sec_id, title=sec_title, action="fast_draft_rejected")
@@ -300,7 +303,7 @@ def run_generate_graph_impl(
         should_defer_to_strict_json_recovery = bool(strict_json and fast_draft and not draft and not fast_draft_rejected)
         if not draft and (not should_defer_to_strict_json_recovery):
             draft, _used_segment_split = runtime_api._draft_section_with_optional_segments(section_key=sec, section_title=sec_title, section_id=sec_id, plan=plan, contract=section_contracts.get(sec), targets=sec_t, out_queue=local_q, text_store=text_store, stream_kwargs=stream_kwargs)
-            hot = evaluate_hot_sample(text=draft, source_rows=source_rows)
+            hot = evaluate_hot_sample(text=draft, source_rows=source_rows, section_title=sec_title)
             originality.emit_metrics(out_queue=local_q, section=sec, section_id=sec_id, title=sec_title, metrics=hot, phase="initial")
             if bool(hot.get("checked")) and (not bool(hot.get("passed", True))):
                 rewritten, changed = rewrite_for_originality(runtime_api, section_key=sec, section_id=sec_id, section_title=sec_title, model=model, draft_text=draft, metrics=hot, source_rows=source_rows, out_queue=local_q)
@@ -308,7 +311,7 @@ def run_generate_graph_impl(
                     originality.record_action(section=sec, section_id=sec_id, title=sec_title, action="rewrite")
                     local_q.put({"event": "section_originality_hot_sample_rewrite", "section": sec, "section_id": sec_id, "title": sec_title})
                     draft = rewritten
-                    hot2 = evaluate_hot_sample(text=draft, source_rows=source_rows)
+                    hot2 = evaluate_hot_sample(text=draft, source_rows=source_rows, section_title=sec_title)
                     originality.emit_metrics(out_queue=local_q, section=sec, section_id=sec_id, title=sec_title, metrics=hot2, phase="post_rewrite")
 
         if enforce_meta and draft:
@@ -318,6 +321,21 @@ def run_generate_graph_impl(
                 draft = stripped if stripped.strip() else draft
         if ensure_min and draft:
             draft = runtime_api._ensure_section_minimums_stream(base_url=settings.base_url, model=model, title=title, section=(f"{parent_map.get(sec)} / {sec_title}" if parent_map.get(sec) else sec_title), parent_section=parent_map.get(sec) or "", instruction=instruction, analysis_summary=writer_requirement or instruction, evidence_summary=str((evidence_pack or {}).get("summary") or "").strip(), allowed_urls=list((evidence_pack or {}).get("allowed_urls") or []), plan_hint=evidence_domain._format_plan_hint(plan), dimension_hints=list((section_contracts.get(sec).dimension_hints if section_contracts.get(sec) else []) or []), draft=draft, min_paras=max(1, int(sec_t.min_paras or 1)), min_chars=max(0, int(sec_t.min_chars or 0)), max_chars=max(0, int(sec_t.max_chars or 0)), min_tables=max(0, int(sec_t.min_tables or 0)), min_figures=max(0, int(sec_t.min_figures or 0)), out_queue=local_q)
+        registered_citations = evidence_domain._register_generated_citations(
+            document_id=run_id,
+            generated_section_id=sec_id,
+            text=draft,
+            evidence_rows=list((evidence_pack or {}).get("retrieved_evidence") or []),
+        )
+        if registered_citations:
+            local_q.put(
+                {
+                    "event": "citation_registry",
+                    "section": sec,
+                    "section_id": sec_id,
+                    "count": registered_citations,
+                }
+            )
         _set_section_text(sec, draft)
         for ev in _drain_queue(local_q):
             yield ev
@@ -338,7 +356,10 @@ def run_generate_graph_impl(
             effective_min_total_chars = estimated_supported_chars
             yield {"event": "fact_density_target_adjustment", "requested_min_total_chars": requested_min_total_chars, "effective_min_total_chars": effective_min_total_chars, "fact_gain_total": fact_gain_total, "avg_fact_density_score": round(avg_density, 4)}
 
-    reference_sources = evidence_domain._collect_reference_sources(evidence_map, query=reference_query)
+    registered_reference_sources = evidence_domain._registered_reference_sources(document_id=run_id)
+    reference_sources = list(registered_reference_sources)
+    if not registered_reference_sources:
+        reference_sources = evidence_domain._collect_reference_sources(evidence_map, query=reference_query)
     if (not reference_sources) and reference_query:
         reference_sources = runtime_api._fallback_reference_sources(instruction=reference_query)
     if rag_gate_enabled and reference_sources:
@@ -348,7 +369,12 @@ def run_generate_graph_impl(
         if rag_gate_dropped:
             yield {"event": "rag_gate", "kept_count": len(reference_sources), "dropped_count": len(rag_gate_dropped), "dropped": rag_gate_dropped[:20]}
     before_count = len(_format_reference_items(reference_sources))
-    if reference_query and before_count < configured_min_ref_items:
+    effective_min_ref_items = (
+        min(configured_min_ref_items, max(1, before_count))
+        if registered_reference_sources
+        else configured_min_ref_items
+    )
+    if reference_query and before_count < effective_min_ref_items:
         repair_sources = runtime_api._fallback_reference_sources(instruction=reference_query)
         merged_sources = []
         seen_keys: set[str] = set()
@@ -400,8 +426,9 @@ def run_generate_graph_impl(
                     repaired = runtime_api._generate_section_stream(base_url=settings.base_url, model=section_models.get(sec) or main_model, title=title, section=(f"{parent_map.get(sec)} / {sec_title}" if parent_map.get(sec) else sec_title), section_id_override=sec_id, parent_section=parent_map.get(sec) or "", instruction=instruction, analysis_summary=writer_requirement or instruction, evidence_summary=str((evidence_map.get(sec) or {}).get("summary") or "").strip(), allowed_urls=list((evidence_map.get(sec) or {}).get("allowed_urls") or []), plan_hint=evidence_domain._format_plan_hint(plan), min_paras=max(2, int(sec_t.min_paras or config.min_section_paragraphs)), min_chars=max(200, int(sec_t.min_chars or 200)), max_chars=max(0, int(sec_t.max_chars or 0)), min_tables=max(0, int(sec_t.min_tables or 0)), min_figures=max(0, int(sec_t.min_figures or 0)), out_queue=repair_q, reference_items=reference_sources, text_store=text_store)
                     if repaired and str(repaired).strip():
                         _set_section_text(sec, str(repaired).strip())
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    logger.debug("Ignored error in graph_runner_runtime_session_domain.py: %s", _exc, exc_info=True)
+
                 for ev in _drain_queue(repair_q):
                     yield ev
             missing = [sec for sec in sections if (not (_get_section_text(sec) or "").strip()) and (not runtime_api._is_reference_section(runtime_api._section_title(sec) or sec))]
@@ -456,7 +483,7 @@ def run_generate_graph_impl(
     quality_passed, quality_failure_reason, terminal_status = finalize_domain.resolve_terminal_quality(
         problems=problems,
         reference_item_count=reference_item_count,
-        configured_min_ref_items=configured_min_ref_items,
+        configured_min_ref_items=effective_min_ref_items,
         enforce_meta=enforce_meta,
         meta_residue_hits=meta_residue_hits,
         enforce_reference_min=_env_flag("WRITING_AGENT_ENFORCE_REFERENCE_MIN", "1"),

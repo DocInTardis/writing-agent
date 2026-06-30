@@ -1,7 +1,7 @@
 import importlib
 import json as _json
 
-import writing_agent.web.app_v2_textops_runtime_part1 as part1
+import writing_agent.web.legacy_fragments.textops_part1 as part1
 
 
 def _install_runtime_stubs(monkeypatch, client_cls):

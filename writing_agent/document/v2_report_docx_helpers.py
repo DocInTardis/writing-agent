@@ -5,6 +5,19 @@ This module belongs to `writing_agent.document` in the writing-agent codebase.
 
 from __future__ import annotations
 
+from writing_agent.document._docx_compat import (
+    doc_body,
+    doc_element,
+    paragraph_p,
+    remove_paragraph,
+    run_rPr,
+    section_sectPr,
+    style_rPr,
+)
+
+import logging
+logger = logging.getLogger(__name__)
+
 import os
 import re
 
@@ -88,7 +101,7 @@ def _add_field_simple(
     fld_end.set(qn("w:fldCharType"), "end")
     r_end.append(fld_end)
 
-    p = paragraph._p  # type: ignore[attr-defined]
+    p = paragraph_p(paragraph)
     p.append(r_begin)
     p.append(r_instr)
     p.append(r_sep)
@@ -113,8 +126,9 @@ def _add_heading(
     except Exception:
         try:
             p.style = f"Heading {max(1, min(9, int(level or 1)))}"
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
     if align is not None:
         p.alignment = align
     _add_inline_runs(p, text)
@@ -127,7 +141,7 @@ def _add_bookmark(paragraph, name: str, bookmark_id: int) -> None:
         return
     bid = max(1, int(bookmark_id or 1))
     try:
-        p = paragraph._p  # type: ignore[attr-defined]
+        p = paragraph_p(paragraph)
         b_start = OxmlElement("w:bookmarkStart")
         b_start.set(qn("w:id"), str(bid))
         b_start.set(qn("w:name"), anchor)
@@ -139,13 +153,12 @@ def _add_bookmark(paragraph, name: str, bookmark_id: int) -> None:
             insert_pos = 1
         p.insert(insert_pos, b_start)
         p.append(b_end)
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 def _add_internal_hyperlink(paragraph, text: str, anchor: str) -> None:
     try:
-        p = paragraph._p  # type: ignore[attr-defined]
+        p = paragraph_p(paragraph)
         hl = OxmlElement("w:hyperlink")
         hl.set(qn("w:anchor"), str(anchor or ""))
         run = OxmlElement("w:r")
@@ -226,8 +239,9 @@ def _add_runs_with_number_citations(paragraph, text: str, bold: bool, italic: bo
             try:
                 run.font.superscript = True
                 run.font.size = Pt(8)
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
             continue
         run = paragraph.add_run(part)
         run.bold = bool(bold)
@@ -631,7 +645,7 @@ def _pick_margin(value: float | None, fallback: float) -> float:
 
 def _set_section_page_numbering(sec, *, start_at: int, numbering_format: str | None = None) -> None:
     try:
-        sect_pr = sec._sectPr  # type: ignore[attr-defined]
+        sect_pr = section_sectPr(sec)
         pg = sect_pr.find(qn("w:pgNumType"))
         if pg is None:
             pg = OxmlElement("w:pgNumType")
@@ -639,13 +653,12 @@ def _set_section_page_numbering(sec, *, start_at: int, numbering_format: str | N
         pg.set(qn("w:start"), str(start_at))
         if numbering_format:
             pg.set(qn("w:fmt"), numbering_format)
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 def _add_bottom_border(paragraph: Paragraph) -> None:
     try:
-        p = paragraph._p  # type: ignore[attr-defined]
+        p = paragraph_p(paragraph)
         p_pr = p.get_or_add_pPr()
         p_bdr = p_pr.find(qn("w:pBdr"))
         if p_bdr is None:
@@ -657,30 +670,29 @@ def _add_bottom_border(paragraph: Paragraph) -> None:
         bottom.set(qn("w:space"), "1")
         bottom.set(qn("w:color"), "auto")
         p_bdr.append(bottom)
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 def _force_paragraph_center(paragraph: Paragraph) -> None:
     try:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
     try:
-        p = paragraph._p  # type: ignore[attr-defined]
+        p = paragraph_p(paragraph)
         p_pr = p.get_or_add_pPr()
         jc = p_pr.find(qn("w:jc"))
         if jc is None:
             jc = OxmlElement("w:jc")
             p_pr.append(jc)
         jc.set(qn("w:val"), "center")
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 def _strip_non_default_header_footer_refs(sec) -> None:
     try:
-        sect_pr = sec._sectPr  # type: ignore[attr-defined]
+        sect_pr = section_sectPr(sec)
     except Exception:
         return
     seen_default: set[str] = set()
@@ -715,8 +727,9 @@ def _clear_header_footer(sec, *, include_variants: bool = False) -> None:
             continue
         try:
             container.is_linked_to_previous = False
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
         for p in list(container.paragraphs):
             p.text = ""
             for run in p.runs:
@@ -724,14 +737,16 @@ def _clear_header_footer(sec, *, include_variants: bool = False) -> None:
         # Remove extra paragraphs to avoid hidden fields from templates.
         for p in list(container.paragraphs)[1:]:
             try:
-                p._element.getparent().remove(p._element)  # type: ignore[attr-defined]
-            except Exception:
-                pass
+                remove_paragraph(p)
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
     if not include_variants:
         try:
             sec.different_first_page_header_footer = False
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
     _strip_non_default_header_footer_refs(sec)
 
 
@@ -748,27 +763,28 @@ def _disable_first_page_numbering(sec) -> None:
                 run.text = ""
         for p in list(ftr.paragraphs)[1:]:
             try:
-                p._element.getparent().remove(p._element)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-    except Exception:
-        pass
+                remove_paragraph(p)
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
     _strip_non_default_header_footer_refs(sec)
 
 
 def _remove_section_page_numbering(sec) -> None:
     try:
-        sect_pr = sec._sectPr  # type: ignore[attr-defined]
+        sect_pr = section_sectPr(sec)
         pg = sect_pr.find(qn("w:pgNumType"))
         if pg is not None:
             sect_pr.remove(pg)
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 def _strip_cover_section_numbering(doc: Document) -> None:
     try:
-        root = doc.element  # type: ignore[attr-defined]
+        root = doc_element(doc)
         for sect in root.findall(".//w:sectPr", {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}):
             pg = sect.find(qn("w:pgNumType"))
             if pg is None:
@@ -780,9 +796,8 @@ def _strip_cover_section_numbering(doc: Document) -> None:
                 for node in list(sect):
                     if node.tag.endswith("}headerReference") or node.tag.endswith("}footerReference"):
                         sect.remove(node)
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 def _apply_toc_heading_style(paragraph: Paragraph, text: str) -> None:
     run = paragraph.add_run(text)
@@ -790,16 +805,16 @@ def _apply_toc_heading_style(paragraph: Paragraph, text: str) -> None:
     try:
         run.font.name = "黑体"
         run.font.size = Pt(16)
-        r_pr = run._element.get_or_add_rPr()  # type: ignore[attr-defined]
+        r_pr = run_rPr(run)
         r_pr.get_or_add_rFonts().set(qn("w:eastAsia"), "黑体")
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
     try:
         paragraph.paragraph_format.space_before = Pt(0)
         paragraph.paragraph_format.space_after = Pt(0)
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 def _enable_update_fields(doc: Document) -> None:
     try:
@@ -809,9 +824,8 @@ def _enable_update_fields(doc: Document) -> None:
             upd = OxmlElement("w:updateFields")
             settings.append(upd)
         upd.set(qn("w:val"), "true")
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 def _disable_update_fields(doc: Document) -> None:
     try:
@@ -824,10 +838,8 @@ def _disable_update_fields(doc: Document) -> None:
         if no_auto is None:
             no_auto = OxmlElement("w:doNotAutoUpdateFields")
             settings.append(no_auto)
-    except Exception:
-        pass
-
-
+    except Exception as _exc:
+        logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 _clear_doc_body = content_helpers._clear_doc_body
 _truncate_template_body = content_helpers._truncate_template_body
@@ -858,8 +870,8 @@ def _ensure_reference_citations(doc: Document) -> None:
         for m in re.finditer(r"\\[(\\d+)\\]", text):
             try:
                 nums.add(int(m.group(1)))
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
     if ref_heading_idx is None:
         return
@@ -872,8 +884,9 @@ def _ensure_reference_citations(doc: Document) -> None:
         if m:
             try:
                 ref_nums.add(int(m.group(1)))
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
+
         elif ref_nums:
             # stop if references are done and content resumes
             break
@@ -894,8 +907,7 @@ def _ensure_reference_citations(doc: Document) -> None:
         try:
             run.font.superscript = True
             run.font.size = Pt(8)
-        except Exception:
-            pass
-
+        except Exception as _exc:
+            logger.debug("Ignored error in v2_report_docx_helpers.py: %s", _exc, exc_info=True)
 
 __all__ = [name for name, value in globals().items() if name.startswith("_") and callable(value)]

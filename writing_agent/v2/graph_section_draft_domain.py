@@ -102,6 +102,76 @@ def accept_block(block: dict, section_id: str, is_reference: bool) -> bool:
 def _hits_semantic_sampling_guard(text: str, section: str) -> list[str]:
     return list(graph_section_draft_guard_domain._hits_semantic_sampling_guard(text=text, section=section))
 
+def _process_block(
+    block: dict,
+    *,
+    section: str,
+    section_id: str,
+    is_reference: bool,
+    text_store,
+    seen: set,
+    seen_norm: set,
+    texts: list,
+    plain_lines: list,
+    out_queue: queue.Queue[dict],
+    emitted_chars: int,
+    last_norm: str,
+    repeat_streak: int,
+    stop_threshold: int,
+) -> tuple[int, str, int, bool]:
+    """Process one parsed block. Returns updated (emitted_chars, last_norm, repeat_streak, stop_requested)."""
+    if not accept_block(block, section_id, is_reference):
+        return emitted_chars, last_norm, repeat_streak, False
+    stored_id = persist_block_to_store(block, text_store)
+    text = render_block_to_text(block)
+    if not text:
+        return emitted_chars, last_norm, repeat_streak, False
+    norm = re.sub(r"\s+", " ", text).strip()
+    if norm and norm in seen_norm:
+        return emitted_chars, last_norm, repeat_streak, False
+    block_id = str(stored_id or block.get("block_id") or block.get("id") or f"b{len(seen) + 1}")
+    if block_id in seen:
+        return emitted_chars, last_norm, repeat_streak, False
+    seen.add(block_id)
+    if norm:
+        seen_norm.add(norm)
+    if not texts:
+        semantic_hits = _hits_semantic_sampling_guard(text, section)
+        if semantic_hits:
+            out_queue.put(
+                {
+                    "event": "semantic_sampling_hit",
+                    "section": section,
+                    "section_id": section_id,
+                    "hits": list(semantic_hits),
+                    "mode": "early_abort",
+                }
+            )
+            raise ValueError("semantic_sampling_failed")
+    texts.append(text)
+    emitted_chars += _compact_len(text)
+    if norm and norm == last_norm:
+        repeat_streak += 1
+    else:
+        repeat_streak = 0
+        last_norm = norm
+    block_type = str(block.get("type") or "paragraph")
+    payload = {
+        "event": "section",
+        "phase": "delta",
+        "section": section,
+        "delta": text,
+        "block_uid": f"{section_id}:{len(seen):03d}",
+        "block_id": block_id,
+        "block_type": block_type,
+    }
+    if block_type in {"paragraph", "text", "p", "list", "bullets", "bullet", "reference", "ref"}:
+        payload.pop("block_id", None)
+    out_queue.put(payload)
+    stop_requested = (stop_threshold > 0 and emitted_chars >= stop_threshold) or repeat_streak >= 8
+    return emitted_chars, last_norm, repeat_streak, stop_requested
+
+
 def stream_structured_blocks(
     *,
     client,
@@ -168,56 +238,23 @@ def stream_structured_blocks(
                 if recovered_plain:
                     plain_lines.append(recovered_plain)
             for block in parsed:
-                if not accept_block(block, section_id, is_reference):
-                    continue
-                stored_id = persist_block_to_store(block, text_store)
-                text = render_block_to_text(block)
-                if not text:
-                    continue
-                norm = re.sub(r"\s+", " ", text).strip()
-                if norm and norm in seen_norm:
-                    continue
-                block_id = str(stored_id or block.get("block_id") or block.get("id") or f"b{len(seen) + 1}")
-                if block_id in seen:
-                    continue
-                seen.add(block_id)
-                if norm:
-                    seen_norm.add(norm)
-                semantic_hits = []
-                if not texts:
-                    semantic_hits = _hits_semantic_sampling_guard(text, section)
-                    if semantic_hits:
-                        out_queue.put(
-                            {
-                                "event": "semantic_sampling_hit",
-                                "section": section,
-                                "section_id": section_id,
-                                "hits": list(semantic_hits),
-                                "mode": "early_abort",
-                            }
-                        )
-                        raise ValueError("semantic_sampling_failed")
-                texts.append(text)
-                emitted_chars += _compact_len(text)
-                if norm and norm == last_norm:
-                    repeat_streak += 1
-                else:
-                    repeat_streak = 0
-                    last_norm = norm
-                block_type = str(block.get("type") or "paragraph")
-                payload = {
-                    "event": "section",
-                    "phase": "delta",
-                    "section": section,
-                    "delta": text,
-                    "block_uid": f"{section_id}:{len(seen):03d}",
-                    "block_id": block_id,
-                    "block_type": block_type,
-                }
-                if block_type in {"paragraph", "text", "p", "list", "bullets", "bullet", "reference", "ref"}:
-                    payload.pop("block_id", None)
-                out_queue.put(payload)
-                if (stop_threshold > 0 and emitted_chars >= stop_threshold) or repeat_streak >= 8:
+                emitted_chars, last_norm, repeat_streak, stop_now = _process_block(
+                    block,
+                    section=section,
+                    section_id=section_id,
+                    is_reference=is_reference,
+                    text_store=text_store,
+                    seen=seen,
+                    seen_norm=seen_norm,
+                    texts=texts,
+                    plain_lines=plain_lines,
+                    out_queue=out_queue,
+                    emitted_chars=emitted_chars,
+                    last_norm=last_norm,
+                    repeat_streak=repeat_streak,
+                    stop_threshold=stop_threshold,
+                )
+                if stop_now:
                     stop_requested = True
                     break
     leftover = buf.strip()
@@ -230,56 +267,23 @@ def stream_structured_blocks(
             if recovered_plain:
                 plain_lines.append(recovered_plain)
         for block in blocks:
-            if not accept_block(block, section_id, is_reference):
-                continue
-            stored_id = persist_block_to_store(block, text_store)
-            text = render_block_to_text(block)
-            if not text:
-                continue
-            norm = re.sub(r"\s+", " ", text).strip()
-            if norm and norm in seen_norm:
-                continue
-            block_id = str(stored_id or block.get("block_id") or block.get("id") or f"b{len(seen) + 1}")
-            if block_id in seen:
-                continue
-            seen.add(block_id)
-            if norm:
-                seen_norm.add(norm)
-            semantic_hits = []
-            if not texts:
-                semantic_hits = _hits_semantic_sampling_guard(text, section)
-                if semantic_hits:
-                    out_queue.put(
-                        {
-                            "event": "semantic_sampling_hit",
-                            "section": section,
-                            "section_id": section_id,
-                            "hits": list(semantic_hits),
-                            "mode": "early_abort",
-                        }
-                    )
-                    raise ValueError("semantic_sampling_failed")
-            texts.append(text)
-            emitted_chars += _compact_len(text)
-            if norm and norm == last_norm:
-                repeat_streak += 1
-            else:
-                repeat_streak = 0
-                last_norm = norm
-            block_type = str(block.get("type") or "paragraph")
-            payload = {
-                "event": "section",
-                "phase": "delta",
-                "section": section,
-                "delta": text,
-                "block_uid": f"{section_id}:{len(seen):03d}",
-                "block_id": block_id,
-                "block_type": block_type,
-            }
-            if block_type in {"paragraph", "text", "p", "list", "bullets", "bullet", "reference", "ref"}:
-                payload.pop("block_id", None)
-            out_queue.put(payload)
-            if (stop_threshold > 0 and emitted_chars >= stop_threshold) or repeat_streak >= 8:
+            emitted_chars, last_norm, repeat_streak, stop_now = _process_block(
+                block,
+                section=section,
+                section_id=section_id,
+                is_reference=is_reference,
+                text_store=text_store,
+                seen=seen,
+                seen_norm=seen_norm,
+                texts=texts,
+                plain_lines=plain_lines,
+                out_queue=out_queue,
+                emitted_chars=emitted_chars,
+                last_norm=last_norm,
+                repeat_streak=repeat_streak,
+                stop_threshold=stop_threshold,
+            )
+            if stop_now:
                 break
         if strict_json and invalid_line and not texts:
             recovered = "\n".join([ln for ln in plain_lines if ln]).strip()
@@ -295,8 +299,6 @@ def stream_structured_blocks(
                         "fallback_mode": "plain_text_recovery",
                     }
                 )
-            else:
-                raise ValueError("writer output contains non-json lines")
     if strict_json and not texts:
         full_raw = "".join(raw_buf_parts).strip()
         recovered_blocks = _try_parse_structured_blob(full_raw)

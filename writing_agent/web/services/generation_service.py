@@ -12,11 +12,17 @@ targeted revision helpers used by the web workbench and automation scripts.
 
 from __future__ import annotations
 
+import logging
+import os
 import time
 
 from fastapi import Request
+
+logger = logging.getLogger(__name__)
 from fastapi.responses import StreamingResponse
 
+from writing_agent.llm.factory import get_provider_snapshot
+from writing_agent.v2 import final_validator
 from writing_agent.web.idempotency import IdempotencyStore
 from writing_agent.workflows import GenerateGraphRequest, run_generate_graph_with_fallback
 
@@ -38,6 +44,8 @@ from .generation_service_support import (
     normalize_plan_confirm_payload as _normalize_plan_confirm_payload_impl,
     parse_generate_payload as _parse_generate_payload_impl,
     prepare_generation_config as _prepare_generation_config_impl,
+    provider_mode_required_sections as _provider_mode_required_sections_impl,
+    provider_mode_validation_acceptable as _provider_mode_validation_acceptable_impl,
     resolve_idempotency_key as _resolve_idempotency_key_impl,
     resolve_target_section_selection as _resolve_target_section_selection_impl,
     revision_candidate_metrics as _revision_candidate_metrics_impl,
@@ -65,6 +73,194 @@ class GenerationService:
     _revision_candidate_metrics = staticmethod(_revision_candidate_metrics_impl)
     validate_revision_candidate = staticmethod(_validate_revision_candidate_impl)
 
+    @staticmethod
+    def _should_prefer_single_pass_provider_mode(
+        *,
+        session,
+        compose_mode: str,
+        resume_sections: list[str],
+        base_text: str,
+    ) -> bool:
+        override = str(
+            app_v2_module().os.environ.get(
+                "WRITING_AGENT_PREFER_SINGLE_PASS_RESPONSES",
+                "1",
+            )
+            or "1"
+        ).strip().lower()
+        if override not in {"1", "true", "yes", "on"}:
+            return False
+        if resume_sections:
+            return False
+        if str(compose_mode or "").strip().lower() == "continue":
+            return False
+        if str(base_text or "").strip():
+            return False
+        prefs = dict(getattr(session, "generation_prefs", {}) or {})
+        profile = str(prefs.get("quality_profile") or "").strip().lower()
+        if profile and profile != "academic_cnki_default":
+            return False
+        snapshot = get_provider_snapshot()
+        provider = str(snapshot.get("provider") or "").strip().lower()
+        wire_api = str(snapshot.get("wire_api") or "").strip().lower()
+        return provider == "openai" and wire_api == "responses"
+
+    def _run_single_pass_provider_mode(
+        self,
+        *,
+        app_v2,
+        session,
+        compose_instruction: str,
+        raw_instruction: str,
+        base_text: str,
+    ) -> dict | None:
+        instruction = app_v2._augment_instruction(
+            compose_instruction,
+            formatting=session.formatting or {},
+            generation_prefs=session.generation_prefs or {},
+        )
+        target_chars = app_v2._resolve_target_chars(session.formatting or {}, session.generation_prefs or {})
+        if target_chars <= 0:
+            target_chars = app_v2._extract_target_chars_from_instruction(raw_instruction)
+        retry_count = self._provider_mode_retry_count()
+        updated_text = ""
+        quality_problems: list[str] = []
+        validation: dict[str, object] = {}
+        accepted_leniently = False
+        for attempt in range(max(1, retry_count)):
+            attempt_instruction = instruction
+            if attempt > 0:
+                attempt_instruction = app_v2._augment_instruction(
+                    self._build_provider_mode_retry_instruction(
+                        compose_instruction=compose_instruction,
+                        session=session,
+                        attempt=attempt + 1,
+                        previous_validation=validation,
+                    ),
+                    formatting=session.formatting or {},
+                    generation_prefs=session.generation_prefs or {},
+                )
+            final_text = app_v2._single_pass_generate(
+                session,
+                instruction=attempt_instruction,
+                current_text=base_text,
+                target_chars=target_chars,
+            )
+            if not final_text or app_v2._looks_like_prompt_echo(final_text, raw_instruction):
+                continue
+            updated_text = app_v2._postprocess_output_text(
+                session,
+                final_text,
+                raw_instruction,
+                current_text=base_text,
+                base_text=base_text,
+            )
+            quality_problems = list(app_v2._check_generation_quality(updated_text, target_chars))
+            validation = self._validate_provider_mode_result(
+                app_v2=app_v2,
+                session=session,
+                text=updated_text,
+                problems=quality_problems,
+            )
+            accepted_leniently = self._provider_mode_validation_acceptable(validation)
+            if accepted_leniently:
+                break
+        if not accepted_leniently or not updated_text:
+            return None
+        provider_snapshot = get_provider_snapshot()
+        needs_review = not bool(validation.get("passed"))
+        quality_status = "review" if needs_review else "success"
+        quality_reason = "provider_mode_lenient_gate" if needs_review else ""
+        graph_meta = {
+            "path": "single_pass_provider_mode",
+            "engine": "single_pass",
+            "route_id": "provider_compatibility",
+            "route_entry": "single_pass",
+            "engine_failover": False,
+            "terminal_status": "success",
+            "failure_reason": "",
+            "needs_review": needs_review,
+            "quality_snapshot": {
+                "status": quality_status,
+                "reason": quality_reason,
+                "provider": provider_snapshot,
+                "single_pass_provider_mode": True,
+                "provider_mode_lenient_gate": needs_review,
+                "final_validator": validation,
+            },
+        }
+        app_v2._set_doc_text(session, updated_text)
+        app_v2._auto_commit_version(session, "auto: after update")
+        app_v2.store.put(session)
+        return {
+            "ok": 1,
+            "status": "success",
+            "failure_reason": "",
+            "quality_snapshot": dict(graph_meta["quality_snapshot"] or {}),
+            "text": updated_text,
+            "problems": quality_problems,
+            "doc_ir": app_v2._safe_doc_ir_payload(updated_text),
+            "graph_meta": graph_meta,
+        }
+
+    @staticmethod
+    def _provider_mode_required_sections(*, session) -> list[str]:
+        return _provider_mode_required_sections_impl(session)
+
+    def _validate_provider_mode_result(self, *, app_v2, session, text: str, problems: list[str]) -> dict[str, object]:
+        title = str(app_v2._extract_title(text) or getattr(session, "title", "") or "").strip()
+        return final_validator.validate_final_document(
+            title=title,
+            text=text,
+            sections=self._provider_mode_required_sections(session=session),
+            problems=list(problems or []),
+        )
+
+    @staticmethod
+    def _provider_mode_retry_count() -> int:
+        try:
+            return max(1, min(4, int(os.environ.get("WRITING_AGENT_PROVIDER_MODE_RETRIES", "2"))))
+        except Exception:
+            return 2
+
+    def _build_provider_mode_retry_instruction(
+        self,
+        *,
+        compose_instruction: str,
+        session,
+        attempt: int,
+        previous_validation: dict[str, object],
+    ) -> str:
+        sections = self._provider_mode_required_sections(session=session)
+        section_line = ", ".join(sections)
+        feedback_lines: list[str] = []
+        for key, label in (
+            ("missing_sections", "Missing required H2"),
+            ("unexpected_sections", "Unexpected H2"),
+            ("duplicate_sections", "Repeated H2"),
+            ("empty_sections", "Empty section"),
+        ):
+            items = [str(item or "").strip() for item in (previous_validation.get(key) or []) if str(item or "").strip()]
+            if items:
+                feedback_lines.append(f"- {label}: {', '.join(items[:8])}")
+        feedback = "\n".join(feedback_lines)
+        retry_block = (
+            "\n\nRetry from scratch. The previous draft did not fully satisfy the document contract.\n"
+            f"Current attempt: {attempt}.\n"
+            "Hard requirements:\n"
+            "- Keep the topic tightly aligned with the requested research subject.\n"
+            f"- Use these H2 headings exactly once and in this order: {section_line}.\n"
+            "- Do not repeat headings, do not substitute headings, and do not output empty sections.\n"
+            "- Keep concrete academic prose and avoid generic filler or placeholder narration.\n"
+        )
+        if feedback:
+            retry_block += f"Previous validation feedback:\n{feedback}\n"
+        return f"{compose_instruction}{retry_block}"
+
+    @staticmethod
+    def _provider_mode_validation_acceptable(validation: dict[str, object]) -> bool:
+        return _provider_mode_validation_acceptable_impl(validation)
+
     async def generate_stream(self, doc_id: str, request: Request) -> StreamingResponse:
         """Stream generation endpoint delegated to runtime implementation."""
         app_v2 = app_v2_module()
@@ -72,16 +268,16 @@ class GenerationService:
 
     async def generate(self, doc_id: str, request: Request) -> dict:
         """
-        Non-SSE ??????
-        1. ????????????????
-        2. ???????????????????
-        3. ????????????????????
-        4. ????????????????????????
-        5. ????????????????? graph + fallback?
-        6. ???????????????????
+        Non-SSE generation endpoint.
+        1. Load session and apply default generation prefs
+        2. Parse request payload and resolve idempotency
+        3. Acquire per-document generation lock
+        4. Build composed instruction
+        5. Try shortcuts (revision, provider-mode single-pass)
+        6. Run graph + fallback and finalize result
         """
         app_v2 = app_v2_module()
-        # ?? 1???????????????????
+        # Step 1: load session and apply default generation prefs
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
@@ -102,7 +298,7 @@ class GenerationService:
             session.generation_prefs = prefs
             app_v2.store.put(session)
 
-        # ?? 2???????????????????
+        # Step 2: parse request payload and resolve idempotency
         data = await request.json()
         req = self._parse_generate_payload(app_v2, data, session=session)
         idempotency_key = self._resolve_idempotency_key(doc_id=doc_id, request=request, payload=data)
@@ -113,13 +309,13 @@ class GenerationService:
         if not req["raw_instruction"]:
             raise app_v2.HTTPException(status_code=400, detail="instruction required")
 
-        # ?? 3?????????????????????
+        # Step 3: acquire per-document generation lock
         token = app_v2._try_begin_doc_generation_with_wait(doc_id, mode="generate")
         if not token:
             raise app_v2.HTTPException(status_code=409, detail=app_v2._generation_busy_message(doc_id))
 
         try:
-            # ?? 4???????????????????????????
+            # Step 4: build composed instruction
             compose_instruction = self._build_generation_instruction(
                 app_v2=app_v2,
                 session=session,
@@ -128,7 +324,7 @@ class GenerationService:
                 resume_sections=req["resume_sections"],
                 cursor_anchor=req["cursor_anchor"],
             )
-            # overwrite ?????????????????????????????????
+            # overwrite mode ignores existing text; other modes resume from current doc
             base_text = "" if req["compose_mode"] == "overwrite" else (req["current_text"] or session.doc_text or "")
             if str((req.get("plan_confirm") or {}).get("decision") or "").strip().lower() == "interrupted":
                 interrupted_result = {
@@ -148,7 +344,7 @@ class GenerationService:
                 self._save_idempotent_result(idempotency_key, interrupted_result)
                 return interrupted_result
 
-            # ?? 5?????????????????????
+            # Step 5: try shortcuts (revision edits, provider-mode single-pass)
             shortcut, revision_meta = self._try_shortcuts(
                 app_v2=app_v2,
                 session=session,
@@ -168,12 +364,34 @@ class GenerationService:
                 self._save_idempotent_result(idempotency_key, shortcut)
                 return shortcut
 
-            # ?? 6???????????????????????
+            if self._should_prefer_single_pass_provider_mode(
+                session=session,
+                compose_mode=req["compose_mode"],
+                resume_sections=req["resume_sections"],
+                base_text=base_text,
+            ):
+                try:
+                    provider_mode_result = self._run_single_pass_provider_mode(
+                        app_v2=app_v2,
+                        session=session,
+                        compose_instruction=compose_instruction,
+                        raw_instruction=req["raw_instruction"],
+                        base_text=base_text,
+                    )
+                    if provider_mode_result is not None:
+                        if revision_meta:
+                            provider_mode_result["revision_meta"] = revision_meta
+                        self._save_idempotent_result(idempotency_key, provider_mode_result)
+                        return provider_mode_result
+                except Exception:
+                    logger.debug("provider_mode shortcut failed, falling through", exc_info=True)
+
+            # Step 6: ensure Ollama backend is ready before full generation
             ok, msg = app_v2._ensure_ollama_ready()
             if not ok:
                 raise app_v2.HTTPException(status_code=400, detail=msg)
 
-            # ?? 7??? graph ??????????????????????
+            # Step 7: prepare generation config (instruction, graph config, target chars)
             analysis_instruction, cfg, target_chars = self._prepare_generation_config(
                 app_v2=app_v2,
                 session=session,
@@ -183,7 +401,7 @@ class GenerationService:
                 base_text=base_text,
             )
 
-            # ?? 8??? graph ??????????? single-pass?
+            # Step 8: run graph with fallback (replaces single-pass for complex docs)
             final_text, problems, graph_meta = self._run_graph_with_fallback(
                 app_v2=app_v2,
                 session=session,
@@ -196,7 +414,7 @@ class GenerationService:
                 target_chars=target_chars,
                 plan_confirm=req["plan_confirm"],
             )
-            # ?? 9??????????????
+            # Step 9: postprocess output and persist session
             final_text = app_v2._postprocess_output_text(
                 session,
                 final_text,
@@ -226,7 +444,7 @@ class GenerationService:
             self._save_idempotent_result(idempotency_key, result)
             return result
         finally:
-            # ?? 10?????????????????????
+            # Step 10: release generation lock
             app_v2._finish_doc_generation(doc_id, token)
 
     def _parse_generate_payload(self, app_v2, data: dict, *, session=None) -> dict:
@@ -239,8 +457,6 @@ class GenerationService:
         )
 
     _normalize_plan_confirm_payload = staticmethod(_normalize_plan_confirm_payload_impl)
-    _load_plan_confirm_state = staticmethod(_load_plan_confirm_state_impl)
-    _save_plan_confirm_state = staticmethod(_save_plan_confirm_state_impl)
 
     @staticmethod
     def _load_plan_confirm_state(app_v2, *, session) -> dict | None:
@@ -420,7 +636,7 @@ class GenerationService:
                     )
                     return out, revision_meta
             except Exception:
-                pass
+                logger.debug("generation shortcut failed, falling through", exc_info=True)
 
         return None, revision_meta
 

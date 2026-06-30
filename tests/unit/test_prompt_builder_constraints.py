@@ -41,17 +41,44 @@ def test_build_writer_prompt_uses_tagged_channels_and_escape():
     assert "<section_id>" in user
     assert "<previous_content>" in user
     assert "<retrieved_context>" in user
+    assert "<originality_guidance>" in user
     assert "&lt;/plan_hint&gt;" in user
     assert "&lt;/previous_content&gt;" in user
     assert "&lt;ctx&gt;" in user
+    assert "Each paragraph should advance one section-specific claim" in user
+    assert "Synthesize multiple evidence points" in user
+    assert "Avoid stock transitions and repeated openings" in user
+    assert "Treat retrieved evidence as fact support" in user
+    assert "Use sources as evidence, not as sentence templates." in user
+
+
+def test_build_writer_prompt_adds_section_specific_originality_guidance():
+    _system, method_user = PromptBuilder.build_writer_prompt(
+        section_title="研究方法",
+        plan_hint="hint",
+        doc_title="Doc",
+        analysis_summary="analysis",
+        section_id="sid-method",
+    )
+    assert "For method sections, state data sources, variables, workflow steps, parameter choices, and validation boundary explicitly" in method_user
+
+    _system, conclusion_user = PromptBuilder.build_writer_prompt(
+        section_title="结论",
+        plan_hint="hint",
+        doc_title="Doc",
+        analysis_summary="analysis",
+        section_id="sid-conclusion",
+    )
+    assert "For conclusion sections, separate findings, implications, and limitations clearly" in conclusion_user
 
 
 def test_build_reference_prompt_uses_tagged_channels_and_escape():
-    _system, user = PromptBuilder.build_reference_prompt(
+    system, user = PromptBuilder.build_reference_prompt(
         [
             {"title": "Paper <1>", "url": "https://example.com?a=<x>"},
         ]
     )
+    assert "GB/T 7714-2015" in system
     assert "<task>format_references</task>" in user
     assert "<sources>" in user
     assert "Paper &lt;1&gt;" in user

@@ -1,9 +1,14 @@
-"""Inline AI guard and prompt-channel helpers."""
+"""Inline AI guard and prompt-channel helpers.
+
+Uses Pydantic structured output for type-safe LLM response parsing.
+"""
 
 from __future__ import annotations
 
 import json
 import re
+
+from writing_agent.v2.structured_output import InlineRewriteOutput
 
 
 def _inline_ai_module():
@@ -54,16 +59,25 @@ def _xml_escape(raw: str) -> str:
 def _extract_output_text(self, raw: str, *, expect_json: bool) -> tuple[str, bool]:
     text = self._strip_fences(raw)
     if expect_json:
-        parsed = None
+        # Try structured Pydantic parsing first
+        try:
+            structured = InlineRewriteOutput.model_validate_json(text)
+            return structured.output_text, True
+        except Exception:
+            # Fallback: try extracting JSON object then validate
+            m = re.search(r"\{[\s\S]*\}", text)
+            if m:
+                try:
+                    structured = InlineRewriteOutput.model_validate_json(m.group(0))
+                    return structured.output_text, True
+                except Exception:
+                    pass
+        # Final fallback: heuristic key search
         try:
             parsed = json.loads(text)
         except Exception:
             m = re.search(r"\{[\s\S]*\}", text)
-            if m:
-                try:
-                    parsed = json.loads(m.group(0))
-                except Exception:
-                    parsed = None
+            parsed = json.loads(m.group(0)) if m else None
         if isinstance(parsed, dict):
             for key in ("output_text", "generated_text", "text", "result", "answer"):
                 value = parsed.get(key)
@@ -117,6 +131,12 @@ def _build_guarded_prompt(self, operation, context, user_prompt: str) -> str:
         constraints.insert(1, "Generate continuation text only; do not rewrite existing text.")
 
     joined_constraints = "\n".join(f"- {item}" for item in constraints)
+    schema_snippet = (
+        '{"output_text":"rewritten text",'
+        '"confidence":0.92,"intent":"improve",'
+        '"preserved_keywords":["term1"],'
+        '"change_summary":"short description"}'
+    )
     return (
         "You are a controlled inline editor.\n"
         f"<task>\n{task}\n</task>\n"
@@ -125,7 +145,7 @@ def _build_guarded_prompt(self, operation, context, user_prompt: str) -> str:
         f"<selected_text>\n{selected}\n</selected_text>\n"
         f"<right_context>\n{right}\n</right_context>\n"
         f"<instruction>\n{instruction_block}\n</instruction>\n"
-        "Respond as strict JSON only: {\"output_text\":\"...\"}"
+        f"Respond as strict JSON only: {schema_snippet}"
     )
 
 

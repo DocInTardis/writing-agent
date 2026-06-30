@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 from writing_agent.v2.graph_runner_core_domain import *
 from writing_agent.v2.graph_reference_domain import _topic_tokens
 
@@ -34,8 +37,9 @@ def _analyze_instruction(
                     "metadata": prompt_meta,
                 }
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in graph_runner_analysis_domain.py: %s", _exc, exc_info=True)
+
     excerpt = _truncate_text(current_text or "", max_chars=800)
     system, user = PromptBuilder.build_analysis_prompt(
         instruction=instruction,

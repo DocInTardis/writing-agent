@@ -35,6 +35,49 @@ def _suite_for(route, context):
     return prompts._PROMPT_SUITES["academic_cn"]
 
 
+def _section_originality_profile(section_title: str) -> str:
+    title = str(section_title or "").strip().lower()
+    if any(token in title for token in ["摘要", "abstract"]):
+        return "abstract"
+    if any(token in title for token in ["引言", "绪论", "introduction", "background"]):
+        return "introduction"
+    if any(token in title for token in ["方法", "method", "methodology", "数据来源", "research design", "materials"]):
+        return "method"
+    if any(token in title for token in ["结果", "discussion", "讨论", "分析", "results", "findings"]):
+        return "results"
+    if any(token in title for token in ["结论", "启示", "conclusion", "implication", "recommendation"]):
+        return "conclusion"
+    return "general"
+
+
+def _build_proactive_originality_guidance(*, section_title: str, has_retrieved_context: bool, has_previous_content: bool) -> list[str]:
+    title = str(section_title or "").strip().lower()
+    profile = _section_originality_profile(section_title)
+    lines = [
+        "Use sources as evidence, not as sentence templates.",
+        "Rebuild paragraph order around your own claim sequence instead of following retrieved context sentence-by-sentence.",
+        "Prefer concrete actors, variables, time windows, mechanisms, observed differences, and limitations over generic summary language.",
+        "Vary paragraph openings; avoid repeating the same discourse marker or sentence scaffold across neighboring paragraphs.",
+    ]
+    if profile == "introduction":
+        lines.append("For introduction sections, move quickly from context to research gap, object, and boundary instead of stacking broad background statements.")
+    elif profile == "method":
+        lines.append("For method sections, state data sources, variables, workflow steps, parameter choices, and validation boundary explicitly instead of using template method narration.")
+    elif profile == "results":
+        lines.append("For results or discussion sections, anchor each paragraph in a concrete comparison, observed pattern, mechanism, or anomaly instead of a generic recap.")
+    elif profile == "conclusion":
+        lines.append("For conclusion sections, separate findings, implications, and limitations clearly instead of repeating earlier body paragraphs.")
+    elif profile == "abstract":
+        lines.append("For abstract sections, compress problem, method, result, and implication into high-density sentences without padding transitions.")
+    if has_retrieved_context:
+        lines.append("When retrieved context is present, fuse multiple evidence points before writing; do not shadow one source's wording or order.")
+    if has_previous_content:
+        lines.append("When previous content exists, extend with a new dimension instead of mirroring the prior paragraph's opener or rhythm.")
+    if any(token in title for token in ["结论", "discussion", "讨论", "分析", "results", "result"]):
+        lines.append("For interpretation-heavy sections, make the paragraph end in an implication, comparison, or boundary condition instead of a generic recap.")
+    return lines[:6]
+
+
 def build_planner_prompt(title: str, total_chars: int, sections: list[str], instruction: str, *, route=None, context=None) -> tuple[str, str]:
     prompts = _prompts_module()
     suite = prompts.PromptBuilder._suite_for(route, context)
@@ -87,11 +130,16 @@ def build_writer_prompt(section_title: str, plan_hint: str, doc_title: str, anal
         + "\n"
         + base_writer_note
         + "\n"
-        + "\u4f60\u53ea\u8f93\u51fa\u8bfb\u8005\u53ef\u76f4\u63a5\u9605\u8bfb\u7684\u6b63\u6587\u5185\u5bb9\uff1b\u4e25\u7981\u8f93\u51fa\u4efb\u4f55\u5199\u4f5c\u8fc7\u7a0b\u89e3\u91ca\u3001\u5143\u6307\u4ee4\u6216\u63d0\u793a\u8bcd\u6587\u672c\u3002"
-        + " \u4e25\u7981\u8f93\u51fa\u201c\u672c\u6bb5\u65e8\u5728/\u672c\u8282\u5c06/\u5e94\u5f53\u6db5\u76d6/\u9700\u8981\u8bf4\u660e\u201d\u7b49\u529f\u80fd\u6027\u8bf4\u660e\u53e5\u3002"
-        + " \u4e0d\u8981\u89e3\u91ca\u4f60\u7684\u5199\u4f5c\u903b\u8f91\u3002"
+        + "Output only reader-facing prose. Never output process notes, prompt residue, or instruction echoes. "
+        + "Do not emit functional narration such as 'this section will', 'the paragraph should', or 'it is necessary to explain'. "
+        + "Do not explain your writing logic."
     )
     visual_preference = prompts._writer_visual_preference(plan_hint, section_title)
+    originality_guidance = _build_proactive_originality_guidance(
+        section_title=section_title,
+        has_retrieved_context=bool(str(rag_context or "").strip()),
+        has_previous_content=bool(str(previous_content or "").strip()),
+    )
     user = (
         "<task>write_section_blocks</task>\n"
         "<constraints>\n"
@@ -100,6 +148,12 @@ def build_writer_prompt(section_title: str, plan_hint: str, doc_title: str, anal
         "- section_id must match exactly.\n"
         "- Output reader-facing section content only; never output guidance/process text.\n"
         "- Never copy or quote text from analysis_summary/plan_hint/retrieved_context verbatim.\n"
+        "- Each paragraph should advance one section-specific claim, observation, mechanism, comparison, or limitation.\n"
+        "- When evidence is available, support claims with concrete details such as actors, variables, time windows, processes, comparisons, or observed outcomes.\n"
+        "- Synthesize multiple evidence points into your own sentence structure instead of serially paraphrasing a single source.\n"
+        "- Avoid stock transitions and repeated openings such as 'This study...', 'First...', 'Second...', or 'In conclusion...' unless they add unique meaning.\n"
+        "- Treat retrieved evidence as fact support; never inherit a source paragraph's sentence order, clause order, or rhetorical scaffold.\n"
+        "- If you continue an existing section, introduce a new angle or deeper evidence rather than reusing the previous paragraph's opening rhythm.\n"
         "- Never output requirement language such as '?/?/??/?', '??/??', 'topic:', 'doc_type:', or 'key points:'.\n"
         "- Never output meta-writing sentences such as '????', '???', '????', '????', or any instruction echo.\n"
         "- If you output a figure block, it must include kind+caption+data; never output caption-only figure blocks.\n"
@@ -112,6 +166,8 @@ def build_writer_prompt(section_title: str, plan_hint: str, doc_title: str, anal
         f"<analysis_summary>\n{prompts._escape_prompt_text(analysis_summary)}\n</analysis_summary>\n"
         f"<plan_hint>\n{prompts._escape_prompt_text(plan_hint)}\n</plan_hint>\n"
     )
+    if originality_guidance:
+        user += "<originality_guidance>\n" + "\n".join(f"- {prompts._escape_prompt_text(line)}" for line in originality_guidance) + "\n</originality_guidance>\n"
     if previous_content:
         user += f"<previous_content>\n{prompts._escape_prompt_text(previous_content)}\n</previous_content>\n"
     if rag_context:
@@ -122,7 +178,7 @@ def build_writer_prompt(section_title: str, plan_hint: str, doc_title: str, anal
 
 def build_reference_prompt(sources: list[dict]) -> tuple[str, str]:
     prompts = _prompts_module()
-    system = "???????????????????????????????? GB/T 7714-2015?"
+    system = "You are a strict reference formatter. Output references only and follow GB/T 7714-2015 style."
     sources_text = "\n".join([f"[{i + 1}] {prompts._escape_prompt_text(s.get('title', ''))} {prompts._escape_prompt_text(s.get('url', ''))}".strip() for i, s in enumerate(sources or [])]) or "(none)"
     user = (
         "<task>format_references</task>\n"

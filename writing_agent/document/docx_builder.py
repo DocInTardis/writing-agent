@@ -5,6 +5,19 @@ This module belongs to `writing_agent.document` in the writing-agent codebase.
 
 from __future__ import annotations
 
+from writing_agent.document._docx_compat import (
+    doc_body,
+    doc_element,
+    paragraph_p,
+    remove_paragraph,
+    run_rPr,
+    section_sectPr,
+    style_rPr,
+)
+
+import logging
+logger = logging.getLogger(__name__)
+
 import io
 import re
 
@@ -80,8 +93,8 @@ class DocxBuilder:
         else:
             normal.paragraph_format.line_spacing = line_spacing
         try:
-            r_pr = normal._element.get_or_add_rPr()  # type: ignore[attr-defined]
+            r_pr = style_rPr(normal)
             r_fonts = r_pr.get_or_add_rFonts()
             r_fonts.set(qn("w:eastAsia"), formatting.font_name_east_asia)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in docx_builder.py: %s", _exc, exc_info=True)
