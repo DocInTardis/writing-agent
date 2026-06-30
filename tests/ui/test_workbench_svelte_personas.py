@@ -65,7 +65,7 @@ def server_url() -> str:
     proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         _wait_for_url(f"http://127.0.0.1:{port}/favicon.ico")
-        yield f"http://127.0.0.1:{port}"
+        yield f"http://127.0.0.1:{port}/new"
     finally:
         proc.terminate()
         try:

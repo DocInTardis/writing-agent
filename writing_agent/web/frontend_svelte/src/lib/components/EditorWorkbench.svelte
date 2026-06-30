@@ -1,5 +1,5 @@
 ﻿<script lang="ts">
-  import { onMount, createEventDispatcher } from 'svelte'
+  import { onMount } from 'svelte'
   import {
     editorCommand,
     sourceText,
@@ -16,34 +16,46 @@
   } from '../stores'
   import { renderDocument, docIrToMarkdown, textToDocIr } from '../utils/markdown'
 
-  let editor: HTMLDivElement | null = null
-  let lastMarkdown = ''
-  let lastRenderSig = ''
-  let renderMode: 'text' | 'doc' = 'text'
-  let historyTimer: ReturnType<typeof setTimeout> | null = null
-  let syncTimer: ReturnType<typeof setTimeout> | null = null
-  let docTextTimer: ReturnType<typeof setTimeout> | null = null
+  let editor = $state<HTMLDivElement | null>(null)
+  let lastMarkdown = $state('')
+  let lastRenderSig = $state('')
+  let renderMode = $state<'text' | 'doc'>('text')
+  let historyTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let syncTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let docTextTimer = $state<ReturnType<typeof setTimeout> | null>(null)
   let sourceUnsub: (() => void) | null = null
   let docIrUnsub: (() => void) | null = null
-  export let showToolbar = true
-  export let paper = true
-  export let lockEditing = false
-  const dispatch = createEventDispatcher()
-  let editingEl: HTMLElement | null = null
-  let editingKey = ''
-  let composing = false
-  let pendingRenderSig: string | null = null
-  let pendingFocusBlockId = ''
-  let editCommitTimer: ReturnType<typeof setTimeout> | null = null
-  let selectedBlockIds: string[] = []
-  let selectedBlockEls: HTMLElement[] = []
-  let selectedAnchorId = ''
-  let dragSelectSeed: { x: number; y: number } | null = null
-  let dragSelecting = false
-  let dragRect = { left: 0, top: 0, width: 0, height: 0 }
-  let suppressClickOnce = false
-  let lastToolbarStateSig = ''
-  let blockClipboard: Array<Record<string, unknown>> = []
+  let {
+    showToolbar = true,
+    paper = true,
+    lockEditing = false,
+    onblockedit,
+    onblockselect,
+    ontoolbarstate
+  }: {
+    showToolbar?: boolean
+    paper?: boolean
+    lockEditing?: boolean
+    onblockedit?: (payload: any) => void
+    onblockselect?: (payload: any) => void
+    ontoolbarstate?: (state: any) => void
+  } = $props()
+  let editingEl = $state<HTMLElement | null>(null)
+  let editingKey = $state('')
+  let composing = $state(false)
+  let pendingRenderSig = $state<string | null>(null)
+  let pendingFocusBlockId = $state('')
+  let editCommitTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let selectedBlockIds = $state<string[]>([])
+  let selectedBlockEls = $state<HTMLElement[]>([])
+  let selectedAnchorId = $state('')
+  let dragSelectSeed = $state<{ x: number; y: number } | null>(null)
+  let dragSelecting = $state(false)
+  let dragRect = $state({ left: 0, top: 0, width: 0, height: 0 })
+  let suppressClickOnce = $state(false)
+  let nativeRedoHint = $state(false)
+  let lastToolbarStateSig = $state('')
+  let blockClipboard = $state<Array<Record<string, unknown>>>([])
   type SlashCommandItem = {
     id: string
     label: string
@@ -66,11 +78,11 @@
     { id: 'math-inline', label: '行内公式', desc: '插入行内 LaTeX 公式', command: 'math-inline', keywords: ['公式', 'math', 'latex'] },
     { id: 'math-block', label: '公式块', desc: '插入块级 LaTeX 公式', command: 'math-block', keywords: ['公式块', 'math', 'latex'] },
   ]
-  let slashMenuOpen = false
-  let slashMenuLeft = 0
-  let slashMenuTop = 0
-  let slashMenuActive = 0
-  let slashMenuQuery = ''
+  let slashMenuOpen = $state(false)
+  let slashMenuLeft = $state(0)
+  let slashMenuTop = $state(0)
+  let slashMenuActive = $state(0)
+  let slashMenuQuery = $state('')
 
   function emptyHintText() {
     if ($generating) return '正在生成内容，暂不可直接编辑…'
@@ -1029,14 +1041,14 @@
       }
     })
     if (!blocks.length) {
-      dispatch('blockselect', { blockId: '', blockIds: [], blocks: [], text: '', rect: null, style: {} })
+      onblockselect?.({ blockId: '', blockIds: [], blocks: [], text: '', rect: null, style: {} })
       return
     }
     const primaryEl = selectedBlockEls[0]
     const primaryId = blockIdOf(primaryEl)
     const primaryText = plainTextFromElement(primaryEl)
     const rect = primaryEl.getBoundingClientRect()
-    dispatch('blockselect', {
+    onblockselect?.({
       blockId: primaryId,
       blockIds: selectedBlockIds.slice(),
       blocks,
@@ -1281,7 +1293,7 @@
     const historyCanUndo = $historyIndex > 0
     const historyCanRedo = $historyIndex >= 0 && $historyIndex < $history.length - 1
     let canUndo = !readonly && (focused || historyCanUndo)
-    let canRedo = !readonly && (focused || historyCanRedo)
+    let canRedo = !readonly && (focused || historyCanRedo || nativeRedoHint)
     try {
       bold = Boolean(document.queryCommandState('bold'))
       italic = Boolean(document.queryCommandState('italic'))
@@ -1291,7 +1303,7 @@
       const nativeUndo = Boolean(document.queryCommandEnabled('undo'))
       const nativeRedo = Boolean(document.queryCommandEnabled('redo'))
       canUndo = !readonly && (nativeUndo || historyCanUndo)
-      canRedo = !readonly && (nativeRedo || historyCanRedo)
+      canRedo = !readonly && (nativeRedo || historyCanRedo || nativeRedoHint)
     } catch {}
     const hasSelection = hasNativeTextSelection() || selectedBlockIds.length > 0
     const canCopy = hasSelection
@@ -1317,7 +1329,16 @@
     const sig = JSON.stringify(state)
     if (!force && sig === lastToolbarStateSig) return
     lastToolbarStateSig = sig
-    dispatch('toolbarstate', state)
+    ontoolbarstate?.(state)
+  }
+
+  function refreshToolbarStateSoon() {
+    emitToolbarState(true)
+    queueMicrotask(() => emitToolbarState(true))
+    setTimeout(() => emitToolbarState(true), 20)
+    setTimeout(() => emitToolbarState(true), 80)
+    setTimeout(() => emitToolbarState(true), 160)
+    setTimeout(() => emitToolbarState(true), 320)
   }
 
   async function copySelectionWithFallback() {
@@ -1476,6 +1497,22 @@
     const target = event.target as HTMLElement | null
     if (!target || !editor.contains(target)) return
     if (target.closest('a,button,input,textarea,select,[data-wa-no-marquee="1"]')) return
+    const block = target.closest('[data-block-id], [data-section-id], [data-doc-title="1"]') as HTMLElement | null
+    if (block && editor.contains(block) && (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)) {
+      const id = blockIdOf(block)
+      if (id) {
+        event.preventDefault()
+        if (event.shiftKey) {
+          selectRangeTo(id)
+        } else if (event.ctrlKey || event.metaKey) {
+          toggleSelectedBlock(id)
+        } else {
+          setSelectedBlocksByIds([id], id)
+        }
+        suppressClickOnce = true
+        return
+      }
+    }
     const editorRect = editor.getBoundingClientRect()
     const nearEditorLeftRail = event.clientX <= editorRect.left + 22
     if (!event.altKey && !nearEditorLeftRail) return
@@ -1680,12 +1717,18 @@
   function handleEditableInput(event: Event) {
     if ($generating || lockEditing) return
     if (composing) return
+    const inputType = event instanceof InputEvent ? String(event.inputType || '') : ''
+    if (inputType === 'historyUndo') nativeRedoHint = true
+    else if (inputType === 'historyRedo') nativeRedoHint = false
+    else nativeRedoHint = false
+    const historyNavigation = inputType === 'historyUndo' || inputType === 'historyRedo'
+    if (historyNavigation) refreshToolbarStateSoon()
     const el = resolveEditableElement(event.target)
     if (!el) return
     editingEl = el
     editingKey = String(el.dataset.blockId || el.dataset.sectionId || el.dataset.docTitle || '')
     scheduleCommit(el)
-    queueMicrotask(() => emitToolbarState())
+    if (!historyNavigation) queueMicrotask(() => emitToolbarState())
   }
 
   function handleCompositionStart() {
@@ -2232,7 +2275,8 @@
         return
       }
       if (!runNativeUndoRedo('undo')) undoHistory()
-      queueMicrotask(() => emitToolbarState())
+      nativeRedoHint = true
+      refreshToolbarStateSoon()
       return
     }
     if (lower === 'redo') {
@@ -2241,7 +2285,8 @@
         return
       }
       if (!runNativeUndoRedo('redo')) redoHistory()
-      queueMicrotask(() => emitToolbarState())
+      nativeRedoHint = false
+      refreshToolbarStateSoon()
       return
     }
     if (!ensureEditableFocus()) return
@@ -2726,14 +2771,14 @@
     queueMicrotask(() => emitToolbarState())
   }
 
-  let showFindReplace = false
-  let findText = ''
-  let replaceText = ''
-  let showFontPanel = false
-  let showColorPanel = false
-  let showBgColorPanel = false
-  let showLineHeightPanel = false
-  let showTableMenu = false
+  let showFindReplace = $state(false)
+  let findText = $state('')
+  let replaceText = $state('')
+  let showFontPanel = $state(false)
+  let showColorPanel = $state(false)
+  let showBgColorPanel = $state(false)
+  let showLineHeightPanel = $state(false)
+  let showTableMenu = $state(false)
   const figureCache = new Map<string, string>()
   
   const fontList = ['宋体', '黑体', '微软雅黑', '楷体', 'Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana']
@@ -3164,7 +3209,7 @@
     }
   })
 
-  $: {
+  $effect(() => {
     const running = $generating || lockEditing
     if (editor) {
       syncEditorUiFlags()
@@ -3176,7 +3221,7 @@
       }
       emitToolbarState()
     }
-  }
+  })
 </script>
 
 <div class={`panel editor ${paper ? 'paper' : ''}`}>
@@ -3193,13 +3238,13 @@
     <!-- 扩展工具栏 -->
     <div class="extended-toolbar">
     <div class="toolbar-group">
-      <button class="tool-btn" on:click={() => (showFontPanel = !showFontPanel)} title="字体">
+      <button class="tool-btn" onclick={() => (showFontPanel = !showFontPanel)} title="字体">
         <span style="font-family: serif;">A</span>
       </button>
       {#if showFontPanel}
         <div class="dropdown-panel">
           {#each fontList as font}
-            <button class="dropdown-item" on:click={() => { applyCommand('font:' + font); showFontPanel = false }} style="font-family: {font}">
+            <button class="dropdown-item" onclick={() => { applyCommand('font:' + font); showFontPanel = false }} style="font-family: {font}">
               {font}
             </button>
           {/each}
@@ -3208,7 +3253,7 @@
     </div>
     
     <div class="toolbar-group">
-      <select class="tool-select" on:change={(e) => applyCommand('size:' + e.currentTarget.value)}>
+      <select class="tool-select" onchange={(e) => applyCommand('size:' + e.currentTarget.value)}>
         <option value="">字号</option>
         {#each fontSizes as size}
           <option value={size}>{size}pt</option>
@@ -3217,7 +3262,7 @@
     </div>
     
     <div class="toolbar-group">
-      <button class="tool-btn" on:click={() => (showColorPanel = !showColorPanel)} title="文字颜色">
+      <button class="tool-btn" onclick={() => (showColorPanel = !showColorPanel)} title="文字颜色">
         <span style="color: #FF0000;">A</span>
       </button>
       {#if showColorPanel}
@@ -3227,7 +3272,7 @@
               class="color-item" 
               style="background: {color};" 
               aria-label={`文字颜色 ${color}`}
-              on:click={() => { applyCommand('color:' + color); showColorPanel = false }}
+              onclick={() => { applyCommand('color:' + color); showColorPanel = false }}
             ></button>
           {/each}
         </div>
@@ -3235,7 +3280,7 @@
     </div>
     
     <div class="toolbar-group">
-      <button class="tool-btn" on:click={() => (showBgColorPanel = !showBgColorPanel)} title="背景颜色">
+      <button class="tool-btn" onclick={() => (showBgColorPanel = !showBgColorPanel)} title="背景颜色">
         <span style="background: #FFFF00;">█</span>
       </button>
       {#if showBgColorPanel}
@@ -3245,7 +3290,7 @@
               class="color-item" 
               style="background: {color};" 
               aria-label={`背景颜色 ${color}`}
-              on:click={() => { applyCommand('bgcolor:' + color); showBgColorPanel = false }}
+              onclick={() => { applyCommand('bgcolor:' + color); showBgColorPanel = false }}
             ></button>
           {/each}
         </div>
@@ -3254,27 +3299,27 @@
     
     <span class="separator"></span>
     
-    <button class="tool-btn" on:click={() => applyCommand('align-left')} title="左对齐">≡</button>
-    <button class="tool-btn" on:click={() => applyCommand('align-center')} title="居中">≡</button>
-    <button class="tool-btn" on:click={() => applyCommand('align-right')} title="右对齐">≡</button>
-    <button class="tool-btn" on:click={() => applyCommand('align-justify')} title="两端对齐">≡</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-left')} title="左对齐">≡</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-center')} title="居中">≡</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-right')} title="右对齐">≡</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-justify')} title="两端对齐">≡</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" on:click={() => applyCommand('superscript')} title="上标">x²</button>
-    <button class="tool-btn" on:click={() => applyCommand('subscript')} title="下标">x₂</button>
-    <button class="tool-btn" on:click={() => applyCommand('hr')} title="水平线">—</button>
+    <button class="tool-btn" onclick={() => applyCommand('superscript')} title="上标">x²</button>
+    <button class="tool-btn" onclick={() => applyCommand('subscript')} title="下标">x₂</button>
+    <button class="tool-btn" onclick={() => applyCommand('hr')} title="水平线">—</button>
     
     <span class="separator"></span>
     
     <div class="toolbar-group">
-      <button class="tool-btn" on:click={() => (showLineHeightPanel = !showLineHeightPanel)} title="行距">
+      <button class="tool-btn" onclick={() => (showLineHeightPanel = !showLineHeightPanel)} title="行距">
         ≣
       </button>
       {#if showLineHeightPanel}
         <div class="dropdown-panel">
           {#each lineHeights as height}
-            <button class="dropdown-item" on:click={() => { applyCommand('line-height:' + height); showLineHeightPanel = false }}>
+            <button class="dropdown-item" onclick={() => { applyCommand('line-height:' + height); showLineHeightPanel = false }}>
               {height}倍行距
             </button>
           {/each}
@@ -3282,33 +3327,33 @@
       {/if}
     </div>
     
-    <button class="tool-btn" on:click={() => applyCommand('indent-first')} title="首行缩进">¶</button>
-    <button class="tool-btn" on:click={() => applyCommand('margin:10px 0')} title="段间距">⇕</button>
+    <button class="tool-btn" onclick={() => applyCommand('indent-first')} title="首行缩进">¶</button>
+    <button class="tool-btn" onclick={() => applyCommand('margin:10px 0')} title="段间距">⇕</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" on:click={() => applyCommand('math-inline')} title="行内公式">𝑓(𝑥)</button>
-    <button class="tool-btn" on:click={() => applyCommand('math-block')} title="公式块">∫</button>
+    <button class="tool-btn" onclick={() => applyCommand('math-inline')} title="行内公式">𝑓(𝑥)</button>
+    <button class="tool-btn" onclick={() => applyCommand('math-block')} title="公式块">∫</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" on:click={() => applyCommand('footnote')} title="插入脚注">※</button>
-    <button class="tool-btn" on:click={() => applyCommand('toc')} title="生成目录">☰</button>
+    <button class="tool-btn" onclick={() => applyCommand('footnote')} title="插入脚注">※</button>
+    <button class="tool-btn" onclick={() => applyCommand('toc')} title="生成目录">☰</button>
     
     <span class="separator"></span>
     
     <div class="toolbar-group">
-      <button class="tool-btn" on:click={() => (showTableMenu = !showTableMenu)} title="表格">
+      <button class="tool-btn" onclick={() => (showTableMenu = !showTableMenu)} title="表格">
         ⊞
       </button>
       {#if showTableMenu}
         <div class="dropdown-panel">
-          <button class="dropdown-item" on:click={() => { applyCommand('table'); showTableMenu = false }}>插入表格</button>
-          <button class="dropdown-item" on:click={() => { mergeTableCells(); showTableMenu = false }}>合并单元格</button>
-          <button class="dropdown-item" on:click={() => { insertTableRow(); showTableMenu = false }}>插入行</button>
-          <button class="dropdown-item" on:click={() => { insertTableCol(); showTableMenu = false }}>插入列</button>
-          <button class="dropdown-item" on:click={() => { deleteTableRow(); showTableMenu = false }}>删除行</button>
-          <button class="dropdown-item" on:click={() => { deleteTableCol(); showTableMenu = false }}>删除列</button>
+          <button class="dropdown-item" onclick={() => { applyCommand('table'); showTableMenu = false }}>插入表格</button>
+          <button class="dropdown-item" onclick={() => { mergeTableCells(); showTableMenu = false }}>合并单元格</button>
+          <button class="dropdown-item" onclick={() => { insertTableRow(); showTableMenu = false }}>插入行</button>
+          <button class="dropdown-item" onclick={() => { insertTableCol(); showTableMenu = false }}>插入列</button>
+          <button class="dropdown-item" onclick={() => { deleteTableRow(); showTableMenu = false }}>删除行</button>
+          <button class="dropdown-item" onclick={() => { deleteTableCol(); showTableMenu = false }}>删除列</button>
         </div>
       {/if}
     </div>
@@ -3322,14 +3367,14 @@
     contenteditable={$generating || lockEditing ? 'false' : 'true'}
     role="region"
     aria-label="文档编辑区"
-    on:mousedown={handleEditorMouseDown}
-    on:input={handleEditableInput}
-    on:focusin={handleEditableFocus}
-    on:focusout={handleEditableBlur}
-    on:compositionstart={handleCompositionStart}
-    on:compositionend={handleCompositionEnd}
-    on:click={handleEditorClick}
-    on:keydown={handleKeydown}
+    onmousedown={handleEditorMouseDown}
+    oninput={handleEditableInput}
+    onfocusin={handleEditableFocus}
+    onfocusout={handleEditableBlur}
+    oncompositionstart={handleCompositionStart}
+    oncompositionend={handleCompositionEnd}
+    onclick={handleEditorClick}
+    onkeydown={handleKeydown}
   ></div>
 
   {#if slashMenuOpen}
@@ -3339,7 +3384,7 @@
       role="listbox"
       tabindex="-1"
       aria-label="插入命令菜单"
-      on:mousedown|stopPropagation
+      onmousedown={(e) => e.stopPropagation()}
     >
       <div class="slash-menu-head">
         <span>/ 命令</span>
@@ -3354,8 +3399,8 @@
               class={`slash-item ${idx === slashMenuActive ? 'active' : ''}`}
               role="option"
               aria-selected={idx === slashMenuActive}
-              on:mouseenter={() => (slashMenuActive = idx)}
-              on:click={() => runSlashCommandByIndex(idx)}
+              onmouseenter={() => (slashMenuActive = idx)}
+              onclick={() => runSlashCommandByIndex(idx)}
             >
               <span class="slash-label">{item.label}</span>
               <span class="slash-desc">{item.desc}</span>
@@ -3379,13 +3424,13 @@
     <div class="find-replace-panel">
       <div class="find-replace-row">
         <input type="text" bind:value={findText} placeholder="查找..." />
-        <button class="btn-small" on:click={findNext}>下一个</button>
-        <button class="btn-small" on:click={() => (showFindReplace = false)}>✕</button>
+        <button class="btn-small" onclick={findNext}>下一个</button>
+        <button class="btn-small" onclick={() => (showFindReplace = false)}>✕</button>
       </div>
       <div class="find-replace-row">
         <input type="text" bind:value={replaceText} placeholder="替换为..." />
-        <button class="btn-small" on:click={replaceNext}>替换</button>
-        <button class="btn-small" on:click={replaceAll}>全部替换</button>
+        <button class="btn-small" onclick={replaceNext}>替换</button>
+        <button class="btn-small" onclick={replaceAll}>全部替换</button>
       </div>
     </div>
   {/if}
@@ -3415,7 +3460,7 @@
     border: 1px solid rgba(148, 163, 184, 0.35);
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.2);
+    box-shadow: 0 16px 36px rgba(250, 249, 247, 0.2);
     overflow: hidden;
     display: grid;
     grid-template-rows: auto 1fr auto;
@@ -3428,7 +3473,7 @@
     padding: 10px 12px 8px;
     border-bottom: 1px solid rgba(148, 163, 184, 0.22);
     font-size: 12px;
-    color: rgba(15, 23, 42, 0.75);
+    color: rgba(250, 249, 247, 0.75);
     font-weight: 600;
   }
 
@@ -3459,13 +3504,13 @@
 
   .slash-item .slash-label {
     font-size: 13px;
-    color: #0f172a;
+    color: #f5f3f0;
     font-weight: 600;
   }
 
   .slash-item .slash-desc {
     font-size: 11px;
-    color: rgba(51, 65, 85, 0.8);
+    color: rgba(245, 243, 240, 0.8);
   }
 
   .slash-item:hover,
@@ -3480,7 +3525,7 @@
   }
 
   .slash-menu-foot {
-    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    border-top: 1px solid rgba(231, 229, 228, 1);
     padding: 8px 12px;
     font-size: 11px;
     color: rgba(71, 85, 105, 0.9);
@@ -3522,7 +3567,7 @@
     outline: none;
     background: #fffdf8;
     white-space: pre-wrap;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 18px 40px rgba(70, 50, 20, 0.12);
+    box-shadow: none, 0 18px 40px rgba(70, 50, 20, 0.12);
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
     position: relative;
   }
@@ -3532,13 +3577,13 @@
     border-radius: 14px;
     padding: 16px 18px 20px;
     background: #ffffff;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
+    box-shadow: 0 12px 28px rgba(250, 249, 247, 0.1);
     min-height: 560px;
     white-space: normal;
     font-family: "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", sans-serif;
     font-size: 16px;
     line-height: 1.8;
-    color: #0f172a;
+    color: #f5f3f0;
     font-weight: 400;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -3565,7 +3610,7 @@
   :global(.editable[data-render-mode='doc'] .wa-doc .wa-header),
   :global(.editable[data-render-mode='doc'] .wa-doc .wa-footer) {
     font-size: 12px;
-    color: #94a3b8;
+    color: #78716c;
     text-align: center;
     letter-spacing: 0.04em;
   }
@@ -3636,8 +3681,8 @@
   :global(.editable[data-render-mode='doc'] .wa-doc .wa-figure-box),
   :global(.editable[data-render-mode='doc'] .wa-doc .wa-table-box) {
     height: 140px;
-    border: 1px dashed #94a3b8;
-    color: #64748b;
+    border: 1px dashed #78716c;
+    color: #a8a29e;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3653,14 +3698,14 @@
 
   :global(.editable[data-render-mode='doc'] .wa-doc th),
   :global(.editable[data-render-mode='doc'] .wa-doc td) {
-    border: 1px solid #cbd5e1;
+    border: 1px solid #a8a29e;
     padding: 6px 8px;
   }
 
   :global(.editable[data-render-mode='doc'] .wa-doc figcaption) {
     margin-top: 6px;
     font-size: 12px;
-    color: #64748b;
+    color: #a8a29e;
   }
 
   .editor.paper .editable {
@@ -3672,12 +3717,12 @@
     border-radius: 10px;
     background: #ffffff;
     box-shadow:
-      0 2px 0 rgba(0, 0, 0, 0.02),
+      0 2px 0 rgba(0, 0, 0, 0.01),
       0 20px 60px rgba(50, 30, 10, 0.12);
     font-family: "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", sans-serif;
     font-size: 16px;
     line-height: 1.8;
-    color: #0f172a;
+    color: #f5f3f0;
   }
 
   .editor.paper .editable[data-render-mode='doc'] {
@@ -3689,7 +3734,7 @@
     border-radius: 10px;
     background: #ffffff;
     box-shadow:
-      0 2px 0 rgba(0, 0, 0, 0.02),
+      0 2px 0 rgba(0, 0, 0, 0.01),
       0 20px 60px rgba(50, 30, 10, 0.12);
   }
 
@@ -3832,11 +3877,11 @@
     width: 100%;
     min-height: 160px;
     border-radius: 12px;
-    background: rgba(15, 23, 42, 0.05);
+    background: rgba(250, 249, 247, 0.05);
     display: grid;
     place-items: center;
     font-weight: 600;
-    color: rgba(15, 23, 42, 0.6);
+    color: rgba(250, 249, 247, 0.6);
     overflow: hidden;
   }
 
@@ -3848,7 +3893,7 @@
 
   :global(.editable .wa-figure-loading) {
     font-size: 12px;
-    color: rgba(15, 23, 42, 0.6);
+    color: rgba(250, 249, 247, 0.6);
   }
 
   :global(.editable figcaption),

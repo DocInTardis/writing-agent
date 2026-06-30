@@ -50,15 +50,11 @@
 
   export type IconName = keyof typeof ICON_PATHS
 
-  export let name: IconName = 'spark'
-  export let size = 16
-  export let className = ''
-  export let decorative = true
-  export let label = ''
+  let { name = 'spark', size = 16, className = '', decorative = true, label = '' }: { name?: IconName, size?: number, className?: string, decorative?: boolean, label?: string } = $props()
 
-  $: d = ICON_PATHS[name] || ICON_PATHS.spark
-  $: px = Math.max(12, Math.min(24, Number(size || 16)))
-  $: ariaLabel = decorative ? undefined : label || name
+  let d = $derived(ICON_PATHS[name] || ICON_PATHS.spark)
+  let px = $derived(Math.max(12, Math.min(24, Number(size || 16))))
+  let ariaLabel = $derived(decorative ? undefined : label || name)
 </script>
 
 <span

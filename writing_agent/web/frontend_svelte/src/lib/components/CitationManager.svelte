@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { docId, pushToast } from '../stores'
 
-  export let visible = false
+  let { visible = false }: { visible?: boolean } = $props()
 
   interface Citation {
     id: string
@@ -136,27 +136,27 @@
   const CACHE_HIT_RATE_WARN_THRESHOLD = 0.55
   const CACHE_EVICT_RATE_WARN_THRESHOLD = 0.08
 
-  let citations: Citation[] = []
-  let loading = false
-  let verifying = false
-  let verifyMap: Record<string, VerifyItem> = {}
-  let verifySummary: VerifySummary | null = null
-  let verifyDebug: VerifyDebugPayload | null = null
-  let verifyDebugHistory: VerifyDebugHistoryEntry[] = []
-  let verifyDebugHistorySeq = 0
-  let verifyDebugLevel: VerifyDebugLevel = 'safe'
-  let lastLoadedId = ''
-  let saveTimer: ReturnType<typeof setTimeout> | null = null
-  let resolveUrl = ''
-  let resolvingUrl = false
+  let citations = $state<Citation[]>([])
+  let loading = $state(false)
+  let verifying = $state(false)
+  let verifyMap = $state<Record<string, VerifyItem>>({})
+  let verifySummary = $state<VerifySummary | null>(null)
+  let verifyDebug = $state<VerifyDebugPayload | null>(null)
+  let verifyDebugHistory = $state<VerifyDebugHistoryEntry[]>([])
+  let verifyDebugHistorySeq = $state(0)
+  let verifyDebugLevel = $state<VerifyDebugLevel>('safe')
+  let lastLoadedId = $state('')
+  let saveTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let resolveUrl = $state('')
+  let resolvingUrl = $state(false)
 
-  let newCitation: Citation = {
+  let newCitation = $state<Citation>({
     id: '',
     author: '',
     title: '',
     year: '',
     source: ''
-  }
+  })
 
   function normalizeItems(items: unknown): Citation[] {
     if (!Array.isArray(items)) return []
@@ -718,13 +718,15 @@
     if (visible) loadCitations()
   })
 
-  $: if (visible) {
-    const id = $docId
-    if (id && id !== lastLoadedId) {
-      lastLoadedId = id
-      loadCitations()
+  $effect(() => {
+    if (visible) {
+      const id = $docId
+      if (id && id !== lastLoadedId) {
+        lastLoadedId = id
+        loadCitations()
+      }
     }
-  }
+  })
 </script>
 
 {#if visible}
@@ -733,18 +735,18 @@
     role="button"
     tabindex="0"
     aria-label="关闭引用管理"
-    on:click={() => (visible = false)}
-    on:keydown={(e) => {
+    onclick={() => (visible = false)}
+    onkeydown={(e) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
         e.preventDefault()
         visible = false
       }
     }}
   >
-    <div class="modal" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h2>引用管理</h2>
-        <button class="close-btn" on:click={() => (visible = false)}>×</button>
+        <button class="close-btn" onclick={() => (visible = false)}>×</button>
       </div>
 
       <div class="modal-body">
@@ -757,14 +759,14 @@
               placeholder="粘贴论文链接（DOI/arXiv/期刊页面）"
               bind:value={resolveUrl}
               disabled={resolvingUrl}
-              on:keydown={(e) => {
+              onkeydown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
                   resolveCitationFromUrl()
                 }
               }}
             />
-            <button class="btn-resolve" disabled={resolvingUrl} on:click={resolveCitationFromUrl}>
+            <button class="btn-resolve" disabled={resolvingUrl} onclick={resolveCitationFromUrl}>
               {#if resolvingUrl}自动补全中...{:else}链接自动补全{/if}
             </button>
           </div>
@@ -775,22 +777,22 @@
             <input type="text" placeholder="年份" bind:value={newCitation.year} />
             <input type="text" placeholder="来源（期刊/会议/URL）" bind:value={newCitation.source} class="full-width" />
           </div>
-          <button class="btn-add" on:click={addCitation}>添加引用</button>
+          <button class="btn-add" onclick={addCitation}>添加引用</button>
         </div>
 
         <div class="verify-section">
           <h3>核验真实性</h3>
           <div class="verify-row">
-            <button class="btn-verify" disabled={verifying || loading || citations.length === 0} on:click={verifyCitations}>
+            <button class="btn-verify" disabled={verifying || loading || citations.length === 0} onclick={verifyCitations}>
               {#if verifying}核验中...{:else}核验引用{/if}
             </button>
             {#if VERIFY_DEBUG_ENABLED}
               <div class="verify-debug-controls">
-                <label for="verify-debug-level">debug level</label>
+                <label for="verify-debug-level">调试级别</label>
                 <select id="verify-debug-level" bind:value={verifyDebugLevel} disabled={verifying}>
-                  <option value="safe">safe (masked)</option>
-                  <option value="strict">strict (metrics only)</option>
-                  <option value="full">full (raw, rate limited)</option>
+                  <option value="safe">安全（脱敏）</option>
+                  <option value="strict">严格（仅指标）</option>
+                  <option value="full">完整（原始数据，限频）</option>
                 </select>
               </div>
             {/if}
@@ -802,53 +804,53 @@
             {#if VERIFY_DEBUG_ENABLED && verifyDebug}
               <div class="verify-debug-summary">
                 <span>
-                  Debug · req {verifyDebug.requested_level} · active {verifyDebug.level} · workers {verifyDebug.request.workers} · sampled {verifyDebug.sampling.output_items}/{verifyDebug.sampling.input_items} · elapsed {verifyDebug.elapsed_ms.toFixed(1)}ms
+                  调试 · 请求 {verifyDebug.requested_level} · 生效 {verifyDebug.level} · 工作线程 {verifyDebug.request.workers} · 采样 {verifyDebug.sampling.output_items}/{verifyDebug.sampling.input_items} · 耗时 {verifyDebug.elapsed_ms.toFixed(1)}ms
                 </span>
                 <span class="verify-debug-metrics">
-                  cache {verifyDebug.cache.size}/{verifyDebug.cache.max_entries || '-'} · ttl {verifyDebug.cache.ttl_s.toFixed(0)}s · hit {verifyDebug.cache.hit}/{cacheLookupCount(verifyDebug.cache)} ({formatRate(cacheHitRate(verifyDebug.cache))}) · evict {verifyDebug.cache.evicted}/{verifyDebug.cache.set} ({formatRate(cacheEvictRate(verifyDebug.cache))}) · expired {verifyDebug.cache.expired}
+                  缓存 {verifyDebug.cache.size}/{verifyDebug.cache.max_entries || '-'} · TTL {verifyDebug.cache.ttl_s.toFixed(0)}s · 命中 {verifyDebug.cache.hit}/{cacheLookupCount(verifyDebug.cache)} ({formatRate(cacheHitRate(verifyDebug.cache))}) · 淘汰 {verifyDebug.cache.evicted}/{verifyDebug.cache.set} ({formatRate(cacheEvictRate(verifyDebug.cache))}) · 过期 {verifyDebug.cache.expired}
                 </span>
                 {#if verifyDebug.observe}
                   <span class="verify-debug-observe">
-                    window {verifyDebug.observe.window.runs}/{verifyDebug.observe.window.max_runs || '-'} · p50/p95 {verifyDebug.observe.window.elapsed_ms.p50.toFixed(1)}/{verifyDebug.observe.window.elapsed_ms.p95.toFixed(1)}ms · avg items {verifyDebug.observe.window.items.avg.toFixed(1)} · avg workers {verifyDebug.observe.window.workers.avg.toFixed(1)} · hitΔ {formatRate(verifyDebug.observe.window.cache_delta.hit_rate)}
+                    窗口 {verifyDebug.observe.window.runs}/{verifyDebug.observe.window.max_runs || '-'} · P50/P95 {verifyDebug.observe.window.elapsed_ms.p50.toFixed(1)}/{verifyDebug.observe.window.elapsed_ms.p95.toFixed(1)}ms · 平均条目 {verifyDebug.observe.window.items.avg.toFixed(1)} · 平均线程 {verifyDebug.observe.window.workers.avg.toFixed(1)} · 命中变化 {formatRate(verifyDebug.observe.window.cache_delta.hit_rate)}
                   </span>
                 {/if}
                 <span class="verify-debug-health">
                   <span class={"verify-debug-chip " + (cacheHitRate(verifyDebug.cache) < CACHE_HIT_RATE_WARN_THRESHOLD ? 'warn' : 'ok')}>
-                    hit {formatRate(cacheHitRate(verifyDebug.cache))}
+                    命中率 {formatRate(cacheHitRate(verifyDebug.cache))}
                   </span>
                   <span class={"verify-debug-chip " + (cacheEvictRate(verifyDebug.cache) > CACHE_EVICT_RATE_WARN_THRESHOLD ? 'warn' : 'ok')}>
-                    evict {formatRate(cacheEvictRate(verifyDebug.cache))}
+                    淘汰率 {formatRate(cacheEvictRate(verifyDebug.cache))}
                   </span>
                 </span>
                 {#if verifyDebug.rate_limited_full}
-                  <span class="verify-debug-flag">full -> safe (rate limited)</span>
+                  <span class="verify-debug-flag">完整 -> 安全（已限流）</span>
                 {/if}
                 {#if verifyDebugHistory.length > 0}
                   <span class="verify-debug-trend">
-                    avg(5) hit {formatRate(historyAverageHitRate(5))} · evict {formatRate(historyAverageEvictRate(5))} · elapsed {historyAverageElapsedMs(5).toFixed(1)}ms
+                    近 5 次平均 命中率 {formatRate(historyAverageHitRate(5))} · 淘汰率 {formatRate(historyAverageEvictRate(5))} · 耗时 {historyAverageElapsedMs(5).toFixed(1)}ms
                   </span>
                 {/if}
                 <button
                   class="btn-debug-clear"
-                  on:click={clearVerifyDebugHistory}
+                  onclick={clearVerifyDebugHistory}
                   disabled={verifyDebugHistory.length === 0}
                 >
                   清空历史
                 </button>
-                <button class="btn-debug-copy" on:click={copyVerifyDebugJson}>复制诊断 JSON</button>
+                <button class="btn-debug-copy" onclick={copyVerifyDebugJson}>复制诊断 JSON</button>
               </div>
               {#if verifyDebugHistory.length > 0}
                 <div class="verify-debug-history">
-                  <div class="verify-debug-history-title">recent verify runs ({verifyDebugHistory.length}/{VERIFY_DEBUG_HISTORY_LIMIT})</div>
+                  <div class="verify-debug-history-title">最近核验记录 ({verifyDebugHistory.length}/{VERIFY_DEBUG_HISTORY_LIMIT})</div>
                   <div class="verify-debug-history-list">
                     {#each verifyDebugHistory.slice().reverse() as run (run.id)}
                       <div class="verify-debug-history-item">
                         <span class="history-time">{run.at_label}</span>
-                        <span class={"history-chip " + (run.hit_rate < CACHE_HIT_RATE_WARN_THRESHOLD ? 'warn' : 'ok')}>hit {formatRate(run.hit_rate)}</span>
-                        <span class={"history-chip " + (run.evict_rate > CACHE_EVICT_RATE_WARN_THRESHOLD ? 'warn' : 'ok')}>evict {formatRate(run.evict_rate)}</span>
-                        <span class="history-meta">w{run.workers}</span>
-                        <span class="history-meta">cache {run.cache_size}/{run.cache_max || '-'}</span>
-                        <span class="history-meta">sample {run.sampled_output}/{run.sampled_input}</span>
+                        <span class={"history-chip " + (run.hit_rate < CACHE_HIT_RATE_WARN_THRESHOLD ? 'warn' : 'ok')}>命中率 {formatRate(run.hit_rate)}</span>
+                        <span class={"history-chip " + (run.evict_rate > CACHE_EVICT_RATE_WARN_THRESHOLD ? 'warn' : 'ok')}>淘汰率 {formatRate(run.evict_rate)}</span>
+                        <span class="history-meta">线程 {run.workers}</span>
+                        <span class="history-meta">缓存 {run.cache_size}/{run.cache_max || '-'}</span>
+                        <span class="history-meta">采样 {run.sampled_output}/{run.sampled_input}</span>
                         <span class="history-meta">{run.elapsed_ms.toFixed(1)}ms</span>
                       </div>
                     {/each}
@@ -862,9 +864,9 @@
         <div class="export-section">
           <h3>导出参考文献</h3>
           <div class="export-btns">
-            <button class="btn-export" on:click={() => exportBibliography('apa')}>APA</button>
-            <button class="btn-export" on:click={() => exportBibliography('mla')}>MLA</button>
-            <button class="btn-export" on:click={() => exportBibliography('gb')}>GB/T 7714</button>
+            <button class="btn-export" onclick={() => exportBibliography('apa')}>APA</button>
+            <button class="btn-export" onclick={() => exportBibliography('mla')}>MLA</button>
+            <button class="btn-export" onclick={() => exportBibliography('gb')}>GB/T 7714</button>
           </div>
         </div>
 
@@ -901,27 +903,27 @@
                         {/if}
                         {#if VERIFY_DEBUG_ENABLED && vdbg}
                           <details class="verify-debug-item">
-                            <summary>debug details</summary>
-                            <div class="debug-line">cache_hit: {vdbg.cache_hit ? 'true' : 'false'}</div>
-                            {#if vdbg.query}<div class="debug-line">query: {vdbg.query}</div>{/if}
+                            <summary>调试详情</summary>
+                            <div class="debug-line">缓存命中：{vdbg.cache_hit ? '是' : '否'}</div>
+                            {#if vdbg.query}<div class="debug-line">检索查询：{vdbg.query}</div>{/if}
                             {#if vdbg.picked_provider}
                               <div class="debug-line">
-                                picked: {vdbg.picked_provider} (total {vdbg.picked_total_score.toFixed(3)}, title {vdbg.picked_title_score.toFixed(3)}, year {vdbg.picked_year_score.toFixed(3)})
+                                选中来源：{vdbg.picked_provider}（总分 {vdbg.picked_total_score.toFixed(3)}，标题 {vdbg.picked_title_score.toFixed(3)}，年份 {vdbg.picked_year_score.toFixed(3)}）
                               </div>
                             {/if}
-                            <div class="debug-line">providers: {JSON.stringify(vdbg.providers)}</div>
+                            <div class="debug-line">候选来源：{JSON.stringify(vdbg.providers)}</div>
                             {#if vdbg.errors.length > 0}
-                              <div class="debug-line">errors: {vdbg.errors.join(' | ')}</div>
+                              <div class="debug-line">错误：{vdbg.errors.join(' | ')}</div>
                             {/if}
-                            <div class="debug-line">elapsed: {vdbg.elapsed_ms.toFixed(2)}ms</div>
+                            <div class="debug-line">耗时：{vdbg.elapsed_ms.toFixed(2)}ms</div>
                           </details>
                         {/if}
                       </div>
                     {/if}
                   </div>
                   <div class="citation-actions">
-                    <button class="btn-copy" on:click={() => copyCiteKey(cite.id)}>复制</button>
-                    <button class="btn-delete" on:click={() => deleteCitation(cite.id)}>删除</button>
+                    <button class="btn-copy" onclick={() => copyCiteKey(cite.id)}>复制</button>
+                    <button class="btn-delete" onclick={() => deleteCitation(cite.id)}>删除</button>
                   </div>
                 </div>
               {/each}
@@ -947,7 +949,7 @@
   .modal {
     background: #fffdf8;
     border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.01);
     max-width: 860px;
     width: 92%;
     max-height: 82vh;
@@ -1146,8 +1148,8 @@
 
   .verify-debug-chip.warn {
     color: #8a3b12;
-    background: rgba(245, 158, 11, 0.16);
-    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(217, 119, 6, 0.16);
+    border-color: rgba(217, 119, 6, 0.35);
   }
 
   .verify-debug-history {
@@ -1201,8 +1203,8 @@
 
   .history-chip.warn {
     color: #8a3b12;
-    background: rgba(245, 158, 11, 0.14);
-    border-color: rgba(245, 158, 11, 0.32);
+    background: rgba(217, 119, 6, 0.14);
+    border-color: rgba(217, 119, 6, 0.32);
   }
 
   .history-meta {
@@ -1238,8 +1240,8 @@
     font-size: 11px;
     font-weight: 600;
     color: #8a3b12;
-    background: rgba(245, 158, 11, 0.16);
-    border: 1px solid rgba(245, 158, 11, 0.35);
+    background: rgba(217, 119, 6, 0.16);
+    border: 1px solid rgba(217, 119, 6, 0.35);
     border-radius: 999px;
     padding: 2px 8px;
   }

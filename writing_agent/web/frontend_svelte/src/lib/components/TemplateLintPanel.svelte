@@ -1,28 +1,28 @@
 ﻿<script lang="ts">
-  export let templateText = ''
-  $: warnings = lintTemplate(templateText)
+  let { templateText = '' } = $props()
+  let warnings = $derived(lintTemplate(templateText))
 
   function lintTemplate(text: string): string[] {
     const t = String(text || '')
     const out: string[] = []
-    if (!t.includes('{{title}}')) out.push('missing variable: {{title}}')
-    if (!t.includes('{{body}}')) out.push('missing variable: {{body}}')
-    if (t.length > 10000) out.push('template too long (>10k chars)')
+    if (!t.includes('{{title}}')) out.push('缺少变量：{{title}}')
+    if (!t.includes('{{body}}')) out.push('缺少变量：{{body}}')
+    if (t.length > 10000) out.push('模板过长（超过 10000 字符）')
     return out
   }
 </script>
 
 <div class="template-lint">
-  <h3>Template Lint</h3>
+  <h3>模板检查</h3>
   {#if warnings.length === 0}
-    <p class="ok">No issues detected.</p>
+    <p class="ok">未发现问题。</p>
   {:else}
     <ul>
       {#each warnings as row}
         <li>{row}</li>
       {/each}
     </ul>
-    <p class="hint">Auto-fix suggestion: add missing placeholders and keep template concise.</p>
+    <p class="hint">建议补齐缺失占位符，并保持模板简洁。</p>
   {/if}
 </div>
 

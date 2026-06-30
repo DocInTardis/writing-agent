@@ -3,13 +3,99 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Writing Agent</title>
+    <title>写作智能工作台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/v2_svelte/style.css?v={{ static_version }}" />
+    <style>
+      #app-loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        background: linear-gradient(180deg, #0c1220 0%, #141c2e 100%);
+        color: #e8eefb;
+        z-index: 9999;
+        transition: opacity 0.4s ease, visibility 0.4s ease;
+      }
+      #app-loading.done {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      .app-loading-logo {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #2563eb, #3b82f6);
+        display: grid;
+        place-items: center;
+        font-size: 24px;
+        font-weight: 800;
+        color: #fff;
+        box-shadow: 0 16px 32px rgba(37, 99, 235, 0.3);
+        animation: loading-pulse 2s ease-in-out infinite;
+      }
+      .app-loading-title {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: #f7fbff;
+      }
+      .app-loading-bar {
+        width: 180px;
+        height: 3px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.08);
+        overflow: hidden;
+        position: relative;
+      }
+      .app-loading-bar::after {
+        content: "";
+        position: absolute;
+        left: -40%;
+        top: 0;
+        width: 40%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+        animation: loading-slide 1.2s ease-in-out infinite;
+      }
+      .app-loading-sub {
+        font-size: 12px;
+        color: rgba(190, 205, 233, 0.6);
+        font-weight: 500;
+      }
+      @keyframes loading-pulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 16px 32px rgba(37, 99, 235, 0.3); }
+        50% { transform: scale(1.05); box-shadow: 0 20px 40px rgba(37, 99, 235, 0.45); }
+      }
+      @keyframes loading-slide {
+        0% { left: -40%; }
+        100% { left: 100%; }
+      }
+    </style>
   </head>
   <body data-doc-id="{{ doc_id }}">
+    <div id="app-loading">
+      <div class="app-loading-logo">WA</div>
+      <div class="app-loading-title">写作智能工作台</div>
+      <div class="app-loading-bar"></div>
+      <div class="app-loading-sub">正在加载编辑器引擎…</div>
+    </div>
     <div id="app"></div>
     <script>
       window.__DOC_ID__ = "{{ doc_id }}";
+      window.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+          var loader = document.getElementById('app-loading');
+          if (loader) loader.classList.add('done');
+        }, 800);
+      });
     </script>
     <script type="module" src="/static/v2_svelte/main.js?v={{ static_version }}"></script>
   </body>

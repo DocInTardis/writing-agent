@@ -70,7 +70,7 @@
   }
 </script>
 
-<button class="btn ghost" on:click={handleOpen}>设置</button>
+<button class="btn ghost" onclick={handleOpen}>设置</button>
 
 <Modal {open} title="生成设置" onClose={() => (open = false)}>
   <div class="settings-row">
@@ -96,22 +96,22 @@
   <div class="settings-row">
     <label for="outputFormat">输出格式</label>
     <select id="outputFormat" bind:value={outputFormat}>
-      <option value="markdown">Markdown</option>
+      <option value="markdown">Markdown 文档</option>
       <option value="plain">纯文本</option>
     </select>
   </div>
 
   <div class="settings-section">
     <div class="section-title">高级设置（可改所有默认值）</div>
-    <label for="formattingJson">格式 formatting</label>
+    <label for="formattingJson">格式配置（formatting）</label>
     <textarea id="formattingJson" rows="6" bind:value={formattingJson}></textarea>
-    <label for="prefsJson">生成偏好 generation_prefs</label>
+    <label for="prefsJson">生成偏好（generation_prefs）</label>
     <textarea id="prefsJson" rows="6" bind:value={prefsJson}></textarea>
   </div>
 
   <div class="settings-actions">
-    <button class="btn primary" on:click={saveSettings}>保存</button>
-    <button class="btn ghost" on:click={() => (open = false)}>取消</button>
+    <button class="btn primary" onclick={saveSettings}>保存</button>
+    <button class="btn ghost" onclick={() => (open = false)}>取消</button>
   </div>
 </Modal>
 

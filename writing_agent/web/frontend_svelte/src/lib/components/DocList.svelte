@@ -2,8 +2,7 @@
   import { onMount } from 'svelte'
   import { pushToast } from '../stores'
 
-  export let visible = false
-  export let onSelect: (docId: string) => void = () => {}
+  let { visible = false, onSelect = () => {} }: { visible?: boolean, onSelect?: (docId: string) => void } = $props()
 
   interface Doc {
     doc_id: string
@@ -13,8 +12,8 @@
     char_count: number
   }
 
-  let docs: Doc[] = []
-  let loading = false
+  let docs: Doc[] = $state([])
+  let loading = $state(false)
 
   async function loadDocs() {
     loading = true
@@ -63,7 +62,11 @@
     if (visible) loadDocs()
   })
 
-  $: if (visible) loadDocs()
+  $effect(() => {
+    if (visible) {
+      loadDocs()
+    }
+  })
 </script>
 
 {#if visible}
@@ -72,18 +75,18 @@
     role="button"
     tabindex="0"
     aria-label="关闭文档列表"
-    on:click={() => (visible = false)}
-    on:keydown={(e) => {
+    onclick={() => (visible = false)}
+    onkeydown={(e) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
         e.preventDefault()
         visible = false
       }
     }}
   >
-    <div class="modal-panel" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
+    <div class="modal-panel" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h2>文档列表</h2>
-        <button class="close-btn" on:click={() => (visible = false)}>✕</button>
+        <button class="close-btn" onclick={() => (visible = false)}>✕</button>
       </div>
       <div class="modal-body">
         {#if loading}
@@ -94,7 +97,7 @@
           <div class="doc-list">
             {#each docs as doc}
               <div class="doc-item">
-                <button class="doc-info" type="button" on:click={() => onSelect(doc.doc_id)}>
+                <button class="doc-info" type="button" onclick={() => onSelect(doc.doc_id)}>
                   <div class="doc-title">{doc.title || '自动生成文档'}</div>
                   <div class="doc-meta">
                     <span>{formatDate(doc.updated_at)}</span>
@@ -102,7 +105,7 @@
                   </div>
                   <div class="doc-preview">{truncate(doc.text, 80)}</div>
                 </button>
-                <button class="delete-btn" on:click={() => deleteDoc(doc.doc_id)}>删除</button>
+                <button class="delete-btn" onclick={() => deleteDoc(doc.doc_id)}>删除</button>
               </div>
             {/each}
           </div>
@@ -120,7 +123,7 @@
     display: grid;
     place-items: center;
     z-index: 1000;
-    backdrop-filter: blur(4px);
+    
   }
 
   .modal-panel {
@@ -131,7 +134,7 @@
     max-height: 80vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.01);
   }
 
   .modal-header {

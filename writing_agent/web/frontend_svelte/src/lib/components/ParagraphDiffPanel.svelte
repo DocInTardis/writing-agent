@@ -1,18 +1,17 @@
 ﻿<script lang="ts">
-  export let original = ''
-  export let revised = ''
+  let { original = '', revised = '' } = $props()
 
   function lines(text: string): string[] {
     return String(text || '').split(/\r?\n/)
   }
 
-  $: left = lines(original)
-  $: right = lines(revised)
-  $: total = Math.max(left.length, right.length)
+  let left = $derived(lines(original))
+  let right = $derived(lines(revised))
+  let total = $derived(Math.max(left.length, right.length))
 </script>
 
 <div class="diff-panel">
-  <h3>Paragraph Diff/Patch</h3>
+  <h3>段落差异对比</h3>
   <div class="grid">
     {#each Array(total) as _, i}
       <div class="row {left[i] === right[i] ? 'same' : 'changed'}">

@@ -1,18 +1,37 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte'
   import { sanitizeDiagramPrompt } from '../utils/ai_payload'
 
-  export let open = false
-  export let docId = ''
-  const dispatch = createEventDispatcher()
+  let {
+    open = false,
+    docId = '',
+    onclose,
+    oninsert
+  }: {
+    open?: boolean
+    docId?: string
+    onclose?: () => void
+    oninsert?: (payload: { spec: Record<string, unknown> }) => void
+  } = $props()
 
-  type Kind = 'flow' | 'architecture' | 'er' | 'sequence' | 'timeline' | 'bar' | 'line' | 'pie'
+
+  type Kind = 'flow' | 'architecture' | 'er' | 'sequence' | 'state' | 'class' | 'gantt' | 'mindmap' | 'quadrant' | 'radar' | 'scatter' | 'heatmap' | 'funnel' | 'sankey' | 'swot' | 'timeline' | 'bar' | 'line' | 'pie'
   type PanelMode = 'studio' | 'json' | 'history'
 
   const kindOptions: Array<{ value: Kind; label: string }> = [
     { value: 'flow', label: '流程图' },
     { value: 'er', label: 'ER 图' },
     { value: 'sequence', label: '时序图' },
+    { value: 'state', label: '状态图' },
+    { value: 'class', label: '类图' },
+    { value: 'gantt', label: 'Gantt 图' },
+    { value: 'mindmap', label: '思维导图' },
+    { value: 'quadrant', label: '四象限' },
+    { value: 'radar', label: '雷达图' },
+    { value: 'scatter', label: '散点图' },
+    { value: 'heatmap', label: '热力图' },
+    { value: 'funnel', label: '漏斗图' },
+    { value: 'sankey', label: '桑基图' },
+    { value: 'swot', label: 'SWOT图' },
     { value: 'timeline', label: '时间线' },
     { value: 'bar', label: '柱状图' },
     { value: 'line', label: '折线图' },
@@ -40,6 +59,61 @@
       '浏览器 -> 服务端 -> 缓存 -> 数据库',
       '客户端 -> API -> 队列 -> Worker -> 存储'
     ],
+    state: [
+      '草稿 -> 待审核 -> 已通过 -> 已发布',
+      '新建 -> 处理中 -> 待确认 -> 已完成',
+      '待提交 -> 审批中 -> 已驳回/已批准'
+    ],
+    class: [
+      '用户、项目、文档、引用之间的类关系',
+      '课程、教师、学生、选课记录的领域模型',
+      '订单、商品、库存、支付的类图'
+    ],
+    gantt: [
+      '立项 M1-M2，开发 M2-M4，测试 M4-M5，上线 M5',
+      '调研、建模、实现、评估四阶段排期',
+      '论文写作：选题、综述、实验、定稿计划'
+    ],
+    mindmap: [
+      '论文主题 -> 背景、方法、实验、结论',
+      '系统设计 -> 用户、能力、数据、治理',
+      '研究问题 -> 现状、痛点、方案、验证'
+    ],
+    quadrant: [
+      '需求优先级四象限：高价值高成本等事项分布',
+      '风险与收益矩阵',
+      '技术方案在影响力与落地难度上的定位'
+    ],
+    radar: [
+      '模型在准确率、鲁棒性、效率、成本上的多维评估',
+      '候选方案能力画像对比',
+      '系统质量维度雷达图'
+    ],
+    scatter: [
+      '不同实验样本在成本和性能上的散点分布',
+      '方案点在延迟与准确率上的关系',
+      '算法版本在资源消耗与质量上的相关性'
+    ],
+    heatmap: [
+      '章节与风险等级的热力图矩阵',
+      '模块与问题密度的热点分布',
+      '实验维度与性能强度热力图'
+    ],
+    funnel: [
+      '候选方案从初筛到最终采用的漏斗图',
+      '样本从收集到纳入分析的转化漏斗',
+      '线索到成交的阶段收敛过程'
+    ],
+    sankey: [
+      '需求输入到生成、校核、交付的流向图',
+      '资源从来源到各模块分配的桑基图',
+      '用户路径分流与结果去向分析'
+    ],
+    swot: [
+      '系统方案的 SWOT 分析',
+      '论文选题的优势、劣势、机会、威胁',
+      '项目立项的战略评估 SWOT 图'
+    ],
     timeline: [
       '立项 -> 调研 -> 设计 -> 开发 -> 测试 -> 发布',
       '需求冻结 -> 联调 -> 验收 -> 复盘',
@@ -62,16 +136,16 @@
     ]
   }
 
-  let panelMode: PanelMode = 'studio'
-  let kind: Kind = 'flow'
-  let prompt = ''
-  let optimizeInput = ''
-  let loading = false
-  let error = ''
-  let svg = ''
-  let spec: Record<string, unknown> | null = null
-  let specText = ''
-  let zoom = 1
+  let panelMode: PanelMode = $state('studio')
+  let kind: Kind = $state('flow')
+  let prompt = $state('')
+  let optimizeInput = $state('')
+  let loading = $state(false)
+  let error = $state('')
+  let svg = $state('')
+  let spec: Record<string, unknown> | null = $state(null)
+  let specText = $state('')
+  let zoom = $state(1)
 
   let historyItems: Array<{
     id: number
@@ -80,7 +154,7 @@
     spec: Record<string, unknown>
     svg: string
     ts: number
-  }> = []
+  }> = $state([])
 
   function panelTitle(mode: PanelMode) {
     if (mode === 'json') return '规范编辑'
@@ -89,7 +163,7 @@
   }
 
   function closeCanvas() {
-    dispatch('close')
+    onclose?.()
   }
 
   function useTemplate(text: string) {
@@ -99,12 +173,41 @@
   function normalizeKind(raw: unknown): Kind {
     const v = String(raw || '').trim().toLowerCase()
     if (v === 'architecture') return 'architecture'
+    if (v === '架构图' || v === '系统架构图') return 'architecture'
     if (v === 'er') return 'er'
+    if (v === 'er图' || v === '实体关系图') return 'er'
     if (v === 'sequence') return 'sequence'
+    if (v === '时序图') return 'sequence'
+    if (v === 'state') return 'state'
+    if (v === '状态图' || v === '状态机图') return 'state'
+    if (v === 'class') return 'class'
+    if (v === '类图') return 'class'
+    if (v === 'gantt') return 'gantt'
+    if (v === '甘特图' || v === 'gantt图') return 'gantt'
+    if (v === 'mindmap') return 'mindmap'
+    if (v === '思维导图' || v === '脑图') return 'mindmap'
+    if (v === 'quadrant') return 'quadrant'
+    if (v === '四象限' || v === '四象限图') return 'quadrant'
+    if (v === 'radar') return 'radar'
+    if (v === '雷达图') return 'radar'
+    if (v === 'scatter') return 'scatter'
+    if (v === '散点图') return 'scatter'
+    if (v === 'heatmap') return 'heatmap'
+    if (v === '热力图') return 'heatmap'
+    if (v === 'funnel') return 'funnel'
+    if (v === '漏斗图') return 'funnel'
+    if (v === 'sankey') return 'sankey'
+    if (v === '桑基图') return 'sankey'
+    if (v === 'swot') return 'swot'
+    if (v === 'swot图') return 'swot'
     if (v === 'timeline') return 'timeline'
+    if (v === '时间线') return 'timeline'
     if (v === 'bar') return 'bar'
+    if (v === '柱状图') return 'bar'
     if (v === 'line') return 'line'
+    if (v === '折线图') return 'line'
     if (v === 'pie') return 'pie'
+    if (v === '饼图') return 'pie'
     return 'flow'
   }
 
@@ -219,7 +322,7 @@
 
   function handleInsert() {
     if (!spec) return
-    dispatch('insert', { spec })
+    oninsert?.({ spec })
   }
 
   async function copySvg() {
@@ -273,21 +376,21 @@
     role="button"
     tabindex="0"
     aria-label="关闭画布"
-    on:click|self={closeCanvas}
-    on:keydown={handleBackdropKeydown}
+    onclick={(e) => { if (e.target === e.currentTarget) closeCanvas() }}
+    onkeydown={handleBackdropKeydown}
   >
     <section class="canvas-shell" aria-label="AI 画布系统">
       <header class="canvas-topbar">
         <div class="title-wrap">
           <h3>AI 画布系统</h3>
-          <p>同页完成生成、修改、预览、插入，支持流程图/ER 图/时序图/统计图。</p>
+          <p>同页完成生成、修改、预览、插入，支持流程图、ER 图、时序图、状态图、类图、甘特图、思维导图、四象限、热力图、漏斗图、桑基图、SWOT图及多类统计图。</p>
         </div>
         <div class="top-actions">
-          <button class="btn ghost" on:click={() => (panelMode = 'studio')}>工作台</button>
-          <button class="btn ghost" on:click={() => (panelMode = 'json')}>JSON</button>
-          <button class="btn ghost" on:click={() => (panelMode = 'history')}>历史</button>
-          <button class="btn ghost" on:click={resetCanvas}>清空</button>
-          <button class="close-btn" on:click={closeCanvas} aria-label="关闭">×</button>
+          <button class="btn ghost" onclick={() => (panelMode = 'studio')}>工作台</button>
+          <button class="btn ghost" onclick={() => (panelMode = 'json')}>JSON结构</button>
+          <button class="btn ghost" onclick={() => (panelMode = 'history')}>历史</button>
+          <button class="btn ghost" onclick={resetCanvas}>清空</button>
+          <button class="close-btn" onclick={closeCanvas} aria-label="关闭">×</button>
         </div>
       </header>
 
@@ -300,7 +403,7 @@
               {#each kindOptions as item}
                 <button
                   class={`kind-chip ${kind === item.value ? 'active' : ''}`}
-                  on:click={() => (kind = item.value)}
+                  onclick={() => (kind = item.value)}
                 >
                   {item.label}
                 </button>
@@ -309,7 +412,7 @@
 
             <div class="template-list">
               {#each quickTemplates[kind] as t}
-                <button class="template-chip" on:click={() => useTemplate(t)}>{t}</button>
+                <button class="template-chip" onclick={() => useTemplate(t)}>{t}</button>
               {/each}
             </div>
 
@@ -321,10 +424,10 @@
             ></textarea>
 
             <div class="canvas-actions">
-              <button class="btn primary" on:click={() => generateDiagram()} disabled={loading || !prompt.trim()}>
+              <button class="btn primary" onclick={() => generateDiagram()} disabled={loading || !prompt.trim()}>
                 {loading ? '生成中...' : '生成图形'}
               </button>
-              <button class="btn ghost" on:click={handleInsert} disabled={!spec}>插入文档</button>
+              <button class="btn ghost" onclick={handleInsert} disabled={!spec}>插入文档</button>
             </div>
 
             <textarea
@@ -333,7 +436,7 @@
               bind:value={optimizeInput}
               placeholder="二次优化，例如：改成更简洁的 5 个节点，强调异常分支。"
             ></textarea>
-            <button class="btn ghost" on:click={optimizeCurrent} disabled={loading || !optimizeInput.trim()}>
+            <button class="btn ghost" onclick={optimizeCurrent} disabled={loading || !optimizeInput.trim()}>
               AI 二次优化
             </button>
           {/if}
@@ -346,10 +449,10 @@
               placeholder="可直接编辑 JSON 规范，例如：type=flow，caption=示例，data 包含 nodes/edges。"
             ></textarea>
             <div class="canvas-actions">
-              <button class="btn primary" on:click={applySpecText} disabled={loading || !specText.trim()}>
+              <button class="btn primary" onclick={applySpecText} disabled={loading || !specText.trim()}>
                 应用规范
               </button>
-              <button class="btn ghost" on:click={copySpec} disabled={!specText.trim()}>复制规范</button>
+              <button class="btn ghost" onclick={copySpec} disabled={!specText.trim()}>复制规范</button>
             </div>
           {/if}
 
@@ -359,7 +462,7 @@
                 <div class="empty">暂无历史记录</div>
               {:else}
                 {#each historyItems as item}
-                  <button class="history-item" on:click={() => restoreHistory(item)}>
+                  <button class="history-item" onclick={() => restoreHistory(item)}>
                     <div>{kindOptions.find((k) => k.value === item.kind)?.label || item.kind}</div>
                     <div>{item.prompt || '无描述'}</div>
                     <div>{new Date(item.ts).toLocaleString()}</div>
@@ -377,15 +480,15 @@
         <section class="canvas-stage">
           <div class="stage-toolbar">
             <div class="zoom-group">
-              <button class="btn ghost" on:click={() => (zoom = Math.max(0.4, Number((zoom - 0.1).toFixed(1))))}>-</button>
+              <button class="btn ghost" onclick={() => (zoom = Math.max(0.4, Number((zoom - 0.1).toFixed(1))))}>-</button>
               <span>{Math.round(zoom * 100)}%</span>
-              <button class="btn ghost" on:click={() => (zoom = Math.min(2.2, Number((zoom + 0.1).toFixed(1))))}>+</button>
-              <button class="btn ghost" on:click={() => (zoom = 1)}>重置缩放</button>
+              <button class="btn ghost" onclick={() => (zoom = Math.min(2.2, Number((zoom + 0.1).toFixed(1))))}>+</button>
+              <button class="btn ghost" onclick={() => (zoom = 1)}>重置缩放</button>
             </div>
             <div class="export-group">
-              <button class="btn ghost" on:click={copySvg} disabled={!svg}>复制 SVG</button>
-              <button class="btn ghost" on:click={downloadSvg} disabled={!svg}>下载 SVG</button>
-              <button class="btn primary" on:click={handleInsert} disabled={!spec}>插入正文</button>
+              <button class="btn ghost" onclick={copySvg} disabled={!svg}>复制 SVG</button>
+              <button class="btn ghost" onclick={downloadSvg} disabled={!svg}>下载 SVG</button>
+              <button class="btn primary" onclick={handleInsert} disabled={!spec}>插入正文</button>
             </div>
           </div>
 
@@ -413,7 +516,7 @@
   .canvas-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.52);
+    background: rgba(250, 249, 247, 0.52);
     z-index: 24;
     display: grid;
     place-items: center;
@@ -425,8 +528,8 @@
     height: min(92vh, 980px);
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.985);
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    box-shadow: 0 30px 80px rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(231, 229, 228, 1);
+    box-shadow: 0 30px 80px rgba(250, 249, 247, 0.45);
     display: grid;
     grid-template-rows: auto 1fr;
     overflow: hidden;
@@ -449,7 +552,7 @@
   .title-wrap p {
     margin: 0;
     font-size: 12px;
-    color: rgba(51, 65, 85, 0.78);
+    color: rgba(245, 243, 240, 0.78);
   }
 
   .top-actions {
@@ -462,7 +565,7 @@
 
   .close-btn {
     border: none;
-    background: rgba(15, 23, 42, 0.08);
+    background: rgba(250, 249, 247, 0.08);
     width: 32px;
     height: 32px;
     border-radius: 10px;
@@ -478,7 +581,7 @@
   }
 
   .canvas-sidebar {
-    border-right: 1px solid rgba(148, 163, 184, 0.2);
+    border-right: 1px solid rgba(231, 229, 228, 1);
     padding: 12px;
     display: grid;
     gap: 10px;
@@ -489,7 +592,7 @@
   .panel-title {
     font-size: 13px;
     font-weight: 700;
-    color: #0f172a;
+    color: #f5f3f0;
   }
 
   .kind-grid {
@@ -501,7 +604,7 @@
   .kind-chip,
   .template-chip,
   .history-item {
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    border: 1px solid rgba(231, 229, 228, 1);
     border-radius: 10px;
     background: #fff;
     cursor: pointer;
@@ -570,11 +673,11 @@
   }
 
   .history-item > div:nth-child(2) {
-    color: rgba(51, 65, 85, 0.8);
+    color: rgba(245, 243, 240, 0.8);
   }
 
   .history-item > div:nth-child(3) {
-    color: rgba(51, 65, 85, 0.62);
+    color: rgba(245, 243, 240, 0.62);
     font-size: 11px;
   }
 
@@ -585,7 +688,7 @@
     display: grid;
     grid-template-rows: auto 1fr;
     gap: 10px;
-    background: linear-gradient(180deg, rgba(241, 245, 249, 0.8), rgba(248, 250, 252, 0.95));
+    background: #ffffff;
   }
 
   .stage-toolbar {
@@ -593,7 +696,7 @@
     justify-content: space-between;
     gap: 10px;
     flex-wrap: wrap;
-    border: 1px solid rgba(148, 163, 184, 0.2);
+    border: 1px solid rgba(231, 229, 228, 1);
     border-radius: 12px;
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.9);
@@ -640,7 +743,7 @@
     display: grid;
     place-content: center;
     text-align: center;
-    color: rgba(51, 65, 85, 0.74);
+    color: rgba(245, 243, 240, 0.74);
     gap: 8px;
   }
 
@@ -668,8 +771,8 @@
   }
 
   .btn.ghost {
-    background: rgba(15, 23, 42, 0.08);
-    color: #0f172a;
+    background: rgba(250, 249, 247, 0.08);
+    color: #f5f3f0;
   }
 
   .btn:disabled {
@@ -678,19 +781,19 @@
   }
 
   .error {
-    color: #ef4444;
+    color: #dc2626;
     font-size: 12px;
     background: rgba(254, 242, 242, 0.9);
-    border: 1px solid rgba(248, 113, 113, 0.35);
+    border: 1px solid rgba(220, 38, 38, 0.35);
     border-radius: 10px;
     padding: 8px 10px;
   }
 
   .empty {
     font-size: 12px;
-    color: rgba(51, 65, 85, 0.7);
+    color: rgba(245, 243, 240, 0.7);
     padding: 10px;
-    border: 1px dashed rgba(148, 163, 184, 0.4);
+    border: 1px dashed rgba(231, 229, 228, 1);
     border-radius: 10px;
     background: rgba(248, 250, 252, 0.7);
   }
@@ -719,7 +822,7 @@
 
     .canvas-sidebar {
       border-right: none;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      border-bottom: 1px solid rgba(231, 229, 228, 1);
     }
 
     .kind-grid {

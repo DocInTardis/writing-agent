@@ -23,11 +23,11 @@
     border-radius: 10px;
     color: #fff;
     font-size: 12px;
-    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+    box-shadow: 0 16px 30px rgba(250, 249, 247, 0.18);
   }
 
   .toast.info {
-    background: #2563eb;
+    background: #d97706;
   }
 
   .toast.ok {

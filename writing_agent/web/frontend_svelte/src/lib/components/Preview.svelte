@@ -2,12 +2,11 @@
   import { sourceText, docIr, docIrDirty, generating } from '../stores'
   import { renderDocument } from '../utils/markdown'
 
-  let previewHtml = ''
-  $: {
+  let previewHtml = $derived.by(() => {
     const hasDocIr = Boolean($docIr && typeof $docIr === 'object')
     const preferText = !hasDocIr
-    previewHtml = renderDocument($sourceText || '', $docIr, preferText)
-  }
+    return renderDocument($sourceText || '', $docIr, preferText)
+  })
 </script>
 
 <div class="panel preview">
@@ -26,7 +25,7 @@
     margin: 0 auto;
     padding: 56px 64px;
     background: #fff;
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    box-shadow: 0 18px 40px rgba(250, 249, 247, 0.12);
     border: 1px solid #e2e8f0;
     font-family: "Times New Roman", "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
     color: #1f2933;
@@ -35,7 +34,7 @@
   .preview-body :global(.wa-doc .wa-header),
   .preview-body :global(.wa-doc .wa-footer) {
     font-size: 12px;
-    color: #94a3b8;
+    color: #78716c;
     text-align: center;
     letter-spacing: 0.04em;
   }
@@ -100,8 +99,8 @@
   .preview-body :global(.wa-doc .wa-figure-box),
   .preview-body :global(.wa-doc .wa-table-box) {
     height: 140px;
-    border: 1px dashed #94a3b8;
-    color: #64748b;
+    border: 1px dashed #78716c;
+    color: #a8a29e;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -117,14 +116,14 @@
 
   .preview-body :global(.wa-doc th),
   .preview-body :global(.wa-doc td) {
-    border: 1px solid #cbd5e1;
+    border: 1px solid #a8a29e;
     padding: 6px 8px;
   }
 
   .preview-body :global(.wa-doc figcaption) {
     margin-top: 6px;
     font-size: 12px;
-    color: #64748b;
+    color: #a8a29e;
   }
 
   @media (max-width: 900px) {

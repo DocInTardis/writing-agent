@@ -19,41 +19,41 @@
     type ResolveMetricsView
   } from './performanceMetricsUtils'
 
-  export let visible = false
+  let { visible = false }: { visible?: boolean } = $props()
 
-  let metrics: MetricsView | null = null
-  let resolveMetrics: ResolveMetricsView | null = null
-  let loading = false
-  let refreshing = false
-  let errorMsg = ''
-  let updatedAt = ''
-  let pollTimer: ReturnType<typeof setInterval> | null = null
-  let wasVisible = false
+  let metrics = $state<MetricsView | null>(null)
+  let resolveMetrics = $state<ResolveMetricsView | null>(null)
+  let loading = $state(false)
+  let refreshing = $state(false)
+  let errorMsg = $state('')
+  let updatedAt = $state('')
+  let pollTimer = $state<ReturnType<typeof setInterval> | null>(null)
+  let wasVisible = $state(false)
 
-  let savingAlertConfig = false
-  let alertConfigDirty = false
-  let alertConfigMsg = ''
-  let alertConfigMsgKind: 'ok' | 'bad' | '' = ''
-  let resolveSavingAlertConfig = false
-  let resolveAlertConfigDirty = false
-  let resolveAlertConfigMsg = ''
-  let resolveAlertConfigMsgKind: 'ok' | 'bad' | '' = ''
-  let alertAdminKey = ''
+  let savingAlertConfig = $state(false)
+  let alertConfigDirty = $state(false)
+  let alertConfigMsg = $state('')
+  let alertConfigMsgKind = $state<'ok' | 'bad' | ''>('')
+  let resolveSavingAlertConfig = $state(false)
+  let resolveAlertConfigDirty = $state(false)
+  let resolveAlertConfigMsg = $state('')
+  let resolveAlertConfigMsgKind = $state<'ok' | 'bad' | ''>('')
+  let alertAdminKey = $state('')
 
-  let eventContextLoading = false
-  let eventContextError = ''
-  let eventContextTargetId = ''
-  let selectedEventContext: MetricsEventContext | null = null
+  let eventContextLoading = $state(false)
+  let eventContextError = $state('')
+  let eventContextTargetId = $state('')
+  let selectedEventContext = $state<MetricsEventContext | null>(null)
 
-  let alertConfigForm: AlertConfigForm = {
+  let alertConfigForm = $state<AlertConfigForm>({
     enabled: true,
     min_runs: 8,
     p95_ms: 4500,
     error_rate_per_run: 0.3,
     cache_delta_hit_rate: 0.35
-  }
+  })
 
-  let resolveAlertConfigForm: ResolveAlertConfigForm = {
+  let resolveAlertConfigForm = $state<ResolveAlertConfigForm>({
     enabled: true,
     min_runs: 8,
     failure_rate: 0.35,
@@ -63,7 +63,7 @@
     notify_enabled: true,
     notify_cooldown_s: 300,
     notify_timeout_s: 4
-  }
+  })
 
   if (typeof window !== 'undefined') {
     alertAdminKey = String(window.localStorage.getItem('wa_alert_admin_key') || '')
@@ -156,11 +156,11 @@
         cache_delta_hit_rate: saved.cache_delta_hit_rate
       })
       alertConfigDirty = false
-      alertConfigMsg = 'Alert config saved'
+      alertConfigMsg = '告警配置已保存'
       alertConfigMsgKind = 'ok'
       await loadMetrics(true)
     } catch (err) {
-      alertConfigMsg = err instanceof Error ? err.message : 'Failed to save alert config'
+      alertConfigMsg = err instanceof Error ? err.message : '保存告警配置失败'
       alertConfigMsgKind = 'bad'
     } finally {
       savingAlertConfig = false
@@ -189,11 +189,11 @@
         cache_delta_hit_rate: saved.cache_delta_hit_rate
       })
       alertConfigDirty = false
-      alertConfigMsg = 'Alert config reset to defaults'
+      alertConfigMsg = '告警配置已重置为默认值'
       alertConfigMsgKind = 'ok'
       await loadMetrics(true)
     } catch (err) {
-      alertConfigMsg = err instanceof Error ? err.message : 'Failed to reset alert config'
+      alertConfigMsg = err instanceof Error ? err.message : '重置告警配置失败'
       alertConfigMsgKind = 'bad'
     } finally {
       savingAlertConfig = false
@@ -229,11 +229,11 @@
         notify_timeout_s: saved.notify_timeout_s
       })
       resolveAlertConfigDirty = false
-      resolveAlertConfigMsg = 'Resolve alert config saved'
+      resolveAlertConfigMsg = '解析告警配置已保存'
       resolveAlertConfigMsgKind = 'ok'
       await loadMetrics(true)
     } catch (err) {
-      resolveAlertConfigMsg = err instanceof Error ? err.message : 'Failed to save resolve alert config'
+      resolveAlertConfigMsg = err instanceof Error ? err.message : '保存解析告警配置失败'
       resolveAlertConfigMsgKind = 'bad'
     } finally {
       resolveSavingAlertConfig = false
@@ -266,11 +266,11 @@
         notify_timeout_s: saved.notify_timeout_s
       })
       resolveAlertConfigDirty = false
-      resolveAlertConfigMsg = 'Resolve alert config reset to defaults'
+      resolveAlertConfigMsg = '解析告警配置已重置为默认值'
       resolveAlertConfigMsgKind = 'ok'
       await loadMetrics(true)
     } catch (err) {
-      resolveAlertConfigMsg = err instanceof Error ? err.message : 'Failed to reset resolve alert config'
+      resolveAlertConfigMsg = err instanceof Error ? err.message : '重置解析告警配置失败'
       resolveAlertConfigMsgKind = 'bad'
     } finally {
       resolveSavingAlertConfig = false
@@ -289,10 +289,10 @@
       })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
-      if (Number(data?.ok || 0) !== 1) throw new Error('Failed to load event context')
+      if (Number(data?.ok || 0) !== 1) throw new Error('加载事件上下文失败')
       selectedEventContext = normalizeEventContextPayload(data, id)
     } catch (err) {
-      eventContextError = err instanceof Error ? err.message : 'Failed to load event context'
+      eventContextError = err instanceof Error ? err.message : '加载事件上下文失败'
       selectedEventContext = null
     } finally {
       eventContextLoading = false
@@ -313,7 +313,7 @@
         fetch('/api/metrics/citation_resolve_url?limit=60')
       ])
       if (verifyResult.status !== 'fulfilled') {
-        throw (verifyResult.reason instanceof Error ? verifyResult.reason : new Error('Failed to load verify metrics'))
+        throw (verifyResult.reason instanceof Error ? verifyResult.reason : new Error('加载验证指标失败'))
       }
       const verifyResp = verifyResult.value
       if (!verifyResp.ok) throw new Error(`HTTP ${verifyResp.status}`)
@@ -331,7 +331,7 @@
       }
       updatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     } catch (err) {
-      errorMsg = err instanceof Error ? err.message : 'Failed to load performance metrics'
+      errorMsg = err instanceof Error ? err.message : '加载性能指标失败'
       resolveMetrics = null
     } finally {
       loading = false
@@ -353,7 +353,7 @@
     }, POLL_MS)
   }
 
-  $: {
+  $effect(() => {
     if (visible && !wasVisible) {
       wasVisible = true
       void loadMetrics(false)
@@ -362,7 +362,7 @@
       wasVisible = false
       stopPolling()
     }
-  }
+  })
 
   onDestroy(() => {
     stopPolling()
@@ -375,46 +375,46 @@
     role="button"
     tabindex="0"
     aria-label="关闭性能观测"
-    on:click={() => (visible = false)}
-    on:keydown={(e) => {
+    onclick={() => (visible = false)}
+    onkeydown={(e) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') {
         e.preventDefault()
         visible = false
       }
     }}
   >
-    <div class="perf-modal" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
+    <div class="perf-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="perf-header">
         <div>
           <h2>核验性能观测</h2>
-          <div class="perf-sub">Verify + Resolve URL metrics with recent request details</div>
+          <div class="perf-sub">核验与 URL 解析指标，展示最近请求详情</div>
         </div>
         <div class="perf-actions">
-          <button class="btn-refresh" on:click={() => loadMetrics(true)} disabled={loading || refreshing}>
-            {#if refreshing}Refreshing...{:else}Refresh{/if}
+          <button class="btn-refresh" onclick={() => loadMetrics(true)} disabled={loading || refreshing}>
+            {#if refreshing}刷新中...{:else}刷新{/if}
           </button>
-          <button class="btn-close" on:click={() => (visible = false)} aria-label="关闭">×</button>
+          <button class="btn-close" onclick={() => (visible = false)} aria-label="关闭">×</button>
         </div>
       </div>
 
       <div class="perf-body">
         {#if loading && !metrics}
-          <div class="perf-empty">Loading...</div>
+          <div class="perf-empty">加载中...</div>
         {:else if errorMsg}
           <div class="perf-error">{errorMsg}</div>
         {:else if metrics}
-          <div class="perf-updated">Updated {updatedAt || "--:--:--"} | Auto poll {Math.floor(POLL_MS / 1000)}s</div>
+          <div class="perf-updated">更新时间 {updatedAt || "--:--:--"} | 自动轮询 {Math.floor(POLL_MS / 1000)} 秒</div>
           <div class={"perf-health " + (metrics.degraded ? 'warn' : 'ok')}>
-            <span class="health-tag">{metrics.degraded ? 'DEGRADED' : 'HEALTHY'}</span>
+            <span class="health-tag">{metrics.degraded ? '降级' : '正常'}</span>
             {#if metrics.degraded}
-              <span>Metrics endpoint is degraded; current data comes from fallback snapshot.</span>
+              <span>指标接口当前已降级，正在展示回退快照数据。</span>
             {:else}
-              <span>Metrics endpoint is healthy.</span>
+              <span>指标接口运行正常。</span>
             {/if}
           </div>
           {#if metrics.degraded && metrics.errors.length > 0}
             <div class="perf-degraded-errors">
-              <div class="title">Degraded Causes</div>
+              <div class="title">降级原因</div>
               <div class="error-list">
                 {#each metrics.errors as err}
                   <span class="error-item">{err}</span>
@@ -423,36 +423,36 @@
             </div>
           {/if}
           <div class={"perf-alert-summary " + (metrics.alerts.enabled ? metrics.alerts.severity : 'ok')}>
-            <span class="alerts-tag">Alerts</span>
+            <span class="alerts-tag">告警</span>
             {#if metrics.alerts.enabled}
               <span>
-                severity {metrics.alerts.severity.toUpperCase()} | triggered {metrics.alerts.triggered} | runs {metrics.alerts.runs}/{metrics.alerts.min_runs}
+                级别 {metrics.alerts.severity.toUpperCase()} | 触发 {metrics.alerts.triggered} | 运行次数 {metrics.alerts.runs}/{metrics.alerts.min_runs}
               </span>
             {:else}
-              <span>alerts disabled</span>
+              <span>告警未启用</span>
             {/if}
             {#if metrics.alerts.warmup && metrics.alerts.enabled}
-              <span class="alerts-warmup">warmup: alerts suppressed until enough runs</span>
+              <span class="alerts-warmup">预热中：达到足够运行次数前暂不触发告警</span>
             {/if}
           </div>
           <div class={"perf-notify-summary " + (metrics.alerts.notification.sent ? 'sent' : 'idle')}>
-            <span class="notify-tag">Notify</span>
+            <span class="notify-tag">通知</span>
             <span>
-              status {metrics.alerts.notification.status} | event {metrics.alerts.notification.event_type} | channels
+              状态 {metrics.alerts.notification.status} | 事件 {metrics.alerts.notification.event_type} | 通道
               {#if metrics.alerts.notification.channels.length > 0}
                 {metrics.alerts.notification.channels.join(',')}
               {:else}
-                none
+                无
               {/if}
             </span>
             {#if metrics.alerts.notification.suppressed > 0}
-              <span>suppressed {metrics.alerts.notification.suppressed}</span>
+              <span>已抑制 {metrics.alerts.notification.suppressed}</span>
             {/if}
             {#if metrics.alerts.notification.dedupe_hit}
-              <span>dedupe-hit</span>
+              <span>命中去重</span>
             {/if}
             {#if metrics.alerts.notification.event_id}
-              <span>event {metrics.alerts.notification.event_id.slice(0, 8)}</span>
+              <span>事件 {metrics.alerts.notification.event_id.slice(0, 8)}</span>
             {/if}
             {#if metrics.alerts.notification.signature}
               <span class="notify-signature">{metrics.alerts.notification.signature}</span>
@@ -464,7 +464,7 @@
           {#if metrics.alerts.notification.events_recent.length > 0}
             <div class="perf-alert-events">
               <div class="title">
-                Alert Events ({metrics.alerts.notification.events_recent.length}/{metrics.alerts.notification.events_total})
+                告警事件（{metrics.alerts.notification.events_recent.length}/{metrics.alerts.notification.events_total}）
               </div>
               <div class="alert-event-list">
                 {#each metrics.alerts.notification.events_recent.slice().reverse() as ev}
@@ -472,19 +472,19 @@
                     <span class="event-time">{formatTime(ev.ts)}</span>
                     <span class="event-type">{ev.event_type}</span>
                     <span class="event-status">{ev.status}</span>
-                    <span>sent {ev.sent ? 'yes' : 'no'}</span>
+                    <span>已发送 {ev.sent ? '是' : '否'}</span>
                     {#if ev.dedupe_hit}
-                      <span>dedupe</span>
+                      <span>去重</span>
                     {/if}
                     {#if ev.triggered_rules.length > 0}
-                      <span>rules {ev.triggered_rules.join(',')}</span>
+                      <span>规则 {ev.triggered_rules.join(',')}</span>
                     {/if}
                     {#if ev.channels.length > 0}
-                      <span>via {ev.channels.join(',')}</span>
+                      <span>通道 {ev.channels.join(',')}</span>
                     {/if}
                     {#if ev.id}
-                      <button class="event-link" on:click={() => loadEventContext(ev.id)} disabled={eventContextLoading}>
-                        {#if eventContextLoading && eventContextTargetId === ev.id}loading...{:else}locate{/if}
+                      <button class="event-link" onclick={() => loadEventContext(ev.id)} disabled={eventContextLoading}>
+                        {#if eventContextLoading && eventContextTargetId === ev.id}加载中...{:else}定位{/if}
                       </button>
                     {/if}
                   </div>
@@ -497,23 +497,23 @@
           {/if}
           {#if selectedEventContext}
             <div class="perf-event-context">
-              <div class="title">Event Context ({selectedEventContext.event_id.slice(0, 8)})</div>
+              <div class="title">事件上下文 ({selectedEventContext.event_id.slice(0, 8)})</div>
               <div class="line">
-                points {selectedEventContext.points.length}/{selectedEventContext.total} | before {selectedEventContext.before}
-                | after {selectedEventContext.after}
+                数据点 {selectedEventContext.points.length}/{selectedEventContext.total} | 之前 {selectedEventContext.before}
+                | 之后 {selectedEventContext.after}
               </div>
               {#if selectedEventContext.points.length > 0}
                 <div class="trend-list">
                   {#each selectedEventContext.points as point, idx (`ctx-${point.id}-${idx}`)}
                     <div class={"trend-item " + point.severity}>
                       <span class="time">{formatTime(point.ts)}</span>
-                      <span>p95 {point.p95_ms.toFixed(1)}ms</span>
-                      <span>err {formatRate(point.error_rate_per_run)}</span>
-                      <span>hit {formatRate(point.cache_delta_hit_rate)}</span>
-                      <span>alerts {point.triggered_alerts}</span>
-                      <span>notify {point.notification_status || 'none'}</span>
+                      <span>P95 {point.p95_ms.toFixed(1)}ms</span>
+                      <span>错误率 {formatRate(point.error_rate_per_run)}</span>
+                      <span>命中率 {formatRate(point.cache_delta_hit_rate)}</span>
+                      <span>告警 {point.triggered_alerts}</span>
+                      <span>通知 {point.notification_status || '无'}</span>
                       {#if point.degraded}
-                        <span>degraded</span>
+                        <span>降级</span>
                       {/if}
                     </div>
                   {/each}
@@ -522,15 +522,15 @@
             </div>
           {/if}
           <div class="perf-alert-config">
-            <div class="title">Alert Config</div>
+            <div class="title">告警配置</div>
             <div class="alert-admin-key">
-              <label for="alert-admin-key">admin key (optional)</label>
+              <label for="alert-admin-key">管理密钥（可选）</label>
               <input
                 id="alert-admin-key"
                 type="password"
                 bind:value={alertAdminKey}
-                placeholder="X-Admin-Key"
-                on:change={saveAdminKeyLocal}
+                placeholder="请输入 X-Admin-Key"
+                onchange={saveAdminKeyLocal}
               />
             </div>
             <div class="alert-config-grid">
@@ -538,22 +538,22 @@
                 <input
                   type="checkbox"
                   bind:checked={alertConfigForm.enabled}
-                  on:change={() => {
+                  onchange={() => {
                     alertConfigDirty = true
                     alertConfigMsg = ''
                     alertConfigMsgKind = ''
                   }}
                 />
-                <span>enabled</span>
+                <span>启用</span>
               </label>
               <label class="alert-field">
-                <span>min runs</span>
+                <span>最小运行次数</span>
                 <input
                   type="number"
                   min="1"
                   max="500"
                   bind:value={alertConfigForm.min_runs}
-                  on:input={() => {
+                  oninput={() => {
                     alertConfigDirty = true
                     alertConfigMsg = ''
                     alertConfigMsgKind = ''
@@ -561,13 +561,13 @@
                 />
               </label>
               <label class="alert-field">
-                <span>p95 ms >=</span>
+                <span>P95 毫秒 ≥</span>
                 <input
                   type="number"
                   min="100"
                   max="60000"
                   bind:value={alertConfigForm.p95_ms}
-                  on:input={() => {
+                  oninput={() => {
                     alertConfigDirty = true
                     alertConfigMsg = ''
                     alertConfigMsgKind = ''
@@ -575,14 +575,14 @@
                 />
               </label>
               <label class="alert-field">
-                <span>error rate >=</span>
+                <span>错误率 ≥</span>
                 <input
                   type="number"
                   min="0"
                   max="1"
                   step="0.01"
                   bind:value={alertConfigForm.error_rate_per_run}
-                  on:input={() => {
+                  oninput={() => {
                     alertConfigDirty = true
                     alertConfigMsg = ''
                     alertConfigMsgKind = ''
@@ -590,14 +590,14 @@
                 />
               </label>
               <label class="alert-field">
-                <span>hit rate &lt;=</span>
+                <span>命中率 ≤</span>
                 <input
                   type="number"
                   min="0"
                   max="1"
                   step="0.01"
                   bind:value={alertConfigForm.cache_delta_hit_rate}
-                  on:input={() => {
+                  oninput={() => {
                     alertConfigDirty = true
                     alertConfigMsg = ''
                     alertConfigMsgKind = ''
@@ -606,11 +606,11 @@
               </label>
             </div>
             <div class="alert-config-actions">
-              <button class="btn-alert-save" on:click={saveAlertConfig} disabled={savingAlertConfig || !alertConfigDirty}>
-                {#if savingAlertConfig}Saving...{:else}Save alert config{/if}
+              <button class="btn-alert-save" onclick={saveAlertConfig} disabled={savingAlertConfig || !alertConfigDirty}>
+                {#if savingAlertConfig}保存中...{:else}保存告警配置{/if}
               </button>
-              <button class="btn-alert-reset" on:click={resetAlertConfig} disabled={savingAlertConfig}>
-                Restore defaults
+              <button class="btn-alert-reset" onclick={resetAlertConfig} disabled={savingAlertConfig}>
+                恢复默认值
               </button>
               {#if alertConfigMsg}
                 <span class={"alert-config-msg " + (alertConfigMsgKind || 'ok')}>{alertConfigMsg}</span>
@@ -619,13 +619,13 @@
           </div>
           {#if metrics.alerts.enabled && metrics.alerts.triggered > 0}
             <div class="perf-alert-rules">
-              <div class="title">Triggered Rules</div>
+              <div class="title">已触发规则</div>
               <div class="alert-rule-list">
                 {#each metrics.alerts.rules.filter((row) => row.triggered) as row}
                   <div class={"alert-rule-item " + row.level}>
                     <span class="rule-id">{row.id}</span>
                     <span>{row.message}</span>
-                    <span>value {formatAlertMetric(row.value)} {row.op} {formatAlertMetric(row.threshold)}</span>
+                    <span>数值 {formatAlertMetric(row.value)} {row.op} {formatAlertMetric(row.threshold)}</span>
                   </div>
                 {/each}
               </div>
@@ -636,70 +636,70 @@
             <div class="perf-card">
               <div class="label">窗口</div>
               <div class="value">{metrics.observe.runs}/{metrics.observe.max_runs}</div>
-              <div class="meta">window {metrics.observe.window_s.toFixed(0)}s</div>
+              <div class="meta">窗口 {metrics.observe.window_s.toFixed(0)} 秒</div>
             </div>
             <div class="perf-card">
               <div class="label">延迟</div>
               <div class="value">{metrics.observe.elapsed_ms.p50.toFixed(1)} / {metrics.observe.elapsed_ms.p95.toFixed(1)} ms</div>
-              <div class="meta">max {metrics.observe.elapsed_ms.max.toFixed(1)} ms</div>
+              <div class="meta">最大 {metrics.observe.elapsed_ms.max.toFixed(1)} ms</div>
             </div>
             <div class="perf-card">
               <div class="label">负载</div>
-              <div class="value">{metrics.observe.items.avg.toFixed(1)} items/run</div>
-              <div class="meta">workers avg {metrics.observe.workers.avg.toFixed(1)} | max {metrics.observe.workers.max.toFixed(0)}</div>
+              <div class="value">{metrics.observe.items.avg.toFixed(1)} 项/次</div>
+              <div class="meta">平均线程 {metrics.observe.workers.avg.toFixed(1)} | 最大 {metrics.observe.workers.max.toFixed(0)}</div>
             </div>
             <div class="perf-card">
-              <div class="label">Errors/Hit rate</div>
+              <div class="label">错误率/命中率</div>
               <div class="value">{formatRate(metrics.observe.errors.rate_per_run)} / {formatRate(metrics.observe.cache_delta.hit_rate)}</div>
-              <div class="meta">errors {metrics.observe.errors.total} | hit_delta</div>
+              <div class="meta">错误数 {metrics.observe.errors.total} | 命中变化</div>
             </div>
           </div>
 
           <div class="perf-cache">
-            <div class="title">Cache snapshot</div>
+            <div class="title">缓存快照</div>
             <div class="line">
-              size {metrics.cache.size}/{metrics.cache.max_entries} | ttl {metrics.cache.ttl_s.toFixed(0)}s | hit {metrics.cache.hit}/
+              容量 {metrics.cache.size}/{metrics.cache.max_entries} | 过期 {metrics.cache.ttl_s.toFixed(0)} 秒 | 命中 {metrics.cache.hit}/
               {metrics.cache.hit + metrics.cache.miss} ({formatRate(cacheHitRate(metrics.cache))})
             </div>
             <div class="line">
-              set {metrics.cache.set} | evicted {metrics.cache.evicted} | expired {metrics.cache.expired}
+              写入 {metrics.cache.set} | 淘汰 {metrics.cache.evicted} | 过期移除 {metrics.cache.expired}
             </div>
           </div>
 
           {#if resolveMetrics}
             <div class="perf-resolve">
-              <div class="title">Resolve URL ({resolveMetrics.runs}/{resolveMetrics.max_runs})</div>
+              <div class="title">URL 解析 ({resolveMetrics.runs}/{resolveMetrics.max_runs})</div>
               <div class="resolve-cards">
                 <div class="resolve-card">
-                  <div class="label">成功率 / fallback</div>
+                  <div class="label">成功率 / 回退率</div>
                   <div class="value">{formatRate(resolveMetrics.success_rate)} / {formatRate(resolveMetrics.fallback_rate)}</div>
                   <div class="meta">
-                    req {resolveMetrics.totals.requests} · success {resolveMetrics.totals.success} · failed {resolveMetrics.totals.failed}
+                    请求 {resolveMetrics.totals.requests} · 成功 {resolveMetrics.totals.success} · 失败 {resolveMetrics.totals.failed}
                   </div>
                 </div>
                 <div class="resolve-card">
                   <div class="label">延迟</div>
                   <div class="value">{resolveMetrics.latency_ms.p50.toFixed(1)} / {resolveMetrics.latency_ms.p95.toFixed(1)} ms</div>
-                  <div class="meta">avg {resolveMetrics.latency_ms.avg.toFixed(1)} · max {resolveMetrics.latency_ms.max.toFixed(1)}</div>
+                  <div class="meta">平均 {resolveMetrics.latency_ms.avg.toFixed(1)} · 最大 {resolveMetrics.latency_ms.max.toFixed(1)}</div>
                 </div>
                 <div class="resolve-card">
                   <div class="label">置信度</div>
                   <div class="value">{formatRate(resolveMetrics.confidence.p50)} / {formatRate(resolveMetrics.confidence.p95)}</div>
                   <div class="meta">
-                    avg {formatRate(resolveMetrics.confidence.avg)} · low_conf {resolveMetrics.totals.low_confidence}
+                    平均 {formatRate(resolveMetrics.confidence.avg)} · 低置信 {resolveMetrics.totals.low_confidence}
                   </div>
                 </div>
                 <div class="resolve-card">
-                  <div class="label">metadata-only</div>
+                  <div class="label">仅元数据</div>
                   <div class="value">{resolveMetrics.totals.metadata_only}</div>
-                  <div class="meta">window {resolveMetrics.window_s.toFixed(0)}s</div>
+                  <div class="meta">窗口 {resolveMetrics.window_s.toFixed(0)} 秒</div>
                 </div>
               </div>
               <div class="resolve-map-row">
                 <div class="resolve-map">
-                  <span class="map-label">resolver</span>
+                  <span class="map-label">解析器</span>
                   {#if topCountEntries(resolveMetrics.resolvers, 6).length === 0}
-                    <span class="map-empty">none</span>
+                    <span class="map-empty">无</span>
                   {:else}
                     {#each topCountEntries(resolveMetrics.resolvers, 6) as row (`resolver-${row.key}`)}
                       <span class="map-chip">{row.key}:{row.count}</span>
@@ -707,9 +707,9 @@
                   {/if}
                 </div>
                 <div class="resolve-map">
-                  <span class="map-label">provider</span>
+                  <span class="map-label">提供方</span>
                   {#if topCountEntries(resolveMetrics.providers, 6).length === 0}
-                    <span class="map-empty">none</span>
+                    <span class="map-empty">无</span>
                   {:else}
                     {#each topCountEntries(resolveMetrics.providers, 6) as row (`provider-${row.key}`)}
                       <span class="map-chip">{row.key}:{row.count}</span>
@@ -718,38 +718,38 @@
                 </div>
               </div>
               <div class={"perf-alert-summary " + (resolveMetrics.alerts.enabled ? resolveMetrics.alerts.severity : 'ok')}>
-                <span class="alerts-tag">Resolve Alerts</span>
+                <span class="alerts-tag">解析告警</span>
                 {#if resolveMetrics.alerts.enabled}
                   <span>
-                    severity {resolveMetrics.alerts.severity.toUpperCase()} | triggered {resolveMetrics.alerts.triggered} |
-                    runs {resolveMetrics.alerts.runs}/{resolveMetrics.alerts.min_runs}
+                    级别 {resolveMetrics.alerts.severity.toUpperCase()} | 已触发 {resolveMetrics.alerts.triggered} |
+                    运行次数 {resolveMetrics.alerts.runs}/{resolveMetrics.alerts.min_runs}
                   </span>
                 {:else}
-                  <span>alerts disabled</span>
+                  <span>告警未启用</span>
                 {/if}
                 {#if resolveMetrics.alerts.warmup && resolveMetrics.alerts.enabled}
-                  <span class="alerts-warmup">warmup: alerts suppressed until enough runs</span>
+                  <span class="alerts-warmup">预热中：运行次数达到阈值前暂不触发告警</span>
                 {/if}
               </div>
               <div class={"perf-notify-summary " + (resolveMetrics.alerts.notification.sent ? 'sent' : 'idle')}>
-                <span class="notify-tag">Resolve Notify</span>
+                <span class="notify-tag">解析通知</span>
                 <span>
-                  status {resolveMetrics.alerts.notification.status} | event {resolveMetrics.alerts.notification.event_type} |
-                  channels
+                  状态 {resolveMetrics.alerts.notification.status} | 事件 {resolveMetrics.alerts.notification.event_type} |
+                  渠道
                   {#if resolveMetrics.alerts.notification.channels.length > 0}
                     {resolveMetrics.alerts.notification.channels.join(',')}
                   {:else}
-                    none
+                    无
                   {/if}
                 </span>
                 {#if resolveMetrics.alerts.notification.suppressed > 0}
-                  <span>suppressed {resolveMetrics.alerts.notification.suppressed}</span>
+                  <span>已抑制 {resolveMetrics.alerts.notification.suppressed}</span>
                 {/if}
                 {#if resolveMetrics.alerts.notification.dedupe_hit}
-                  <span>dedupe-hit</span>
+                  <span>命中去重</span>
                 {/if}
                 {#if resolveMetrics.alerts.notification.event_id}
-                  <span>event {resolveMetrics.alerts.notification.event_id.slice(0, 8)}</span>
+                  <span>事件 {resolveMetrics.alerts.notification.event_id.slice(0, 8)}</span>
                 {/if}
                 {#if resolveMetrics.alerts.notification.signature}
                   <span class="notify-signature">{resolveMetrics.alerts.notification.signature}</span>
@@ -759,41 +759,41 @@
                 {/if}
               </div>
               <div class="perf-alert-config">
-                <div class="title">Resolve Alert Config</div>
-                <div class="line">uses the same admin key above</div>
+                <div class="title">解析告警配置</div>
+                <div class="line">使用上方相同的管理密钥</div>
                 <div class="alert-config-grid resolve">
                   <label class="alert-field checkbox">
                     <input
                       type="checkbox"
                       bind:checked={resolveAlertConfigForm.enabled}
-                      on:change={() => {
+                      onchange={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
                       }}
                     />
-                    <span>enabled</span>
+                    <span>启用告警</span>
                   </label>
                   <label class="alert-field checkbox">
                     <input
                       type="checkbox"
                       bind:checked={resolveAlertConfigForm.notify_enabled}
-                      on:change={() => {
+                      onchange={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
                       }}
                     />
-                    <span>notify enabled</span>
+                    <span>启用通知</span>
                   </label>
                   <label class="alert-field">
-                    <span>min runs</span>
+                    <span>最少运行次数</span>
                     <input
                       type="number"
                       min="1"
                       max="500"
                       bind:value={resolveAlertConfigForm.min_runs}
-                      on:input={() => {
+                      oninput={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
@@ -801,14 +801,14 @@
                     />
                   </label>
                   <label class="alert-field">
-                    <span>failure rate &gt;=</span>
+                    <span>失败率 &gt;=</span>
                     <input
                       type="number"
                       min="0"
                       max="1"
                       step="0.01"
                       bind:value={resolveAlertConfigForm.failure_rate}
-                      on:input={() => {
+                      oninput={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
@@ -816,14 +816,14 @@
                     />
                   </label>
                   <label class="alert-field">
-                    <span>fallback rate &gt;=</span>
+                    <span>回退率 &gt;=</span>
                     <input
                       type="number"
                       min="0"
                       max="1"
                       step="0.01"
                       bind:value={resolveAlertConfigForm.fallback_rate}
-                      on:input={() => {
+                      oninput={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
@@ -831,13 +831,13 @@
                     />
                   </label>
                   <label class="alert-field">
-                    <span>p95 ms &gt;=</span>
+                    <span>P95 延迟毫秒 &gt;=</span>
                     <input
                       type="number"
                       min="100"
                       max="60000"
                       bind:value={resolveAlertConfigForm.p95_ms}
-                      on:input={() => {
+                      oninput={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
@@ -845,14 +845,14 @@
                     />
                   </label>
                   <label class="alert-field">
-                    <span>low conf rate &gt;=</span>
+                    <span>低置信率 &gt;=</span>
                     <input
                       type="number"
                       min="0"
                       max="1"
                       step="0.01"
                       bind:value={resolveAlertConfigForm.low_confidence_rate}
-                      on:input={() => {
+                      oninput={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
@@ -860,13 +860,13 @@
                     />
                   </label>
                   <label class="alert-field">
-                    <span>notify cooldown s</span>
+                    <span>通知冷却秒数</span>
                     <input
                       type="number"
                       min="10"
                       max="86400"
                       bind:value={resolveAlertConfigForm.notify_cooldown_s}
-                      on:input={() => {
+                      oninput={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
@@ -874,14 +874,14 @@
                     />
                   </label>
                   <label class="alert-field">
-                    <span>notify timeout s</span>
+                    <span>通知超时秒数</span>
                     <input
                       type="number"
                       min="1"
                       max="30"
                       step="0.5"
                       bind:value={resolveAlertConfigForm.notify_timeout_s}
-                      on:input={() => {
+                      oninput={() => {
                         resolveAlertConfigDirty = true
                         resolveAlertConfigMsg = ''
                         resolveAlertConfigMsgKind = ''
@@ -892,13 +892,13 @@
                 <div class="alert-config-actions">
                   <button
                     class="btn-alert-save"
-                    on:click={saveResolveAlertConfig}
+                    onclick={saveResolveAlertConfig}
                     disabled={resolveSavingAlertConfig || !resolveAlertConfigDirty}
                   >
-                    {#if resolveSavingAlertConfig}Saving...{:else}Save resolve config{/if}
+                    {#if resolveSavingAlertConfig}保存中...{:else}保存解析配置{/if}
                   </button>
-                  <button class="btn-alert-reset" on:click={resetResolveAlertConfig} disabled={resolveSavingAlertConfig}>
-                    Restore defaults
+                  <button class="btn-alert-reset" onclick={resetResolveAlertConfig} disabled={resolveSavingAlertConfig}>
+                    恢复默认值
                   </button>
                   {#if resolveAlertConfigMsg}
                     <span class={"alert-config-msg " + (resolveAlertConfigMsgKind || 'ok')}>{resolveAlertConfigMsg}</span>
@@ -908,7 +908,7 @@
               {#if resolveMetrics.alerts.notification.events_recent.length > 0}
                 <div class="perf-alert-events">
                   <div class="title">
-                    Resolve Alert Events ({resolveMetrics.alerts.notification.events_recent.length}/{resolveMetrics.alerts.notification.events_total})
+                    解析告警事件 ({resolveMetrics.alerts.notification.events_recent.length}/{resolveMetrics.alerts.notification.events_total})
                   </div>
                   <div class="alert-event-list">
                     {#each resolveMetrics.alerts.notification.events_recent.slice().reverse() as ev}
@@ -916,15 +916,15 @@
                         <span class="event-time">{formatTime(ev.ts)}</span>
                         <span class="event-type">{ev.event_type}</span>
                         <span class="event-status">{ev.status}</span>
-                        <span>sent {ev.sent ? 'yes' : 'no'}</span>
+                        <span>已发送 {ev.sent ? '是' : '否'}</span>
                         {#if ev.dedupe_hit}
-                          <span>dedupe</span>
+                          <span>去重</span>
                         {/if}
                         {#if ev.triggered_rules.length > 0}
-                          <span>rules {ev.triggered_rules.join(',')}</span>
+                          <span>规则 {ev.triggered_rules.join(',')}</span>
                         {/if}
                         {#if ev.channels.length > 0}
-                          <span>via {ev.channels.join(',')}</span>
+                          <span>通道 {ev.channels.join(',')}</span>
                         {/if}
                       </div>
                     {/each}
@@ -933,20 +933,20 @@
               {/if}
               {#if resolveMetrics.alerts.enabled && resolveMetrics.alerts.triggered > 0}
                 <div class="perf-alert-rules">
-                  <div class="title">Resolve Triggered Rules</div>
+                  <div class="title">已触发解析规则</div>
                   <div class="alert-rule-list">
                     {#each resolveMetrics.alerts.rules.filter((row) => row.triggered) as row}
                       <div class={"alert-rule-item " + row.level}>
                         <span class="rule-id">{row.id}</span>
                         <span>{row.message}</span>
-                        <span>value {formatAlertMetric(row.value)} {row.op} {formatAlertMetric(row.threshold)}</span>
+                        <span>当前值 {formatAlertMetric(row.value)} {row.op} 阈值 {formatAlertMetric(row.threshold)}</span>
                       </div>
                     {/each}
                   </div>
                 </div>
               {/if}
               <div class="resolve-recent">
-                <div class="title">Recent Resolve Runs ({resolveMetrics.recent.length})</div>
+                <div class="title">最近解析记录 ({resolveMetrics.recent.length})</div>
                 {#if resolveMetrics.recent.length === 0}
                   <div class="perf-empty">暂无数据</div>
                 {:else}
@@ -958,8 +958,8 @@
                         <span>{row.elapsed_ms.toFixed(1)}ms</span>
                         <span>{row.resolver || '-'}</span>
                         <span>{row.provider || '-'}</span>
-                        <span>conf {formatRate(row.confidence)}</span>
-                        <span>warn {row.warning_count}</span>
+                        <span>置信度 {formatRate(row.confidence)}</span>
+                        <span>警告 {row.warning_count}</span>
                         {#if row.error}
                           <span class="resolve-err">{row.error}</span>
                         {/if}
@@ -972,7 +972,7 @@
           {/if}
 
           <div class="perf-recent">
-            <div class="title">Recent Runs ({metrics.observe.recent.length})</div>
+            <div class="title">最近运行记录 ({metrics.observe.recent.length})</div>
             {#if metrics.observe.recent.length === 0}
               <div class="perf-empty">暂无数据</div>
             {:else}
@@ -981,10 +981,10 @@
                   <div class="recent-item">
                     <span class="time">{formatTime(run.ts)}</span>
                     <span>{run.elapsed_ms.toFixed(1)}ms</span>
-                    <span>items {run.item_count}</span>
-                    <span>w{run.worker_count}</span>
-                    <span>err {run.error_count}</span>
-                    <span>hit_delta {formatRate(run.cache_delta.hit_rate)}</span>
+                    <span>条目 {run.item_count}</span>
+                    <span>线程 {run.worker_count}</span>
+                    <span>错误 {run.error_count}</span>
+                    <span>命中变化 {formatRate(run.cache_delta.hit_rate)}</span>
                   </div>
                 {/each}
               </div>
@@ -992,9 +992,9 @@
           </div>
 
           <div class="perf-trend">
-            <div class="title">Trend ({metrics.trend.points.length}/{metrics.trend.total})</div>
+            <div class="title">趋势 ({metrics.trend.points.length}/{metrics.trend.total})</div>
             {#if !metrics.trend.enabled}
-              <div class="line">trend storage disabled</div>
+              <div class="line">趋势存储未启用</div>
             {:else if metrics.trend.points.length === 0}
               <div class="perf-empty">暂无趋势数据</div>
             {:else}
@@ -1002,13 +1002,13 @@
                 {#each metrics.trend.points.slice().reverse() as point, idx (`${point.id}-${idx}`)}
                   <div class={"trend-item " + point.severity}>
                     <span class="time">{formatTime(point.ts)}</span>
-                    <span>p95 {point.p95_ms.toFixed(1)}ms</span>
-                    <span>err {formatRate(point.error_rate_per_run)}</span>
-                    <span>hit {formatRate(point.cache_delta_hit_rate)}</span>
-                    <span>alerts {point.triggered_alerts}</span>
-                    <span>notify {point.notification_status || 'none'}</span>
+                    <span>P95 {point.p95_ms.toFixed(1)}ms</span>
+                    <span>错误率 {formatRate(point.error_rate_per_run)}</span>
+                    <span>命中率 {formatRate(point.cache_delta_hit_rate)}</span>
+                    <span>告警 {point.triggered_alerts}</span>
+                    <span>通知 {point.notification_status || '无'}</span>
                     {#if point.degraded}
-                      <span>degraded</span>
+                      <span>降级</span>
                     {/if}
                   </div>
                 {/each}

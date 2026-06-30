@@ -5,7 +5,6 @@
     display: grid;
     place-items: center;
     z-index: 1100;
-    backdrop-filter: blur(3px);
   }
 
   .perf-modal {
@@ -16,13 +15,13 @@
     background: linear-gradient(180deg, #f7fafc 0%, #eef4fb 100%);
     border: 1px solid rgba(30, 64, 175, 0.18);
     border-radius: 16px;
-    box-shadow: 0 30px 80px rgba(15, 23, 42, 0.3);
+    box-shadow: 0 30px 80px rgba(250, 249, 247, 0.3);
     overflow: hidden;
   }
 
   .perf-header {
     padding: 16px 18px;
-    border-bottom: 1px solid rgba(59, 130, 246, 0.22);
+    border-bottom: 1px solid rgba(217, 119, 6, 0.22);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -70,8 +69,8 @@
     border: none;
     border-radius: 999px;
     cursor: pointer;
-    background: rgba(30, 41, 59, 0.12);
-    color: #0f172a;
+    background: rgba(245, 243, 240, 0.12);
+    color: #f5f3f0;
     font-size: 18px;
     line-height: 1;
   }
@@ -117,7 +116,7 @@
 
   .perf-health.ok .health-tag {
     border-color: rgba(22, 163, 74, 0.34);
-    background: rgba(34, 197, 94, 0.14);
+    background: rgba(22, 163, 74, 0.14);
     color: #14532d;
   }
 
@@ -232,7 +231,7 @@
 
   .perf-alert-events {
     border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.34);
+    border: 1px solid rgba(231, 229, 228, 1);
     background: rgba(248, 250, 252, 0.82);
     padding: 9px 10px;
     display: grid;
@@ -281,7 +280,7 @@
 
   .event-type {
     border-radius: 999px;
-    border: 1px solid rgba(148, 163, 184, 0.34);
+    border: 1px solid rgba(231, 229, 228, 1);
     background: rgba(255, 255, 255, 0.82);
     padding: 1px 8px;
     font-weight: 700;
@@ -314,7 +313,7 @@
 
   .perf-alert-config {
     border-radius: 10px;
-    border: 1px solid rgba(59, 130, 246, 0.25);
+    border: 1px solid rgba(217, 119, 6, 0.25);
     background: rgba(239, 246, 255, 0.7);
     padding: 10px;
     display: grid;
@@ -353,7 +352,7 @@
     border-radius: 8px;
     padding: 5px 7px;
     font-size: 12px;
-    color: #0f172a;
+    color: #f5f3f0;
     background: rgba(255, 255, 255, 0.9);
   }
 
@@ -407,7 +406,7 @@
 
   .perf-alert-rules {
     border-radius: 10px;
-    border: 1px solid rgba(248, 113, 113, 0.36);
+    border: 1px solid rgba(220, 38, 38, 0.36);
     background: rgba(255, 241, 242, 0.8);
     padding: 9px 10px;
     display: grid;
@@ -444,7 +443,7 @@
 
   .rule-id {
     border-radius: 999px;
-    border: 1px solid rgba(148, 163, 184, 0.38);
+    border: 1px solid rgba(231, 229, 228, 1);
     background: rgba(255, 255, 255, 0.82);
     color: #334155;
     padding: 1px 8px;
@@ -484,7 +483,7 @@
 
   .perf-card .label {
     font-size: 11px;
-    color: rgba(51, 65, 85, 0.72);
+    color: rgba(245, 243, 240, 0.72);
     text-transform: uppercase;
     letter-spacing: 0.35px;
   }
@@ -492,12 +491,12 @@
   .perf-card .value {
     font-size: 15px;
     font-weight: 700;
-    color: #0f172a;
+    color: #f5f3f0;
   }
 
   .perf-card .meta {
     font-size: 11px;
-    color: rgba(30, 41, 59, 0.7);
+    color: rgba(245, 243, 240, 0.7);
   }
 
   .perf-cache,
@@ -530,7 +529,7 @@
 
   .resolve-card .label {
     font-size: 11px;
-    color: rgba(51, 65, 85, 0.72);
+    color: rgba(245, 243, 240, 0.72);
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
@@ -538,12 +537,12 @@
   .resolve-card .value {
     font-size: 14px;
     font-weight: 700;
-    color: #0f172a;
+    color: #f5f3f0;
   }
 
   .resolve-card .meta {
     font-size: 11px;
-    color: rgba(30, 41, 59, 0.74);
+    color: rgba(245, 243, 240, 0.74);
   }
 
   .resolve-map-row {
@@ -575,7 +574,7 @@
 
   .resolve-map .map-chip {
     border-radius: 999px;
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    border: 1px solid rgba(217, 119, 6, 0.3);
     background: rgba(239, 246, 255, 0.9);
     color: #1d4ed8;
     font-size: 11px;
@@ -584,7 +583,7 @@
 
   .resolve-map .map-empty {
     font-size: 11px;
-    color: #64748b;
+    color: #a8a29e;
   }
 
   .resolve-recent {
@@ -606,7 +605,7 @@
     align-items: center;
     font-size: 12px;
     color: #1f2937;
-    border: 1px solid rgba(148, 163, 184, 0.24);
+    border: 1px solid rgba(231, 229, 228, 1);
     border-radius: 8px;
     padding: 6px 8px;
     background: rgba(248, 250, 252, 0.86);
@@ -717,7 +716,7 @@
     align-items: center;
     font-size: 12px;
     color: #1f2937;
-    border: 1px solid rgba(148, 163, 184, 0.24);
+    border: 1px solid rgba(231, 229, 228, 1);
     border-radius: 8px;
     padding: 6px 8px;
     background: rgba(248, 250, 252, 0.86);

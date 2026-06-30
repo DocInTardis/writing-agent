@@ -5,6 +5,7 @@
   import DiagramCanvas from './lib/components/DiagramCanvas.svelte'
   import Toast from './lib/components/Toast.svelte'
   import Settings from './lib/components/Settings.svelte'
+  import LLMConfig from './lib/components/LLMConfig.svelte'
   import Icon from './lib/components/Icon.svelte'
   import DocList from './lib/components/DocList.svelte'
   import LoadingSkeleton from './lib/components/LoadingSkeleton.svelte'
@@ -46,37 +47,37 @@
   } from './lib/stores'
   import type { EditorCommand } from './lib/types'
 
-  let aborter: AbortController | null = null
-  let writeBuffer = ''
-  let writeTimer: ReturnType<typeof setTimeout> | null = null
-  let docIrRefreshTimer: ReturnType<typeof setTimeout> | null = null
-  let streamingLive = false
-  let typingActive = false
-  let streamQueue: Array<{ section: string; raw: boolean; text: string }> = []
-  let streamTimer: ReturnType<typeof setTimeout> | null = null
-  let streamToken = 0
-  let streamPendingChars = 0
-  let streamFastDrain = false
-  let streamTypingActive = false
-  let pendingFinalText: string | null = null
-  let pendingFinalDocIr: Record<string, unknown> | null = null
-  let genStartTs = 0
-  let lastEventName = ''
-  let lastProgressMsg = ''
-  let sawFinal = false
-  let sawError = false
-  let sawSectionDelta = false
-  let lastEventAt = 0
-  let lastEventGap = 0
-  let maxEventGap = 0
-  let baseIdleMs = 90000
-  let stallTimer: ReturnType<typeof setInterval> | null = null
-  let fallbackTriggered = false
-  let progress = { current: 0, total: 0, percent: 0, etaS: 0, section: "" }
-  let progressStart = 0
-  let progressEvents: number[] = []
-  let sectionFailures: { section: string; reason: string }[] = []
-  let sectionOriginalitySummary: OriginalitySummary | null = null
+  let aborter = $state<AbortController | null>(null)
+  let writeBuffer = $state('')
+  let writeTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let docIrRefreshTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let streamingLive = $state(false)
+  let typingActive = $state(false)
+  let streamQueue = $state<Array<{ section: string; raw: boolean; text: string }>>([])
+  let streamTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let streamToken = $state(0)
+  let streamPendingChars = $state(0)
+  let streamFastDrain = $state(false)
+  let streamTypingActive = $state(false)
+  let pendingFinalText = $state<string | null>(null)
+  let pendingFinalDocIr = $state<Record<string, unknown> | null>(null)
+  let genStartTs = $state(0)
+  let lastEventName = $state('')
+  let lastProgressMsg = $state('')
+  let sawFinal = $state(false)
+  let sawError = $state(false)
+  let sawSectionDelta = $state(false)
+  let lastEventAt = $state(0)
+  let lastEventGap = $state(0)
+  let maxEventGap = $state(0)
+  let baseIdleMs = $state(90000)
+  let stallTimer = $state<ReturnType<typeof setInterval> | null>(null)
+  let fallbackTriggered = $state(false)
+  let progress = $state({ current: 0, total: 0, percent: 0, etaS: 0, section: "" })
+  let progressStart = $state(0)
+  let progressEvents = $state<number[]>([])
+  let sectionFailures = $state<{ section: string; reason: string }[]>([])
+  let sectionOriginalitySummary = $state<OriginalitySummary | null>(null)
   type PendingGenerateConfirmation = {
     requestPayload: Record<string, unknown>
     note: string
@@ -85,19 +86,19 @@
     planSource: string
     operationsCount: number
   }
-  let pendingGenerateConfirmation: PendingGenerateConfirmation | null = null
-  let confirmDialogBusy = false
-  let planConfirmDecision: 'approved' | 'interrupted' = 'approved'
-  let planConfirmScore = 5
-  let planConfirmNote = ''
-  let leftWidth = 46
-  let resizing = false
+  let pendingGenerateConfirmation = $state<PendingGenerateConfirmation | null>(null)
+  let confirmDialogBusy = $state(false)
+  let planConfirmDecision = $state<'approved' | 'interrupted'>('approved')
+  let planConfirmScore = $state(5)
+  let planConfirmNote = $state('')
+  let leftWidth = $state(46)
+  let resizing = $state(false)
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
-  let partialSaveTimer: ReturnType<typeof setTimeout> | null = null
-  let partialSaveInFlight = false
-  let partialSavedSnapshot = ''
-  let lastSavedText = ''
-  let lastSavedDocIr: Record<string, unknown> | null = null
+  let partialSaveTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let partialSaveInFlight = $state(false)
+  let partialSavedSnapshot = $state('')
+  let lastSavedText = $state('')
+  let lastSavedDocIr = $state<Record<string, unknown> | null>(null)
   type ResumeState = {
     status: 'running' | 'interrupted'
     updated_at: number
@@ -162,23 +163,23 @@
     size_label: string
     action: 'editor' | 'citation' | 'metrics' | 'version' | 'assistant' | 'upload'
   }
-  let resumeState: ResumeState | null = null
-  let lastGraphMeta: GraphMeta | null = null
-  let surfaceTab: WorkbenchSurface = 'editor'
-  let workspaceMode: WorkspaceMode = 'editor'
-  let libraryViewMode: 'grid' | 'masonry' | 'list' = 'grid'
-  let librarySearch = ''
-  let librarySelectAll = false
-  let selectedLibraryCardId = ''
-  let filteredLibraryCards: LibraryCard[] = []
-  let topStatusLine = '未加载'
-  let hideLibraryInfo = false
-  let infoDrawerOpen = false
-  let showDocList = false
-  let showCitations = false
-  let showPerformanceMetrics = false
-  let showVersions = false
-  let showFeedbackPanel = false
+  let resumeState = $state<ResumeState | null>(null)
+  let lastGraphMeta = $state<GraphMeta | null>(null)
+  let surfaceTab = $state<WorkbenchSurface>('editor')
+  let workspaceMode = $state<WorkspaceMode>('editor')
+  let libraryViewMode = $state<'grid' | 'masonry' | 'list'>('grid')
+  let librarySearch = $state('')
+  let librarySelectAll = $state(false)
+  let selectedLibraryCardId = $state('')
+  let filteredLibraryCards = $state<LibraryCard[]>([])
+
+  let hideLibraryInfo = $state(false)
+  let infoDrawerOpen = $state(false)
+  let showDocList = $state(false)
+  let showCitations = $state(false)
+  let showPerformanceMetrics = $state(false)
+  let showVersions = $state(false)
+  let showFeedbackPanel = $state(false)
   type FeedbackItem = {
     id: string
     rating: number
@@ -187,22 +188,22 @@
     tags?: string[]
     created_at: number
   }
-  let feedbackItems: FeedbackItem[] = []
-  let satisfactionRating = 0
-  let satisfactionStage = 'general'
-  let satisfactionNote = ''
-  let satisfactionSaving = false
-  let lastLowFeedbackRecorded = 0
-  let showPlagiarismPanel = false
-  let plagiarismLoading = false
-  let plagiarismLibraryLoading = false
-  let plagiarismThreshold = 0.35
-  let plagiarismReferenceDocIds = ''
-  let plagiarismReferenceText = ''
-  let showAiRatePanel = false
-  let aiRateLoading = false
-  let aiRateThreshold = 0.65
-  let aiRateResult: Record<string, any> | null = null
+  let feedbackItems = $state<FeedbackItem[]>([])
+  let satisfactionRating = $state(0)
+  let satisfactionStage = $state('general')
+  let satisfactionNote = $state('')
+  let satisfactionSaving = $state(false)
+  let lastLowFeedbackRecorded = $state(0)
+  let showPlagiarismPanel = $state(false)
+  let plagiarismLoading = $state(false)
+  let plagiarismLibraryLoading = $state(false)
+  let plagiarismThreshold = $state(0.35)
+  let plagiarismReferenceDocIds = $state('')
+  let plagiarismReferenceText = $state('')
+  let showAiRatePanel = $state(false)
+  let aiRateLoading = $state(false)
+  let aiRateThreshold = $state(0.65)
+  let aiRateResult = $state<Record<string, any> | null>(null)
   type PlagiarismEvidence = {
     source_start: number
     reference_start: number
@@ -218,50 +219,70 @@
     metrics: Record<string, any>
     evidence: PlagiarismEvidence[]
   }
-  let plagiarismResults: PlagiarismResult[] = []
-  let plagiarismFlaggedCount = 0
-  let plagiarismMaxScore = 0
-  let plagiarismLatestReport: Record<string, any> | null = null
-  let versionLoading = false
-  let versionList: Array<any> = []
-  let versionGroups: Array<any> = []
-  let versionDiff = ''
-  let versionDiffFrom = ''
-  let versionDiffTo = ''
-  let versionTree = ''
-  let versionMessage = ''
-  let versionError = ''
-  let assistantOpen = false
-  let showAdvancedToolbar = false
-  let canvasOpen = false
-  let selectedBlockId = ''
-  let selectedBlockIds: string[] = []
-  let selectedBlocks: Array<{
+  let plagiarismResults = $state<PlagiarismResult[]>([])
+  let plagiarismFlaggedCount = $state(0)
+  let plagiarismMaxScore = $state(0)
+  let plagiarismLatestReport = $state<Record<string, any> | null>(null)
+  type QualityAdviceAction =
+    | 'open-ai-panel'
+    | 'open-plagiarism-panel'
+    | 'run-ai-check'
+    | 'run-plagiarism-check'
+    | 'revise-first-risk'
+  type QualityAdviceItem = {
+    id: string
+    tone: 'good' | 'warn' | 'alert'
+    title: string
+    detail: string
+    action?: QualityAdviceAction
+    actionLabel?: string
+  }
+  type QualityOverview = {
+    tone: 'good' | 'warn' | 'alert'
+    label: string
+    note: string
+  }
+
+  let versionLoading = $state(false)
+  let versionList = $state<Array<any>>([])
+  let versionGroups = $state<Array<any>>([])
+  let versionDiff = $state('')
+  let versionDiffFrom = $state('')
+  let versionDiffTo = $state('')
+  let versionTree = $state('')
+  let versionMessage = $state('')
+  let versionError = $state('')
+  let assistantOpen = $state(false)
+  let showAdvancedToolbar = $state(false)
+  let canvasOpen = $state(false)
+  let selectedBlockId = $state('')
+  let selectedBlockIds = $state<string[]>([])
+  let selectedBlocks = $state<Array<{
     id: string
     text: string
     style: Record<string, string>
     kind?: 'block' | 'section' | 'title'
     sectionId?: string
     sectionTitle?: string
-  }> = []
-  let selectedBlockText = ''
-  let blockStyleFontSize = ''
-  let blockStyleLineHeight = ''
-  let blockStyleFontFamily = ''
-  let blockStyleColor = ''
-  let blockStyleBackground = ''
-  let blockStyleAlign = ''
-  let blockStyleFontWeight = ''
-  let blockStyleFontStyle = ''
-  let blockEditCmd = ''
-  let inlinePanelTab: 'rewrite' | 'style' | 'assistant' = 'rewrite'
-  let blockPreviewBusy = false
-  let blockEditError = ''
-  let blockOriginalText = ''
-  let blockCandidates: Array<any> = []
-  let activeCandidateIndex = 0
-  let activeCandidate: any = null
-  let blockDialogInput = ''
+  }>>([])
+  let selectedBlockText = $state('')
+  let blockStyleFontSize = $state('')
+  let blockStyleLineHeight = $state('')
+  let blockStyleFontFamily = $state('')
+  let blockStyleColor = $state('')
+  let blockStyleBackground = $state('')
+  let blockStyleAlign = $state('')
+  let blockStyleFontWeight = $state('')
+  let blockStyleFontStyle = $state('')
+  let blockEditCmd = $state('')
+  let inlinePanelTab = $state<'rewrite' | 'style' | 'assistant'>('rewrite')
+  let blockPreviewBusy = $state(false)
+  let blockEditError = $state('')
+  let blockOriginalText = $state('')
+  let blockCandidates = $state<Array<any>>([])
+  let activeCandidateIndex = $state(0)
+
+  let blockDialogInput = $state('')
   type InlinePanelTab = 'rewrite' | 'style' | 'assistant'
   type BlockSession = {
     tab: InlinePanelTab
@@ -281,23 +302,23 @@
     dialogInput: string
   }
   const blockSessionStore = new Map<string, BlockSession>()
-  let activeBlockSessionKey = ''
-  let inlineBarVisible = false
-  let inlineBarLeft = 0
-  let inlineBarTop = 0
-  let inlinePopoverOpen = false
-  let inlinePopoverPlacement: 'up' | 'down' = 'down'
-  let inlinePopoverLeft = 0
-  let inlinePopoverTop = 0
-  let activeStreamingSections: string[] = []
-  let completedStreamingSections: string[] = []
-  let inlineEditLocked = false
-  let inlineEditLockReason = ''
-  let uploadImageInput: HTMLInputElement | null = null
-  let libraryUploadInput: HTMLInputElement | null = null
-  let pendingInlineImageTargets: string[] = []
-  let renderActivityAt = Date.now()
-  let editorToolbarState = {
+  let activeBlockSessionKey = $state('')
+  let inlineBarVisible = $state(false)
+  let inlineBarLeft = $state(0)
+  let inlineBarTop = $state(0)
+  let inlinePopoverOpen = $state(false)
+  let inlinePopoverPlacement = $state<'up' | 'down'>('down')
+  let inlinePopoverLeft = $state(0)
+  let inlinePopoverTop = $state(0)
+  let activeStreamingSections = $state<string[]>([])
+  let completedStreamingSections = $state<string[]>([])
+  let inlineEditLocked = $state(false)
+  let inlineEditLockReason = $state('')
+  let uploadImageInput = $state<HTMLInputElement | null>(null)
+  let libraryUploadInput = $state<HTMLInputElement | null>(null)
+  let pendingInlineImageTargets = $state<string[]>([])
+  let renderActivityAt = $state(Date.now())
+  let editorToolbarState = $state({
     focused: false,
     readonly: false,
     bold: false,
@@ -309,13 +330,19 @@
     canCopy: false,
     canCut: false,
     canPaste: false
-  }
+  })
   type QueuedInstruction = { id: number; text: string; createdAt: number }
-  let queuedInstructionSeed = 0
-  let queuedGlobalInstructions: QueuedInstruction[] = []
-  let drainingQueuedGlobalInstructions = false
-  let rustEngineReadyLocal = false
-  let wasmInitPromise: Promise<boolean> | null = null
+  let queuedInstructionSeed = $state(0)
+  let queuedGlobalInstructions = $state<QueuedInstruction[]>([])
+  let drainingQueuedGlobalInstructions = $state(false)
+  let recentQueuedBadgeCount = $state(0)
+  let recentQueuedBadgeTimer = $state<ReturnType<typeof setTimeout> | null>(null)
+  let lastGenerateStartedAt = $state(0)
+  let assistantBadgeCount = $derived(
+    queuedGlobalInstructions.length || recentQueuedBadgeCount || ($generating || typingActive || streamTypingActive ? 1 : 0)
+  )
+  let rustEngineReadyLocal = $state(false)
+  let wasmInitPromise = $state<Promise<boolean> | null>(null)
   if (typeof window !== 'undefined') {
     document.body.setAttribute('data-engine', 'rust')
   }
@@ -374,7 +401,7 @@
   }
 
   function isGenerationOrRenderBusy() {
-    return $generating || typingActive || streamTypingActive
+    return $generating || typingActive || streamTypingActive || Date.now() - lastGenerateStartedAt < 1200
   }
 
   function hasMeaningfulDocContent(text: string) {
@@ -581,7 +608,7 @@
     const src = String(text || '')
     const m = src.match(/^\s*#\s+(.+)$/m)
     if (m && m[1]) return m[1].trim()
-    return 'Untitled Document'
+    return '未命名文档'
   }
 
   function estimateKb(text: string) {
@@ -614,7 +641,7 @@
     parts.push(`${Math.max(0, Number($wordCount || 0))} 词`)
     if (lastGraphMeta?.route_id || lastGraphMeta?.route_entry || lastGraphMeta?.engine) {
       parts.push(
-        `路由 ${lastGraphMeta?.route_id || 'default'}/${lastGraphMeta?.route_entry || 'planner'} · ${lastGraphMeta?.engine || 'legacy'}`
+        `路由 ${lastGraphMeta?.route_id || '默认'}/${lastGraphMeta?.route_entry || 'planner'} · ${lastGraphMeta?.engine || 'legacy'}`
       )
     }
     if (feedbackItems.length > 0) {
@@ -740,16 +767,18 @@
     return haystack.includes(q)
   }
 
-  $: {
+  $effect(() => {
     const cards = buildLibraryCards()
     const query = librarySearch.trim()
     filteredLibraryCards = cards.filter((card) => cardMatchesSearch(card, query))
     if (!librarySelectAll && selectedLibraryCardId && !filteredLibraryCards.some((card) => card.id === selectedLibraryCardId)) {
       selectedLibraryCardId = ''
     }
-  }
+  })
 
-  $: topStatusLine = buildTopStatusLine()
+  let topStatusLine = $derived(buildTopStatusLine())
+  let qualityOverview = $derived(buildQualityOverview())
+  let qualityAdviceItems = $derived(buildQualityAdviceItems())
 
   function selectedSectionKeys() {
     const out: string[] = []
@@ -808,6 +837,12 @@
       createdAt: Date.now()
     }
     queuedGlobalInstructions = [...queuedGlobalInstructions, next].slice(-20)
+    recentQueuedBadgeCount = Math.max(1, queuedGlobalInstructions.length)
+    if (recentQueuedBadgeTimer) clearTimeout(recentQueuedBadgeTimer)
+    recentQueuedBadgeTimer = setTimeout(() => {
+      if (!queuedGlobalInstructions.length) recentQueuedBadgeCount = 0
+      recentQueuedBadgeTimer = null
+    }, 3000)
     appendChat('system', `当前正在生成，已加入待执行队列（${queuedGlobalInstructions.length}）`)
     pushToast(`已排队（${queuedGlobalInstructions.length}）`, 'info')
     queueMicrotask(() => {
@@ -1010,7 +1045,7 @@
     kickStreamTyping()
   }
 
-  let typingToken = 0
+  let typingToken = $state(0)
   async function typewriterSetText(
     text: string,
     opts?: { chunk?: number; delayMs?: number; finalDocIr?: Record<string, unknown> | null }
@@ -1290,8 +1325,13 @@
     }
   }
 
-  function handleBlockEdit(event: CustomEvent) {
-    const payload = event.detail || {}
+  function eventPayload(event: any) {
+    if (event && typeof event === 'object' && 'detail' in event) return event.detail || {}
+    return event || {}
+  }
+
+  function handleBlockEdit(event: any) {
+    const payload = eventPayload(event)
     if (payload.docIr && typeof payload.docIr === 'object') {
       const normalized = normalizeDocIrParagraphBlocks(payload.docIr as Record<string, unknown>)
       docIr.set(normalized)
@@ -1304,12 +1344,13 @@
       lastSavedText = txt
     }
     if (payload.meta && payload.meta.action) {
-      pushToast('Block updated', 'ok')
+      pushToast('块已更新', 'ok')
     }
   }
 
-  function handleToolbarState(event: CustomEvent) {
-    const detail = event.detail && typeof event.detail === 'object' ? event.detail : {}
+  function handleToolbarState(event: any) {
+    const payload = eventPayload(event)
+    const detail = payload && typeof payload === 'object' ? payload : {}
     editorToolbarState = {
       focused: Boolean((detail as any).focused),
       readonly: Boolean((detail as any).readonly),
@@ -1325,8 +1366,8 @@
     }
   }
 
-  function handleBlockSelect(event: CustomEvent) {
-    const detail = event.detail || {}
+  function handleBlockSelect(event: any) {
+    const detail = eventPayload(event)
     const incomingIds = Array.isArray(detail.blockIds)
       ? detail.blockIds.map((v: unknown) => String(v || '').trim()).filter(Boolean)
       : []
@@ -1804,6 +1845,19 @@
     }
   }
 
+  function handleAssistantSheetKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    setAssistantOpen(false)
+  }
+
+  function handleGlobalKeydownCapture(event: KeyboardEvent) {
+    if (event.key === 'Escape' && assistantOpen) {
+      event.preventDefault()
+      setAssistantOpen(false)
+    }
+  }
+
   function sanitizeCandidateText(after: string, before: string) {
     const src = String(after || '').trim()
     if (!src) return ''
@@ -1887,11 +1941,17 @@
     lastSavedText = nextText
   }
 
-  $: if (activeCandidateIndex >= blockCandidates.length) {
-    activeCandidateIndex = 0
-  }
+  $effect(() => {
+    if (!blockCandidates.length) {
+      if (activeCandidateIndex !== 0) activeCandidateIndex = 0
+      return
+    }
+    if (activeCandidateIndex >= blockCandidates.length) {
+      activeCandidateIndex = 0
+    }
+  })
 
-  $: activeCandidate = blockCandidates[activeCandidateIndex] || null
+  let activeCandidate = $derived(blockCandidates[activeCandidateIndex] || null)
 
   function insertBlockAfterBlock(
     doc: Record<string, unknown>,
@@ -2428,6 +2488,168 @@
     return '很低'
   }
 
+  function aiRateScore(): number {
+    if (!aiRateResult || typeof aiRateResult !== 'object') return 0
+    const direct = Number(aiRateResult.ai_rate)
+    if (Number.isFinite(direct) && direct > 0) {
+      return normalizeScore(direct)
+    }
+    const percent = Number(aiRateResult.ai_rate_percent)
+    if (Number.isFinite(percent) && percent > 0) {
+      return normalizeScore(percent / 100)
+    }
+    return 0
+  }
+
+  function buildQualityOverview(): QualityOverview {
+    const aiScore = aiRateScore()
+    const originalityRisk = normalizeScore(sectionOriginalitySummary?.failedSectionRatio || 0)
+    const plagiarismScore = normalizeScore(plagiarismMaxScore)
+    const worst = Math.max(aiScore, originalityRisk, plagiarismScore)
+    if (!aiRateResult && !plagiarismLatestReport && !sectionOriginalitySummary) {
+      return {
+        tone: 'good',
+        label: '待检测',
+        note: '运行检测后这里会汇总原创性与重合度风险'
+      }
+    }
+    if (worst >= 0.55) {
+      return {
+        tone: 'alert',
+        label: '需优先修订',
+        note: '当前存在明显模板化或重合风险，建议先处理再导出'
+      }
+    }
+    if (worst >= 0.25) {
+      return {
+        tone: 'warn',
+        label: '建议复核',
+        note: '结构可用，但仍有原创性或重合度信号需要人工确认'
+      }
+    }
+    return {
+      tone: 'good',
+      label: '整体稳定',
+      note: '当前结构、原创性和重合度信号没有明显异常'
+    }
+  }
+
+  function buildQualityAdviceItems(): QualityAdviceItem[] {
+    const items: QualityAdviceItem[] = []
+    const aiScore = aiRateScore()
+    const repeated3gramRatio = normalizeScore(aiRateResult?.signals?.repeated_3gram_ratio)
+    const lexicalDiversity = normalizeScore(aiRateResult?.signals?.lexical_diversity)
+    const burstiness = normalizeScore(aiRateResult?.signals?.sentence_burstiness_cv)
+    const failedRows = (sectionOriginalitySummary?.rows || []).filter((row) => !row.latest_passed)
+    const overlapRows = plagiarismResults.filter((row) => row.suspected || row.score >= row.threshold)
+
+    if (failedRows.length > 0) {
+      const first = failedRows[0]
+      items.push({
+        id: 'hotspot-revise',
+        tone: 'alert',
+        title: `优先修订章节：${first.title || first.section}`,
+        detail: `该章节触发了原创性热采样风险，先补充具体对象、时间、机制和结果，再重新检测。`,
+        action: 'revise-first-risk',
+        actionLabel: '定向修订'
+      })
+    }
+
+    if (aiRateResult && (Boolean(aiRateResult.suspected_ai) || aiScore >= 0.45 || repeated3gramRatio >= 0.1)) {
+      items.push({
+        id: 'ai-style',
+        tone: aiScore >= 0.6 || repeated3gramRatio >= 0.16 ? 'alert' : 'warn',
+        title: '压缩模板化表达',
+        detail: '优先改写连续重复的开头句、总分总套话和泛化过渡句，把段落改成“对象-动作-证据-结论”的具体表达。',
+        action: 'open-ai-panel',
+        actionLabel: '查看 AI 面板'
+      })
+    }
+
+    if (aiRateResult && (lexicalDiversity > 0 && lexicalDiversity <= 0.42 || burstiness <= 0.18)) {
+      items.push({
+        id: 'ai-diversity',
+        tone: 'warn',
+        title: '提高词汇与句式多样性',
+        detail: '不要只替换同义词。优先拆开长句、改变论证顺序，并引入具体案例、变量、时间窗和限制条件。',
+        action: 'run-ai-check',
+        actionLabel: '复测 AI 率'
+      })
+    }
+
+    if (overlapRows.length > 0 || plagiarismMaxScore >= 0.35) {
+      items.push({
+        id: 'plagiarism-overlap',
+        tone: plagiarismMaxScore >= 0.55 ? 'alert' : 'warn',
+        title: '处理高重合片段',
+        detail: `当前有 ${Math.max(overlapRows.length, plagiarismFlaggedCount)} 个来源超过或接近阈值。优先重写证据后的分析句群，而不是仅删除引用。`,
+        action: 'open-plagiarism-panel',
+        actionLabel: '查看查重面板'
+      })
+    }
+
+    if (!aiRateResult) {
+      items.push({
+        id: 'run-ai',
+        tone: 'good',
+        title: '运行 AI 风险检测',
+        detail: '先做一次检测，确认重复 3-gram、词汇多样性和句长波动是否已经回到正常范围。',
+        action: 'run-ai-check',
+        actionLabel: '开始检测'
+      })
+    }
+
+    if (!plagiarismLatestReport && plagiarismResults.length === 0) {
+      items.push({
+        id: 'run-plag',
+        tone: 'good',
+        title: '运行查重或全库扫描',
+        detail: '导出前至少对历史稿、参考文本或资料库做一次交叉比对，先发现高重合来源，再决定重写范围。',
+        action: 'run-plagiarism-check',
+        actionLabel: '开始查重'
+      })
+    }
+
+    if (items.length === 0) {
+      items.push({
+        id: 'quality-stable',
+        tone: 'good',
+        title: '当前质量信号稳定',
+        detail: '下一步建议做人工复核，重点看论证是否具体、引用是否准确、结论是否真正回应研究问题。'
+      })
+    }
+
+    return items.slice(0, 4)
+  }
+
+  function runQualityAdviceAction(action?: QualityAdviceAction) {
+    if (!action) return
+    if (action === 'open-ai-panel') {
+      showAiRatePanel = true
+      return
+    }
+    if (action === 'open-plagiarism-panel') {
+      showPlagiarismPanel = true
+      return
+    }
+    if (action === 'run-ai-check') {
+      showAiRatePanel = true
+      void runAiRateCheck()
+      return
+    }
+    if (action === 'run-plagiarism-check') {
+      showPlagiarismPanel = true
+      void runPlagiarismLibraryScan()
+      return
+    }
+    if (action === 'revise-first-risk') {
+      const first = (sectionOriginalitySummary?.rows || []).find((row) => !row.latest_passed)
+      if (first) {
+        void reviseRiskSection(first.title || first.section)
+      }
+    }
+  }
+
   async function runPlagiarismCheck() {
     const id = $docId
     if (!id) return
@@ -2951,16 +3173,16 @@
       const nodes = Array.isArray(data.nodes) ? data.nodes : []
       const edges = Array.isArray(data.edges) ? data.edges : []
       const lines: string[] = []
-      lines.push('Nodes:')
+      lines.push('节点：')
       for (const n of nodes) {
         const id = String(n.id || '').slice(0, 7)
         const msg = String(n.message || '')
         const ts = formatVersionTime(Number(n.timestamp || 0))
-        const cur = n.is_current ? ' *current*' : ''
+        const cur = n.is_current ? ' *当前*' : ''
         lines.push(`- ${id} ${msg} ${ts}${cur}`)
       }
       lines.push('')
-      lines.push('Edges:')
+      lines.push('边：')
       for (const e of edges) {
         const from = String(e.from || '').slice(0, 7)
         const to = String(e.to || '').slice(0, 7)
@@ -3036,12 +3258,22 @@
       pushToast('没有可续跑的历史指令', 'info')
       return
     }
+    const pendingSections = pendingResumeSections(resumeState)
     await handleGenerate(inst, {
       fromResume: true,
       forcedComposeMode: 'continue',
-      resumeSections: resumeState.pending_sections || [],
+      resumeSections: pendingSections,
       cursorAnchor: resumeState.cursor_anchor || ''
     })
+  }
+
+  function pendingResumeSections(state: ResumeState | null): string[] {
+    if (!state) return []
+    const pending = normalizeStringArray(state.pending_sections || [])
+    if (pending.length) return pending
+    const plan = normalizeStringArray(state.plan_sections || [])
+    const completed = new Set(normalizeStringArray(state.completed_sections || []))
+    return plan.filter((section) => !completed.has(section))
   }
 
   function clearPendingGenerateConfirmation() {
@@ -3238,8 +3470,9 @@
     if (input) input.value = ''
   }
 
-  async function handleAssistantUpload(event: CustomEvent<{ file: File }>) {
-    const file = event?.detail?.file
+  async function handleAssistantUpload(event: any) {
+    const payload = event && typeof event === 'object' && 'detail' in event ? event.detail : event
+    const file = payload?.file
     if (!file) return
     await uploadAsset(file, { source: 'assistant' })
   }
@@ -3300,7 +3533,10 @@
   ) {
     const inst = sanitizeAiInputText(text, { trim: true, maxChars: 12000 })
     if (!inst) return
-    if (isGenerationOrRenderBusy()) {
+    const realBusy = $generating || typingActive || streamTypingActive
+    const recentlyStarted = Date.now() - lastGenerateStartedAt < 1200
+    const shouldHoldForQueueBadge = recentlyStarted && queuedGlobalInstructions.length > 0
+    if (realBusy || (!opts?.fromResume && shouldHoldForQueueBadge)) {
       if (!opts?.fromQueue) {
         appendChat('user', inst)
         instruction.set('')
@@ -3364,6 +3600,7 @@
       error: ''
     }
     typingToken += 1
+    lastGenerateStartedAt = Date.now()
     resetStreamTyping()
     resetStreamingSections()
     generating.set(true)
@@ -3379,6 +3616,8 @@
     sawSectionDelta = false
     lastEventAt = Date.now()
     renderActivityAt = Date.now()
+    let observedPlanSections = resumeSections.slice()
+    let observedCompletedSections: string[] = []
     fallbackTriggered = false
     progress = { current: 0, total: 0, percent: 0, etaS: 0, section: "" }
     progressStart = Date.now()
@@ -3462,6 +3701,8 @@
             const title = String(data.title || '自动生成文档')
             const sectionsRaw = Array.isArray(data.sections) ? data.sections : []
             const sections = sectionsRaw.map((item) => decodeSectionTitle(String(item || ''))).filter(Boolean)
+            observedPlanSections = sections.slice()
+            observedCompletedSections = []
             if (resumeState) {
               resumeState = {
                 ...resumeState,
@@ -3486,6 +3727,7 @@
               const sec = decodeSectionTitle(String(section || '')).trim()
               if (resumeState && sec) {
                 const done = normalizeStringArray([...resumeState.completed_sections, sec])
+                observedCompletedSections = normalizeStringArray([...observedCompletedSections, sec])
                 const plan = resumeState.plan_sections || []
                 const pending = plan.filter((item) => !done.includes(item))
                 resumeState = {
@@ -3530,7 +3772,7 @@
           }
           if (event === 'section_error') {
             const section = String(data.section || '')
-            const reason = String(data.reason || 'unknown')
+            const reason = String(data.reason || '未知')
             if (section) {
               sectionFailures = [...sectionFailures, { section, reason }]
               pushToast(`章节失败: ${section}`, 'bad')
@@ -3699,6 +3941,15 @@
       if (!sawFinal) {
         const preview = String($sourceText || '').trim()
         const prev = resumeState
+        const planSections = normalizeStringArray(prev?.plan_sections?.length ? prev.plan_sections : observedPlanSections)
+        const completedSections = normalizeStringArray(
+          prev?.completed_sections?.length ? prev.completed_sections : observedCompletedSections
+        )
+        let pendingSections = normalizeStringArray(prev?.pending_sections || [])
+        if (!pendingSections.length && planSections.length) {
+          const completedSet = new Set(completedSections)
+          pendingSections = planSections.filter((section) => !completedSet.has(section))
+        }
         resumeState = {
           status: 'interrupted',
           updated_at: Date.now() / 1000,
@@ -3707,9 +3958,9 @@
           compose_mode: (prev?.compose_mode || composeMode) as ResumeState['compose_mode'],
           partial_chars: preview.length,
           partial_preview: preview.slice(-240),
-          plan_sections: normalizeStringArray(prev?.plan_sections || []),
-          completed_sections: normalizeStringArray(prev?.completed_sections || []),
-          pending_sections: normalizeStringArray(prev?.pending_sections || []),
+          plan_sections: planSections,
+          completed_sections: completedSections,
+          pending_sections: pendingSections,
           cursor_anchor: String(prev?.cursor_anchor || cursorAnchor),
           error: String($docStatus || '')
         }
@@ -3877,16 +4128,16 @@
     editorCommand.set(cmd)
   }
 
-  $: {
+  $effect(() => {
     if ($sourceText && $sourceText !== lastSavedText && !$generating) {
       if (autoSaveTimer) clearTimeout(autoSaveTimer)
       autoSaveTimer = setTimeout(() => {
         saveDoc().catch(() => {})
       }, 3000)
     }
-  }
+  })
 
-  $: {
+  $effect(() => {
     if (!isGenerationOrRenderBusy()) {
       inlineEditLocked = false
       inlineEditLockReason = ''
@@ -3908,7 +4159,7 @@
           : ''
       }
     }
-  }
+  })
 
   onMount(() => {
     const savedDarkMode = localStorage.getItem('darkMode') === 'true'
@@ -3940,6 +4191,7 @@
     window.addEventListener('mouseup', onUp)
     window.addEventListener('resize', onViewportChange)
     window.addEventListener('scroll', onViewportChange, true)
+    window.addEventListener('keydown', handleGlobalKeydownCapture, true)
     window.addEventListener('keydown', handleInlineShortcut)
     if (!$docId) {
       const id = readDocId()
@@ -3954,8 +4206,10 @@
       window.removeEventListener('mouseup', onUp)
       window.removeEventListener('resize', onViewportChange)
       window.removeEventListener('scroll', onViewportChange, true)
+      window.removeEventListener('keydown', handleGlobalKeydownCapture, true)
       window.removeEventListener('keydown', handleInlineShortcut)
       if (autoSaveTimer) clearTimeout(autoSaveTimer)
+      if (recentQueuedBadgeTimer) clearTimeout(recentQueuedBadgeTimer)
     }
   })
 </script>
@@ -3975,34 +4229,49 @@
         <span>{topStatusLine}</span>
       </div>
       <nav class="menu" aria-label="工作区模式">
-        <button class={`menu-item ${workspaceMode === 'editor' ? 'active' : ''}`} on:click={() => switchWorkspaceMode('editor')}>
+        <button class={`menu-item ${workspaceMode === 'editor' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('editor')}>
           <span>编辑</span>
         </button>
-        <button class={`menu-item ${workspaceMode === 'library' ? 'active' : ''}`} on:click={() => switchWorkspaceMode('library')}>
+        <button class={`menu-item ${workspaceMode === 'library' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('library')}>
           <span>资料</span>
         </button>
-        <button class={`menu-item ${workspaceMode === 'collab' ? 'active' : ''}`} on:click={() => switchWorkspaceMode('collab')}>
+        <button class={`menu-item ${workspaceMode === 'collab' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('collab')}>
           <span>协作</span>
         </button>
       </nav>
+      <div class="workspace-metrics" aria-label="工作台概览">
+        <div class={`metric-pill tone-${qualityOverview.tone}`}>
+          <span class="metric-label">质量</span>
+          <strong>{qualityOverview.label}</strong>
+        </div>
+        <div class="metric-pill">
+          <span class="metric-label">字数</span>
+          <strong>{Math.max(0, Number($wordCount || 0))}</strong>
+        </div>
+        <div class="metric-pill">
+          <span class="metric-label">路由</span>
+          <strong>{lastGraphMeta?.route_id || '默认'}</strong>
+        </div>
+      </div>
     </div>
     <div class="top-actions">
-      <button class="btn ghost icon-btn-text" on:click={saveDoc}>
+      <button class="btn ghost icon-btn-text" onclick={saveDoc}>
         <Icon name="save" className="ui-icon" />
         <span>保存</span>
       </button>
-      <button class="btn ghost icon-btn-text" on:click={exportDocx}>
+      <button class="btn ghost icon-btn-text" onclick={exportDocx}>
         <Icon name="doc" className="ui-icon" />
         <span>导出 Word</span>
       </button>
-      <button class="btn ghost icon-btn-text" on:click={exportPdf}>
+      <button class="btn ghost icon-btn-text" onclick={exportPdf}>
         <Icon name="pdf" className="ui-icon" />
         <span>导出 PDF</span>
       </button>
-      <button class="btn ghost icon-btn-text" on:click={toggleInfoDrawer}>
+      <button class="btn ghost icon-btn-text" onclick={toggleInfoDrawer}>
         <Icon name="doc" className="ui-icon" />
         <span>文档信息</span>
       </button>
+      <LLMConfig />
       <Settings />
     </div>
   </header>
@@ -4016,7 +4285,7 @@
           bind:value={librarySearch}
         />
       </div>
-      <button class="rail-upload-btn icon-btn-text" on:click={triggerLibraryUpload}>
+      <button class="rail-upload-btn icon-btn-text" onclick={triggerLibraryUpload}>
         <Icon name="upload" className="ui-icon" />
         <span>上传素材</span>
       </button>
@@ -4034,7 +4303,7 @@
             {#each filteredLibraryCards as card}
               <button
                 class={`library-card tone-${card.tone} ${librarySelectAll || selectedLibraryCardId === card.id ? 'selected' : ''}`}
-                on:click={() => openLibraryCard(card)}
+                onclick={() => openLibraryCard(card)}
                 title={card.summary}
               >
                 <div class="library-card-cover">
@@ -4064,29 +4333,29 @@
           <span>快捷入口</span>
           <em>4</em>
         </div>
-        <button class={`nav-btn ${workspaceMode === 'editor' ? 'active' : ''}`} on:click={() => switchWorkspaceMode('editor')} title="编辑器">
+        <button class={`nav-btn ${workspaceMode === 'editor' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('editor')} title="编辑器">
           <Icon name="editor" className="ui-icon" />
           <span>正文编辑</span>
         </button>
-        <button class="nav-btn" on:click={() => (canvasOpen = true)} title="画布">
+        <button class="nav-btn" onclick={() => (canvasOpen = true)} title="画布">
           <Icon name="canvas" className="ui-icon" />
           <span>图形画布</span>
         </button>
-        <button class="nav-btn" title="引用" on:click={() => (showCitations = true)}>
+        <button class="nav-btn" title="引用" onclick={() => (showCitations = true)}>
           <Icon name="cite" className="ui-icon" />
           <span>引用管理</span>
         </button>
-        <button class={`nav-btn ${workspaceMode === 'collab' ? 'active' : ''}`} title="协作助手" on:click={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}>
+        <button class={`nav-btn ${workspaceMode === 'collab' ? 'active' : ''}`} title="协作助手" onclick={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}>
           <Icon name="chat" className="ui-icon" />
           <span>协作助手</span>
         </button>
-        <button class="nav-btn" title="性能" on:click={() => (showPerformanceMetrics = true)}>
+        <button class="nav-btn" title="性能" onclick={() => (showPerformanceMetrics = true)}>
           <Icon name="chart" className="ui-icon" />
           <span>性能指标</span>
         </button>
       </section>
 
-      <button class="rail-reset icon-btn-text" on:click={() => { librarySearch = ''; librarySelectAll = false; selectedLibraryCardId = ''; }}>
+      <button class="rail-reset icon-btn-text" onclick={() => { librarySearch = ''; librarySelectAll = false; selectedLibraryCardId = ''; }}>
         <Icon name="clearSelection" className="ui-icon" />
         <span>重置筛选</span>
       </button>
@@ -4098,21 +4367,21 @@
           <div class="library-view-switch">
             <button
               class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
-              on:click={() => (libraryViewMode = 'grid')}
+              onclick={() => (libraryViewMode = 'grid')}
               title="网格视图"
             >
               <Icon name="grid" className="ui-icon" />
             </button>
             <button
               class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
-              on:click={() => (libraryViewMode = 'masonry')}
+              onclick={() => (libraryViewMode = 'masonry')}
               title="瀑布视图"
             >
               <Icon name="masonry" className="ui-icon" />
             </button>
             <button
               class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
-              on:click={() => (libraryViewMode = 'list')}
+              onclick={() => (libraryViewMode = 'list')}
               title="列表视图"
             >
               <Icon name="list" className="ui-icon" />
@@ -4120,15 +4389,15 @@
           </div>
           <div class="library-counter">{librarySearch ? `搜索：${librarySearch}` : '资料模式：拖拽素材、整理证据、批量管理'}</div>
           <div class="library-actions">
-            <button class="btn ghost icon-btn-text" on:click={triggerLibraryUpload}>
+            <button class="btn ghost icon-btn-text" onclick={triggerLibraryUpload}>
               <Icon name="upload" className="ui-icon" />
               <span>上传素材</span>
             </button>
-            <button class="btn ghost icon-btn-text" on:click={() => (librarySelectAll = !librarySelectAll)}>
+            <button class="btn ghost icon-btn-text" onclick={() => (librarySelectAll = !librarySelectAll)}>
               <Icon name="select" className="ui-icon" />
               <span>{librarySelectAll ? '取消全选' : '全选资料'}</span>
             </button>
-            <button class="btn ghost icon-btn-text" on:click={() => switchWorkspaceMode('editor')}>
+            <button class="btn ghost icon-btn-text" onclick={() => switchWorkspaceMode('editor')}>
               <Icon name="open" className="ui-icon" />
               <span>返回编辑</span>
             </button>
@@ -4137,22 +4406,22 @@
         <section
           class="library-mode-stage"
           aria-label="资料模式拖拽工作区"
-          on:dragover|preventDefault
-          on:drop={handleLibraryDrop}
+          ondragover={(e) => e.preventDefault()}
+          ondrop={handleLibraryDrop}
         >
           <div class="library-mode-dropzone">
             <div class="panel-title">资料工作区</div>
             <div class="panel-sub">拖拽图片/文档到此处，或点击上传素材。资料模式默认不展示正文编辑器。</div>
             <div class="library-mode-actions">
-              <button class="btn ghost icon-btn-text" on:click={triggerLibraryUpload}>
+              <button class="btn ghost icon-btn-text" onclick={triggerLibraryUpload}>
                 <Icon name="upload" className="ui-icon" />
                 <span>上传文件</span>
               </button>
-              <button class="btn ghost icon-btn-text" on:click={() => (showCitations = true)}>
+              <button class="btn ghost icon-btn-text" onclick={() => (showCitations = true)}>
                 <Icon name="cite" className="ui-icon" />
                 <span>引用管理</span>
               </button>
-              <button class="btn ghost icon-btn-text" on:click={openVersions}>
+              <button class="btn ghost icon-btn-text" onclick={openVersions}>
                 <Icon name="clock" className="ui-icon" />
                 <span>版本记录</span>
               </button>
@@ -4165,7 +4434,7 @@
               {#each filteredLibraryCards as card}
                 <button
                   class={`library-mode-card tone-${card.tone} ${librarySelectAll || selectedLibraryCardId === card.id ? 'selected' : ''}`}
-                  on:click={() => openLibraryCard(card)}
+                  onclick={() => openLibraryCard(card)}
                   title={card.summary}
                 >
                   <div class="library-mode-card-head">
@@ -4188,21 +4457,21 @@
         <div class="library-view-switch">
           <button
             class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
-            on:click={() => (libraryViewMode = 'grid')}
+            onclick={() => (libraryViewMode = 'grid')}
             title="网格视图"
           >
             <Icon name="grid" className="ui-icon" />
           </button>
           <button
             class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
-            on:click={() => (libraryViewMode = 'masonry')}
+            onclick={() => (libraryViewMode = 'masonry')}
             title="瀑布视图"
           >
             <Icon name="masonry" className="ui-icon" />
           </button>
           <button
             class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
-            on:click={() => (libraryViewMode = 'list')}
+            onclick={() => (libraryViewMode = 'list')}
             title="列表视图"
           >
             <Icon name="list" className="ui-icon" />
@@ -4210,7 +4479,7 @@
         </div>
         <div class="library-counter">{librarySearch ? `搜索：${librarySearch}` : '实时文档工作区'}</div>
         <div class="library-actions">
-          <button class="btn ghost icon-btn-text" on:click={() => (librarySelectAll = !librarySelectAll)}>
+          <button class="btn ghost icon-btn-text" onclick={() => (librarySelectAll = !librarySelectAll)}>
             <Icon name="select" className="ui-icon" />
             <span>{librarySelectAll ? '取消全选' : '全选资料'}</span>
           </button>
@@ -4218,7 +4487,7 @@
             <Icon name="batch" className="ui-icon" />
             <span>批处理 ({librarySelectAll ? filteredLibraryCards.length : 1})</span>
           </button>
-          <button class="btn ghost icon-btn-text" on:click={openInfoDrawer}>
+          <button class="btn ghost icon-btn-text" onclick={openInfoDrawer}>
             <Icon name="doc" className="ui-icon" />
             <span>文档信息</span>
           </button>
@@ -4228,39 +4497,39 @@
         <div class="toolbar-line primary">
           <div class="toolbar-cluster core">
             <span class="cluster-label">创作核心</span>
-            <button class="tool-btn" on:click={() => runEditorCommand('heading1')} aria-label="一级标题">
+            <button class="tool-btn" onclick={() => runEditorCommand('heading1')} aria-label="一级标题">
               <Icon name="h1" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" on:click={() => runEditorCommand('heading2')} aria-label="二级标题">
+            <button class="tool-btn" onclick={() => runEditorCommand('heading2')} aria-label="二级标题">
               <Icon name="h2" size={14} className="ui-icon sm" />
             </button>
             <button
               class={`tool-btn ${editorToolbarState.bold ? 'active' : ''}`}
               title="加粗 Ctrl/Cmd+B"
               aria-label="加粗"
-              on:click={() => runEditorCommand('bold')}
+              onclick={() => runEditorCommand('bold')}
               disabled={editorToolbarState.readonly || !editorToolbarState.focused}
             >
               <Icon name="bold" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" on:click={() => runEditorCommand('list-bullet')} aria-label="无序列表">
+            <button class="tool-btn" onclick={() => runEditorCommand('list-bullet')} aria-label="无序列表">
               <Icon name="listBullet" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" on:click={() => runEditorCommand('list-number')} aria-label="有序列表">
+            <button class="tool-btn" onclick={() => runEditorCommand('list-number')} aria-label="有序列表">
               <Icon name="listNumber" size={14} className="ui-icon sm" />
             </button>
             <span class="tool-sep"></span>
-            <button class="tool-btn" on:click={() => (canvasOpen = true)} aria-label="图形画布">
+            <button class="tool-btn" onclick={() => (canvasOpen = true)} aria-label="图形画布">
               <Icon name="diagram" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" on:click={() => (showCitations = true)} aria-label="引用管理">
+            <button class="tool-btn" onclick={() => (showCitations = true)} aria-label="引用管理">
               <Icon name="cite" size={14} className="ui-icon sm" />
             </button>
           </div>
-          <button class="btn ghost btn-sm toolbar-advanced-toggle" on:click={() => (showAdvancedToolbar = !showAdvancedToolbar)}>
+          <button class="btn ghost btn-sm toolbar-advanced-toggle" onclick={() => (showAdvancedToolbar = !showAdvancedToolbar)}>
             {showAdvancedToolbar ? '收起高级' : '高级操作'}
           </button>
-          <button class="btn primary icon-btn-text toolbar-generate-btn" on:click={() => handleGenerate($instruction)} disabled={$generating}>
+          <button class="btn primary icon-btn-text toolbar-generate-btn" onclick={() => handleGenerate($instruction)} disabled={$generating}>
             <Icon name="play" className="ui-icon" />
             <span>{$generating ? '生成中…' : '生成'}</span>
           </button>
@@ -4269,41 +4538,41 @@
           <div class="toolbar-line secondary">
             <div class="toolbar-cluster">
               <span class="cluster-label">结构与编辑</span>
-              <button class="tool-btn" title="撤销 Ctrl/Cmd+Z" aria-label="撤销" on:click={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
+              <button class="tool-btn" title="撤销 Ctrl/Cmd+Z" aria-label="撤销" onclick={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
                 <Icon name="undo" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="重做 Ctrl/Cmd+Y" aria-label="重做" on:click={() => runEditorCommand('redo')} disabled={!editorToolbarState.canRedo}>
+              <button class="tool-btn" title="重做 Ctrl/Cmd+Y" aria-label="重做" onclick={() => runEditorCommand('redo')} disabled={editorToolbarState.readonly}>
                 <Icon name="redo" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="复制 Ctrl/Cmd+C" aria-label="复制" on:click={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
+              <button class="tool-btn" title="复制 Ctrl/Cmd+C" aria-label="复制" onclick={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
                 <Icon name="copy" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="剪切 Ctrl/Cmd+X" aria-label="剪切" on:click={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
+              <button class="tool-btn" title="剪切 Ctrl/Cmd+X" aria-label="剪切" onclick={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
                 <Icon name="cut" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="粘贴 Ctrl/Cmd+V" aria-label="粘贴" on:click={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
+              <button class="tool-btn" title="粘贴 Ctrl/Cmd+V" aria-label="粘贴" onclick={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
                 <Icon name="paste" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="清除格式" aria-label="清除格式" on:click={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
+              <button class="tool-btn" title="清除格式" aria-label="清除格式" onclick={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
                 <Icon name="clear" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" on:click={() => runEditorCommand('quote')} aria-label="引用块">
+              <button class="tool-btn" onclick={() => runEditorCommand('quote')} aria-label="引用块">
                 <Icon name="quote" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" on:click={() => runEditorCommand('code')} aria-label="代码块">
+              <button class="tool-btn" onclick={() => runEditorCommand('code')} aria-label="代码块">
                 <Icon name="code" size={14} className="ui-icon sm" />
               </button>
             </div>
             <div class="toolbar-cluster compact">
               <span class="cluster-label">高级操作</span>
-              <button class="btn ghost icon-btn-text" on:click={runBatchFromToolbar}>
+              <button class="btn ghost icon-btn-text" onclick={runBatchFromToolbar}>
                 <Icon name="batch" className="ui-icon" />
                 <span>批处理</span>
               </button>
               <button
                 class="btn ghost icon-btn-text"
                 data-testid="ai-rate-toggle"
-                on:click={() => (showAiRatePanel = !showAiRatePanel)}
+                onclick={() => (showAiRatePanel = !showAiRatePanel)}
               >
                 <Icon name="ai" className="ui-icon" />
                 <span>{showAiRatePanel ? '收起 AI 率' : 'AI 率检测'}</span>
@@ -4311,7 +4580,7 @@
               <button
                 class="btn ghost icon-btn-text"
                 data-testid="plagiarism-toggle"
-                on:click={() => (showPlagiarismPanel = !showPlagiarismPanel)}
+                onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}
               >
                 <Icon name="shield" className="ui-icon" />
                 <span>{showPlagiarismPanel ? '收起查重' : '查重检测'}</span>
@@ -4319,7 +4588,7 @@
               <button
                 class="btn ghost icon-btn-text"
                 data-testid="feedback-toggle"
-                on:click={() => (showFeedbackPanel = !showFeedbackPanel)}
+                onclick={() => (showFeedbackPanel = !showFeedbackPanel)}
               >
                 <Icon name="star" className="ui-icon" />
                 <span>{showFeedbackPanel ? '收起评分' : '满意度评分'}</span>
@@ -4329,7 +4598,7 @@
                 <select
                   class="plan-confirm-select"
                   bind:value={planConfirmDecision}
-                  on:change={() => void persistPlanConfirmPreference()}
+                  onchange={() => void persistPlanConfirmPreference()}
                 >
                   <option value="approved">通过</option>
                   <option value="interrupted">终止</option>
@@ -4342,16 +4611,16 @@
                     max="5"
                     step="1"
                     bind:value={planConfirmScore}
-                    on:change={() => void persistPlanConfirmPreference()}
+                    onchange={() => void persistPlanConfirmPreference()}
                   />
                 </label>
               </div>
-              <button class="btn ghost icon-btn-text" on:click={handleStop} disabled={!$generating}>
+              <button class="btn ghost icon-btn-text" onclick={handleStop} disabled={!$generating}>
                 <Icon name="stop" className="ui-icon" />
                 <span>停止</span>
               </button>
               {#if resumeState && !$generating}
-                <button class="btn ghost icon-btn-text" on:click={resumeInterruptedGeneration}>
+                <button class="btn ghost icon-btn-text" onclick={resumeInterruptedGeneration}>
                   <Icon name="resume" className="ui-icon" />
                   <span>续跑</span>
                 </button>
@@ -4383,7 +4652,7 @@
           {#each sectionFailures as f}
             <div class="failure-row">
               <span>{f.section}</span>
-              <button class="btn ghost" on:click={() => retrySection(f.section)}>重试</button>
+              <button class="btn ghost" onclick={() => retrySection(f.section)}>重试</button>
             </div>
           {/each}
         </section>
@@ -4408,10 +4677,43 @@
                 <span class:ok={row.latest_passed} class:bad={!row.latest_passed} class="risk-badge">
                   {row.latest_passed ? '已通过' : '待处理'}
                 </span>
-                <button class="btn ghost" on:click={() => reviseRiskSection(row.title || row.section)}>定向修订</button>
+                <button class="btn ghost" onclick={() => reviseRiskSection(row.title || row.section)}>定向修订</button>
               </div>
             </div>
           {/each}
+        </section>
+      {/if}
+
+      {#if qualityAdviceItems.length > 0}
+        <section class="feedback-panel quality-advice-panel">
+          <div class="feedback-panel-head">
+            <div>
+              <div class="panel-title">原创性修订建议</div>
+              <div class="panel-sub">这里汇总的是质量改进建议，不是检测规避指令。</div>
+            </div>
+            <span class={`quality-overview-badge tone-${qualityOverview.tone}`}>{qualityOverview.label}</span>
+          </div>
+          <div class="quality-advice-note">{qualityOverview.note}</div>
+          <div class="quality-advice-grid">
+            {#each qualityAdviceItems as item}
+              <article class={`quality-advice-card tone-${item.tone}`}>
+                <div class="quality-advice-title-row">
+                  <div class="quality-advice-title">{item.title}</div>
+                  <span class={`quality-tone-chip tone-${item.tone}`}>
+                    {item.tone === 'good' ? '稳定' : item.tone === 'warn' ? '关注' : '优先'}
+                  </span>
+                </div>
+                <div class="quality-advice-detail">{item.detail}</div>
+                {#if item.action && item.actionLabel}
+                  <div class="quality-advice-actions">
+                    <button class="btn ghost btn-sm" onclick={() => runQualityAdviceAction(item.action)}>
+                      {item.actionLabel}
+                    </button>
+                  </div>
+                {/if}
+              </article>
+            {/each}
+          </div>
         </section>
       {/if}
 
@@ -4440,7 +4742,7 @@
             <div class="feedback-actions">
               <button
                 class="btn primary"
-                on:click={runAiRateCheck}
+                onclick={runAiRateCheck}
                 disabled={aiRateLoading}
                 data-testid="ai-rate-run"
               >
@@ -4449,7 +4751,7 @@
               {#if aiRateResult}
                 <span class="feedback-tip">
                   估计 AI 率 {Math.round(Number(aiRateResult.ai_rate || 0) * 100)}%，
-                  风险 {String(aiRateResult.risk_level || 'unknown')}，
+                  风险 {String(aiRateResult.risk_level || '未知')}，
                   置信度 {Math.round(Number(aiRateResult.confidence || 0) * 100)}%
                 </span>
               {/if}
@@ -4522,7 +4824,7 @@
             <div class="feedback-actions">
               <button
                 class="btn primary"
-                on:click={runPlagiarismCheck}
+                onclick={runPlagiarismCheck}
                 disabled={plagiarismLoading}
                 data-testid="plagiarism-run"
               >
@@ -4530,7 +4832,7 @@
               </button>
               <button
                 class="btn ghost"
-                on:click={runPlagiarismLibraryScan}
+                onclick={runPlagiarismLibraryScan}
                 disabled={plagiarismLibraryLoading}
                 data-testid="plagiarism-library-run"
               >
@@ -4550,9 +4852,9 @@
                 <span class="panel-sub">
                   报告ID {plagiarismLatestReport.report_id} · 来源 {plagiarismLatestReport.total_references} · 超阈值 {plagiarismLatestReport.flagged_count}
                 </span>
-                <button class="btn ghost" on:click={() => downloadPlagiarismReport('json')}>下载 JSON</button>
-                <button class="btn ghost" on:click={() => downloadPlagiarismReport('md')}>下载 MD</button>
-                <button class="btn ghost" on:click={() => downloadPlagiarismReport('csv')}>下载 CSV</button>
+                <button class="btn ghost" onclick={() => downloadPlagiarismReport('json')}>下载 JSON</button>
+                <button class="btn ghost" onclick={() => downloadPlagiarismReport('md')}>下载 MD</button>
+                <button class="btn ghost" onclick={() => downloadPlagiarismReport('csv')}>下载 CSV</button>
               </div>
             {/if}
 
@@ -4606,7 +4908,7 @@
                   <button
                     class={`rating-btn ${satisfactionRating === score ? 'active' : ''}`}
                     data-testid={`rating-${score}`}
-                    on:click={() => (satisfactionRating = score)}
+                    onclick={() => (satisfactionRating = score)}
                     type="button"
                   >
                     {score}
@@ -4635,7 +4937,7 @@
               <button
                 class="btn primary"
                 data-testid="feedback-submit"
-                on:click={submitSatisfaction}
+                onclick={submitSatisfaction}
                 disabled={satisfactionSaving}
               >
                 {satisfactionSaving ? '提交中...' : '提交评分'}
@@ -4672,9 +4974,9 @@
             showToolbar={false}
             paper={true}
             lockEditing={typingActive || streamTypingActive}
-            on:blockedit={handleBlockEdit}
-            on:blockselect={handleBlockSelect}
-            on:toolbarstate={handleToolbarState}
+            onblockedit={handleBlockEdit}
+            onblockselect={handleBlockSelect}
+            ontoolbarstate={handleToolbarState}
           />
         {/if}
       </div>
@@ -4689,7 +4991,7 @@
             <div class="panel-title">版本树</div>
             <div class="panel-sub">自动小版本 · 手动大版本</div>
           </div>
-          <button class="icon-btn" on:click={loadVersionLog} title="刷新">刷新</button>
+          <button class="icon-btn" onclick={loadVersionLog} title="刷新">刷新</button>
         </div>
         <div class="major-commit">
           <input
@@ -4697,7 +4999,7 @@
             placeholder="输入版本说明"
             bind:value={versionMessage}
           />
-          <button class="btn primary" on:click={commitVersion}>保存版本</button>
+          <button class="btn primary" onclick={commitVersion}>保存版本</button>
         </div>
         {#if versionLoading}
           <div class="panel-empty">加载中...</div>
@@ -4724,8 +5026,8 @@
                     <div class="version-summary">{formatVersionSummary(group.major?.summary)}</div>
                   {/if}
                   <div class="version-actions">
-                    <button class="btn ghost" on:click={() => checkoutVersion(group.major?.version_id)} disabled={group.major?.is_current}>切换</button>
-                    <button class="btn ghost" on:click={() => compareWithCurrent(group.major?.version_id)} disabled={group.major?.is_current}>对比</button>
+                    <button class="btn ghost" onclick={() => checkoutVersion(group.major?.version_id)} disabled={group.major?.is_current}>切换</button>
+                    <button class="btn ghost" onclick={() => compareWithCurrent(group.major?.version_id)} disabled={group.major?.is_current}>对比</button>
                   </div>
                 </div>
                 {#if group.minors && group.minors.length}
@@ -4740,8 +5042,8 @@
                           <div class="minor-meta">{formatVersionTime(v.timestamp)}</div>
                         </div>
                         <div class="minor-actions">
-                          <button class="btn ghost" on:click={() => checkoutVersion(v.version_id)} disabled={v.is_current}>切换</button>
-                          <button class="btn ghost" on:click={() => compareWithCurrent(v.version_id)} disabled={v.is_current}>对比</button>
+                          <button class="btn ghost" onclick={() => checkoutVersion(v.version_id)} disabled={v.is_current}>切换</button>
+                          <button class="btn ghost" onclick={() => compareWithCurrent(v.version_id)} disabled={v.is_current}>对比</button>
                         </div>
                       </div>
                     {/each}
@@ -4762,14 +5064,14 @@
 
   {#if infoDrawerOpen}
     <div class="info-drawer-backdrop" role="presentation">
-      <button type="button" class="sheet-backdrop-hit" on:click={closeInfoDrawer} aria-label="关闭文档信息"></button>
+      <button type="button" class="sheet-backdrop-hit" onclick={closeInfoDrawer} aria-label="关闭文档信息"></button>
       <div class="info-drawer panel-card media-meta-panel" role="dialog" aria-modal="true" aria-label="文档信息">
         <div class="panel-header">
           <div>
             <div class="panel-title">文档信息</div>
             <div class="panel-sub">当前工作区摘要</div>
           </div>
-          <button class="btn ghost btn-sm" on:click={closeInfoDrawer}>关闭</button>
+          <button class="btn ghost btn-sm" onclick={closeInfoDrawer}>关闭</button>
         </div>
         <div class="meta-hero">
           <div class="meta-hero-glow"></div>
@@ -4781,14 +5083,14 @@
           <div><span>大小</span><strong>{estimateKb($sourceText)} KB</strong></div>
           <div><span>词数</span><strong>{$wordCount}</strong></div>
           <div><span>选区</span><strong>{selectedBlockIds.length || 0}</strong></div>
-          <div><span>路由</span><strong>{lastGraphMeta?.route_id || 'default'}</strong></div>
+          <div><span>路由</span><strong>{lastGraphMeta?.route_id || '默认'}</strong></div>
         </div>
         <div class="meta-actions">
-          <button class="btn ghost icon-btn-text" on:click={() => switchWorkspaceMode('editor')}>
+          <button class="btn ghost icon-btn-text" onclick={() => switchWorkspaceMode('editor')}>
             <Icon name="open" className="ui-icon" />
             <span>定位到编辑区</span>
           </button>
-          <button class="btn ghost danger icon-btn-text" on:click={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}>
+          <button class="btn ghost danger icon-btn-text" onclick={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}>
             <Icon name="clearSelection" className="ui-icon" />
             <span>清空选区</span>
           </button>
@@ -4809,13 +5111,13 @@
         <span>Ctrl/Cmd+Enter 下弹窗 · Ctrl/Cmd+Shift+Enter 上弹窗</span>
       </div>
       <div class="inline-selection-actions">
-        <button class="mini-btn" on:click={() => openInlinePopover('rewrite', 'down')} disabled={inlineEditLocked}>改写</button>
-        <button class="mini-btn" on:click={() => openInlinePopover('style', 'down')} disabled={inlineEditLocked}>样式</button>
-        <button class="mini-btn" on:click={triggerInlineTableInsert} disabled={inlineEditLocked}>插表</button>
-        <button class="mini-btn" on:click={triggerInlineImageUpload} disabled={inlineEditLocked}>插图</button>
-        <button class="mini-btn" on:click={() => openInlinePopover('assistant', 'down')}>对话</button>
-        <button class="mini-btn" on:click={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>上方</button>
-        <button class="mini-btn" on:click={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>下方</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('rewrite', 'down')} disabled={inlineEditLocked}>改写</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('style', 'down')} disabled={inlineEditLocked}>样式</button>
+        <button class="mini-btn" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>插表</button>
+        <button class="mini-btn" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>插图</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('assistant', 'down')}>对话</button>
+        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>上方</button>
+        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>下方</button>
       </div>
     </div>
   {/if}
@@ -4832,22 +5134,22 @@
           <div class="panel-sub">当前上下文独立于其他段落块，同一块会继承修改上下文。</div>
         </div>
         <div class="inline-popover-head-actions">
-          <button class="btn ghost btn-sm" on:click={triggerInlineTableInsert} disabled={inlineEditLocked}>插表</button>
-          <button class="btn ghost btn-sm" on:click={triggerInlineImageUpload} disabled={inlineEditLocked}>插图</button>
-          <button class="btn ghost btn-sm" on:click={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>上方</button>
-          <button class="btn ghost btn-sm" on:click={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>下方</button>
-          <button class="btn ghost btn-sm" on:click={closeInlinePopover}>关闭</button>
+          <button class="btn ghost btn-sm" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>插表</button>
+          <button class="btn ghost btn-sm" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>插图</button>
+          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>上方</button>
+          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>下方</button>
+          <button class="btn ghost btn-sm" onclick={closeInlinePopover}>关闭</button>
         </div>
       </div>
 
       <div class="inline-tabs">
-        <button class={`inline-tab ${inlinePanelTab === 'rewrite' ? 'active' : ''}`} on:click={() => toggleInlineTab('rewrite')}>
+        <button class={`inline-tab ${inlinePanelTab === 'rewrite' ? 'active' : ''}`} onclick={() => toggleInlineTab('rewrite')}>
           改写建议
         </button>
-        <button class={`inline-tab ${inlinePanelTab === 'style' ? 'active' : ''}`} on:click={() => toggleInlineTab('style')}>
+        <button class={`inline-tab ${inlinePanelTab === 'style' ? 'active' : ''}`} onclick={() => toggleInlineTab('style')}>
           样式设置
         </button>
-        <button class={`inline-tab ${inlinePanelTab === 'assistant' ? 'active' : ''}`} on:click={() => toggleInlineTab('assistant')}>
+        <button class={`inline-tab ${inlinePanelTab === 'assistant' ? 'active' : ''}`} onclick={() => toggleInlineTab('assistant')}>
           改动对话
         </button>
       </div>
@@ -4869,7 +5171,7 @@
           <select
             bind:value={blockStyleFontFamily}
             disabled={inlineEditLocked}
-            on:change={() => applyInlineBlockStyle({ fontFamily: blockStyleFontFamily })}
+            onchange={() => applyInlineBlockStyle({ fontFamily: blockStyleFontFamily })}
           >
             <option value="">默认</option>
             <option value="宋体">宋体</option>
@@ -4882,7 +5184,7 @@
           <select
             bind:value={blockStyleFontSize}
             disabled={inlineEditLocked}
-            on:change={() => applyInlineBlockStyle({ fontSize: blockStyleFontSize })}
+            onchange={() => applyInlineBlockStyle({ fontSize: blockStyleFontSize })}
           >
             <option value="">默认</option>
             <option value="12pt">12pt</option>
@@ -4895,7 +5197,7 @@
           <select
             bind:value={blockStyleLineHeight}
             disabled={inlineEditLocked}
-            on:change={() => applyInlineBlockStyle({ lineHeight: blockStyleLineHeight })}
+            onchange={() => applyInlineBlockStyle({ lineHeight: blockStyleLineHeight })}
           >
             <option value="">默认</option>
             <option value="1.2">1.2</option>
@@ -4907,7 +5209,7 @@
           <select
             bind:value={blockStyleAlign}
             disabled={inlineEditLocked}
-            on:change={() => applyInlineBlockStyle({ align: blockStyleAlign })}
+            onchange={() => applyInlineBlockStyle({ align: blockStyleAlign })}
           >
             <option value="">默认</option>
             <option value="left">左对齐</option>
@@ -4919,7 +5221,7 @@
           <select
             bind:value={blockStyleFontWeight}
             disabled={inlineEditLocked}
-            on:change={() => applyInlineBlockStyle({ fontWeight: blockStyleFontWeight })}
+            onchange={() => applyInlineBlockStyle({ fontWeight: blockStyleFontWeight })}
           >
             <option value="">默认</option>
             <option value="400">常规</option>
@@ -4931,7 +5233,7 @@
           <select
             bind:value={blockStyleFontStyle}
             disabled={inlineEditLocked}
-            on:change={() => applyInlineBlockStyle({ fontStyle: blockStyleFontStyle })}
+            onchange={() => applyInlineBlockStyle({ fontStyle: blockStyleFontStyle })}
           >
             <option value="">默认</option>
             <option value="normal">正常</option>
@@ -4943,7 +5245,7 @@
             placeholder="#1f2937"
             bind:value={blockStyleColor}
             disabled={inlineEditLocked}
-            on:change={() => applyInlineBlockStyle({ color: blockStyleColor })}
+            onchange={() => applyInlineBlockStyle({ color: blockStyleColor })}
           />
           <span>背景色</span>
           <input
@@ -4951,7 +5253,7 @@
             placeholder="#ffffff"
             bind:value={blockStyleBackground}
             disabled={inlineEditLocked}
-            on:change={() => applyInlineBlockStyle({ background: blockStyleBackground })}
+            onchange={() => applyInlineBlockStyle({ background: blockStyleBackground })}
           />
         </div>
         <div class="panel-empty">样式栏会回显当前选中块的样式，修改仅作用于当前选区。</div>
@@ -4968,24 +5270,24 @@
           <div class="assistant-inline-actions">
             <button
               class="btn ghost"
-              on:click={() => {
+              onclick={() => {
                 blockEditCmd = blockDialogInput.trim()
                 inlinePanelTab = 'rewrite'
               }}
             >
               同步到改写指令
             </button>
-            <button class="btn ghost" on:click={() => openAssistantForBlock(blockDialogInput)}>发到右下角全局助手</button>
+            <button class="btn ghost" onclick={() => openAssistantForBlock(blockDialogInput)}>发到右下角全局助手</button>
           </div>
         </div>
       {/if}
 
       {#if inlinePanelTab === 'rewrite'}
         <div class="inline-preset-row">
-          <button class="preset-chip" on:click={() => useRewritePreset('语气更正式，保留原意')}>更正式</button>
-          <button class="preset-chip" on:click={() => useRewritePreset('压缩到更简洁，控制在80字左右')}>更简洁</button>
-          <button class="preset-chip" on:click={() => useRewritePreset('增加解释细节，但不要扩展事实')}>更详细</button>
-          <button class="preset-chip" on:click={() => useRewritePreset('保持术语不变，仅调整表达')}>保留术语</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('语气更正式，保留原意')}>更正式</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('压缩到更简洁，控制在80字左右')}>更简洁</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('增加解释细节，但不要扩展事实')}>更详细</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('保持术语不变，仅调整表达')}>保留术语</button>
         </div>
 
         <div class="inline-ai-row">
@@ -4997,10 +5299,10 @@
         </div>
 
         <div class="inline-action-row">
-          <button class="btn ghost" on:click={() => openInlinePopover('assistant', inlinePopoverPlacement)}>切到改动对话</button>
+          <button class="btn ghost" onclick={() => openInlinePopover('assistant', inlinePopoverPlacement)}>切到改动对话</button>
           <button
             class="btn primary"
-            on:click={previewSelectedBlockEdit}
+            onclick={previewSelectedBlockEdit}
             disabled={inlineEditLocked || blockPreviewBusy || !blockEditCmd.trim() || hasNonBlockTargets()}
           >
             {blockPreviewBusy ? '正在生成建议...' : '生成建议（不改原文）'}
@@ -5026,7 +5328,7 @@
               {#each blockCandidates as c, idx}
                 <button
                   class={`candidate-switch ${activeCandidateIndex === idx ? 'active' : ''}`}
-                  on:click={() => (activeCandidateIndex = idx)}
+                  onclick={() => (activeCandidateIndex = idx)}
                 >
                   <span>{c.label}</span>
                   <span>{candidateLengthDelta(c)}</span>
@@ -5040,9 +5342,9 @@
                   <span class="candidate-meta">{candidateLengthDelta(activeCandidate)}</span>
                 </div>
                 <div class="candidate-actions">
-                  <button class="btn primary" on:click={() => applyCandidateVersion(activeCandidateIndex)} disabled={inlineEditLocked}>采纳到正文</button>
-                  <button class="btn ghost" on:click={previewSelectedBlockEdit}>重新生成</button>
-                  <button class="btn ghost danger" on:click={ignoreCandidateSuggestions}>忽略建议</button>
+                  <button class="btn primary" onclick={() => applyCandidateVersion(activeCandidateIndex)} disabled={inlineEditLocked}>采纳到正文</button>
+                  <button class="btn ghost" onclick={previewSelectedBlockEdit}>重新生成</button>
+                  <button class="btn ghost danger" onclick={ignoreCandidateSuggestions}>忽略建议</button>
                 </div>
                 <div class="candidate-label">建议文本</div>
                 <div class="candidate-text">{activeCandidate.selectedAfter}</div>
@@ -5054,29 +5356,32 @@
     </section>
   {/if}
 
-  <button class="assistant-fab" on:click={toggleAssistantOpen} title="打开智能助手 (Ctrl/Cmd+K)">
+  <button class="assistant-fab" onclick={toggleAssistantOpen} title="打开智能助手 (Ctrl/Cmd+K)">
     <Icon name="chat" className="ui-icon" />
     <span>助手</span>
-    {#if queuedGlobalInstructions.length > 0}
-      <span class="assistant-queue-badge">{queuedGlobalInstructions.length}</span>
+    {#if assistantBadgeCount > 0}
+      <span class="assistant-queue-badge">{assistantBadgeCount}</span>
     {/if}
   </button>
 
   {#if assistantOpen}
     <div class="assistant-sheet-backdrop" role="presentation">
-      <button type="button" class="sheet-backdrop-hit" on:click={() => setAssistantOpen(false)} aria-label="关闭智能助手"></button>
-      <div class="assistant-sheet" role="dialog" aria-modal="true" aria-label="智能助手">
+      <button type="button" class="sheet-backdrop-hit" onclick={() => setAssistantOpen(false)} aria-label="关闭智能助手"></button>
+      <div class="assistant-sheet" role="dialog" aria-modal="true" aria-label="智能助手" tabindex="-1" onkeydown={handleAssistantSheetKeydown}>
         <div class="assistant-sheet-head">
           <div>
             <div class="panel-title">智能助手</div>
             <div class="panel-sub">快捷键：Ctrl/Cmd + K</div>
           </div>
-          <button class="btn ghost btn-sm" on:click={() => setAssistantOpen(false)}>关闭</button>
+          {#if assistantBadgeCount > 0}
+            <span class="assistant-queue-badge">{assistantBadgeCount}</span>
+          {/if}
+          <button class="btn ghost btn-sm" onclick={() => setAssistantOpen(false)}>关闭</button>
         </div>
         <Chat
           variant="assistant"
-          on:send={(e) => handleGenerate(e.detail)}
-          on:upload={handleAssistantUpload}
+          onsend={(text) => handleGenerate(text)}
+          onupload={handleAssistantUpload}
         />
       </div>
     </div>
@@ -5087,14 +5392,14 @@
     type="file"
     accept="image/*"
     bind:this={uploadImageInput}
-    on:change={handleInlineImageSelect}
+    onchange={handleInlineImageSelect}
   />
 
   <input
     class="hidden-input"
     type="file"
     bind:this={libraryUploadInput}
-    on:change={handleLibraryUploadSelect}
+    onchange={handleLibraryUploadSelect}
   />
 
   {#if pendingGenerateConfirmation}
@@ -5109,8 +5414,8 @@
           {pendingGenerateConfirmation.note || '该请求会执行高风险文本改动，请确认是否继续。'}
         </div>
         <div class="confirm-actions">
-          <button class="btn ghost" on:click={cancelPendingGenerate} disabled={confirmDialogBusy}>取消</button>
-          <button class="btn primary danger" on:click={confirmPendingGenerate} disabled={confirmDialogBusy}>
+          <button class="btn ghost" onclick={cancelPendingGenerate} disabled={confirmDialogBusy}>取消</button>
+          <button class="btn primary danger" onclick={confirmPendingGenerate} disabled={confirmDialogBusy}>
             {confirmDialogBusy ? '执行中...' : '确认执行'}
           </button>
         </div>
@@ -5126,8 +5431,8 @@
 <DiagramCanvas
   open={canvasOpen}
   docId={$docId}
-  on:close={() => (canvasOpen = false)}
-  on:insert={(e) => insertDiagramIntoDoc(e.detail.spec)}
+  onclose={() => (canvasOpen = false)}
+  oninsert={(payload) => insertDiagramIntoDoc(payload.spec)}
 />
 
 <ErrorBoundary>
@@ -5140,11 +5445,10 @@
 <style>
   :global(body) {
     margin: 0;
-    background:
-      radial-gradient(700px 360px at 15% 10%, rgba(94, 175, 255, 0.12), transparent 60%),
+    background: radial-gradient(700px 360px at 15% 10%, rgba(94, 175, 255, 0.12), transparent 60%),
       radial-gradient(520px 280px at 85% 12%, rgba(56, 230, 255, 0.14), transparent 60%),
       linear-gradient(180deg, #f6f9ff 0%, #eef3fb 50%, #f3f7ff 100%);
-    color: #0f172a;
+    color: #f5f3f0;
     font-family: "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", sans-serif;
   }
 
@@ -5154,8 +5458,8 @@
     inset: 0;
     pointer-events: none;
     background:
-      repeating-linear-gradient(120deg, rgba(15, 23, 42, 0.04) 0, rgba(15, 23, 42, 0.04) 1px, transparent 1px, transparent 32px),
-      repeating-linear-gradient(200deg, rgba(56, 189, 248, 0.06) 0, rgba(56, 189, 248, 0.06) 1px, transparent 1px, transparent 36px);
+      repeating-linear-gradient(120deg, rgba(250, 249, 247, 0.04) 0, rgba(250, 249, 247, 0.04) 1px, transparent 1px, transparent 32px),
+      repeating-linear-gradient(200deg, rgba(217, 119, 6, 0.06) 0, rgba(217, 119, 6, 0.06) 1px, transparent 1px, transparent 36px);
     opacity: 0.4;
     z-index: 0;
   }
@@ -5163,10 +5467,10 @@
   .app {
     --panel-bg: rgba(255, 255, 255, 0.88);
     --panel-border: rgba(148, 163, 184, 0.22);
-    --panel-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    --panel-shadow: 0 18px 40px rgba(250, 249, 247, 0.12);
     --accent: #2563eb;
     --accent-weak: rgba(37, 99, 235, 0.12);
-    --text-muted: rgba(51, 65, 85, 0.72);
+    --text-muted: rgba(245, 243, 240, 0.72);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -5181,8 +5485,8 @@
     gap: 20px;
     padding: 16px 28px;
     background: rgba(255, 255, 255, 0.86);
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(231, 229, 228, 1);
+    
   }
 
   .brand {
@@ -5198,8 +5502,8 @@
     display: grid;
     place-items: center;
     font-weight: 700;
-    color: #0f172a;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(14, 165, 233, 0.9));
+    color: #f5f3f0;
+    background: #faf9f7;
     box-shadow: 0 10px 20px rgba(14, 165, 233, 0.25);
   }
 
@@ -5454,7 +5758,7 @@
     font-size: 12px;
     text-align: center;
     cursor: pointer;
-    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 10px 20px rgba(250, 249, 247, 0.08);
     transition: transform 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
   }
 
@@ -5516,7 +5820,7 @@
   .tool-sep {
     width: 1px;
     height: 18px;
-    background: rgba(148, 163, 184, 0.36);
+    background: rgba(231, 229, 228, 1);
     margin: 0 2px;
   }
 
@@ -5524,7 +5828,7 @@
     min-width: 34px;
     height: 32px;
     border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    border: 1px solid rgba(231, 229, 228, 1);
     background: #fff;
     font-weight: 600;
     padding: 0 10px;
@@ -5539,7 +5843,7 @@
 
   .tool-btn.active {
     border-color: rgba(37, 99, 235, 0.75);
-    background: linear-gradient(135deg, rgba(219, 234, 254, 0.95), rgba(186, 230, 253, 0.9));
+    background: #faf9f7;
     color: #1d4ed8;
     box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
   }
@@ -5549,7 +5853,7 @@
     cursor: not-allowed;
     box-shadow: none;
     transform: none;
-    border-color: rgba(148, 163, 184, 0.24);
+    border-color: rgba(231, 229, 228, 1);
     border-style: dashed;
     background: rgba(241, 245, 249, 0.72);
     color: rgba(100, 116, 139, 0.9);
@@ -5564,7 +5868,7 @@
     padding: 10px 16px;
     border-radius: 14px;
     background: rgba(14, 165, 233, 0.12);
-    color: #0f172a;
+    color: #f5f3f0;
     font-size: 13px;
   }
 
@@ -5585,8 +5889,8 @@
   }
 
   .originality-panel {
-    background: rgba(245, 158, 11, 0.08);
-    border-color: rgba(245, 158, 11, 0.28);
+    background: rgba(217, 119, 6, 0.08);
+    border-color: rgba(217, 119, 6, 0.28);
   }
 
   .risk-row {
@@ -5595,7 +5899,7 @@
     gap: 16px;
     align-items: center;
     padding: 10px 0;
-    border-top: 1px dashed rgba(148, 163, 184, 0.24);
+    border-top: 1px dashed rgba(231, 229, 228, 1);
   }
 
   .risk-title {
@@ -5608,7 +5912,7 @@
     flex-wrap: wrap;
     gap: 10px;
     font-size: 12px;
-    color: rgba(15, 23, 42, 0.72);
+    color: rgba(250, 249, 247, 0.72);
     margin-top: 4px;
   }
 
@@ -5630,7 +5934,7 @@
 
   .risk-badge.ok {
     color: #166534;
-    border-color: rgba(34, 197, 94, 0.32);
+    border-color: rgba(22, 163, 74, 0.32);
     background: rgba(220, 252, 231, 0.72);
   }
 
@@ -5662,7 +5966,7 @@
     padding: 7px 14px;
     font-size: 13px;
     background: rgba(248, 250, 252, 0.94);
-    color: #0f172a;
+    color: #f5f3f0;
     cursor: pointer;
   }
 
@@ -5759,7 +6063,7 @@
 
   .candidate-before,
   .candidate-card {
-    border: 1px solid rgba(148, 163, 184, 0.25);
+    border: 1px solid rgba(231, 229, 228, 1);
     border-radius: 12px;
     background: rgba(248, 250, 252, 0.95);
     padding: 12px;
@@ -5786,7 +6090,7 @@
     border: 1px solid rgba(148, 163, 184, 0.32);
     border-radius: 10px;
     background: rgba(241, 245, 249, 0.9);
-    color: #0f172a;
+    color: #f5f3f0;
     padding: 7px 10px;
     font-size: 12px;
     display: grid;
@@ -5838,7 +6142,7 @@
     white-space: pre-wrap;
     font-size: 16px;
     line-height: 1.55;
-    color: #0f172a;
+    color: #f5f3f0;
   }
 
   .btn.ghost.danger {
@@ -5922,7 +6226,7 @@
   }
 
   .version-major.current {
-    border-color: rgba(16, 185, 129, 0.5);
+    border-color: rgba(22, 163, 74, 0.5);
   }
 
   .version-title {
@@ -5937,7 +6241,7 @@
     font-size: 11px;
     padding: 2px 6px;
     border-radius: 999px;
-    background: rgba(148, 163, 184, 0.2);
+    background: rgba(231, 229, 228, 1);
   }
 
   .badge.major {
@@ -5955,7 +6259,7 @@
   .version-summary {
     margin-top: 6px;
     font-size: 11px;
-    color: #0f172a;
+    color: #f5f3f0;
   }
 
   .version-actions,
@@ -5975,14 +6279,14 @@
   .version-minor {
     padding: 8px 10px;
     border-radius: 12px;
-    border: 1px dashed rgba(148, 163, 184, 0.3);
+    border: 1px dashed rgba(231, 229, 228, 1);
     display: flex;
     justify-content: space-between;
     gap: 8px;
   }
 
   .version-minor.current {
-    border-color: rgba(16, 185, 129, 0.5);
+    border-color: rgba(22, 163, 74, 0.5);
   }
 
   .minor-title {
@@ -5996,7 +6300,7 @@
   }
 
   .version-diff pre {
-    background: rgba(15, 23, 42, 0.06);
+    background: rgba(250, 249, 247, 0.06);
     padding: 10px;
     border-radius: 12px;
     font-size: 11px;
@@ -6007,8 +6311,8 @@
 
   .block-preview {
     font-size: 12px;
-    color: #0f172a;
-    background: rgba(15, 23, 42, 0.04);
+    color: #f5f3f0;
+    background: rgba(250, 249, 247, 0.04);
     border-radius: 10px;
     padding: 8px;
     max-height: 80px;
@@ -6023,7 +6327,7 @@
   }
 
   .block-error {
-    color: #ef4444;
+    color: #dc2626;
     font-size: 12px;
     margin-top: 6px;
   }
@@ -6076,7 +6380,7 @@
     border-radius: 12px;
     border: 1px solid rgba(37, 99, 235, 0.28);
     background: rgba(255, 255, 255, 0.97);
-    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.22);
+    box-shadow: 0 16px 30px rgba(250, 249, 247, 0.22);
     padding: 8px 10px;
     display: flex;
     align-items: center;
@@ -6086,7 +6390,7 @@
 
   .inline-selection-meta {
     font-size: 12px;
-    color: #0f172a;
+    color: #f5f3f0;
     display: grid;
     gap: 2px;
   }
@@ -6105,9 +6409,9 @@
   }
 
   .mini-btn {
-    border: 1px solid rgba(148, 163, 184, 0.38);
+    border: 1px solid rgba(231, 229, 228, 1);
     background: rgba(248, 250, 252, 0.95);
-    color: #0f172a;
+    color: #f5f3f0;
     border-radius: 9px;
     padding: 6px 9px;
     font-size: 12px;
@@ -6123,7 +6427,7 @@
   .mini-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    background: rgba(226, 232, 240, 0.7);
+    background: rgba(168, 162, 158, 0.7);
   }
 
   .inline-edit-popover {
@@ -6135,7 +6439,7 @@
     border-radius: 16px;
     border: 1px solid rgba(37, 99, 235, 0.32);
     background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+    box-shadow: 0 24px 48px rgba(250, 249, 247, 0.28);
     padding: 12px;
     display: grid;
     gap: 10px;
@@ -6163,7 +6467,7 @@
     min-width: 18px;
     height: 18px;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.8);
+    background: rgba(250, 249, 247, 0.8);
     color: #fff;
     display: inline-flex;
     align-items: center;
@@ -6174,8 +6478,8 @@
 
   .btn {
     border: none;
-    background: rgba(15, 23, 42, 0.08);
-    color: #0f172a;
+    background: rgba(250, 249, 247, 0.08);
+    color: #f5f3f0;
     padding: 8px 12px;
     border-radius: 10px;
     font-size: 12px;
@@ -6189,18 +6493,18 @@
   }
 
   .btn.ghost {
-    background: rgba(15, 23, 42, 0.06);
+    background: rgba(250, 249, 247, 0.06);
   }
 
   .btn.primary.danger {
-    background: linear-gradient(135deg, #dc2626, #ef4444);
+    background: linear-gradient(135deg, #dc2626, #dc2626);
   }
 
   .confirm-overlay {
     position: fixed;
     inset: 0;
     z-index: 40;
-    background: rgba(15, 23, 42, 0.38);
+    background: rgba(250, 249, 247, 0.38);
     display: grid;
     place-items: center;
     padding: 16px;
@@ -6211,7 +6515,7 @@
     border-radius: 16px;
     border: 1px solid rgba(220, 38, 38, 0.25);
     background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 26px 48px rgba(15, 23, 42, 0.3);
+    box-shadow: 0 26px 48px rgba(250, 249, 247, 0.3);
     padding: 16px;
     display: grid;
     gap: 10px;
@@ -6219,7 +6523,7 @@
 
   .confirm-note {
     border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.28);
+    border: 1px solid rgba(231, 229, 228, 1);
     background: rgba(248, 250, 252, 0.92);
     color: #334155;
     padding: 10px 12px;
@@ -6241,7 +6545,7 @@
 
   .icon-btn {
     border: none;
-    background: rgba(15, 23, 42, 0.08);
+    background: rgba(250, 249, 247, 0.08);
     width: 28px;
     height: 28px;
     border-radius: 8px;
@@ -6339,10 +6643,9 @@
   }
   /* FilmLab-style dark skin overrides */
   :global(body) {
-    background:
-      radial-gradient(1200px 620px at -6% -18%, rgba(56, 189, 248, 0.16), transparent 68%),
+    background: radial-gradient(1200px 620px at -6% -18%, rgba(217, 119, 6, 0.16), transparent 68%),
       radial-gradient(920px 520px at 106% -12%, rgba(234, 179, 8, 0.14), transparent 70%),
-      linear-gradient(180deg, #05080f 0%, #0b111b 52%, #111827 100%);
+      linear-gradient(180deg, #0c1220 0%, #141c2e 100%);
     color: #e8eefb;
   }
 
@@ -6374,7 +6677,7 @@
     background: rgba(7, 13, 26, 0.72);
     border-bottom: 1px solid rgba(167, 189, 220, 0.2);
     box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(14px);
+    
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr) auto;
     gap: 14px;
@@ -6383,8 +6686,8 @@
   }
 
   .logo {
-    color: #f8fbff;
-    background: linear-gradient(145deg, rgba(58, 122, 255, 0.98), rgba(44, 186, 255, 0.9));
+    color: #fff;
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
     box-shadow: 0 14px 28px rgba(35, 121, 255, 0.35);
   }
 
@@ -6421,7 +6724,7 @@
 
   .menu-item.active {
     color: #ffffff;
-    background: linear-gradient(125deg, rgba(79, 116, 222, 0.92), rgba(38, 164, 228, 0.88));
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
     border-color: rgba(189, 220, 255, 0.66);
     box-shadow: 0 10px 22px rgba(53, 117, 236, 0.36);
   }
@@ -6482,21 +6785,21 @@
   }
 
   .btn.primary {
-    background: linear-gradient(130deg, rgba(96, 132, 255, 0.96), rgba(48, 170, 237, 0.92));
-    border: 1px solid rgba(177, 210, 255, 0.52);
-    color: #ffffff;
+    background: linear-gradient(135deg, #3b82f6, #0ea5e9);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    color: #fff;
     box-shadow: 0 12px 24px rgba(57, 126, 245, 0.34);
   }
 
   .btn.primary.danger {
-    background: linear-gradient(130deg, rgba(239, 68, 68, 0.96), rgba(249, 115, 22, 0.92));
+    background: #faf9f7;
     border: 1px solid rgba(255, 189, 189, 0.45);
   }
 
   .btn.ghost.danger {
-    background: rgba(127, 29, 29, 0.4);
-    color: #fecaca;
-    border: 1px solid rgba(248, 113, 113, 0.45);
+    background: rgba(254, 242, 242, 0.4);
+    color: #fee2e2;
+    border: 1px solid rgba(220, 38, 38, 0.45);
   }
 
   .btn:hover,
@@ -6536,7 +6839,7 @@
     padding: 14px;
     border-radius: 18px;
     border: 1px solid rgba(164, 190, 226, 0.2);
-    background: linear-gradient(180deg, rgba(15, 24, 43, 0.96), rgba(10, 17, 32, 0.94));
+    background: rgba(12, 18, 32, 0.85);
     box-shadow: 0 22px 38px rgba(0, 0, 0, 0.4);
   }
 
@@ -6556,12 +6859,12 @@
 
   .rail-search input:focus {
     border-color: rgba(160, 205, 255, 0.66);
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
   }
 
   .rail-upload-btn {
     border: 1px solid rgba(214, 178, 97, 0.45);
-    background: linear-gradient(145deg, rgba(242, 197, 98, 0.22), rgba(244, 168, 70, 0.2));
+    background: #faf9f7;
     color: #fbe4ac;
     border-radius: 12px;
     padding: 8px 10px;
@@ -6572,7 +6875,7 @@
 
   .rail-upload-btn:hover {
     border-color: rgba(250, 214, 127, 0.74);
-    background: linear-gradient(145deg, rgba(242, 197, 98, 0.34), rgba(244, 168, 70, 0.3));
+    background: #faf9f7;
   }
 
   .rail-tip {
@@ -6607,7 +6910,7 @@
     justify-content: space-between;
     font-size: 11px;
     letter-spacing: 0.08em;
-    color: rgba(182, 201, 230, 0.82);
+    color: rgba(168, 162, 158, 0.82);
   }
 
   .rail-group-head em {
@@ -6644,7 +6947,7 @@
   }
 
   .library-card {
-    border: 1px solid rgba(151, 176, 213, 0.24);
+    border: 1px solid rgba(231, 229, 228, 1);
     background: rgba(23, 35, 62, 0.78);
     border-radius: 11px;
     padding: 8px;
@@ -6677,19 +6980,19 @@
   }
 
   .library-card.tone-azure .library-card-cover {
-    background: linear-gradient(130deg, rgba(68, 112, 213, 0.5), rgba(46, 156, 220, 0.42));
+    background: #faf9f7;
   }
 
   .library-card.tone-gold .library-card-cover {
-    background: linear-gradient(130deg, rgba(170, 126, 48, 0.52), rgba(223, 171, 78, 0.38));
+    background: #faf9f7;
   }
 
   .library-card.tone-violet .library-card-cover {
-    background: linear-gradient(130deg, rgba(109, 83, 191, 0.54), rgba(153, 96, 219, 0.36));
+    background: #faf9f7;
   }
 
   .library-card.tone-teal .library-card-cover {
-    background: linear-gradient(130deg, rgba(48, 126, 156, 0.52), rgba(44, 183, 171, 0.36));
+    background: #faf9f7;
   }
 
   .library-status,
@@ -6716,7 +7019,7 @@
   }
 
   .library-status.status-review {
-    border-color: rgba(248, 113, 113, 0.5);
+    border-color: rgba(220, 38, 38, 0.5);
   }
 
   .library-kind {
@@ -6739,7 +7042,7 @@
 
   .library-card-title {
     font-size: 12px;
-    color: #eef5ff;
+    color: #1c1917;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
@@ -6777,7 +7080,7 @@
 
   .rail-filter {
     border: 1px solid rgba(154, 180, 218, 0.24);
-    background: rgba(24, 36, 62, 0.7);
+    background: rgba(245, 243, 240, 0.7);
     color: rgba(210, 224, 247, 0.9);
     border-radius: 10px;
     padding: 6px 8px;
@@ -6788,7 +7091,7 @@
 
   .rail-filter.active {
     border-color: rgba(158, 206, 255, 0.66);
-    background: linear-gradient(130deg, rgba(72, 108, 205, 0.72), rgba(39, 145, 201, 0.66));
+    background: #faf9f7;
     color: #ffffff;
   }
 
@@ -6796,7 +7099,7 @@
     margin-top: auto;
     border: 1px dashed rgba(153, 178, 214, 0.36);
     background: rgba(20, 31, 54, 0.56);
-    color: rgba(201, 216, 242, 0.88);
+    color: rgba(168, 162, 158, 0.88);
     border-radius: 10px;
     padding: 8px 10px;
     font-size: 12px;
@@ -6810,16 +7113,16 @@
     border-radius: 10px;
     padding: 8px 10px;
     text-align: left;
-    border: 1px solid rgba(151, 176, 213, 0.24);
-    background: rgba(25, 36, 63, 0.78);
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(245, 243, 240, 0.78);
     color: rgba(214, 228, 247, 0.9);
     box-shadow: none;
   }
 
   .nav-btn.active {
-    border-color: rgba(158, 206, 255, 0.72);
-    box-shadow: 0 8px 18px rgba(50, 98, 199, 0.32);
-    background: linear-gradient(130deg, rgba(72, 110, 205, 0.72), rgba(39, 145, 201, 0.66));
+    border-color: rgba(217, 119, 6, 0.2);
+    box-shadow: 0 8px 18px rgba(217, 119, 6, 0.32);
+    background: #faf9f7;
     color: #ffffff;
   }
 
@@ -6838,9 +7141,9 @@
     gap: 12px;
     padding: 10px 12px;
     border-radius: 14px;
-    border: 1px solid rgba(161, 188, 223, 0.2);
-    background: linear-gradient(180deg, rgba(15, 24, 44, 0.88), rgba(11, 18, 34, 0.84));
-    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: #ffffff;
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.01);
   }
 
   .library-view-switch {
@@ -6848,7 +7151,7 @@
     gap: 6px;
     padding: 4px;
     border-radius: 12px;
-    background: rgba(20, 31, 53, 0.88);
+    background: rgba(245, 243, 240, 0.88);
     border: 1px solid rgba(148, 173, 212, 0.24);
   }
 
@@ -6867,9 +7170,9 @@
 
   .view-btn.active {
     color: #ffffff;
-    border-color: rgba(171, 213, 255, 0.62);
-    background: linear-gradient(125deg, rgba(76, 112, 208, 0.86), rgba(40, 157, 222, 0.8));
-    box-shadow: 0 8px 16px rgba(52, 108, 214, 0.32);
+    border-color: rgba(217, 119, 6, 0.25);
+    background: #faf9f7;
+    box-shadow: 0 8px 16px rgba(217, 119, 6, 0.32);
   }
 
   .library-counter {
@@ -6892,9 +7195,9 @@
   .doc-stage,
   .panel-card,
   .feedback-panel {
-    border-color: rgba(158, 184, 222, 0.2);
-    background: linear-gradient(180deg, rgba(14, 23, 43, 0.88), rgba(10, 17, 31, 0.84));
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.34);
+    border-color: rgba(231, 229, 228, 1);
+    background: #ffffff;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.01);
   }
 
   .panel-card,
@@ -6919,25 +7222,25 @@
   }
 
   .toolbar-cluster {
-    border-color: rgba(156, 181, 218, 0.24);
-    background: rgba(20, 31, 56, 0.76);
+    border-color: rgba(231, 229, 228, 1);
+    background: rgba(250, 249, 247, 0.76);
   }
 
   .cluster-label {
-    color: rgba(187, 205, 235, 0.72);
+    color: rgba(168, 162, 158, 0.72);
   }
 
   .tool-sep {
-    background: rgba(166, 188, 220, 0.25);
+    background: rgba(231, 229, 228, 1);
   }
 
   .tool-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(152, 178, 218, 0.28);
-    background: rgba(18, 30, 54, 0.82);
-    color: #e4efff;
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(245, 243, 240, 0.82);
+    color: #1c1917;
   }
 
   .tool-btn .ui-icon {
@@ -6946,28 +7249,28 @@
   }
 
   .tool-btn.active {
-    border-color: rgba(160, 207, 255, 0.68);
-    background: linear-gradient(130deg, rgba(77, 113, 206, 0.78), rgba(43, 153, 217, 0.72));
+    border-color: rgba(217, 119, 6, 0.25);
+    background: #faf9f7;
     color: #ffffff;
-    box-shadow: 0 10px 18px rgba(46, 103, 212, 0.36);
+    box-shadow: 0 10px 18px rgba(217, 119, 6, 0.36);
   }
 
   .tool-btn:disabled {
     color: rgba(157, 176, 206, 0.62);
     border-color: rgba(132, 153, 186, 0.22);
-    background: rgba(17, 27, 48, 0.58);
+    background: rgba(250, 249, 247, 0.58);
   }
 
   .generation-banner {
-    border: 1px solid rgba(166, 201, 255, 0.28);
-    background: rgba(25, 45, 80, 0.56);
+    border: 1px solid rgba(217, 119, 6, 0.2);
+    background: rgba(250, 249, 247, 0.56);
     color: rgba(214, 228, 252, 0.9);
   }
 
   .section-failures {
-    background: rgba(88, 22, 22, 0.34);
-    border: 1px dashed rgba(248, 113, 113, 0.44);
-    color: #fecaca;
+    background: rgba(254, 242, 242, 0.34);
+    border: 1px dashed rgba(220, 38, 38, 0.44);
+    color: #fee2e2;
   }
 
   .failure-row {
@@ -6975,13 +7278,13 @@
   }
 
   .originality-panel {
-    background: rgba(95, 62, 14, 0.34);
-    border-color: rgba(251, 191, 36, 0.32);
-    color: #fde68a;
+    background: rgba(255, 251, 235, 0.34);
+    border-color: rgba(217, 119, 6, 0.32);
+    color: #fef3c7;
   }
 
   .risk-row {
-    border-top-color: rgba(251, 191, 36, 0.22);
+    border-top-color: rgba(217, 119, 6, 0.22);
   }
 
   .risk-metrics {
@@ -6990,23 +7293,23 @@
 
   .risk-badge {
     background: rgba(17, 24, 39, 0.45);
-    color: rgba(226, 232, 240, 0.92);
+    color: rgba(168, 162, 158, 0.92);
   }
 
   .risk-badge.ok {
-    color: #bbf7d0;
-    background: rgba(20, 83, 45, 0.46);
-    border-color: rgba(34, 197, 94, 0.28);
+    color: #166534;
+    background: rgba(22, 163, 74, 0.46);
+    border-color: rgba(22, 163, 74, 0.28);
   }
 
   .risk-badge.bad {
-    color: #fecaca;
-    background: rgba(127, 29, 29, 0.48);
-    border-color: rgba(248, 113, 113, 0.3);
+    color: #fee2e2;
+    background: rgba(254, 242, 242, 0.48);
+    border-color: rgba(220, 38, 38, 0.3);
   }
 
   .panel-title {
-    color: #eef5ff;
+    color: #1c1917;
     letter-spacing: 0.025em;
   }
 
@@ -7029,45 +7332,45 @@
   .inline-style-row select,
   .inline-style-row input,
   .inline-instruction {
-    border: 1px solid rgba(155, 180, 218, 0.28);
+    border: 1px solid rgba(231, 229, 228, 1);
     background: rgba(14, 25, 46, 0.84);
-    color: #e9f1ff;
+    color: #1c1917;
   }
 
   .rating-btn {
     border: 1px solid rgba(152, 178, 216, 0.3);
-    background: rgba(19, 30, 55, 0.82);
-    color: #dce8ff;
+    background: rgba(245, 243, 240, 0.82);
+    color: #1c1917;
   }
 
   .rating-btn.active {
-    border-color: rgba(159, 206, 255, 0.72);
-    background: linear-gradient(130deg, rgba(79, 116, 209, 0.84), rgba(45, 160, 222, 0.76));
+    border-color: rgba(217, 119, 6, 0.2);
+    background: #faf9f7;
     color: #fff;
   }
 
   .feedback-tip {
-    color: rgba(165, 211, 255, 0.9);
+    color: rgba(217, 119, 6, 0.9);
   }
 
   .feedback-history,
   .plagiarism-results,
   .plagiarism-report-actions {
-    border-top-color: rgba(154, 177, 213, 0.26);
+    border-top-color: rgba(231, 229, 228, 1);
   }
 
   .feedback-item,
   .plagiarism-item,
   .candidate-before,
   .candidate-card {
-    border: 1px solid rgba(152, 177, 214, 0.24);
-    background: rgba(18, 31, 56, 0.72);
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(245, 243, 240, 0.72);
   }
 
   .feedback-item-note,
   .plagiarism-item-head,
   .candidate-text {
-    color: #e3ecfb;
+    color: #1c1917;
   }
 
   .plagiarism-item-head em,
@@ -7080,18 +7383,18 @@
 
   .plagiarism-evidence {
     color: rgba(214, 226, 247, 0.86);
-    border-left-color: rgba(146, 190, 255, 0.54);
+    border-left-color: rgba(217, 119, 6, 0.2);
   }
 
   .candidate-switch {
-    border: 1px solid rgba(154, 180, 220, 0.26);
-    background: rgba(22, 34, 62, 0.72);
-    color: rgba(215, 228, 250, 0.9);
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(245, 243, 240, 0.72);
+    color: rgba(168, 162, 158, 0.9);
   }
 
   .candidate-switch.active {
-    border-color: rgba(155, 203, 255, 0.68);
-    background: linear-gradient(130deg, rgba(74, 110, 207, 0.76), rgba(42, 154, 219, 0.7));
+    border-color: rgba(217, 119, 6, 0.2);
+    background: #faf9f7;
     color: #ffffff;
   }
 
@@ -7100,74 +7403,74 @@
   }
 
   .inline-tab {
-    border: 1px solid rgba(152, 178, 216, 0.26);
-    background: rgba(18, 30, 54, 0.72);
-    color: rgba(213, 227, 249, 0.9);
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(245, 243, 240, 0.72);
+    color: rgba(168, 162, 158, 0.9);
   }
 
   .inline-tab.active {
-    border-color: rgba(153, 202, 255, 0.66);
-    background: linear-gradient(130deg, rgba(77, 113, 206, 0.78), rgba(43, 154, 218, 0.72));
+    border-color: rgba(217, 119, 6, 0.2);
+    background: #faf9f7;
     color: #ffffff;
   }
 
   .assistant-inline-tip {
-    border-color: rgba(151, 196, 252, 0.38);
-    background: rgba(20, 33, 60, 0.72);
-    color: rgba(214, 226, 248, 0.92);
+    border-color: rgba(217, 119, 6, 0.15);
+    background: rgba(245, 243, 240, 0.72);
+    color: rgba(168, 162, 158, 0.92);
   }
 
   .preset-chip {
-    border-color: rgba(152, 200, 255, 0.44);
-    background: rgba(30, 48, 84, 0.58);
+    border-color: rgba(217, 119, 6, 0.2);
+    background: rgba(245, 243, 240, 0.58);
     color: rgba(205, 223, 251, 0.94);
   }
 
   .inline-selection-bar {
-    border: 1px solid rgba(151, 197, 255, 0.36);
-    background: rgba(8, 15, 30, 0.94);
-    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.48);
+    border: 1px solid rgba(217, 119, 6, 0.15);
+    background: rgba(250, 249, 247, 0.94);
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.06);
   }
 
   .inline-selection-meta {
-    color: #ebf2ff;
+    color: #1c1917;
   }
 
   .mini-btn {
     border: 1px solid rgba(150, 176, 214, 0.3);
-    background: rgba(18, 29, 53, 0.86);
-    color: #dfebff;
+    background: rgba(250, 249, 247, 0.86);
+    color: #1c1917;
   }
 
   .mini-btn:hover {
-    border-color: rgba(160, 203, 255, 0.64);
-    background: rgba(30, 46, 81, 0.92);
+    border-color: rgba(217, 119, 6, 0.2);
+    background: rgba(245, 243, 240, 0.92);
   }
 
   .inline-edit-popover,
   .confirm-dialog {
-    border: 1px solid rgba(150, 177, 216, 0.3);
-    background: rgba(7, 13, 27, 0.96);
-    box-shadow: 0 28px 52px rgba(0, 0, 0, 0.52);
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 28px 52px rgba(0, 0, 0, 0.08);
   }
 
   .confirm-note {
     border-color: rgba(149, 174, 214, 0.28);
-    background: rgba(17, 29, 54, 0.74);
+    background: rgba(245, 243, 240, 0.74);
     color: rgba(214, 228, 250, 0.88);
   }
 
   .selected-chip {
-    border: 1px solid rgba(142, 191, 255, 0.38);
-    background: rgba(39, 88, 165, 0.28);
+    border: 1px solid rgba(217, 119, 6, 0.15);
+    background: rgba(217, 119, 6, 0.28);
     color: #dceaff;
   }
 
   .media-meta-panel {
     border-color: rgba(208, 176, 106, 0.34);
     background:
-      radial-gradient(300px 220px at 86% -10%, rgba(235, 178, 76, 0.18), transparent 70%),
-      linear-gradient(180deg, rgba(22, 29, 50, 0.9), rgba(13, 20, 37, 0.92));
+      none, transparent 70%),
+      #ffffff;
   }
 
   .meta-hero {
@@ -7175,7 +7478,7 @@
     overflow: hidden;
     border-radius: 14px;
     border: 1px solid rgba(205, 169, 95, 0.34);
-    background: linear-gradient(145deg, rgba(43, 55, 88, 0.74), rgba(26, 35, 58, 0.74));
+    background: #faf9f7;
     min-height: 96px;
     padding: 14px 12px;
   }
@@ -7187,7 +7490,7 @@
     right: -46px;
     top: -70px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(245, 200, 112, 0.42), rgba(245, 200, 112, 0.05) 66%, transparent 76%);
+    background: none, rgba(245, 200, 112, 0.05) 66%, transparent 76%);
     filter: blur(2px);
   }
 
@@ -7195,7 +7498,7 @@
     position: relative;
     font-size: 13px;
     line-height: 1.52;
-    color: rgba(235, 241, 253, 0.92);
+    color: rgba(168, 162, 158, 0.92);
     max-height: 74px;
     overflow: hidden;
   }
@@ -7211,7 +7514,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    border-bottom: 1px dashed rgba(159, 183, 218, 0.22);
+    border-bottom: 1px dashed rgba(231, 229, 228, 1);
     padding-bottom: 6px;
   }
 
@@ -7221,7 +7524,7 @@
   }
 
   .meta-list strong {
-    color: #f2f7ff;
+    color: #1c1917;
     font-size: 12px;
     text-align: right;
     font-weight: 600;
@@ -7257,21 +7560,21 @@
   .version-minor {
     border: 1px solid rgba(153, 179, 218, 0.22);
     border-radius: 10px;
-    background: rgba(17, 27, 50, 0.74);
+    background: rgba(245, 243, 240, 0.74);
     padding: 10px;
   }
 
   .version-major.current,
   .version-minor.current {
     border-color: rgba(158, 205, 255, 0.72);
-    box-shadow: inset 0 0 0 1px rgba(116, 182, 255, 0.24);
+    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.1);
   }
 
   .version-title {
     display: flex;
     justify-content: space-between;
     gap: 8px;
-    color: #eaf1ff;
+    color: #1c1917;
     font-size: 13px;
     font-weight: 600;
   }
@@ -7280,17 +7583,17 @@
     border-radius: 999px;
     font-size: 11px;
     padding: 2px 8px;
-    border: 1px solid rgba(154, 179, 216, 0.3);
+    border: 1px solid rgba(231, 229, 228, 1);
   }
 
   .badge.major {
-    color: #fde68a;
+    color: #fef3c7;
     border-color: rgba(245, 204, 113, 0.46);
-    background: rgba(140, 97, 23, 0.3);
+    background: rgba(255, 251, 235, 0.3);
   }
 
   .badge.minor {
-    color: #cbe4ff;
+    color: #57534e;
     border-color: rgba(147, 191, 245, 0.42);
     background: rgba(30, 80, 164, 0.3);
   }
@@ -7327,7 +7630,7 @@
     overflow: auto;
     border-radius: 10px;
     border: 1px solid rgba(148, 173, 210, 0.26);
-    background: rgba(9, 16, 31, 0.9);
+    background: rgba(250, 249, 247, 0.9);
     color: rgba(213, 228, 251, 0.88);
     padding: 10px;
     font-size: 12px;
@@ -7336,19 +7639,21 @@
 
   .icon-btn {
     border: 1px solid rgba(149, 174, 212, 0.28);
-    background: rgba(23, 34, 59, 0.8);
-    color: rgba(220, 231, 249, 0.9);
+    background: rgba(245, 243, 240, 0.8);
+    color: rgba(168, 162, 158, 0.9);
   }
 
   .assistant-queue-badge {
-    background: rgba(5, 10, 20, 0.84);
-    color: #eff6ff;
+    background: rgba(250, 249, 247, 0.84);
+    color: #1c1917;
   }
 
   /* Focus-first simplification */
   :global(body) {
-    background: #0f172a !important;
-    color: #e2e8f0;
+    background: radial-gradient(1200px 720px at 18% -12%, rgba(217, 119, 6, 0.14), transparent 60%),
+      none, transparent 58%),
+      linear-gradient(180deg, #faf8f5 0%, #f5f3f0 34%, #eeede9 100%) !important;
+    color: #1c1917;
   }
 
   :global(body)::before {
@@ -7358,25 +7663,32 @@
   }
 
   .app {
-    --panel-bg: rgba(15, 23, 42, 0.92);
-    --panel-bg-soft: rgba(15, 23, 42, 0.86);
-    --panel-border: rgba(148, 163, 184, 0.16);
-    --panel-shadow: 0 12px 28px rgba(2, 6, 23, 0.32);
-    --text-main: #e2e8f0;
-    --text-muted: rgba(148, 163, 184, 0.8);
-    --accent: #60a5fa;
-    --accent-weak: rgba(96, 165, 250, 0.14);
+    --panel-bg: #ffffff;
+    --panel-bg-soft: #ffffff;
+    --panel-border: rgba(164, 183, 208, 0.18);
+    --panel-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+    --text-main: #1c1917;
+    --text-muted: rgba(171, 188, 209, 0.78);
+    --accent: #d97706;
+    --accent-weak: rgba(217, 119, 6, 0.14);
+    background: radial-gradient(620px 360px at 12% 0%, rgba(217, 119, 6, 0.08), transparent 58%);
     font-family: "Sora", "Manrope", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
   }
 
   .topbar {
-    background: rgba(15, 23, 42, 0.95);
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-    box-shadow: none;
+    position: sticky;
+    top: 0;
+    z-index: 22;
+    
+    background: #ffffff;
+    border-bottom: 1px solid rgba(231, 229, 228, 1);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
   }
 
   .brand-sub {
-    display: none;
+    display: block;
+    color: rgba(168, 162, 158, 0.66);
+    letter-spacing: 0.04em;
   }
 
   .workspace-status-line {
@@ -7384,7 +7696,7 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
-    color: #94a3b8;
+    color: #78716c;
     font-size: 12px;
     line-height: 1.4;
     white-space: nowrap;
@@ -7392,39 +7704,90 @@
     text-overflow: ellipsis;
   }
 
+   .workspace-hub {
+    gap: 10px;
+  }
+
+  .workspace-metrics {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .metric-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(250, 249, 247, 0.72);
+    color: #1c1917;
+  }
+
+  .metric-pill strong {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .metric-label {
+    font-size: 11px;
+    color: rgba(175, 191, 211, 0.74);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .metric-pill.tone-good {
+    border-color: rgba(22, 163, 74, 0.26);
+    background: rgba(22, 163, 74, 0.68);
+  }
+
+  .metric-pill.tone-warn {
+    border-color: rgba(217, 119, 6, 0.26);
+    background: rgba(255, 251, 235, 0.7);
+  }
+
+  .metric-pill.tone-alert {
+    border-color: rgba(220, 38, 38, 0.3);
+    background: rgba(254, 242, 242, 0.72);
+  }
+
   .workspace-status-line .dot {
     width: 7px;
     height: 7px;
     border-radius: 999px;
-    background: #22c55e;
-    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.14);
+    background: #16a34a;
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14);
     flex: 0 0 auto;
   }
 
   .menu-item {
     background: transparent;
     border: 1px solid transparent;
-    color: #94a3b8;
+    color: #78716c;
     box-shadow: none;
   }
 
   .menu-item:hover {
-    background: rgba(30, 41, 59, 0.8);
-    border-color: rgba(148, 163, 184, 0.24);
-    color: #e2e8f0;
+    background: rgba(245, 243, 240, 0.8);
+    border-color: rgba(231, 229, 228, 1);
+    color: #44403c;
   }
 
   .menu-item.active {
-    background: rgba(51, 65, 85, 0.88);
-    border-color: rgba(148, 163, 184, 0.36);
-    color: #f8fafc;
+    background: rgba(245, 243, 240, 0.88);
+    border-color: rgba(231, 229, 228, 1);
+    color: #1c1917;
     box-shadow: none;
   }
 
   .workspace {
-    grid-template-columns: 72px minmax(0, 1fr) 320px;
-    gap: 14px;
-    padding: 12px 16px 30px;
+    grid-template-columns: 82px minmax(0, 1fr) 338px;
+    gap: 16px;
+    padding: 14px 18px 34px;
   }
 
   .workspace.mode-editor {
@@ -7448,25 +7811,55 @@
   .workspace.mode-library .nav-rail {
     width: 100%;
     min-width: 0;
-    padding: 10px 0;
+    padding: 14px 0;
     transition: none;
+  }
+
+  .nav-rail {
+    position: sticky;
+    top: 98px;
+    align-self: start;
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+  }
+
+  .doc-toolbar {
+    position: sticky;
+    top: 98px;
+    z-index: 12;
+    
+  }
+
+  .doc-stage {
+    min-height: calc(100vh - 238px);
+    background:
+      none, transparent 56%),
+      #ffffff;
+  }
+
+  .side-panel {
+    position: sticky;
+    top: 98px;
+    align-self: start;
+    max-height: calc(100vh - 118px);
+    overflow: auto;
+    padding-right: 4px;
   }
 
   .library-mode-stage {
     display: grid;
     gap: 12px;
     min-height: 360px;
-    border: 1px dashed rgba(148, 163, 184, 0.28);
+    border: 1px dashed rgba(231, 229, 228, 1);
     border-radius: 14px;
     padding: 12px;
-    background: rgba(15, 23, 42, 0.56);
+    background: rgba(250, 249, 247, 0.56);
   }
 
   .library-mode-dropzone {
-    border: 1px dashed rgba(148, 163, 184, 0.34);
+    border: 1px dashed rgba(231, 229, 228, 1);
     border-radius: 12px;
     padding: 12px;
-    background: rgba(30, 41, 59, 0.36);
+    background: rgba(245, 243, 240, 0.36);
     display: grid;
     gap: 10px;
   }
@@ -7489,10 +7882,10 @@
   }
 
   .library-mode-card {
-    border: 1px solid rgba(148, 163, 184, 0.24);
+    border: 1px solid rgba(231, 229, 228, 1);
     border-radius: 12px;
-    background: rgba(15, 23, 42, 0.78);
-    color: #e2e8f0;
+    background: rgba(250, 249, 247, 0.78);
+    color: #44403c;
     padding: 10px;
     text-align: left;
     display: grid;
@@ -7501,8 +7894,8 @@
   }
 
   .library-mode-card.selected {
-    border-color: rgba(96, 165, 250, 0.68);
-    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.24);
+    border-color: rgba(217, 119, 6, 0.68);
+    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.24);
   }
 
   .library-mode-card-head {
@@ -7523,7 +7916,7 @@
   .library-mode-card-summary {
     font-size: 12px;
     line-height: 1.5;
-    color: #94a3b8;
+    color: #78716c;
     min-height: 38px;
   }
 
@@ -7531,7 +7924,7 @@
     display: flex;
     justify-content: space-between;
     gap: 8px;
-    color: #64748b;
+    color: #a8a29e;
     font-size: 11px;
   }
 
@@ -7560,19 +7953,155 @@
     display: none;
   }
 
+  .feedback-row textarea,
+  .feedback-row select,
+  .plagiarism-grid input,
+  .version-input,
+  .block-input {
+    background: rgba(250, 249, 247, 0.9);
+    border-color: rgba(164, 183, 208, 0.22);
+    color: #1c1917;
+  }
+
+  .feedback-item,
+  .plagiarism-item,
+  .version-major,
+  .version-minor {
+    background: rgba(15, 25, 42, 0.84);
+    border-color: rgba(164, 183, 208, 0.2);
+  }
+
+  .version-summary,
+  .plagiarism-item-head,
+  .plagiarism-evidence,
+  .risk-metrics {
+    color: rgba(201, 214, 233, 0.82);
+  }
+
+  .generation-banner {
+    color: #1c1917;
+    border: 1px solid rgba(217, 119, 6, 0.22);
+    background: #faf9f7;
+  }
+
+  .section-failures {
+    background: #faf9f7;
+    border-color: rgba(220, 38, 38, 0.32);
+  }
+
+  .quality-advice-panel {
+    border-color: rgba(241, 184, 76, 0.26);
+    background: radial-gradient(360px 180px at 100% 0%, rgba(217, 119, 6, 0.09), transparent 60%),
+      #faf9f7;
+  }
+
+  .quality-advice-note {
+    font-size: 12px;
+    color: rgba(191, 205, 226, 0.72);
+    line-height: 1.5;
+  }
+
+  .quality-advice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .quality-advice-card {
+    display: grid;
+    gap: 10px;
+    padding: 12px 13px;
+    border-radius: 14px;
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(14, 23, 39, 0.76);
+  }
+
+  .quality-advice-card.tone-good {
+    border-color: rgba(22, 163, 74, 0.22);
+    background: rgba(19, 38, 31, 0.7);
+  }
+
+  .quality-advice-card.tone-warn {
+    border-color: rgba(217, 119, 6, 0.22);
+    background: rgba(46, 34, 15, 0.72);
+  }
+
+  .quality-advice-card.tone-alert {
+    border-color: rgba(220, 38, 38, 0.24);
+    background: rgba(254, 242, 242, 0.74);
+  }
+
+  .quality-advice-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .quality-advice-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1c1917;
+    line-height: 1.4;
+  }
+
+  .quality-advice-detail {
+    font-size: 12px;
+    line-height: 1.6;
+    color: rgba(211, 223, 241, 0.84);
+  }
+
+  .quality-advice-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .quality-overview-badge,
+  .quality-tone-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(168, 187, 214, 0.24);
+    padding: 4px 9px;
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .quality-overview-badge.tone-good,
+  .quality-tone-chip.tone-good {
+    color: #166534;
+    border-color: rgba(22, 163, 74, 0.24);
+    background: rgba(22, 163, 74, 0.7);
+  }
+
+  .quality-overview-badge.tone-warn,
+  .quality-tone-chip.tone-warn {
+    color: #fef3c7;
+    border-color: rgba(217, 119, 6, 0.24);
+    background: rgba(50, 39, 13, 0.74);
+  }
+
+  .quality-overview-badge.tone-alert,
+  .quality-tone-chip.tone-alert {
+    color: #fee2e2;
+    border-color: rgba(220, 38, 38, 0.26);
+    background: rgba(56, 21, 21, 0.74);
+  }
+
   .toolbar-line.primary {
     justify-content: space-between;
   }
 
   .toolbar-line.secondary {
     padding-top: 8px;
-    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    border-top: 1px solid rgba(231, 229, 228, 1);
   }
 
   .toolbar-cluster {
     border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    background: rgba(15, 23, 42, 0.74);
+    border: 1px solid rgba(231, 229, 228, 1);
+    background: rgba(250, 249, 247, 0.74);
   }
 
   .toolbar-cluster.core {
@@ -7584,23 +8113,23 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
-    border: 1px dashed rgba(148, 163, 184, 0.3);
+    border: 1px dashed rgba(231, 229, 228, 1);
     border-radius: 10px;
-    background: rgba(15, 23, 42, 0.52);
+    background: rgba(250, 249, 247, 0.52);
   }
 
   .plan-confirm-label {
     font-size: 11px;
-    color: #94a3b8;
+    color: #78716c;
   }
 
   .plan-confirm-select,
   .plan-confirm-score input {
     height: 28px;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    border: 1px solid rgba(231, 229, 228, 1);
     border-radius: 8px;
-    background: rgba(15, 23, 42, 0.84);
-    color: #e2e8f0;
+    background: rgba(250, 249, 247, 0.84);
+    color: #44403c;
     font-size: 12px;
     padding: 0 8px;
   }
@@ -7609,7 +8138,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    color: #94a3b8;
+    color: #78716c;
     font-size: 11px;
   }
 
@@ -7627,48 +8156,48 @@
   }
 
   .tool-btn {
-    background: rgba(15, 23, 42, 0.82);
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    color: #cbd5e1;
+    background: rgba(250, 249, 247, 0.82);
+    border: 1px solid rgba(231, 229, 228, 1);
+    color: #a8a29e;
     box-shadow: none;
   }
 
   .tool-btn.active {
-    background: rgba(59, 130, 246, 0.22);
-    border-color: rgba(96, 165, 250, 0.72);
-    color: #dbeafe;
+    background: rgba(217, 119, 6, 0.22);
+    border-color: rgba(217, 119, 6, 0.72);
+    color: #57534e;
     box-shadow: none;
   }
 
   .btn {
     background: transparent;
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    color: #cbd5e1;
+    border: 1px solid rgba(231, 229, 228, 1);
+    color: #a8a29e;
     box-shadow: none;
   }
 
   .btn.ghost {
     background: transparent;
-    color: #cbd5e1;
-    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: #a8a29e;
+    border: 1px solid rgba(231, 229, 228, 1);
   }
 
   .btn.primary {
     background: transparent;
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    color: #cbd5e1;
+    border: 1px solid rgba(231, 229, 228, 1);
+    color: #a8a29e;
     box-shadow: none;
   }
 
   .toolbar-generate-btn.btn.primary {
-    background: #3b82f6;
-    border-color: #60a5fa;
+    background: linear-gradient(135deg, #3b82f6, #0ea5e9);
+    border-color: rgba(59, 130, 246, 0.5);
     color: #fff;
   }
 
   .btn.primary.danger {
     background: #b91c1c;
-    border-color: #ef4444;
+    border-color: #dc2626;
     color: #fff;
   }
 
@@ -7681,7 +8210,7 @@
     position: fixed;
     inset: 0;
     z-index: 33;
-    background: rgba(2, 6, 23, 0.45);
+    background: rgba(0, 0, 0, 0.01);
     display: flex;
     justify-content: flex-end;
   }
@@ -7699,7 +8228,7 @@
     height: 100vh;
     margin: 0;
     border-radius: 0;
-    border-left: 1px solid rgba(148, 163, 184, 0.24);
+    border-left: 1px solid rgba(231, 229, 228, 1);
     padding: 16px 14px;
     overflow: auto;
   }
@@ -7713,8 +8242,8 @@
     border-radius: 999px;
     z-index: 34;
     border: 1px solid rgba(148, 163, 184, 0.32);
-    background: rgba(15, 23, 42, 0.95);
-    color: #e2e8f0;
+    background: rgba(250, 249, 247, 0.95);
+    color: #44403c;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7738,7 +8267,7 @@
     width: min(40vw, 560px);
     min-width: 320px;
     height: 100vh;
-    background: #0f172a;
+    background: #f5f3f0;
     border-left: 1px solid rgba(148, 163, 184, 0.26);
     padding: 14px;
     display: flex;
@@ -7757,8 +8286,8 @@
     width: 100%;
     height: 100%;
     border-radius: 12px;
-    background: rgba(15, 23, 42, 0.85);
-    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(250, 249, 247, 0.85);
+    border: 1px solid rgba(231, 229, 228, 1);
     box-shadow: none;
   }
 
@@ -7777,7 +8306,7 @@
 
   @media (max-width: 1320px) {
     .workspace {
-      grid-template-columns: 214px minmax(0, 1fr) 272px;
+      grid-template-columns: 214px minmax(0, 1fr) 292px;
     }
   }
 
@@ -7787,6 +8316,9 @@
     }
 
     .side-panel {
+      position: static;
+      max-height: none;
+      overflow: visible;
       grid-column: 1 / -1;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7822,6 +8354,12 @@
       grid-template-columns: 1fr;
       padding: 12px 12px 36px;
       gap: 12px;
+    }
+
+    .nav-rail,
+    .doc-toolbar {
+      position: static;
+      top: auto;
     }
 
     .workspace.hide-info {
@@ -7863,6 +8401,10 @@
     .library-mode-board {
       grid-template-columns: 1fr;
     }
+
+    .quality-advice-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 760px) {
@@ -7877,6 +8419,15 @@
     .top-actions .btn {
       font-size: 12px;
       padding: 7px 9px;
+    }
+
+    .workspace-metrics {
+      gap: 6px;
+    }
+
+    .metric-pill {
+      width: 100%;
+      justify-content: space-between;
     }
 
     .toolbar-line {
@@ -7901,5 +8452,3 @@
     }
   }
 </style>
-
-

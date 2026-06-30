@@ -35,7 +35,7 @@
         <li>如问题持续，请联系技术支持</li>
       </ul>
     </div>
-    <button class="btn-retry" on:click={() => window.location.reload()}>
+    <button class="btn-retry" onclick={() => window.location.reload()}>
       重新加载
     </button>
   </div>

@@ -5,11 +5,11 @@
 </script>
 
 {#if open}
-  <button type="button" class="modal-backdrop" aria-label="关闭" on:click={onClose}></button>
+  <button type="button" class="modal-backdrop" aria-label="关闭" onclick={onClose}></button>
   <div class="modal" role="dialog" aria-modal="true">
     <div class="modal-header">
       <div class="modal-title">{title}</div>
-      <button class="btn ghost" on:click={onClose}>关闭</button>
+      <button class="btn ghost" onclick={onClose}>关闭</button>
     </div>
     <div class="modal-body">
       <slot></slot>
@@ -21,7 +21,7 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.4);
+    background: rgba(250, 249, 247, 0.4);
     z-index: 60;
   }
 
@@ -33,7 +33,7 @@
     width: min(560px, 92vw);
     background: rgba(255, 255, 255, 0.96);
     border-radius: 16px;
-    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+    box-shadow: 0 24px 70px rgba(250, 249, 247, 0.28);
     z-index: 61;
     padding: 16px;
   }
