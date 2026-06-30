@@ -5,6 +5,9 @@ This module belongs to `writing_agent.web.domains` in the writing-agent codebase
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import re
 import os
 from typing import Any, Callable
@@ -25,8 +28,9 @@ def normalize_doc_ir_for_export(
     if getattr(session, "doc_ir", None):
         try:
             doc_ir = doc_ir_from_dict(session.doc_ir)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in doc_state_domain.py: %s", _exc, exc_info=True)
+
     if doc_ir is None:
         return doc_ir
     canonicalize_ir = str(os.environ.get("WRITING_AGENT_EXPORT_DOC_IR_CANONICALIZE", "0")).strip().lower() in {
@@ -40,8 +44,9 @@ def normalize_doc_ir_for_export(
     try:
         if doc_ir_has_styles(doc_ir):
             return doc_ir
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in doc_state_domain.py: %s", _exc, exc_info=True)
+
     try:
         text = doc_ir_to_text(doc_ir)
     except Exception:
@@ -79,8 +84,9 @@ def safe_doc_text(
                 session.doc_ir = {}
                 store_put(session)
                 return ""
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in doc_state_domain.py: %s", _exc, exc_info=True)
+
     if not text.strip() and getattr(session, "doc_ir", None):
         try:
             text = doc_ir_to_text(doc_ir_from_dict(session.doc_ir))

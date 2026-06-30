@@ -20,6 +20,7 @@ from writing_agent.web.domains.revision_edit_common_domain import (
     _record_selected_revision_metric,
 )
 
+
 @dataclass(frozen=True)
 class _SelectionSpan:
     start: int
@@ -424,11 +425,16 @@ def _build_full_document_revision_prompts(
 
 
 def _chat_once(client: Any, *, system: str, user: str, temperature: float) -> str:
-    if hasattr(client, "chat") and callable(getattr(client, "chat")):
-        return str(client.chat(system=system, user=user, temperature=temperature) or "")
-    if hasattr(client, "chat_stream") and callable(getattr(client, "chat_stream")):
+    if hasattr(client, "chat"):
+        chat = client.chat
+        if callable(chat):
+            return str(chat(system=system, user=user, temperature=temperature) or "")
+    if hasattr(client, "chat_stream"):
+        chat_stream = client.chat_stream
+        if not callable(chat_stream):
+            raise RuntimeError("llm client missing chat/chat_stream")
         buf: list[str] = []
-        for delta in client.chat_stream(system=system, user=user, temperature=temperature):
+        for delta in chat_stream(system=system, user=user, temperature=temperature):
             buf.append(str(delta))
         return "".join(buf)
     raise RuntimeError("llm client missing chat/chat_stream")

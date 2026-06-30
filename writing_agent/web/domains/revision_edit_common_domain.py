@@ -10,7 +10,8 @@ import time
 from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+
 
 def _normalize_heading_text(text: str) -> str:
     value = re.sub(r"^#{1,6}\s*", "", str(text or "")).strip()
@@ -420,6 +421,5 @@ __all__ = [
         "field",
         "Path",
         "Any",
-        "Callable",
     }
 ]

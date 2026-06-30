@@ -120,6 +120,53 @@ def new_plagiarism_report_id() -> str:
     return f"{stamp}_{uuid.uuid4().hex[:8]}"
 
 
+def build_plagiarism_progress_summary(
+    *,
+    current_max_score: object,
+    threshold: object,
+    flagged_count: object,
+    previous_max_score: object | None = None,
+) -> dict:
+    try:
+        current = float(current_max_score or 0.0)
+    except Exception:
+        current = 0.0
+    try:
+        th = float(threshold or 0.35)
+    except Exception:
+        th = 0.35
+    try:
+        flagged = int(flagged_count or 0)
+    except Exception:
+        flagged = 0
+    previous = None
+    try:
+        if previous_max_score is not None:
+            previous = float(previous_max_score)
+    except Exception:
+        previous = None
+
+    reduction = None
+    reduction_percent = None
+    if previous is not None:
+        reduction = round(previous - current, 4)
+        if previous > 0:
+            reduction_percent = round((previous - current) / previous, 4)
+
+    target_band = min(max(th * 0.6, 0.12), 0.30)
+    has_headroom = bool((current > target_band) or (flagged > 0))
+    return {
+        "current_overlap_risk": round(max(0.0, min(1.0, current)), 4),
+        "previous_overlap_risk": round(max(0.0, min(1.0, previous)), 4) if previous is not None else None,
+        "reduced_by": reduction,
+        "reduced_percent": reduction_percent,
+        "threshold": round(max(0.05, min(0.95, th)), 4),
+        "flagged_count": flagged,
+        "target_band": round(target_band, 4),
+        "still_has_reduction_space": has_headroom,
+    }
+
+
 def plagiarism_report_doc_dir(doc_id: str, *, report_root: Path) -> Path:
     root = report_root / str(doc_id or "unknown").strip()
     root.mkdir(parents=True, exist_ok=True)
@@ -138,6 +185,22 @@ def build_plagiarism_report_markdown(payload: dict) -> str:
     lines.append(f"- Flagged Count: `{payload.get('flagged_count')}`")
     lines.append(f"- Total References: `{payload.get('total_references')}`")
     lines.append("")
+    progress = payload.get("progress_summary") if isinstance(payload.get("progress_summary"), dict) else {}
+    if progress:
+        lines.append("## Progress Summary")
+        lines.append("")
+        lines.append(f"- Current Overlap Risk: `{progress.get('current_overlap_risk')}`")
+        lines.append(f"- Reduced By: `{progress.get('reduced_by')}`")
+        lines.append(f"- Reduced Percent: `{progress.get('reduced_percent')}`")
+        lines.append(f"- Still Has Reduction Space: `{progress.get('still_has_reduction_space')}`")
+        lines.append("")
+    advice = [str(item).strip() for item in (payload.get("revision_advice") or []) if str(item).strip()]
+    if advice:
+        lines.append("## Revision Advice")
+        lines.append("")
+        for item in advice[:4]:
+            lines.append(f"- {item}")
+        lines.append("")
     lines.append("## Top Results")
     lines.append("")
     lines.append("| Reference | Score | Suspected | Containment | Jaccard | Winnowing | Longest Match |")

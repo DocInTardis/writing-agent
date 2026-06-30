@@ -6,9 +6,12 @@ This module belongs to `writing_agent.llm` in the writing-agent codebase.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import logging
 import os
 from pathlib import Path
-import json
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -43,9 +46,9 @@ def get_ollama_settings() -> OllamaSettings:
                     if candidate in available:
                         default_model = candidate
                         break
-        except Exception:
-            pass
-    
+        except Exception as exc:
+            logger.debug("get_ollama_settings: ollama list failed: %s", exc)
+
     model = default_model or "qwen2.5:1.5b"
     if model.strip().lower() in {"name", "model", "default", "unknown"}:
         model = "qwen2.5:7b"  # 默认改为7b
@@ -61,6 +64,6 @@ def get_ollama_settings() -> OllamaSettings:
                 if totals:
                     p95 = sorted(totals)[max(0, int(round((len(totals) - 1) * 0.95)))]
                     timeout_s = max(timeout_s, float(p95) * 1.2)
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.debug("get_ollama_settings: failed to read stream metrics: %s", exc)
     return OllamaSettings(enabled=enabled, base_url=base_url, model=model, timeout_s=timeout_s)

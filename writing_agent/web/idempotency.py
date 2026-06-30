@@ -5,6 +5,9 @@ This module belongs to `writing_agent.web` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import hashlib
 import json
 import os
@@ -73,8 +76,8 @@ class IdempotencyStore:
     def _safe_unlink(path: Path) -> None:
         try:
             path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in idempotency.py: %s", _exc, exc_info=True)
 
     @staticmethod
     def _record_saved_at(value: dict[str, Any], path: Path) -> float:

@@ -5,6 +5,9 @@ This module belongs to `writing_agent.llm` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import urllib.error
@@ -89,8 +92,8 @@ class OllamaClient:
                 emb = data.get("embedding")
                 if isinstance(emb, list):
                     return [float(x) for x in emb]
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in ollama.py: %s", _exc, exc_info=True)
 
         # Newer endpoint
         data2 = self._request_json("POST", "/api/embed", {"model": m, "input": p})

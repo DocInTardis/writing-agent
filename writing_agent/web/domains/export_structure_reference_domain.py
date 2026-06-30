@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import re
 from datetime import date
 
@@ -112,8 +115,9 @@ def _reference_numbering_is_sequential(text: str) -> tuple[bool, dict]:
         if m:
             try:
                 numbers.append(int(m.group(1)))
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in export_structure_reference_domain.py: %s", _exc, exc_info=True)
+
     if nonempty <= 0:
         return True, {"numbers": [], "expected": []}
     if not numbers:

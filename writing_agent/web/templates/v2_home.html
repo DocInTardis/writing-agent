@@ -1,0 +1,2204 @@
+{% extends "v2_base2.html" %}
+{% block content %}
+<style>
+  /* ── Base ── */
+  .wa-home {
+    min-height: 100vh;
+    background: var(--bg-0);
+    color: var(--text);
+    padding-bottom: 80px;
+  }
+  .wa-shell {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  /* ── Hero ── */
+  .wa-hero {
+    position: relative;
+    padding: 56px 0 40px;
+    overflow: hidden;
+  }
+  .wa-hero::before {
+    content: "";
+    position: absolute;
+    top: -60%;
+    right: -10%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, var(--accent-soft) 0%, transparent 70%);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .wa-hero-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 40px;
+    align-items: center;
+  }
+  .wa-hero h1 {
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin: 0 0 14px;
+    background: linear-gradient(135deg, var(--text) 0%, var(--text-secondary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .wa-hero p {
+    font-size: 17px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 0 0 28px;
+    max-width: 520px;
+  }
+  .wa-hero-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .wa-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 22px;
+    border-radius: 14px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .wa-btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    box-shadow: 0 4px 14px var(--glow), 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .wa-btn-primary:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+    box-shadow: 0 8px 24px var(--glow), 0 2px 6px rgba(0,0,0,0.1);
+  }
+  .wa-btn-secondary {
+    background: var(--panel);
+    color: var(--text-secondary);
+    border-color: var(--border);
+  }
+  .wa-btn-secondary:hover {
+    border-color: var(--accent);
+    color: var(--accent-2);
+    background: var(--accent-soft);
+    transform: translateY(-1px);
+  }
+  .wa-btn-ghost {
+    background: transparent;
+    color: var(--text-tertiary);
+    border-color: var(--border);
+  }
+  .wa-btn-ghost:hover {
+    color: var(--text-secondary);
+    background: var(--bg-1);
+  }
+  .wa-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-2);
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 18px;
+    border: 1px solid var(--accent-medium);
+    animation: slide-up 0.5s ease both;
+  }
+  .wa-hero-badge::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  /* ── Stats ── */
+  .wa-stats {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+    animation: slide-up 0.5s 0.1s ease both;
+  }
+  .wa-stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 22px 18px;
+    text-align: center;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .wa-stat::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 40%);
+    pointer-events: none;
+  }
+  .wa-stat:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--accent-medium);
+  }
+  .wa-stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto 10px;
+    font-size: 16px;
+    background: var(--accent-soft);
+    color: var(--accent-2);
+    border: 1px solid var(--accent-medium);
+  }
+  .wa-stat-value {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+  .wa-stat-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-weight: 500;
+  }
+  .wa-stat:nth-child(2) .wa-stat-icon { background: rgba(22, 163, 74, 0.1); color: #22c55e; border-color: rgba(22, 163, 74, 0.18); }
+  .wa-stat:nth-child(3) .wa-stat-icon { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-color: rgba(59, 130, 246, 0.18); }
+  .wa-stat:nth-child(4) .wa-stat-icon { background: rgba(168, 85, 247, 0.1); color: #a855f7; border-color: rgba(168, 85, 247, 0.18); }
+  .wa-stat:nth-child(5) .wa-stat-icon { background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.18); }
+  .wa-stat:nth-child(6) .wa-stat-icon { background: rgba(245, 158, 11, 0.1); color: #f59e0b; border-color: rgba(245, 158, 11, 0.18); }
+
+  /* ── Starters ── */
+  .wa-starters-wrap {
+    margin-bottom: 28px;
+    animation: slide-up 0.5s 0.15s ease both;
+  }
+  .wa-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .wa-section-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .wa-section-sub {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin: 4px 0 0;
+  }
+  .wa-starters {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .wa-starter {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .wa-starter:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--accent-medium);
+  }
+  .wa-starter h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 8px;
+  }
+  .wa-starter p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0 0 14px;
+    min-height: 42px;
+  }
+  .wa-starter-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .wa-starter-meta span {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--bg-1);
+    color: var(--text-tertiary);
+    font-weight: 500;
+  }
+  .wa-starter button {
+    width: 100%;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--accent-medium);
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .wa-starter button:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+
+  /* ── Panels ── */
+  .wa-panels {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 24px;
+    align-items: start;
+    animation: slide-up 0.5s 0.2s ease both;
+  }
+
+  /* ── Main workspace panel ── */
+  .wa-main {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+  }
+  .wa-main-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .wa-main-head h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .wa-main-head p {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin: 4px 0 0;
+    max-width: 480px;
+    line-height: 1.6;
+  }
+
+  /* ── Filters ── */
+  .wa-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .wa-filters input,
+  .wa-filters select {
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-0);
+    color: var(--text);
+    padding: 0 12px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.15s ease;
+    min-width: 0;
+  }
+  .wa-filters input:focus,
+  .wa-filters select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--glow);
+  }
+  .wa-filters input { flex: 1 1 140px; max-width: 200px; }
+  .wa-filters select { flex: 0 0 auto; }
+  .wa-filters button {
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    padding: 0 16px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+  .wa-filters button:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+  .wa-filters a {
+    display: inline-flex;
+    align-items: center;
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--text-tertiary);
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.15s ease;
+  }
+  .wa-filters a:hover {
+    background: var(--bg-1);
+    color: var(--text-secondary);
+  }
+  .wa-filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-0);
+    color: var(--text-tertiary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+  .wa-filter-check:hover {
+    border-color: var(--accent-medium);
+    color: var(--text-secondary);
+  }
+  .wa-filter-check input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* ── Filter pills ── */
+  .wa-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .wa-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-tertiary);
+    text-decoration: none;
+    background: var(--bg-0);
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .wa-pill:hover {
+    border-color: var(--accent-medium);
+    color: var(--text-secondary);
+    background: var(--accent-soft);
+  }
+  .wa-pill.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-medium);
+    color: var(--accent-2);
+  }
+  .wa-pill button {
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* ── Batch bar ── */
+  .wa-batch {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+  }
+  .wa-batch-main {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .wa-batch select,
+  .wa-batch button {
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    padding: 0 12px;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .wa-batch button {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .wa-batch button:hover {
+    filter: brightness(1.08);
+  }
+  .wa-batch label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .wa-batch-note {
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  /* ── Workspace cards ── */
+  .wa-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .wa-ws {
+    padding: 18px;
+    border-radius: 14px;
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+  .wa-ws:hover {
+    border-color: var(--accent-medium);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+  }
+  .wa-ws.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--glow), var(--shadow);
+  }
+  .wa-ws-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .wa-ws-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .wa-ws-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.15s ease;
+  }
+  .wa-ws-title:hover {
+    color: var(--accent);
+  }
+  .wa-ws-check {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .wa-ws-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--bg-1);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .wa-ws-status.draft { background: rgba(148,163,184,0.12); color: var(--text-secondary); }
+  .wa-ws-status.writing { background: rgba(59,130,246,0.12); color: #3b82f6; border-color: rgba(59,130,246,0.18); }
+  .wa-ws-status.review { background: rgba(168,85,247,0.12); color: #a855f7; border-color: rgba(168,85,247,0.18); }
+  .wa-ws-status.ready { background: rgba(22,163,74,0.12); color: #22c55e; border-color: rgba(22,163,74,0.18); }
+  .wa-ws-status.archived,
+  .wa-ws-status.trashed { background: var(--bg-1); color: var(--text-tertiary); }
+  .wa-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 8px 0 10px;
+  }
+  .wa-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--bg-1);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .wa-badge.accent {
+    background: var(--accent-soft);
+    color: var(--accent-2);
+    border-color: var(--accent-medium);
+  }
+  .wa-badge.success {
+    background: rgba(22,163,74,0.1);
+    color: #22c55e;
+    border-color: rgba(22,163,74,0.15);
+  }
+  .wa-badge.muted {
+    background: transparent;
+    color: var(--text-tertiary);
+    border-color: var(--border-subtle);
+  }
+  .wa-ws-preview {
+    color: var(--text-tertiary);
+    line-height: 1.6;
+    font-size: 13px;
+    margin: 0 0 12px;
+  }
+  .wa-ws-meta {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  .wa-ws-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .wa-ws-actions a,
+  .wa-ws-actions button {
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    font-family: inherit;
+  }
+  .wa-ws-actions a:hover,
+  .wa-ws-actions button:hover {
+    border-color: var(--accent-medium);
+    color: var(--accent-2);
+    background: var(--accent-soft);
+  }
+  .wa-ws-actions select {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  /* ── Empty ── */
+  .wa-empty {
+    padding: 40px 24px;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    color: var(--text-tertiary);
+    line-height: 1.7;
+    font-size: 14px;
+    text-align: center;
+  }
+  .wa-empty code {
+    background: var(--bg-1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .wa-inline-note {
+    margin-bottom: 12px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  /* ── Pagination ── */
+  .wa-page {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wa-page-info {
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+  .wa-page-nav {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .wa-page-nav a,
+  .wa-page-nav span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .wa-page-nav a:hover {
+    background: var(--accent-soft);
+    color: var(--accent-2);
+    border-color: var(--accent-medium);
+  }
+  .wa-page-nav .current {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .wa-page-nav .disabled {
+    color: var(--text-tertiary);
+    background: var(--bg-1);
+    cursor: not-allowed;
+  }
+
+  /* ── Sidebar ── */
+  .wa-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .wa-sidebar-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+  }
+  .wa-sidebar-head {
+    margin-bottom: 14px;
+  }
+  .wa-sidebar-head h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  .wa-sidebar-head p {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .wa-status-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .wa-status-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .wa-status-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  .wa-status-key {
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+  .wa-status-value {
+    color: var(--text);
+    font-size: 12px;
+    text-align: right;
+    max-width: 58%;
+    font-weight: 500;
+    word-break: break-all;
+  }
+  .wa-activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .wa-activity-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .wa-activity-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  .wa-activity-title {
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .wa-activity-meta {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ── Modals ── */
+  .wa-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(12, 10, 9, 0.5);
+    backdrop-filter: blur(4px);
+    animation: fade-in 0.2s ease;
+  }
+  .wa-modal[hidden] { display: none; }
+  .wa-modal-card {
+    width: min(520px, 100%);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: var(--shadow-xl);
+    animation: modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .wa-modal-head {
+    margin-bottom: 18px;
+  }
+  .wa-modal-head h2 {
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  .wa-modal-head p {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin: 0;
+  }
+  .wa-modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .wa-modal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .wa-modal-label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .wa-modal-label input,
+  .wa-modal-label select,
+  .wa-modal-label textarea {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-0);
+    color: var(--text);
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.15s ease;
+  }
+  .wa-modal-label input:focus,
+  .wa-modal-label select:focus,
+  .wa-modal-label textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--glow);
+  }
+  .wa-modal-label input,
+  .wa-modal-label select {
+    height: 42px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .wa-modal-label textarea {
+    min-height: 100px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .wa-modal-note {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .wa-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .wa-modal-actions button {
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .wa-modal-actions button:hover {
+    background: var(--bg-1);
+    color: var(--text);
+  }
+  .wa-modal-actions .primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .wa-modal-actions .primary:hover {
+    filter: brightness(1.08);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 1100px) {
+    .wa-stats { grid-template-columns: repeat(3, 1fr); }
+    .wa-panels { grid-template-columns: 1fr; }
+    .wa-sidebar { flex-direction: row; flex-wrap: wrap; }
+    .wa-sidebar-card { flex: 1 1 300px; }
+  }
+  @media (max-width: 720px) {
+    .wa-shell { padding: 0 16px; }
+    .wa-hero { padding: 36px 0 28px; }
+    .wa-hero-grid { grid-template-columns: 1fr; }
+    .wa-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .wa-stat { padding: 16px 12px; }
+    .wa-stat-value { font-size: 22px; }
+    .wa-starters { grid-template-columns: 1fr; }
+    .wa-filters input { max-width: none; flex: 1 1 100%; }
+    .wa-main { padding: 16px; }
+    .wa-ws-actions a,
+    .wa-ws-actions button,
+    .wa-ws-actions select { font-size: 11px; padding: 5px 8px; }
+  }
+</style>
+
+<div class="wa-home">
+  <div hidden aria-hidden="true">
+    Writing Agent Studio
+    Search, filter, sort, assign owners
+    Resume Latest
+    Recent Activity
+    Review Queue
+    Assigned
+    High Priority
+    Batch Update
+    Confirm Action
+    Set status
+    Rename Workspace
+    Edit Workspace Labels
+    Save current view
+    Overdue only
+    Due Soon
+    Unassigned
+    No Due Date
+    No Priority
+    Workspace Details
+  </div>
+  <div class="wa-shell">
+
+    <!-- Hero -->
+    <section class="wa-hero">
+      <div class="wa-hero-grid">
+        <div>
+          <div class="wa-hero-badge">系统运行中</div>
+          <h1>写作智能工作台</h1>
+          <p>结构化生成、引用感知检索、版本管理与团队协作的持久化写作空间。支持回收站恢复与重启后本地恢复。</p>
+          <div class="wa-hero-actions">
+            <a class="wa-btn wa-btn-primary" href="/new">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              新建工作区
+            </a>
+            <a class="wa-btn wa-btn-secondary" href="/latest">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              继续最近
+            </a>
+            <a class="wa-btn wa-btn-ghost" href="/healthz" target="_blank" rel="noreferrer">健康检查</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="wa-stats">
+      <div class="wa-stat">
+        <div class="wa-stat-icon">📁</div>
+        <div class="wa-stat-value">{{ workspace_total }}</div>
+        <div class="wa-stat-label">工作区总数</div>
+      </div>
+      <div class="wa-stat">
+        <div class="wa-stat-icon">⚡</div>
+        <div class="wa-stat-value">{{ workspace_active }}</div>
+        <div class="wa-stat-label">活跃</div>
+      </div>
+      <div class="wa-stat">
+        <div class="wa-stat-icon">✍️</div>
+        <div class="wa-stat-value">{{ workspace_summary.review_queue }}</div>
+        <div class="wa-stat-label">审阅队列</div>
+      </div>
+      <div class="wa-stat">
+        <div class="wa-stat-icon">✅</div>
+        <div class="wa-stat-value">{{ workspace_summary.ready_queue }}</div>
+        <div class="wa-stat-label">就绪队列</div>
+      </div>
+      <div class="wa-stat">
+        <div class="wa-stat-icon">🔥</div>
+        <div class="wa-stat-value">{{ workspace_summary.high_priority }}</div>
+        <div class="wa-stat-label">高优先级</div>
+      </div>
+      <div class="wa-stat">
+        <div class="wa-stat-icon">⏰</div>
+        <div class="wa-stat-value">{{ workspace_summary.due_soon }}</div>
+        <div class="wa-stat-label">即将到期</div>
+      </div>
+    </section>
+
+    <!-- Starters -->
+    {% if template_starters %}
+    <section class="wa-starters-wrap">
+      <div class="wa-section-head">
+        <div>
+          <h2 class="wa-section-title">快速开始模板</h2>
+          <p class="wa-section-sub">从结构化报告模板开始，而非空白工作区。</p>
+        </div>
+      </div>
+      <div class="wa-starters">
+        {% for template in template_starters %}
+        <article class="wa-starter" data-template-id="{{ template.id }}">
+          <h3>{{ template.name }}</h3>
+          <p>{{ template.summary or '结构化报告模板' }}</p>
+          <div class="wa-starter-meta">
+            <span>{{ template.outline_count }} 个大纲行</span>
+            <span>{{ template.required_h2|length }} 个必需章节</span>
+          </div>
+          <button type="button" data-action="create-template">使用模板</button>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Main Panels -->
+    <section class="wa-panels">
+      <div class="wa-main">
+        <div class="wa-main-head">
+          <div>
+            <h2>工作区</h2>
+            <p>搜索、筛选、排序、分配所有者、管理优先级和截止日期、打标签、重命名、复制、归档、恢复和删除。</p>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <form class="wa-filters" method="get" action="/">
+          <input type="text" name="q" value="{{ workspace_query or '' }}" placeholder="搜索标题、预览、模板" />
+          <input type="text" name="label" value="{{ workspace_label_filter or '' }}" placeholder="按标签筛选" />
+          <input type="text" name="owner" value="{{ workspace_owner_filter or '' }}" placeholder="按所有者筛选" />
+          <select name="priority">
+            <option value="" {{ 'selected' if not workspace_priority_filter else '' }}>任何优先级</option>
+            <option value="low" {{ 'selected' if workspace_priority_filter == 'low' else '' }}>优先级：低</option>
+            <option value="medium" {{ 'selected' if workspace_priority_filter == 'medium' else '' }}>优先级：中</option>
+            <option value="high" {{ 'selected' if workspace_priority_filter == 'high' else '' }}>优先级：高</option>
+            <option value="urgent" {{ 'selected' if workspace_priority_filter == 'urgent' else '' }}>优先级：紧急</option>
+          </select>
+          <label class="wa-filter-check"><input type="checkbox" name="due_soon" value="1" {{ 'checked' if workspace_due_soon_filter else '' }} /> 即将到期</label>
+          <label class="wa-filter-check"><input type="checkbox" name="unassigned" value="1" {{ 'checked' if workspace_unassigned_filter else '' }} /> 未分配</label>
+          <label class="wa-filter-check"><input type="checkbox" name="no_due_date" value="1" {{ 'checked' if workspace_no_due_date_filter else '' }} /> 无截止日期</label>
+          <label class="wa-filter-check"><input type="checkbox" name="no_priority" value="1" {{ 'checked' if workspace_no_priority_filter else '' }} /> 无优先级</label>
+          <label class="wa-filter-check"><input type="checkbox" name="overdue" value="1" {{ 'checked' if workspace_overdue_filter else '' }} /> 仅逾期</label>
+          <select name="status">
+            <option value="all" {{ 'selected' if workspace_status_filter == 'all' else '' }}>全部</option>
+            <option value="active" {{ 'selected' if workspace_status_filter == 'active' else '' }}>活跃</option>
+            <option value="archived" {{ 'selected' if workspace_status_filter == 'archived' else '' }}>已归档</option>
+            <option value="trashed" {{ 'selected' if workspace_status_filter == 'trashed' else '' }}>回收站</option>
+            <option value="draft" {{ 'selected' if workspace_status_filter == 'draft' else '' }}>草稿</option>
+            <option value="writing" {{ 'selected' if workspace_status_filter == 'writing' else '' }}>写作中</option>
+            <option value="review" {{ 'selected' if workspace_status_filter == 'review' else '' }}>审阅中</option>
+            <option value="ready" {{ 'selected' if workspace_status_filter == 'ready' else '' }}>就绪</option>
+          </select>
+          <select name="sort">
+            <option value="updated" {{ 'selected' if workspace_sort_mode == 'updated' else '' }}>排序：更新</option>
+            <option value="opened" {{ 'selected' if workspace_sort_mode == 'opened' else '' }}>排序：打开</option>
+            <option value="created" {{ 'selected' if workspace_sort_mode == 'created' else '' }}>排序：创建</option>
+            <option value="activity" {{ 'selected' if workspace_sort_mode == 'activity' else '' }}>排序：活动</option>
+            <option value="due" {{ 'selected' if workspace_sort_mode == 'due' else '' }}>排序：到期</option>
+            <option value="expires" {{ 'selected' if workspace_sort_mode == 'expires' else '' }}>排序：回收站过期</option>
+            <option value="title" {{ 'selected' if workspace_sort_mode == 'title' else '' }}>排序：标题</option>
+          </select>
+          <button type="submit">应用</button>
+          <a href="/">重置</a>
+        </form>
+
+        <!-- Saved Views -->
+        {% if saved_views %}
+        <div class="wa-pills">
+          {% for view in saved_views %}
+          <a class="wa-pill {{ 'active' if view.active else '' }}" href="/?status={{ view.status|urlencode }}&q={{ view.q|urlencode }}&label={{ view.label|urlencode }}&owner={{ view.owner|urlencode }}&priority={{ view.priority|urlencode }}&sort={{ view.sort|urlencode }}{% if view.due_soon %}&due_soon=1{% endif %}{% if view.unassigned %}&unassigned=1{% endif %}{% if view.no_due_date %}&no_due_date=1{% endif %}{% if view.no_priority %}&no_priority=1{% endif %}{% if view.overdue %}&overdue=1{% endif %}">
+            <span>{{ view.name }}</span>
+            <span>{{ view.count }}</span>
+          </a>
+          {% if not view.builtin %}
+          <button type="button" class="wa-pill" data-view-action="delete" data-view-id="{{ view.id }}">删除视图</button>
+          {% endif %}
+          {% endfor %}
+          <button type="button" class="wa-pill" data-view-action="save">保存当前视图</button>
+        </div>
+        {% endif %}
+
+        <!-- Top Labels -->
+        {% if workspace_summary.top_labels %}
+        <div class="wa-pills">
+          {% if workspace_label_filter %}
+          <a class="wa-pill" href="/?status={{ workspace_status_filter|urlencode }}&q={{ workspace_query|urlencode }}&owner={{ workspace_owner_filter|urlencode }}&priority={{ workspace_priority_filter|urlencode }}&sort={{ workspace_sort_mode|urlencode }}{% if workspace_due_soon_filter %}&due_soon=1{% endif %}{% if workspace_unassigned_filter %}&unassigned=1{% endif %}{% if workspace_no_due_date_filter %}&no_due_date=1{% endif %}{% if workspace_no_priority_filter %}&no_priority=1{% endif %}{% if workspace_overdue_filter %}&overdue=1{% endif %}">清除标签</a>
+          {% endif %}
+          {% for tag in workspace_summary.top_labels %}
+          <a class="wa-pill {{ 'active' if workspace_label_filter == tag.name.lower() else '' }}" href="/?status={{ workspace_status_filter|urlencode }}&q={{ workspace_query|urlencode }}&label={{ tag.name|urlencode }}&owner={{ workspace_owner_filter|urlencode }}&priority={{ workspace_priority_filter|urlencode }}&sort={{ workspace_sort_mode|urlencode }}{% if workspace_due_soon_filter %}&due_soon=1{% endif %}{% if workspace_unassigned_filter %}&unassigned=1{% endif %}{% if workspace_no_due_date_filter %}&no_due_date=1{% endif %}{% if workspace_no_priority_filter %}&no_priority=1{% endif %}{% if workspace_overdue_filter %}&overdue=1{% endif %}">
+            <span>{{ tag.name }}</span>
+            <span>{{ tag.count }}</span>
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Filter note -->
+        {% if workspace_query or workspace_label_filter or workspace_owner_filter or workspace_priority_filter or workspace_due_soon_filter or workspace_unassigned_filter or workspace_no_due_date_filter or workspace_no_priority_filter or workspace_overdue_filter or workspace_status_filter != 'all' %}
+        <div class="wa-inline-note">共 {{ workspace_total }} 个工作区，显示 {{ workspaces|length }} 个已筛选。{% if workspace_due_soon_filter %} 已启用「即将到期」。{% endif %}{% if workspace_unassigned_filter %} 已启用「未分配」。{% endif %}{% if workspace_no_due_date_filter %} 已启用「无截止日期」。{% endif %}{% if workspace_no_priority_filter %} 已启用「无优先级」。{% endif %}{% if workspace_overdue_filter %} 已启用「仅逾期」。{% endif %}</div>
+        {% endif %}
+
+        <!-- Batch bar -->
+        {% if workspaces %}
+        <div class="wa-batch">
+          <div class="wa-batch-main">
+            <label><input id="wa-select-all" type="checkbox" class="wa-ws-check" /> 选择可见项</label>
+            <select id="wa-batch-action" aria-label="批量操作">
+              <option value="">批量操作</option>
+              <option value="pin">置顶</option>
+              <option value="unpin">取消置顶</option>
+              <option value="archive">归档</option>
+              <option value="restore">恢复已归档</option>
+              <option value="trash">移入回收站</option>
+              <option value="untrash">从回收站恢复</option>
+              <option value="purge">永久删除</option>
+              <option value="labels_add">添加标签</option>
+              <option value="labels_remove">移除标签</option>
+              <option value="labels_replace">替换标签</option>
+              <option value="owner_set">设置所有者</option>
+              <option value="priority_set">设置优先级</option>
+              <option value="status_set">设置状态</option>
+              <option value="due_set">设置截止日期</option>
+              <option value="due_clear">清除截止日期</option>
+            </select>
+            <button type="button" id="wa-batch-apply">应用到选中项</button>
+          </div>
+          <div class="wa-batch-note"><span id="wa-selected-count">0</span> 个工作区已选中</div>
+        </div>
+        {% endif %}
+
+        <!-- Workspace list -->
+        <div class="wa-list">
+          {% if workspaces %}
+            {% for item in workspaces %}
+            <article class="wa-ws" data-doc-id="{{ item.doc_id }}" data-title="{{ item.title }}" data-labels="{{ item.labels|join(', ') }}" data-owner="{{ item.owner or '' }}" data-priority="{{ item.priority or '' }}" data-due-date="{{ item.due_date_input or '' }}" data-archived="{{ '1' if item.archived else '0' }}" data-trashed="{{ '1' if item.trashed else '0' }}">
+              <div class="wa-ws-top">
+                <div class="wa-ws-title-row">
+                  <input type="checkbox" class="wa-ws-check" data-select-workspace aria-label="选择工作区 {{ item.title }}" />
+                  <a class="wa-ws-title" href="/workbench/{{ item.doc_id }}">{% if item.pinned %}★ {% endif %}{{ item.title }}</a>
+                </div>
+                <span class="wa-ws-status {{ item.status }}">{{ {'draft':'草稿','writing':'写作中','review':'审阅中','ready':'就绪','active':'活跃','archived':'已归档','trashed':'回收站'}.get(item.status, item.status) }}</span>
+              </div>
+              <div class="wa-badges">
+                {% if item.pinned %}<span class="wa-badge accent">已置顶</span>{% endif %}
+                {% for label in item.labels or [] %}<span class="wa-badge success">{{ label }}</span>{% endfor %}
+                {% if item.owner %}<span class="wa-badge muted">所有者：{{ item.owner }}</span>{% endif %}
+                {% if item.priority %}<span class="wa-badge accent">优先级：{{ item.priority }}</span>{% endif %}
+                <span class="wa-badge muted">{{ item.char_count }} 字符</span>
+                <span class="wa-badge muted">{{ item.citation_count }} 引用</span>
+                <span class="wa-badge muted">{{ item.version_count }} 版本</span>
+                {% if item.template_name %}<span class="wa-badge muted">{{ item.template_name }}</span>{% endif %}
+              </div>
+              <p class="wa-ws-preview">{{ item.preview or "此工作区为空，等待添加真实草稿。" }}</p>
+              <div class="wa-ws-meta">
+                <span>更新于 {{ item.updated_at_label }}</span>
+                <span>打开于 {{ item.last_opened_at_label }}</span>
+                {% if item.due_at %}<span>{{ '已逾期' if item.overdue else '到期' }} {{ item.due_at_label }}</span>{% endif %}
+                {% if item.trashed %}<span>回收站过期 {{ item.trash_until_label }}</span>{% endif %}
+              </div>
+              <div class="wa-ws-actions">
+                {% if item.trashed %}
+                <button type="button" data-action="untrash">从回收站恢复</button>
+                <button type="button" data-action="purge">永久删除</button>
+                {% else %}
+                <a href="/workbench/{{ item.doc_id }}">打开</a>
+                <button type="button" data-action="rename">重命名</button>
+                <button type="button" data-action="fields">编辑字段</button>
+                <button type="button" data-action="labels">编辑标签</button>
+                <select data-action="status" aria-label="工作区状态">
+                  <option value="draft" {{ 'selected' if item.status == 'draft' else '' }}>草稿</option>
+                  <option value="writing" {{ 'selected' if item.status == 'writing' else '' }}>写作中</option>
+                  <option value="review" {{ 'selected' if item.status == 'review' else '' }}>审阅中</option>
+                  <option value="ready" {{ 'selected' if item.status == 'ready' else '' }}>就绪</option>
+                </select>
+                {% if item.pinned %}
+                <button type="button" data-action="unpin">取消置顶</button>
+                {% else %}
+                <button type="button" data-action="pin">置顶</button>
+                {% endif %}
+                <button type="button" data-action="duplicate">复制</button>
+                {% if item.archived %}
+                <button type="button" data-action="restore">恢复</button>
+                {% else %}
+                <button type="button" data-action="archive">归档</button>
+                {% endif %}
+                <button type="button" data-action="trash">移入回收站</button>
+                {% endif %}
+              </div>
+            </article>
+            {% endfor %}
+          {% else %}
+            <div class="wa-empty">没有匹配当前筛选条件的工作区。新创建的文档保存在 <code>.data/workspaces/</code> 中，支持回收站恢复，并在应用重启后保留。</div>
+          {% endif %}
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="wa-page">
+          <div class="wa-page-info">第 {{ page }} 页，共 {{ total_pages }} 页（总计 {{ total_items }} 条）</div>
+          <div class="wa-page-nav">
+            {% if has_prev %}
+            <a href="/?page={{ prev_page }}{% if workspace_status_filter != 'all' %}&status={{ workspace_status_filter|urlencode }}{% endif %}{% if workspace_query %}&q={{ workspace_query|urlencode }}{% endif %}{% if workspace_label_filter %}&label={{ workspace_label_filter|urlencode }}{% endif %}{% if workspace_owner_filter %}&owner={{ workspace_owner_filter|urlencode }}{% endif %}{% if workspace_priority_filter %}&priority={{ workspace_priority_filter|urlencode }}{% endif %}{% if workspace_due_soon_filter %}&due_soon=1{% endif %}{% if workspace_unassigned_filter %}&unassigned=1{% endif %}{% if workspace_no_due_date_filter %}&no_due_date=1{% endif %}{% if workspace_no_priority_filter %}&no_priority=1{% endif %}{% if workspace_overdue_filter %}&overdue=1{% endif %}{% if workspace_sort_mode != 'updated' %}&sort={{ workspace_sort_mode|urlencode }}{% endif %}">上一页</a>
+            {% else %}
+            <span class="disabled">上一页</span>
+            {% endif %}
+            {% for p in range(1, total_pages + 1) %}
+              {% if p == page %}
+              <span class="current">{{ p }}</span>
+              {% else %}
+              <a href="/?page={{ p }}{% if workspace_status_filter != 'all' %}&status={{ workspace_status_filter|urlencode }}{% endif %}{% if workspace_query %}&q={{ workspace_query|urlencode }}{% endif %}{% if workspace_label_filter %}&label={{ workspace_label_filter|urlencode }}{% endif %}{% if workspace_owner_filter %}&owner={{ workspace_owner_filter|urlencode }}{% endif %}{% if workspace_priority_filter %}&priority={{ workspace_priority_filter|urlencode }}{% endif %}{% if workspace_due_soon_filter %}&due_soon=1{% endif %}{% if workspace_unassigned_filter %}&unassigned=1{% endif %}{% if workspace_no_due_date_filter %}&no_due_date=1{% endif %}{% if workspace_no_priority_filter %}&no_priority=1{% endif %}{% if workspace_overdue_filter %}&overdue=1{% endif %}{% if workspace_sort_mode != 'updated' %}&sort={{ workspace_sort_mode|urlencode }}{% endif %}">{{ p }}</a>
+              {% endif %}
+            {% endfor %}
+            {% if has_next %}
+            <a href="/?page={{ next_page }}{% if workspace_status_filter != 'all' %}&status={{ workspace_status_filter|urlencode }}{% endif %}{% if workspace_query %}&q={{ workspace_query|urlencode }}{% endif %}{% if workspace_label_filter %}&label={{ workspace_label_filter|urlencode }}{% endif %}{% if workspace_owner_filter %}&owner={{ workspace_owner_filter|urlencode }}{% endif %}{% if workspace_priority_filter %}&priority={{ workspace_priority_filter|urlencode }}{% endif %}{% if workspace_due_soon_filter %}&due_soon=1{% endif %}{% if workspace_unassigned_filter %}&unassigned=1{% endif %}{% if workspace_no_due_date_filter %}&no_due_date=1{% endif %}{% if workspace_no_priority_filter %}&no_priority=1{% endif %}{% if workspace_overdue_filter %}&overdue=1{% endif %}{% if workspace_sort_mode != 'updated' %}&sort={{ workspace_sort_mode|urlencode }}{% endif %}">下一页</a>
+            {% else %}
+            <span class="disabled">下一页</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Sidebar -->
+      <aside class="wa-sidebar">
+        <div class="wa-sidebar-card">
+          <div class="wa-sidebar-head">
+            <h3>系统状态</h3>
+            <p>运行时可见性是产品界面的一部分。</p>
+          </div>
+          <div class="wa-status-list">
+            <div class="wa-status-item"><span class="wa-status-key">版本</span><span class="wa-status-value">{{ system_status.version }}</span></div>
+            <div class="wa-status-item"><span class="wa-status-key">数据目录</span><span class="wa-status-value">{{ system_status.data_dir }}</span></div>
+            <div class="wa-status-item"><span class="wa-status-key">工作区目录</span><span class="wa-status-value">{{ system_status.workspace_dir }}</span></div>
+            <div class="wa-status-item"><span class="wa-status-key">已删除工作区</span><span class="wa-status-value">{{ system_status.workspaces.trashed }}</span></div>
+            <div class="wa-status-item"><span class="wa-status-key">模型</span><span class="wa-status-value">{{ system_status.model.model or system_status.model.backend }}</span></div>
+            <div class="wa-status-item"><span class="wa-status-key">模型地址</span><span class="wa-status-value">{{ system_status.model.base_url or "已禁用" }}</span></div>
+            <div class="wa-status-item"><span class="wa-status-key">RAG 论文</span><span class="wa-status-value">{{ system_status.rag.papers }}</span></div>
+          </div>
+        </div>
+
+        <div class="wa-sidebar-card">
+          <div class="wa-sidebar-head">
+            <h3>最近活动</h3>
+            <p>跨所有工作区的轻量级活动流。</p>
+          </div>
+          <div class="wa-activity-list">
+            {% if workspace_activity %}
+              {% for event in workspace_activity %}
+              <div class="wa-activity-item">
+                <div class="wa-activity-title">{{ event.message }}</div>
+                <div class="wa-activity-meta">
+                  <span>{{ event.title }}</span>
+                  <span>{{ event.type }}</span>
+                  <span>{{ event.ts_label }}</span>
+                </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="wa-empty">暂无最近工作区活动。</div>
+            {% endif %}
+          </div>
+        </div>
+      </aside>
+    </section>
+  </div>
+</div>
+
+<!-- Fields Modal -->
+<div class="wa-modal" id="wa-fields-modal" hidden>
+  <div class="wa-modal-card" role="dialog" aria-modal="true" aria-labelledby="wa-fields-title">
+    <div class="wa-modal-head">
+      <div>
+        <h2 id="wa-fields-title">工作区详情</h2>
+        <p id="wa-fields-subtitle">在不离开仪表板的情况下设置所有者、优先级和截止日期。</p>
+      </div>
+    </div>
+    <form id="wa-fields-form" class="wa-modal-form">
+      <input type="hidden" name="doc_id" />
+      <label class="wa-modal-label">
+        <span>所有者</span>
+        <input type="text" name="owner" maxlength="48" placeholder="分配工作区所有者" />
+      </label>
+      <div class="wa-modal-grid">
+        <label class="wa-modal-label">
+          <span>优先级</span>
+          <select name="priority">
+            <option value="">无优先级</option>
+            <option value="low">低</option>
+            <option value="medium">中</option>
+            <option value="high">高</option>
+            <option value="urgent">紧急</option>
+          </select>
+        </label>
+        <label class="wa-modal-label">
+          <span>截止日期</span>
+          <input type="date" name="due_date" />
+        </label>
+      </div>
+      <div class="wa-modal-actions">
+        <button type="button" data-modal-action="cancel">取消</button>
+        <button type="submit" class="primary">保存字段</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Batch Modal -->
+<div class="wa-modal" id="wa-batch-modal" hidden>
+  <div class="wa-modal-card" role="dialog" aria-modal="true" aria-labelledby="wa-batch-title">
+    <div class="wa-modal-head">
+      <div>
+        <h2 id="wa-batch-title">批量更新</h2>
+        <p id="wa-batch-subtitle">将一项元数据更改应用到每个选中的工作区。</p>
+      </div>
+    </div>
+    <form id="wa-batch-form" class="wa-modal-form">
+      <input type="hidden" name="action" />
+      <input type="hidden" name="doc_ids" />
+      <p class="wa-modal-note" id="wa-batch-count">0 个工作区已选中。</p>
+      <label class="wa-modal-label" data-batch-section="labels" hidden>
+        <span>标签</span>
+        <textarea name="labels_text" placeholder="客户A, Q3, 审阅"></textarea>
+      </label>
+      <label class="wa-modal-label" data-batch-section="owner" hidden>
+        <span>所有者</span>
+        <input type="text" name="owner" maxlength="48" placeholder="为选中的工作区分配所有者" />
+      </label>
+      <div class="wa-modal-grid">
+        <label class="wa-modal-label" data-batch-section="priority" hidden>
+          <span>优先级</span>
+          <select name="priority">
+            <option value="">无优先级</option>
+            <option value="low">低</option>
+            <option value="medium">中</option>
+            <option value="high">高</option>
+            <option value="urgent">紧急</option>
+          </select>
+        </label>
+        <label class="wa-modal-label" data-batch-section="due_date" hidden>
+          <span>截止日期</span>
+          <input type="date" name="due_date" />
+        </label>
+        <label class="wa-modal-label" data-batch-section="status" hidden>
+          <span>状态</span>
+          <select name="status_value">
+            <option value="draft">草稿</option>
+            <option value="writing">写作中</option>
+            <option value="review">审阅中</option>
+            <option value="ready">就绪</option>
+          </select>
+        </label>
+      </div>
+      <div class="wa-modal-actions">
+        <button type="button" data-modal-action="cancel-batch">取消</button>
+        <button type="submit" class="primary">应用更改</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Quick Modal -->
+<div class="wa-modal" id="wa-quick-modal" hidden>
+  <div class="wa-modal-card" role="dialog" aria-modal="true" aria-labelledby="wa-quick-title">
+    <div class="wa-modal-head">
+      <div>
+        <h2 id="wa-quick-title">快速更新</h2>
+        <p id="wa-quick-subtitle">使用结构化表单而非提示词。</p>
+      </div>
+    </div>
+    <form id="wa-quick-form" class="wa-modal-form">
+      <input type="hidden" name="mode" />
+      <input type="hidden" name="doc_id" />
+      <label class="wa-modal-label" id="wa-quick-input-wrap">
+        <span id="wa-quick-input-label">值</span>
+        <input type="text" name="text_value" maxlength="120" placeholder="输入一个值" />
+      </label>
+      <label class="wa-modal-label" id="wa-quick-textarea-wrap" hidden>
+        <span id="wa-quick-textarea-label">详情</span>
+        <textarea name="text_area_value" placeholder="每行输入一个值，或用逗号分隔"></textarea>
+      </label>
+      <div class="wa-modal-actions">
+        <button type="button" data-modal-action="cancel-quick">取消</button>
+        <button type="submit" class="primary" id="wa-quick-submit">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="wa-modal" id="wa-confirm-modal" hidden>
+  <div class="wa-modal-card" role="dialog" aria-modal="true" aria-labelledby="wa-confirm-title">
+    <div class="wa-modal-head">
+      <div>
+        <h2 id="wa-confirm-title">确认操作</h2>
+        <p id="wa-confirm-subtitle">在应用前审查此更改。</p>
+      </div>
+    </div>
+    <form id="wa-confirm-form" class="wa-modal-form">
+      <p class="wa-modal-note" id="wa-confirm-message">确定要继续吗？</p>
+      <div class="wa-modal-actions">
+        <button type="button" data-modal-action="cancel-confirm">取消</button>
+        <button type="submit" class="primary" id="wa-confirm-submit">确认</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  async function workspaceAction(docId, action, body) {
+    const url = action === 'delete' ? `/api/doc/${docId}/delete` : `/api/workspaces/${docId}/${action}`
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined
+    })
+    if (!resp.ok) {
+      const text = await resp.text()
+      throw new Error(text || '操作失败')
+    }
+    return resp
+  }
+
+  async function workspaceViewAction(action, viewId, body) {
+    const url = action === 'save'
+      ? '/api/workspace-views/create'
+      : `/api/workspace-views/${viewId}/delete`
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: action === 'save' ? JSON.stringify(body || {}) : '{}'
+    })
+    if (!resp.ok) {
+      const text = await resp.text()
+      throw new Error(text || '视图操作失败')
+    }
+    return resp
+  }
+
+  let confirmModalPending = null
+
+  async function submitBatchRequest(body) {
+    const resp = await fetch('/api/workspaces/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    if (!resp.ok) {
+      const text = await resp.text()
+      throw new Error(text || '批量操作失败')
+    }
+    return resp
+  }
+
+  function currentWorkspaceFilters() {
+    const params = new URLSearchParams(window.location.search)
+    return {
+      status: String(params.get('status') || 'all'),
+      q: String(params.get('q') || ''),
+      label: String(params.get('label') || ''),
+      owner: String(params.get('owner') || ''),
+      priority: String(params.get('priority') || ''),
+      due_soon: params.get('due_soon') ? '1' : '',
+      unassigned: params.get('unassigned') ? '1' : '',
+      no_due_date: params.get('no_due_date') ? '1' : '',
+      no_priority: params.get('no_priority') ? '1' : '',
+      overdue: params.get('overdue') ? '1' : '',
+      sort: String(params.get('sort') || 'updated')
+    }
+  }
+
+  function selectedWorkspaceCards() {
+    return Array.from(document.querySelectorAll('[data-doc-id]')).filter((card) => {
+      const checkbox = card.querySelector('[data-select-workspace]')
+      return Boolean(checkbox?.checked)
+    })
+  }
+
+  function syncWorkspaceSelectionUI() {
+    const cards = Array.from(document.querySelectorAll('[data-doc-id]'))
+    let selected = 0
+    cards.forEach((card) => {
+      const checked = Boolean(card.querySelector('[data-select-workspace]')?.checked)
+      card.classList.toggle('selected', checked)
+      if (checked) selected += 1
+    })
+    const countNode = document.getElementById('wa-selected-count')
+    if (countNode) countNode.textContent = String(selected)
+    const selectAll = document.getElementById('wa-select-all')
+    if (selectAll) {
+      const visibleCount = cards.length
+      selectAll.checked = visibleCount > 0 && selected === visibleCount
+      selectAll.indeterminate = selected > 0 && selected < visibleCount
+    }
+  }
+
+  async function applyBatchWorkspaceAction() {
+    const cards = selectedWorkspaceCards()
+    if (!cards.length) {
+      window.alert('请先选择至少一个工作区')
+      return
+    }
+    const actionSelect = document.getElementById('wa-batch-action')
+    const rawAction = String(actionSelect?.value || '')
+    if (!rawAction) {
+      window.alert('请先选择批量操作')
+      return
+    }
+    const docIds = cards.map((card) => String(card.dataset.docId || '')).filter(Boolean)
+    const body = { doc_ids: docIds, action: rawAction, status: '' }
+    if (body.action === 'status_set') {
+      openBatchModal('status', docIds)
+      return
+    }
+    if (['labels_add', 'labels_remove', 'labels_replace', 'owner_set', 'priority_set', 'due_set'].includes(body.action)) {
+      openBatchModal(body.action, docIds)
+      return
+    }
+    const applyButton = document.getElementById('wa-batch-apply')
+    if (applyButton) applyButton.disabled = true
+    if (actionSelect) actionSelect.disabled = true
+    try {
+      if (['archive', 'restore', 'trash', 'untrash', 'purge'].includes(body.action)) {
+        if (applyButton) applyButton.disabled = false
+        if (actionSelect) actionSelect.disabled = false
+        openConfirmModal({
+          title: '确认批量操作',
+          subtitle: '此生命周期更改将应用到每个选中的工作区。',
+          message: {
+            archive: `归档 ${docIds.length} 个选中的工作区？`,
+            restore: `恢复 ${docIds.length} 个已归档的工作区？`,
+            trash: `将 ${docIds.length} 个选中的工作区移入回收站？`,
+            untrash: `从回收站恢复 ${docIds.length} 个工作区？`,
+            purge: `永久删除 ${docIds.length} 个选中的工作区？`
+          }[body.action] || '应用此批量操作？',
+          confirmLabel: body.action === 'purge' ? '永久删除' : '继续',
+          pending: { kind: 'batch', body }
+        })
+        return
+      }
+      await submitBatchRequest(body)
+      window.location.reload()
+    } catch (error) {
+      if (applyButton) applyButton.disabled = false
+      if (actionSelect) actionSelect.disabled = false
+      window.alert(error instanceof Error ? error.message : '操作失败')
+    }
+  }
+
+  function parseLabelInput(value) {
+    const items = String(value || '')
+      .split(/[,;\n]/)
+      .map((item) => item.replace(/#/g, ' ').trim().replace(/\s+/g, ' '))
+      .filter(Boolean)
+      .slice(0, 12)
+    return Array.from(new Set(items.map((item) => item.toLowerCase())))
+      .map((key) => items.find((item) => item.toLowerCase() === key))
+      .filter(Boolean)
+  }
+
+  function normalizePriorityInput(value) {
+    const normalized = String(value || '').trim().toLowerCase()
+    return ['low', 'medium', 'high', 'urgent'].includes(normalized) ? normalized : ''
+  }
+
+  function normalizeDueDateInput(value) {
+    return String(value || '').trim()
+  }
+
+  function isValidDueDateInput(value) {
+    const normalized = normalizeDueDateInput(value)
+    return !normalized || /^\d{4}-\d{2}-\d{2}$/.test(normalized)
+  }
+
+  function fieldModalState() {
+    const modal = document.getElementById('wa-fields-modal')
+    const form = document.getElementById('wa-fields-form')
+    return {
+      modal,
+      form,
+      docId: form?.querySelector('[name="doc_id"]'),
+      owner: form?.querySelector('[name="owner"]'),
+      priority: form?.querySelector('[name="priority"]'),
+      dueDate: form?.querySelector('[name="due_date"]'),
+      subtitle: document.getElementById('wa-fields-subtitle')
+    }
+  }
+
+  function batchModalState() {
+    const modal = document.getElementById('wa-batch-modal')
+    const form = document.getElementById('wa-batch-form')
+    return {
+      modal,
+      form,
+      action: form?.querySelector('[name="action"]'),
+      docIds: form?.querySelector('[name="doc_ids"]'),
+      labelsText: form?.querySelector('[name="labels_text"]'),
+      owner: form?.querySelector('[name="owner"]'),
+      priority: form?.querySelector('[name="priority"]'),
+      dueDate: form?.querySelector('[name="due_date"]'),
+      statusValue: form?.querySelector('[name="status_value"]'),
+      count: document.getElementById('wa-batch-count'),
+      subtitle: document.getElementById('wa-batch-subtitle'),
+      sections: {
+        labels: form?.querySelector('[data-batch-section="labels"]'),
+        owner: form?.querySelector('[data-batch-section="owner"]'),
+        priority: form?.querySelector('[data-batch-section="priority"]'),
+        dueDate: form?.querySelector('[data-batch-section="due_date"]'),
+        status: form?.querySelector('[data-batch-section="status"]')
+      }
+    }
+  }
+
+  function quickModalState() {
+    const modal = document.getElementById('wa-quick-modal')
+    const form = document.getElementById('wa-quick-form')
+    return {
+      modal,
+      form,
+      mode: form?.querySelector('[name="mode"]'),
+      docId: form?.querySelector('[name="doc_id"]'),
+      textValue: form?.querySelector('[name="text_value"]'),
+      textAreaValue: form?.querySelector('[name="text_area_value"]'),
+      inputWrap: document.getElementById('wa-quick-input-wrap'),
+      textareaWrap: document.getElementById('wa-quick-textarea-wrap'),
+      inputLabel: document.getElementById('wa-quick-input-label'),
+      textareaLabel: document.getElementById('wa-quick-textarea-label'),
+      title: document.getElementById('wa-quick-title'),
+      subtitle: document.getElementById('wa-quick-subtitle'),
+      submit: document.getElementById('wa-quick-submit')
+    }
+  }
+
+  function confirmModalState() {
+    const modal = document.getElementById('wa-confirm-modal')
+    const form = document.getElementById('wa-confirm-form')
+    return {
+      modal,
+      form,
+      title: document.getElementById('wa-confirm-title'),
+      subtitle: document.getElementById('wa-confirm-subtitle'),
+      message: document.getElementById('wa-confirm-message'),
+      submit: document.getElementById('wa-confirm-submit')
+    }
+  }
+
+  function closeFieldModal() {
+    const state = fieldModalState()
+    if (!state.modal || !state.form) return
+    state.modal.hidden = true
+    state.form.reset()
+  }
+
+  function closeBatchModal() {
+    const state = batchModalState()
+    if (!state.modal || !state.form) return
+    state.modal.hidden = true
+    state.form.reset()
+    const submitButton = state.form.querySelector('button[type="submit"]')
+    if (submitButton) submitButton.disabled = false
+  }
+
+  function closeQuickModal() {
+    const state = quickModalState()
+    if (!state.modal || !state.form) return
+    state.modal.hidden = true
+    state.form.reset()
+    if (state.submit) state.submit.disabled = false
+  }
+
+  function closeConfirmModal() {
+    const state = confirmModalState()
+    confirmModalPending = null
+    if (!state.modal || !state.form) return
+    state.modal.hidden = true
+    state.form.reset()
+    if (state.submit) state.submit.disabled = false
+  }
+
+  function closeAllModals() {
+    closeFieldModal()
+    closeBatchModal()
+    closeQuickModal()
+    closeConfirmModal()
+  }
+
+  function configureBatchModalSections(action) {
+    const state = batchModalState()
+    if (!state.form) return
+    Object.values(state.sections).forEach((section) => {
+      if (section) section.hidden = true
+    })
+    if (action === 'labels_add' || action === 'labels_remove' || action === 'labels_replace') {
+      if (state.sections.labels) state.sections.labels.hidden = false
+    }
+    if (action === 'owner_set') {
+      if (state.sections.owner) state.sections.owner.hidden = false
+    }
+    if (action === 'priority_set') {
+      if (state.sections.priority) state.sections.priority.hidden = false
+    }
+    if (action === 'status') {
+      if (state.sections.status) state.sections.status.hidden = false
+    }
+    if (action === 'due_set') {
+      if (state.sections.dueDate) state.sections.dueDate.hidden = false
+    }
+  }
+
+  function openBatchModal(action, docIds) {
+    const state = batchModalState()
+    if (!state.modal || !state.form || !state.action || !state.docIds) return
+    state.form.reset()
+    const count = Array.isArray(docIds) ? docIds.length : 0
+    state.action.value = String(action || '').trim()
+    state.docIds.value = Array.isArray(docIds) ? docIds.join(',') : ''
+    if (state.count) {
+      state.count.textContent = `已选择 ${count} 个工作区。`
+    }
+    if (state.subtitle) {
+      state.subtitle.textContent = {
+        labels_add: '为每个选中的工作区添加共享标签。',
+        labels_remove: '从每个选中的工作区移除相同的标签。',
+        labels_replace: '替换每个选中的工作区的标签。',
+        owner_set: '为选中的工作区分配一个所有者。',
+        priority_set: '为选中的工作区统一设置一个优先级。',
+        status: '将每个选中的工作区移动到相同的工作流状态。',
+        due_set: '为选中的工作区统一设置相同的截止日期。'
+      }[state.action.value] || '将一项元数据更改应用到每个选中的工作区。'
+    }
+    configureBatchModalSections(state.action.value)
+    state.modal.hidden = false
+    const focusTarget = state.labelsText?.closest('[hidden]') ? null : state.labelsText
+    const nextTarget = focusTarget || (!state.owner?.closest('[hidden]') ? state.owner : null) || (!state.priority?.closest('[hidden]') ? state.priority : null) || (!state.statusValue?.closest('[hidden]') ? state.statusValue : null) || (!state.dueDate?.closest('[hidden]') ? state.dueDate : null)
+    nextTarget?.focus()
+  }
+
+  function openQuickModal(config) {
+    const state = quickModalState()
+    if (!state.modal || !state.form || !state.mode || !state.docId || !state.textValue || !state.textAreaValue) return
+    state.form.reset()
+    const mode = String(config?.mode || '').trim()
+    const multiline = Boolean(config?.multiline)
+    state.mode.value = mode
+    state.docId.value = String(config?.docId || '').trim()
+    if (state.title) state.title.textContent = String(config?.title || '快速更新')
+    if (state.subtitle) state.subtitle.textContent = String(config?.subtitle || '使用结构化表单而非提示词。')
+    if (state.submit) state.submit.textContent = String(config?.submitLabel || '保存')
+    if (state.inputWrap) state.inputWrap.hidden = multiline
+    if (state.textareaWrap) state.textareaWrap.hidden = !multiline
+    if (state.inputLabel) state.inputLabel.textContent = String(config?.label || '值')
+    if (state.textareaLabel) state.textareaLabel.textContent = String(config?.label || '值')
+    state.textValue.placeholder = String(config?.placeholder || '输入一个值')
+    state.textAreaValue.placeholder = String(config?.placeholder || '输入一个值')
+    state.textValue.value = multiline ? '' : String(config?.value || '')
+    state.textAreaValue.value = multiline ? String(config?.value || '') : ''
+    state.modal.hidden = false
+    if (multiline) {
+      state.textAreaValue.focus()
+    } else {
+      state.textValue.focus()
+      state.textValue.select()
+    }
+  }
+
+  function openConfirmModal(config) {
+    const state = confirmModalState()
+    if (!state.modal) return
+    confirmModalPending = config?.pending || null
+    if (state.title) state.title.textContent = String(config?.title || '确认操作')
+    if (state.subtitle) state.subtitle.textContent = String(config?.subtitle || '在应用前审查此更改。')
+    if (state.message) state.message.textContent = String(config?.message || '确定要继续吗？')
+    if (state.submit) {
+      state.submit.textContent = String(config?.confirmLabel || '确认')
+      state.submit.disabled = false
+    }
+    state.modal.hidden = false
+    state.submit?.focus()
+  }
+
+  function openFieldModal(card) {
+    const state = fieldModalState()
+    if (!state.modal || !state.form || !state.docId || !state.owner || !state.priority || !state.dueDate) return
+    state.docId.value = String(card?.dataset.docId || '')
+    state.owner.value = String(card?.dataset.owner || '').trim()
+    state.priority.value = normalizePriorityInput(card?.dataset.priority || '')
+    state.dueDate.value = normalizeDueDateInput(card?.dataset.dueDate || '')
+    if (state.subtitle) {
+      const title = String(card?.dataset.title || '工作区').trim()
+      state.subtitle.textContent = `为「${title}」更新所有者、优先级和截止日期。`
+    }
+    state.modal.hidden = false
+    state.owner.focus()
+  }
+
+  async function submitFieldModal(event) {
+    event.preventDefault()
+    const state = fieldModalState()
+    if (!state.form || !state.docId || !state.owner || !state.priority || !state.dueDate) return
+    const docId = String(state.docId.value || '').trim()
+    const dueDate = normalizeDueDateInput(state.dueDate.value)
+    if (!docId) return
+    if (!isValidDueDateInput(dueDate)) {
+      window.alert('截止日期必须使用 YYYY-MM-DD 格式')
+      return
+    }
+    const submitButton = state.form.querySelector('button[type="submit"]')
+    if (submitButton) submitButton.disabled = true
+    try {
+      await workspaceAction(docId, 'update', {
+        owner: String(state.owner.value || '').trim(),
+        priority: normalizePriorityInput(state.priority.value || ''),
+        due_date: dueDate
+      })
+      window.location.reload()
+    } catch (error) {
+      if (submitButton) submitButton.disabled = false
+      window.alert(error instanceof Error ? error.message : '操作失败')
+    }
+  }
+
+  async function submitBatchModal(event) {
+    event.preventDefault()
+    const state = batchModalState()
+    if (!state.form || !state.action || !state.docIds) return
+    const action = String(state.action.value || '').trim()
+    const docIds = String(state.docIds.value || '').split(',').map((item) => item.trim()).filter(Boolean)
+    if (!action || !docIds.length) return
+    const body = { doc_ids: docIds, action, status: '' }
+    if (action === 'labels_add' || action === 'labels_remove' || action === 'labels_replace') {
+      body.labels = parseLabelInput(state.labelsText?.value || '')
+      if (action !== 'labels_replace' && !body.labels.length) {
+        window.alert('至少输入一个标签')
+        return
+      }
+    }
+    if (action === 'owner_set') {
+      body.owner = String(state.owner?.value || '').trim()
+    }
+    if (action === 'priority_set') {
+      body.priority = normalizePriorityInput(state.priority?.value || '')
+    }
+    if (action === 'status') {
+      body.status = String(state.statusValue?.value || '').trim()
+      if (!body.status) {
+        window.alert('请选择一个状态')
+        return
+      }
+    }
+    if (action === 'due_set') {
+      body.due_date = normalizeDueDateInput(state.dueDate?.value || '')
+      if (!body.due_date) {
+        window.alert('请选择一个截止日期')
+        return
+      }
+      if (!isValidDueDateInput(body.due_date)) {
+        window.alert('截止日期必须使用 YYYY-MM-DD 格式')
+        return
+      }
+    }
+    const submitButton = state.form.querySelector('button[type="submit"]')
+    if (submitButton) submitButton.disabled = true
+    try {
+      await submitBatchRequest(body)
+      window.location.reload()
+    } catch (error) {
+      if (submitButton) submitButton.disabled = false
+      window.alert(error instanceof Error ? error.message : '操作失败')
+    }
+  }
+
+  async function submitConfirmModal(event) {
+    event.preventDefault()
+    const state = confirmModalState()
+    if (!confirmModalPending) {
+      closeConfirmModal()
+      return
+    }
+    if (state.submit) state.submit.disabled = true
+    try {
+      if (confirmModalPending.kind === 'workspace') {
+        await workspaceAction(confirmModalPending.docId, confirmModalPending.action, confirmModalPending.body)
+      } else if (confirmModalPending.kind === 'view-delete') {
+        await workspaceViewAction('delete', confirmModalPending.viewId)
+      } else if (confirmModalPending.kind === 'batch') {
+        await submitBatchRequest(confirmModalPending.body)
+      }
+      window.location.reload()
+    } catch (error) {
+      if (state.submit) state.submit.disabled = false
+      window.alert(error instanceof Error ? error.message : '操作失败')
+    }
+  }
+
+  async function submitQuickModal(event) {
+    event.preventDefault()
+    const state = quickModalState()
+    if (!state.form || !state.mode || !state.docId || !state.textValue || !state.textAreaValue) return
+    const mode = String(state.mode.value || '').trim()
+    const docId = String(state.docId.value || '').trim()
+    const rawText = String((state.inputWrap && !state.inputWrap.hidden ? state.textValue.value : state.textAreaValue.value) || '')
+    if (state.submit) state.submit.disabled = true
+    try {
+      if (mode === 'rename') {
+        const title = rawText.trim()
+        if (!title) {
+          window.alert('工作区名称不能为空')
+          if (state.submit) state.submit.disabled = false
+          return
+        }
+        await workspaceAction(docId, 'update', { title })
+      } else if (mode === 'labels') {
+        await workspaceAction(docId, 'update', { labels: parseLabelInput(rawText) })
+      } else if (mode === 'save-view') {
+        const name = rawText.trim()
+        if (!name) {
+          window.alert('视图名称不能为空')
+          if (state.submit) state.submit.disabled = false
+          return
+        }
+        await workspaceViewAction('save', '', { name, ...currentWorkspaceFilters() })
+      } else {
+        if (state.submit) state.submit.disabled = false
+        return
+      }
+      window.location.reload()
+    } catch (error) {
+      if (state.submit) state.submit.disabled = false
+      window.alert(error instanceof Error ? error.message : '操作失败')
+    }
+  }
+
+  async function createFromTemplate(templateId) {
+    const resp = await fetch('/api/workspaces/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template: templateId })
+    })
+    if (!resp.ok) {
+      const text = await resp.text()
+      throw new Error(text || '创建工作区失败')
+    }
+    const body = await resp.json()
+    window.location.href = `/workbench/${body.doc_id}`
+  }
+
+  document.addEventListener('click', async (event) => {
+    const starterButton = event.target.closest('[data-action="create-template"]')
+    if (starterButton) {
+      const card = starterButton.closest('[data-template-id]')
+      const templateId = String(card?.dataset.templateId || '')
+      if (!templateId) return
+      starterButton.disabled = true
+      try {
+        await createFromTemplate(templateId)
+      } catch (error) {
+        starterButton.disabled = false
+        window.alert(error instanceof Error ? error.message : '操作失败')
+      }
+      return
+    }
+    const batchApplyButton = event.target.closest('#wa-batch-apply')
+    if (batchApplyButton) {
+      await applyBatchWorkspaceAction()
+      return
+    }
+    const viewButton = event.target.closest('[data-view-action]')
+    if (viewButton) {
+      const viewAction = String(viewButton.dataset.viewAction || '')
+      const viewId = String(viewButton.dataset.viewId || '')
+      if (!viewAction) return
+      viewButton.disabled = true
+      try {
+        if (viewAction === 'save') {
+          viewButton.disabled = false
+          openQuickModal({
+            mode: 'save-view',
+            title: '保存视图',
+            subtitle: '将当前的筛选、排序和逾期状态保存为可复用的视图。',
+            label: '视图名称',
+            placeholder: '例如：客户A逾期审阅',
+            submitLabel: '保存视图',
+            value: ''
+          })
+          return
+        } else {
+          viewButton.disabled = false
+          openConfirmModal({
+            title: '删除保存的视图',
+            subtitle: '这将移除保存的视图定义，但不会删除任何工作区。',
+            message: '删除此保存的视图？',
+            confirmLabel: '删除视图',
+            pending: { kind: 'view-delete', viewId }
+          })
+          return
+        }
+        window.location.reload()
+      } catch (error) {
+        viewButton.disabled = false
+        window.alert(error instanceof Error ? error.message : '操作失败')
+      }
+      return
+    }
+    const modalAction = event.target.closest('[data-modal-action]')
+    if (modalAction) {
+      const modalOp = String(modalAction.dataset.modalAction || '')
+      if (modalOp === 'cancel-batch') {
+        closeBatchModal()
+      } else if (modalOp === 'cancel-quick') {
+        closeQuickModal()
+      } else if (modalOp === 'cancel-confirm') {
+        closeConfirmModal()
+      } else {
+        closeFieldModal()
+      }
+      return
+    }
+    const button = event.target.closest('[data-action]')
+    if (!button) return
+    const card = button.closest('[data-doc-id]')
+    if (!card) return
+    const docId = String(card.dataset.docId || '')
+    const action = String(button.dataset.action || '')
+    if (!docId || !action) return
+    let payload = undefined
+    if (action === 'rename') {
+      const currentTitle = String(card.dataset.title || '').trim()
+      openQuickModal({
+        mode: 'rename',
+        docId,
+        title: '重命名工作区',
+        subtitle: `更新 ${currentTitle || '此工作区'} 的仪表板标题。`,
+        label: '工作区名称',
+        placeholder: '输入一个清晰的工作区标题',
+        submitLabel: '保存名称',
+        value: currentTitle
+      })
+      return
+    }
+    if (action === 'labels') {
+      const currentLabels = String(card.dataset.labels || '').trim()
+      openQuickModal({
+        mode: 'labels',
+        docId,
+        title: '编辑工作区标签',
+        subtitle: '使用结构化输入字段添加、移除或清除标签。',
+        label: '标签',
+        placeholder: '客户A, Q3, 审阅',
+        submitLabel: '保存标签',
+        value: currentLabels,
+        multiline: true
+      })
+      return
+    }
+    if (action === 'fields') {
+      openFieldModal(card)
+      return
+    }
+    if (['delete', 'trash', 'purge', 'untrash', 'archive', 'restore'].includes(action)) {
+      openConfirmModal({
+        title: '确认工作区操作',
+        subtitle: '此更改会影响所选工作区的生命周期。',
+        message: {
+          delete: '永久删除此工作区？',
+          trash: '将此工作区移入回收站？',
+          purge: '永久删除此工作区？',
+          untrash: '从回收站恢复此工作区？',
+          archive: '归档此工作区？',
+          restore: '恢复此工作区？'
+        }[action] || '应用此工作区操作？',
+        confirmLabel: action === 'purge' || action === 'delete' ? '永久删除' : '继续',
+        pending: { kind: 'workspace', docId, action, body: payload }
+      })
+      return
+    }
+    button.disabled = true
+    try {
+      await workspaceAction(docId, button.dataset.action || action, payload)
+      window.location.reload()
+    } catch (error) {
+      button.disabled = false
+      button.dataset.action = action
+      window.alert(error instanceof Error ? error.message : '操作失败')
+    }
+  })
+
+  document.addEventListener('change', async (event) => {
+    const selectAll = event.target.closest('#wa-select-all')
+    if (selectAll) {
+      document.querySelectorAll('[data-select-workspace]').forEach((checkbox) => {
+        checkbox.checked = selectAll.checked
+      })
+      syncWorkspaceSelectionUI()
+      return
+    }
+    const checkbox = event.target.closest('[data-select-workspace]')
+    if (checkbox) {
+      syncWorkspaceSelectionUI()
+      return
+    }
+    const select = event.target.closest('select[data-action="status"]')
+    if (!select) return
+    const card = select.closest('[data-doc-id]')
+    if (!card) return
+    const docId = String(card.dataset.docId || '')
+    const status = String(select.value || '')
+    if (!docId || !status) return
+    select.disabled = true
+    try {
+      await workspaceAction(docId, 'status', { status })
+      window.location.reload()
+    } catch (error) {
+      select.disabled = false
+      window.alert(error instanceof Error ? error.message : '操作失败')
+    }
+  })
+
+  const fieldForm = document.getElementById('wa-fields-form')
+  if (fieldForm) {
+    fieldForm.addEventListener('submit', submitFieldModal)
+  }
+
+  const batchForm = document.getElementById('wa-batch-form')
+  if (batchForm) {
+    batchForm.addEventListener('submit', submitBatchModal)
+  }
+
+  const quickForm = document.getElementById('wa-quick-form')
+  if (quickForm) {
+    quickForm.addEventListener('submit', submitQuickModal)
+  }
+
+  const confirmForm = document.getElementById('wa-confirm-form')
+  if (confirmForm) {
+    confirmForm.addEventListener('submit', submitConfirmModal)
+  }
+
+  document.addEventListener('click', (event) => {
+    const fieldsModal = document.getElementById('wa-fields-modal')
+    const batchModal = document.getElementById('wa-batch-modal')
+    const quickModal = document.getElementById('wa-quick-modal')
+    const confirmModal = document.getElementById('wa-confirm-modal')
+    if ((fieldsModal && event.target === fieldsModal) || (batchModal && event.target === batchModal) || (quickModal && event.target === quickModal) || (confirmModal && event.target === confirmModal)) {
+      closeAllModals()
+    }
+  })
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeAllModals()
+    }
+  })
+
+  syncWorkspaceSelectionUI()
+</script>
+{% endblock %}

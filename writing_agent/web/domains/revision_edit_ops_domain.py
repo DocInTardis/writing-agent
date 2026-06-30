@@ -8,15 +8,16 @@ from pathlib import Path
 
 from writing_agent.web.domains import section_edit_ops_domain
 from writing_agent.web.domains.revision_edit_common_domain import (
+    _EDIT_RULES_CACHE,
     EditOp,
     RuleSpec,
-    _EDIT_RULES_CACHE,
     _clean_section_title,
     _clean_title_candidate,
     _normalize_heading_text,
     _parse_chinese_number,
     _split_title_list,
 )
+
 
 def _compile_rule_flags(flag_list: list[str]) -> int:
     flags = 0

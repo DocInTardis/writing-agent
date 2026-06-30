@@ -25,8 +25,20 @@ def _guess_block_kind(block_id: str) -> str:
     return service._guess_block_kind(block_id)
 
 
-def docs_list() -> dict:
-    return service.docs_list()
+def docs_list(
+    status: str = "active",
+    q: str = "",
+    label: str = "",
+    owner: str = "",
+    priority: str = "",
+    due_soon: str = "",
+    unassigned: str = "",
+    no_due_date: str = "",
+    no_priority: str = "",
+    overdue: str = "",
+    sort: str = "updated",
+) -> dict:
+    return service.docs_list(status=status, query=q, label=label, owner=owner, priority=priority, due_soon=due_soon, unassigned=unassigned, no_due_date=no_due_date, no_priority=no_priority, overdue=overdue, sort=sort)
 
 
 def doc_delete(doc_id: str) -> dict:
@@ -44,8 +56,20 @@ def get_text_block_flow(block_id: str) -> dict:
 
 
 @router.get("/api/docs/list")
-def docs_list_flow() -> dict:
-    return docs_list()
+def docs_list_flow(
+    status: str = "active",
+    q: str = "",
+    label: str = "",
+    owner: str = "",
+    priority: str = "",
+    due_soon: str = "",
+    unassigned: str = "",
+    no_due_date: str = "",
+    no_priority: str = "",
+    overdue: str = "",
+    sort: str = "updated",
+) -> dict:
+    return docs_list(status=status, q=q, label=label, owner=owner, priority=priority, due_soon=due_soon, unassigned=unassigned, no_due_date=no_due_date, no_priority=no_priority, overdue=overdue, sort=sort)
 
 
 @router.post("/api/doc/{doc_id}/delete")

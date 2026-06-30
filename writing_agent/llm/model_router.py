@@ -5,6 +5,9 @@ This module belongs to `writing_agent.llm` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -108,8 +111,9 @@ class SemanticCache:
                 if isinstance(raw, dict) and key in raw:
                     self._l1[key] = raw[key]
                     return raw[key]
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in model_router.py: %s", _exc, exc_info=True)
+
         return None
 
     def set(self, key: str, value: Any) -> None:
@@ -127,5 +131,5 @@ class SemanticCache:
                     existing = raw
             existing[key] = value
             path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in model_router.py: %s", _exc, exc_info=True)

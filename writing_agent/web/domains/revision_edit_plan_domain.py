@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from writing_agent.web.domains.revision_edit_common_domain import (
+    _ALLOWED_EDIT_OPS,
     EditExecutionResult,
     EditOp,
     EditPlanV2,
-    _ALLOWED_EDIT_OPS,
     _clean_section_title,
     _clean_title_candidate,
     _coerce_int,
@@ -20,8 +21,8 @@ from writing_agent.web.domains.revision_edit_common_domain import (
     _extract_json_block,
     _has_confirmation_token,
     _normalize_heading_text,
-    _record_edit_plan_metric,
     _parse_chinese_number,
+    _record_edit_plan_metric,
     _requires_confirmation,
     _risk_level_from_ops,
     _split_title_list,
@@ -33,6 +34,7 @@ from writing_agent.web.domains.revision_edit_ops_domain import (
     _parse_edit_ops,
     _strip_quotes,
 )
+
 
 def _normalize_edit_op_item(item: object) -> EditOp | None:
     if not isinstance(item, dict):

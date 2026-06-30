@@ -5,6 +5,9 @@ This module belongs to `writing_agent.web.services` in the writing-agent codebas
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import io
 import os
 import re
@@ -253,8 +256,8 @@ class ExportService:
             try:
                 tmp_docx_path.unlink(missing_ok=True)
                 tmp_pdf_path.unlink(missing_ok=True)
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in export_service.py: %s", _exc, exc_info=True)
 
     def export_multi_format(self, doc_id: str, format: str) -> Response:
         app_v2 = app_v2_module()

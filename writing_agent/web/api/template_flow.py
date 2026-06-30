@@ -5,7 +5,13 @@ This module belongs to `writing_agent.web.api` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, File, Request, UploadFile
+from writing_agent.web.upload_utils import read_upload_payload as _read_upload_payload
+
+from writing_agent.web.services import workspace_service
 
 router = APIRouter()
 
@@ -57,6 +63,7 @@ async def save_doc(doc_id: str, request: Request) -> dict:
             session.generation_prefs if isinstance(session.generation_prefs, dict) else {},
             data.get("generation_prefs") or {},
         )
+    workspace_service.note_content_saved(session, source="editor_save", text=text)
     app_v2.store.put(session)
     return {"ok": 1}
 
@@ -84,14 +91,15 @@ async def import_doc(doc_id: str, file: UploadFile = File(...)) -> dict:
     finally:
         try:
             tmp_path.unlink()
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in template_flow.py: %s", _exc, exc_info=True)
 
     text = (text or "").strip()
     if not text:
         raise app_v2.HTTPException(status_code=400, detail="empty document")
 
     app_v2._set_doc_text(session, text)
+    workspace_service.note_content_saved(session, source="import", text=text)
     app_v2.store.put(session)
     return {"ok": 1, "text": text}
 
@@ -114,6 +122,7 @@ async def save_settings(doc_id: str, request: Request) -> dict:
             session.generation_prefs if isinstance(session.generation_prefs, dict) else {},
             data.get("generation_prefs") or {},
         )
+    workspace_service.note_settings_saved(session)
     app_v2.store.put(session)
     return {"ok": 1}
 
@@ -377,7 +386,7 @@ async def doc_upload(doc_id: str, file: UploadFile = File(...)) -> dict:
     if session is None:
         raise app_v2.HTTPException(status_code=404, detail="document not found")
 
-    source_name, _, raw = await app_v2._read_upload_payload(file)
+    source_name, _, raw = await _read_upload_payload(file)
     rec = app_v2.user_library.put_upload(filename=source_name, file_bytes=raw)
 
     kind = "library"

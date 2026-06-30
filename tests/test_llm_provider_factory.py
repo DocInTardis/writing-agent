@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from types import SimpleNamespace
 
@@ -6,7 +6,17 @@ import pytest
 
 from writing_agent.llm.factory import get_default_provider, get_provider_name, get_provider_snapshot, mask_secret
 from writing_agent.llm.provider import LLMProviderError
-from writing_agent.llm.providers import NodeAIGatewayProvider, OllamaProvider, OpenAICompatibleProvider
+from writing_agent.llm.providers import (
+    NodeAIGatewayProvider,
+    OllamaProvider,
+    OpenAICompatibleProvider,
+    OpenAIQuotaFallbackProvider,
+)
+
+
+def test_get_provider_name_defaults_to_openai(monkeypatch) -> None:
+    monkeypatch.delenv("WRITING_AGENT_LLM_PROVIDER", raising=False)
+    assert get_provider_name() == "openai"
 
 
 def test_get_default_provider_returns_ollama_provider(monkeypatch) -> None:
@@ -77,6 +87,7 @@ def test_get_default_provider_node_without_url_falls_back_when_enabled(monkeypat
 
 def test_get_default_provider_supports_openai_compatible(monkeypatch) -> None:
     monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", "0")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_BASE_URL", "https://api.example.com/v1")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_API_KEY", "sk-test-openai-123456")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_MODEL", "gpt-4o-mini")
@@ -85,6 +96,62 @@ def test_get_default_provider_supports_openai_compatible(monkeypatch) -> None:
     assert isinstance(provider, OpenAICompatibleProvider)
     assert provider.base_url == "https://api.example.com/v1"
     assert provider.model == "gpt-4o-mini"
+    assert provider.wire_api == "chat_completions"
+
+
+def test_get_default_provider_wraps_openai_with_ollama_quota_fallback(monkeypatch) -> None:
+    class _Primary:
+        base_url = "https://api.example.com/v1"
+        model = "gpt-4o-mini"
+
+        def is_running(self) -> bool:
+            return True
+
+        def chat(self, *, system, user, temperature=0.2, options=None):
+            _ = system, user, temperature, options
+            raise LLMProviderError("api_insufficient_quota:http_429")
+
+        def chat_stream(self, *, system, user, temperature=0.2, options=None):
+            _ = system, user, temperature, options
+            raise LLMProviderError("api_insufficient_quota:http_429")
+            yield ""  # pragma: no cover
+
+        def embeddings(self, *, prompt, model=None):
+            _ = prompt, model
+            return [0.1]
+
+    class _Fallback:
+        def is_running(self) -> bool:
+            return True
+
+        def chat(self, *, system, user, temperature=0.2, options=None):
+            _ = system, user, temperature, options
+            return "fallback-text"
+
+        def chat_stream(self, *, system, user, temperature=0.2, options=None):
+            _ = system, user, temperature, options
+            yield "fallback-"
+            yield "stream"
+
+        def embeddings(self, *, prompt, model=None):
+            _ = prompt, model
+            return [0.2]
+
+    monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", "1")
+    monkeypatch.setattr("writing_agent.llm.factory.openai_from_env", lambda **_kwargs: _Primary())
+    monkeypatch.setattr(
+        "writing_agent.llm.factory.get_ollama_settings",
+        lambda: SimpleNamespace(enabled=True, base_url="http://127.0.0.1:11434", model="qwen2.5:1.5b", timeout_s=12.0),
+    )
+    monkeypatch.setattr("writing_agent.llm.factory.OllamaProvider.from_settings", lambda *_args, **_kwargs: _Fallback())
+
+    provider = get_default_provider()
+    assert isinstance(provider, OpenAIQuotaFallbackProvider)
+    assert provider.base_url == "https://api.example.com/v1"
+    assert provider.model == "gpt-4o-mini"
+    assert provider.chat(system="s", user="u") == "fallback-text"
+    assert "".join(provider.chat_stream(system="s", user="u")) == "fallback-stream"
 
 
 def test_provider_name_alias_openai_compatible(monkeypatch) -> None:
@@ -96,12 +163,20 @@ def test_provider_snapshot_masks_api_key(monkeypatch) -> None:
     monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_BASE_URL", "https://api.example.com/v1")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_API_KEY", "sk-super-secret-abcdefg")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", "1")
+    monkeypatch.setattr(
+        "writing_agent.llm.factory.get_ollama_settings",
+        lambda: SimpleNamespace(enabled=True, base_url="http://127.0.0.1:11434", model="qwen2.5:7b", timeout_s=12.0),
+    )
     snap = get_provider_snapshot(model="gpt-5.4")
     assert snap["provider"] == "openai"
     assert snap["base_url"] == "https://api.example.com/v1"
     assert snap["api_key_masked"].startswith("sk-s")
     assert "secret" not in snap["api_key_masked"]
     assert snap["model"] == "gpt-5.4"
+    assert snap["wire_api"] == "chat_completions"
+    assert snap["fallback_provider"] == "ollama"
+    assert snap["fallback_model"] == "qwen2.5:7b"
 
 
 def test_mask_secret_handles_short_values() -> None:
@@ -109,10 +184,10 @@ def test_mask_secret_handles_short_values() -> None:
     assert mask_secret("abc") == "***"
 
 
-
 def test_get_default_provider_reuses_cached_instance(monkeypatch) -> None:
     monkeypatch.setenv("WRITING_AGENT_PROVIDER_CACHE_ENABLED", "1")
     monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", "0")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_BASE_URL", "https://api.example.com/v1")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_API_KEY", "sk-cache-test-123456")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_MODEL", "gpt-5.4")

@@ -167,6 +167,70 @@ def test_ensure_ollama_ready_returns_success_when_service_running() -> None:
     }
 
 
+def test_ensure_ollama_ready_uses_remote_provider_probe_without_starting_local_service() -> None:
+    starts: list[str] = []
+    waits: list[float] = []
+
+    class _RemoteProvider:
+        def is_running(self) -> bool:
+            return True
+
+    result = ensure_ollama_ready(
+        get_ollama_settings_fn=lambda: SimpleNamespace(
+            enabled=False,
+            base_url='http://127.0.0.1:11434',
+            model='qwen2.5',
+            timeout_s=30.0,
+        ),
+        ollama_client_cls=lambda **_kwargs: None,
+        start_ollama_serve_fn=lambda: starts.append('started'),
+        wait_until_fn=lambda predicate, timeout_s: waits.append(timeout_s) or predicate(),
+        get_provider_snapshot_fn=lambda: {
+            'provider': 'openai',
+            'wire_api': 'responses',
+            'base_url': 'https://aixj.vip/v1',
+        },
+        get_default_provider_fn=lambda: _RemoteProvider(),
+    )
+
+    assert result == (True, '')
+    assert starts == []
+    assert waits == []
+
+
+def test_ensure_ollama_ready_iter_returns_remote_provider_failure_without_starting_local_service() -> None:
+    starts: list[str] = []
+    waits: list[float] = []
+
+    class _RemoteProvider:
+        def is_running(self) -> bool:
+            return False
+
+    notes, result = _drain(
+        ensure_ollama_ready_iter(
+            get_ollama_settings_fn=lambda: SimpleNamespace(
+                enabled=True,
+                base_url='http://127.0.0.1:11434',
+                model='qwen2.5',
+                timeout_s=30.0,
+            ),
+            ollama_client_cls=lambda **_kwargs: None,
+            start_ollama_serve_fn=lambda: starts.append('started'),
+            wait_until_fn=lambda predicate, timeout_s: waits.append(timeout_s) or predicate(),
+            get_provider_snapshot_fn=lambda: {
+                'provider': 'openai',
+                'wire_api': 'responses',
+                'base_url': 'https://aixj.vip/v1',
+            },
+            get_default_provider_fn=lambda: _RemoteProvider(),
+        )
+    )
+
+    assert notes == ['checking model service: https://aixj.vip/v1']
+    assert result == (False, 'openai provider not ready: https://aixj.vip/v1')
+    assert starts == []
+    assert waits == []
+
 
 def test_ensure_ollama_ready_iter_starts_service_and_emits_note() -> None:
     state = {'running': False}

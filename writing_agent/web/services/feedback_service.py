@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from writing_agent.web import meta_db as _meta_db
 from .base import app_v2_module
 
 
@@ -17,7 +18,7 @@ class FeedbackService:
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
-        meta = app_v2._load_meta(doc_id)
+        meta = _meta_db.load_meta(doc_id)
         return {"items": meta.get("chat", [])}
 
     async def save_chat(self, doc_id: str, request: Request) -> dict:
@@ -41,7 +42,7 @@ class FeedbackService:
             cleaned.append({"role": role, "text": text})
         session.chat_log = cleaned
         app_v2.store.put(session)
-        app_v2._save_meta(doc_id, chat=cleaned)
+        _meta_db.save_meta(doc_id, chat=cleaned)
         return {"ok": 1}
 
     def get_thoughts(self, doc_id: str) -> dict:
@@ -50,7 +51,7 @@ class FeedbackService:
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
-        meta = app_v2._load_meta(doc_id)
+        meta = _meta_db.load_meta(doc_id)
         return {"items": meta.get("thoughts", [])}
 
     async def save_thoughts(self, doc_id: str, request: Request) -> dict:
@@ -75,7 +76,7 @@ class FeedbackService:
             cleaned.append({"label": label, "detail": detail, "time": time_str})
         session.thought_log = cleaned
         app_v2.store.put(session)
-        app_v2._save_meta(doc_id, thoughts=cleaned)
+        _meta_db.save_meta(doc_id, thoughts=cleaned)
         return {"ok": 1}
 
     def get_feedback(self, doc_id: str) -> dict:
@@ -84,7 +85,7 @@ class FeedbackService:
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
-        meta = app_v2._load_meta(doc_id)
+        meta = _meta_db.load_meta(doc_id)
         return {"items": meta.get("feedback", [])}
 
     async def save_feedback(self, doc_id: str, request: Request) -> dict:
@@ -108,17 +109,17 @@ class FeedbackService:
                 normalized.append(one)
         if not normalized:
             raise app_v2.HTTPException(status_code=400, detail="no valid feedback item")
-        existing = app_v2._load_meta(doc_id)
+        existing = _meta_db.load_meta(doc_id)
         merged = [x for x in (existing.get("feedback") or []) if isinstance(x, dict)]
         merged.extend(normalized)
         merged = merged[-500:]
-        app_v2._save_meta(doc_id, feedback=merged)
+        _meta_db.save_meta(doc_id, feedback=merged)
         low_threshold = app_v2._low_satisfaction_threshold()
         low_recorded = 0
         context = data.get("context") if isinstance(data.get("context"), dict) else {}
         for item in normalized:
             if int(item.get("rating") or 0) <= low_threshold:
-                ok = app_v2._append_low_satisfaction_event(
+                ok = _meta_db.append_low_satisfaction_event(
                     doc_id,
                     item,
                     context=context,
@@ -135,7 +136,5 @@ class FeedbackService:
         }
 
     def get_low_feedback(self, limit: int = 200) -> dict:
-        app_v2 = app_v2_module()
-
-        return {"items": app_v2._load_low_satisfaction_events(limit=limit)}
+        return {"items": _meta_db.load_low_satisfaction_events(limit=limit)}
 

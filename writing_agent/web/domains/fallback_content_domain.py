@@ -88,7 +88,7 @@ def augment_instruction(instruction: str, *, formatting: dict, generation_prefs:
     figure_types = prefs.get("figure_types")
     table_types = prefs.get("table_types")
     extra_req = str(prefs.get("extra_requirements") or "").strip()
-    lines: list[str] = [inst, "", "【格式与输出约束（系统设置）】"]
+    lines: list[str] = [inst, "", "【输出约束（系统设置）】"]
     if purpose:
         lines.append(f"- 用途：{purpose}")
     mode = str(prefs.get("target_length_mode") or "").strip().lower()
@@ -101,25 +101,8 @@ def augment_instruction(instruction: str, *, formatting: dict, generation_prefs:
     if extra_req:
         lines.append(f"- 补充要求：{extra_req}")
     if fmt:
-        name = str(fmt.get("font_size_name") or "").strip()
-        pt = str(fmt.get("font_size_pt") or "").strip()
-        ls = str(fmt.get("line_spacing") or "").strip()
-        if name or pt:
-            lines.append(f"- 字号：{name or '[默认]'}（{pt or '[默认]'}pt）")
-        if ls:
-            lines.append(f"- 行距：{ls}")
-        h1_pt = str(fmt.get("heading1_size_pt") or "").strip()
-        h2_pt = str(fmt.get("heading2_size_pt") or "").strip()
-        h3_pt = str(fmt.get("heading3_size_pt") or "").strip()
-        h1_font = str(fmt.get("heading1_font_name_east_asia") or fmt.get("heading1_font_name") or "").strip()
-        h2_font = str(fmt.get("heading2_font_name_east_asia") or fmt.get("heading2_font_name") or "").strip()
-        h3_font = str(fmt.get("heading3_font_name_east_asia") or fmt.get("heading3_font_name") or "").strip()
-        if h1_pt or h1_font:
-            lines.append(f"- 一级标题：{h1_font or '[默认字体]'} {h1_pt or '[默认字号]'}pt")
-        if h2_pt or h2_font:
-            lines.append(f"- 二级标题：{h2_font or '[默认字体]'} {h2_pt or '[默认字号]'}pt")
-        if h3_pt or h3_font:
-            lines.append(f"- 三级标题：{h3_font or '[默认字体]'} {h3_pt or '[默认字号]'}pt")
+        lines.append("- 排版会在导出阶段自动应用；不要把字体、字号、行距、目录、页眉页脚等设置写入正文。")
+        lines.append("- 题目必须围绕主题自行拟定，不要把排版参数、样式名称或模板标签当作标题。")
     if isinstance(table_types, list) and table_types:
         lines.append("- 建议表格类型：" + ", ".join([str(x) for x in table_types]))
     if isinstance(figure_types, list) and figure_types:

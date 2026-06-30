@@ -5,6 +5,9 @@ This module belongs to `writing_agent.llm` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import time
 from dataclasses import dataclass
@@ -151,6 +154,7 @@ class AISDKAdapter:
         registry: dict[str, Callable[[dict[str, Any]], Any]],
         options: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        last_err: Exception | None = None
         if hasattr(self.provider, "tool_call"):
             try:
                 result = self.provider.tool_call(
@@ -161,10 +165,14 @@ class AISDKAdapter:
                 if isinstance(result, dict):
                     return result
                 return {"ok": 1, "result": result}
-            except Exception:
-                pass
+            except Exception as _exc:
+                last_err = _exc
+                logger.debug("Provider tool_call failed for %s: %s", tool_name, _exc, exc_info=True)
+
         fn = registry.get(str(tool_name))
         if fn is None:
+            if last_err is not None:
+                raise AISDKError(f"tool_call failed for {tool_name}: {last_err}") from last_err
             raise AISDKError(f"tool not found: {tool_name}")
         result = fn(dict(arguments or {}))
         if isinstance(result, dict):
@@ -177,13 +185,16 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     if not raw:
         return None
     if raw.startswith("```"):
-        raw = raw.replace("```json", "").replace("```", "").strip()
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start < 0 or end <= start:
-        return None
-    try:
-        value = json.loads(raw[start : end + 1])
-    except Exception:
-        return None
-    return value if isinstance(value, dict) else None
+        raw = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", raw).strip()
+        raw = re.sub(r"\s*```$", "", raw).strip()
+    # Try full text first (handles top-level arrays too)
+    for candidate in (raw, raw[raw.find("{") : raw.rfind("}") + 1] if "{" in raw and "}" in raw else ""):
+        if not candidate:
+            continue
+        try:
+            value = json.loads(candidate)
+            if isinstance(value, dict):
+                return value
+        except Exception:
+            continue
+    return None

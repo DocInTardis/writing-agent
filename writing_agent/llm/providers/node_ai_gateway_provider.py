@@ -5,6 +5,9 @@ This module belongs to `writing_agent.llm.providers` in the writing-agent codeba
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import time
@@ -30,8 +33,9 @@ def _build_session() -> requests.Session:
         adapter = requests.adapters.HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=0)
         session.mount("http://", adapter)
         session.mount("https://", adapter)
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in node_ai_gateway_provider.py: %s", _exc, exc_info=True)
+
     return session
 
 from writing_agent.llm.provider import LLMProvider, LLMProviderError

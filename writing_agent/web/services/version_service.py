@@ -13,6 +13,21 @@ from .base import app_v2_module
 
 
 class VersionService:
+    @staticmethod
+    async def _read_payload(request: Request, app_v2, *, raise_on_invalid: bool) -> dict:
+        try:
+            body = await request.body()
+            payload = app_v2.json.loads(body.decode("utf-8")) if body else {}
+        except Exception as err:
+            if raise_on_invalid:
+                raise app_v2.HTTPException(400, "invalid payload") from err
+            return {}
+        if isinstance(payload, dict):
+            return payload
+        if raise_on_invalid:
+            raise app_v2.HTTPException(400, "invalid payload")
+        return {}
+
     async def version_commit(self, doc_id: str, request: Request) -> dict:
         app_v2 = app_v2_module()
 
@@ -20,13 +35,9 @@ class VersionService:
         if not session:
             raise app_v2.HTTPException(404, "document not found")
 
-        try:
-            body = await request.body()
-            payload = app_v2.json.loads(body.decode("utf-8")) if body else {}
-        except Exception:
-            payload = {}
+        payload = await self._read_payload(request, app_v2, raise_on_invalid=False)
 
-        message = payload.get("message", "淇濆瓨鐗堟湰")
+        message = payload.get("message", "保存版本")
         author = payload.get("author", "user")
         tags = payload.get("tags", [])
         if not isinstance(tags, list):
@@ -146,11 +157,7 @@ class VersionService:
         session = app_v2.store.get(doc_id)
         if not session:
             raise app_v2.HTTPException(404, "document not found")
-        try:
-            body = await request.body()
-            payload = app_v2.json.loads(body.decode("utf-8")) if body else {}
-        except Exception:
-            raise app_v2.HTTPException(400, "invalid payload")
+        payload = await self._read_payload(request, app_v2, raise_on_invalid=True)
 
         version_id = payload.get("version_id")
         if not version_id:
@@ -171,11 +178,7 @@ class VersionService:
         session = app_v2.store.get(doc_id)
         if not session:
             raise app_v2.HTTPException(404, "document not found")
-        try:
-            body = await request.body()
-            payload = app_v2.json.loads(body.decode("utf-8")) if body else {}
-        except Exception:
-            raise app_v2.HTTPException(400, "invalid payload")
+        payload = await self._read_payload(request, app_v2, raise_on_invalid=True)
 
         branch_name = payload.get("branch_name", "").strip()
         if not branch_name:
@@ -223,11 +226,7 @@ class VersionService:
         session = app_v2.store.get(doc_id)
         if not session:
             raise app_v2.HTTPException(404, "document not found")
-        try:
-            body = await request.body()
-            payload = app_v2.json.loads(body.decode("utf-8")) if body else {}
-        except Exception:
-            raise app_v2.HTTPException(400, "invalid payload")
+        payload = await self._read_payload(request, app_v2, raise_on_invalid=True)
 
         version_id = payload.get("version_id")
         tag = payload.get("tag", "").strip()

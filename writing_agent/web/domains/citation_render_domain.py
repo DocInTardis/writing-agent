@@ -5,6 +5,9 @@ This module belongs to `writing_agent.web.domains` in the writing-agent codebase
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import re
 
 from writing_agent.agents.citations import CitationAgent
@@ -46,8 +49,9 @@ def insert_reference_section(text: str, ref_lines: list[str]) -> str:
         if m:
             try:
                 existing_nums.add(int(m.group(1)))
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in citation_render_domain.py: %s", _exc, exc_info=True)
+
     to_add: list[str] = []
     for line in ref_lines:
         m = re.match(r"^\[(\d+)\]\s*", line)
@@ -55,8 +59,9 @@ def insert_reference_section(text: str, ref_lines: list[str]) -> str:
             try:
                 if int(m.group(1)) in existing_nums:
                     continue
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Ignored error in citation_render_domain.py: %s", _exc, exc_info=True)
+
         to_add.append(line)
     if not to_add:
         return text

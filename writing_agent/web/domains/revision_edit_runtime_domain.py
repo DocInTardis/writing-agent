@@ -11,14 +11,25 @@ Compatibility wrapper that re-exports the split revision edit domains.
 
 from __future__ import annotations
 
-from writing_agent.web.domains.revision_edit_common_domain import *
-from writing_agent.web.domains.revision_edit_ops_domain import *
-from writing_agent.web.domains.revision_edit_plan_domain import *
-from writing_agent.web.domains.revision_selected_edit_domain import *
+from writing_agent.web.domains import (
+    revision_edit_common_domain as _common_domain,
+    revision_edit_ops_domain as _ops_domain,
+    revision_edit_plan_domain as _plan_domain,
+    revision_selected_edit_domain as _selected_domain,
+)
 
-from writing_agent.web.domains.revision_edit_common_domain import __all__ as _common_all
-from writing_agent.web.domains.revision_edit_ops_domain import __all__ as _ops_all
-from writing_agent.web.domains.revision_edit_plan_domain import __all__ as _plan_all
-from writing_agent.web.domains.revision_selected_edit_domain import __all__ as _selected_all
+_EXPORT_MODULES = (
+    _common_domain,
+    _ops_domain,
+    _plan_domain,
+    _selected_domain,
+)
 
-__all__ = list(dict.fromkeys(list(_common_all) + list(_ops_all) + list(_plan_all) + list(_selected_all)))
+_PUBLIC_EXPORTS = {
+    name: getattr(module, name)
+    for module in _EXPORT_MODULES
+    for name in getattr(module, "__all__", ())
+}
+globals().update(_PUBLIC_EXPORTS)
+
+__all__ = list(_PUBLIC_EXPORTS)

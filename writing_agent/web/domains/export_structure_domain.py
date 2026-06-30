@@ -5,6 +5,9 @@ This module belongs to `writing_agent.web.domains` in the writing-agent codebase
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import os
 import re
 import time
@@ -194,8 +197,9 @@ def _resolve_min_reference_count(session: Any) -> int:
             value = int(raw)
             if value > 0:
                 return min(100, value)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in export_structure_domain.py: %s", _exc, exc_info=True)
+
     raw_env = str(os.environ.get("WRITING_AGENT_MIN_REFERENCE_COUNT", "8")).strip()
     try:
         return max(1, min(100, int(raw_env)))
@@ -238,8 +242,9 @@ def _resolve_positive_int_pref(
         try:
             value = int(raw)
             return max(min_value, min(max_value, value))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in export_structure_domain.py: %s", _exc, exc_info=True)
+
     raw_env = str(os.environ.get(env_key, str(default))).strip()
     try:
         value = int(raw_env)

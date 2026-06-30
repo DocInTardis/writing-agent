@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import queue
 import threading
 import time
 from collections.abc import Iterable
+from typing import Any
 
 
 def recommended_stream_timeouts(*, load_stream_metrics_fn, percentile_fn, load_probe_fn) -> tuple[float, float]:
@@ -27,8 +31,9 @@ def recommended_stream_timeouts(*, load_stream_metrics_fn, percentile_fn, load_p
                 default_total = max(default_total, (max_total_ms / 1000.0) * 1.2)
             if max_gap_ms > 0:
                 default_gap = max(default_gap, (max_gap_ms / 1000.0) * 3.0)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in model_runtime_support.py: %s", _exc, exc_info=True)
+
     overall_s = max(default_total, p95_total * 1.3 if p95_total > 0 else 0.0)
     stall_s = max(default_gap, p95_gap * 3 if p95_gap > 0 else 0.0)
     return overall_s, stall_s
@@ -119,13 +124,65 @@ def pull_model_stream(*, base_url: str, name: str, timeout_s: float, pull_model_
     return ok, msg
 
 
+def _provider_name(snapshot: dict[str, Any] | None) -> str:
+    if not isinstance(snapshot, dict):
+        return ""
+    return str(snapshot.get("provider") or "").strip().lower()
+
+
+def _provider_target(snapshot: dict[str, Any] | None, *, fallback: str = "") -> str:
+    if not isinstance(snapshot, dict):
+        return str(fallback or "").strip()
+    base_url = str(snapshot.get("base_url") or "").strip()
+    if base_url:
+        return base_url
+    model = str(snapshot.get("model") or "").strip()
+    if model:
+        return model
+    return str(fallback or "").strip()
+
+
+def _ensure_remote_provider_ready(
+    *,
+    get_provider_snapshot_fn,
+    get_default_provider_fn,
+) -> tuple[bool, str, dict[str, Any] | None]:
+    snapshot = get_provider_snapshot_fn() if callable(get_provider_snapshot_fn) else {}
+    provider_name = _provider_name(snapshot)
+    if not provider_name or provider_name == "ollama":
+        return False, "", snapshot if isinstance(snapshot, dict) else {}
+    try:
+        provider = get_default_provider_fn() if callable(get_default_provider_fn) else None
+    except Exception as exc:
+        return False, f"{provider_name} provider unavailable: {exc}", snapshot
+    if provider is None:
+        return False, f"{provider_name} provider unavailable", snapshot
+    try:
+        if provider.is_running():
+            return True, "", snapshot
+    except Exception as exc:
+        return False, f"{provider_name} provider unavailable: {exc}", snapshot
+    target = _provider_target(snapshot, fallback=provider_name)
+    return False, f"{provider_name} provider not ready: {target}", snapshot
+
+
 def ensure_ollama_ready_iter(
     *,
     get_ollama_settings_fn,
     ollama_client_cls,
     start_ollama_serve_fn,
     wait_until_fn,
+    get_provider_snapshot_fn=None,
+    get_default_provider_fn=None,
 ) -> Iterable[str] | tuple[bool, str]:
+    remote_ok, remote_msg, remote_snapshot = _ensure_remote_provider_ready(
+        get_provider_snapshot_fn=get_provider_snapshot_fn,
+        get_default_provider_fn=get_default_provider_fn,
+    )
+    provider_name = _provider_name(remote_snapshot)
+    if provider_name and provider_name != "ollama":
+        yield f"checking model service: {_provider_target(remote_snapshot, fallback=provider_name)}"
+        return remote_ok, remote_msg
     settings = get_ollama_settings_fn()
     if not settings.enabled:
         return False, "model service disabled"
@@ -142,7 +199,22 @@ def ensure_ollama_ready_iter(
     return True, ""
 
 
-def ensure_ollama_ready(*, get_ollama_settings_fn, ollama_client_cls, start_ollama_serve_fn, wait_until_fn) -> tuple[bool, str]:
+def ensure_ollama_ready(
+    *,
+    get_ollama_settings_fn,
+    ollama_client_cls,
+    start_ollama_serve_fn,
+    wait_until_fn,
+    get_provider_snapshot_fn=None,
+    get_default_provider_fn=None,
+) -> tuple[bool, str]:
+    remote_ok, remote_msg, remote_snapshot = _ensure_remote_provider_ready(
+        get_provider_snapshot_fn=get_provider_snapshot_fn,
+        get_default_provider_fn=get_default_provider_fn,
+    )
+    provider_name = _provider_name(remote_snapshot)
+    if provider_name and provider_name != "ollama":
+        return remote_ok, remote_msg
     settings = get_ollama_settings_fn()
     if not settings.enabled:
         return False, "model service disabled"
