@@ -5,8 +5,14 @@ This module belongs to `writing_agent.web.api` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import FileResponse
+
+from writing_agent.web.upload_utils import read_upload_payload as _read_upload_payload
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -15,6 +21,23 @@ def _app_v2():
     from writing_agent.web import app_v2
 
     return app_v2
+
+
+def _schedule_paper_indexing(app_v2, record, *, embed: bool) -> bool:
+    from writing_agent.v2.rag.background_jobs import schedule_once
+
+    key = f"paper-index:{app_v2.RAG_DIR}:{record.paper_id}"
+
+    def _run() -> None:
+        try:
+            app_v2.rag_index.upsert_from_paper(record, embed=embed)
+        except Exception:
+            logger.warning("Legacy RAG indexing failed for %s", record.paper_id, exc_info=True)
+        from writing_agent.v2.rag.preprocess import DocumentPreprocessor
+
+        DocumentPreprocessor(app_v2.RAG_DIR).process_paper(record, embed=embed)
+
+    return schedule_once(key, _run, group=f"paper-index-store:{app_v2.RAG_DIR}")
 
 
 async def rag_arxiv_ingest(request: Request) -> dict:
@@ -44,9 +67,9 @@ async def rag_arxiv_ingest(request: Request) -> dict:
             rec = app_v2.rag_store.put_arxiv_paper(paper, pdf_bytes=pdf_bytes)
             if index_after:
                 try:
-                    app_v2.rag_index.upsert_from_paper(rec, embed=embed)
+                    _schedule_paper_indexing(app_v2, rec, embed=embed)
                 except Exception:
-                    pass
+                    logger.warning("rag indexing schedule failed for paper %s", rec.paper_id, exc_info=True)
             saved.append(
                 {
                     "paper_id": rec.paper_id,
@@ -55,6 +78,7 @@ async def rag_arxiv_ingest(request: Request) -> dict:
                     "abs_url": rec.abs_url,
                     "pdf_url": rec.pdf_url,
                     "pdf_path": rec.pdf_path if (pdf_bytes is not None) else "",
+                    "processing_status": "processing" if index_after else "stored",
                 }
             )
         except Exception as e:
@@ -172,7 +196,7 @@ async def rag_search(request: Request) -> dict:
                         }
                     )
             except Exception:
-                pass
+                logger.warning("openalex search failed for query %r", query, exc_info=True)
         if "arxiv" in srcs:
             try:
                 res = app_v2.search_arxiv(query=query, max_results=max_results)
@@ -193,7 +217,7 @@ async def rag_search(request: Request) -> dict:
                         }
                     )
             except Exception:
-                pass
+                logger.warning("arxiv search failed for query %r", query, exc_info=True)
         return {"ok": 1, "items": items}
 
     hits = app_v2.search_papers(papers=app_v2.rag_store.list_papers(), query=query, top_k=top_k)
@@ -224,7 +248,7 @@ async def rag_retrieve(request: Request) -> dict:
     max_chars = int(data.get("max_chars") or 2500)
     per_paper = int(data.get("per_paper") or 2)
 
-    mcp_payload = app_v2._mcp_rag_retrieve(query, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
+    mcp_payload = app_v2._mcp_rag_retrieve(query=query, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
     if isinstance(mcp_payload, dict):
         context = str(mcp_payload.get("context") or "")
         sources = mcp_payload.get("sources")
@@ -245,6 +269,18 @@ async def rag_retrieve(request: Request) -> dict:
         return {"context": context, "mode": "mcp", "hits": hits}
 
     res = app_v2.retrieve_context(rag_dir=app_v2.RAG_DIR, query=query, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
+    kg_hits_data = [
+        {
+            "ku_id": h.ku_id,
+            "claim": h.claim,
+            "evidence": h.evidence,
+            "confidence": h.confidence,
+            "entities": h.entities,
+            "source_doc": h.source_doc,
+            "source_title": h.source_title,
+        }
+        for h in res.kg_hits
+    ]
     if res.chunk_hits:
         return {
             "context": res.context,
@@ -253,8 +289,9 @@ async def rag_retrieve(request: Request) -> dict:
                 {"chunk_id": h.chunk_id, "paper_id": h.paper_id, "title": h.title, "score": h.score, "kind": h.kind, "abs_url": h.abs_url}
                 for h in res.chunk_hits
             ],
+            "kg_hits": kg_hits_data,
         }
-    return {"context": res.context, "mode": "papers", "hits": [{"paper_id": h.paper_id, "title": h.title, "score": h.score} for h in res.paper_hits]}
+    return {"context": res.context, "mode": "papers", "hits": [{"paper_id": h.paper_id, "title": h.title, "score": h.score} for h in res.paper_hits], "kg_hits": kg_hits_data}
 
 
 async def rag_index_rebuild(request: Request) -> dict:
@@ -264,7 +301,13 @@ async def rag_index_rebuild(request: Request) -> dict:
         raise app_v2.HTTPException(status_code=400, detail="body must be object")
     embed = bool(data.get("embed", True))
     total = app_v2.rag_index.rebuild(embed=embed)
-    return {"ok": 1, "chunks": total}
+    from writing_agent.v2.rag.preprocess import DocumentPreprocessor
+
+    structured = DocumentPreprocessor(app_v2.RAG_DIR).rebuild_all(
+        embed=embed,
+        force=bool(data.get("force_structured", False)),
+    )
+    return {"ok": 1, "chunks": total, "structured": structured}
 
 
 async def rag_search_chunks(request: Request) -> dict:
@@ -332,7 +375,7 @@ def rag_get_pdf(paper_id: str) -> FileResponse:
 
 async def library_upload(file: UploadFile = File(...)) -> dict:
     app_v2 = _app_v2()
-    source_name, _, raw = await app_v2._read_upload_payload(file)
+    source_name, _, raw = await _read_upload_payload(file)
     rec = app_v2.user_library.put_upload(filename=source_name, file_bytes=raw)
     return {"ok": 1, "item": app_v2._library_item_payload(rec)}
 
@@ -488,8 +531,15 @@ async def rag_ingest(request: Request) -> dict:
                     },
                 )()
                 rec = app_v2.rag_store.put_openalex_work(work, pdf_bytes=pdf_bytes)
-            app_v2.rag_index.upsert_from_paper(rec, embed=embed)
-            ingested.append({"paper_id": paper_id, "title": rec.title, "source": rec.source})
+            _schedule_paper_indexing(app_v2, rec, embed=embed)
+            ingested.append(
+                {
+                    "paper_id": paper_id,
+                    "title": rec.title,
+                    "source": rec.source,
+                    "processing_status": "processing",
+                }
+            )
         except Exception:
             continue
     return {"ok": 1, "count": len(ingested), "items": ingested}
@@ -498,11 +548,17 @@ async def rag_ingest(request: Request) -> dict:
 def rag_stats() -> dict:
     app_v2 = _app_v2()
     papers = app_v2.rag_store.list_papers()
+    from writing_agent.v2.rag.structured_store import StructuredRagStore
+
+    structured_sources = StructuredRagStore(app_v2.RAG_DIR).list_sources()
     return {
         "ok": 1,
         "paper_count": len(papers),
         "pdf_count": len([p for p in papers if p.pdf_path and app_v2.Path(p.pdf_path).exists()]),
         "chunks": app_v2.rag_index.index_path.exists(),
+        "structured_ready": sum(row.processing_status == "ready" for row in structured_sources),
+        "structured_failed": sum(row.processing_status == "failed" for row in structured_sources),
+        "structured_processing": sum(row.processing_status not in {"ready", "failed"} for row in structured_sources),
     }
 
 

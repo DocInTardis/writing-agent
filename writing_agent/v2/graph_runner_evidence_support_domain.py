@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import re
+
+from writing_agent.v2 import graph_reference_domain
 from writing_agent.v2.graph_runner_core_domain import *
 
 
@@ -16,6 +20,30 @@ def _extract_sources_from_context(context: str) -> list[dict]:
         url = ""
         if len(lines) > 1 and lines[1].startswith("http"):
             url = lines[1]
+        structured = re.match(
+            r"^\[paper_id=(?P<paper_id>[^\s\]]+)\s+section_id=(?P<section_id>[^\s\]]+)\]\s+"
+            r"(?P<title>.+?)(?:\s+>\s+.+?)?\s+\[level=(?P<level>[^\]]+)\]$",
+            head,
+        )
+        if structured:
+            evidence_ids = []
+            for line in lines[1:]:
+                evidence_match = re.match(r"^\[evidence_id=([^\s\]]+)", line)
+                if evidence_match:
+                    evidence_ids.append(evidence_match.group(1))
+            out.append(
+                {
+                    "id": structured.group("paper_id").strip(),
+                    "paper_id": structured.group("paper_id").strip(),
+                    "section_id": structured.group("section_id").strip(),
+                    "evidence_ids": evidence_ids,
+                    "title": structured.group("title").strip(),
+                    "kind": "structured",
+                    "data_level": structured.group("level").strip(),
+                    "url": url,
+                }
+            )
+            continue
         m = re.match(r"^\[(.+?)\]\s+(.+?)(?:\s+\((.+)\))?$", head)
         if m:
             paper_id = m.group(1).strip()

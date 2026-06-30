@@ -5,24 +5,27 @@ This module belongs to `writing_agent` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
-def _encode(msg: Dict[str, Any]) -> bytes:
+def _encode(msg: dict[str, Any]) -> bytes:
     raw = json.dumps(msg, ensure_ascii=False)
     payload = raw.encode("utf-8")
     header = f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii")
     return header + payload
 
 
-def _read_message(stdout) -> Optional[Dict[str, Any]]:
-    headers: Dict[str, str] = {}
+def _read_message(stdout) -> Optional[dict[str, Any]]:
+    headers: dict[str, str] = {}
     while True:
         line = stdout.readline()
         if not line:
@@ -47,7 +50,7 @@ def _read_message(stdout) -> Optional[Dict[str, Any]]:
 
 
 class McpClient:
-    def __init__(self, cmd: list[str], *, env: Optional[Dict[str, str]] = None, cwd: Optional[str] = None):
+    def __init__(self, cmd: list[str], *, env: Optional[dict[str, str]] = None, cwd: str | None = None):
         self._proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -64,14 +67,15 @@ class McpClient:
                 msg = {"jsonrpc": "2.0", "id": self._next_id, "method": "shutdown", "params": {}}
                 self._proc.stdin.write(_encode(msg))
                 self._proc.stdin.flush()
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in mcp_client.py: %s", _exc, exc_info=True)
+
         try:
             self._proc.terminate()
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in mcp_client.py: %s", _exc, exc_info=True)
 
-    def request(self, method: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def request(self, method: str, params: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
         if self._proc.stdin is None or self._proc.stdout is None:
             return None
         req_id = self._next_id
@@ -97,7 +101,7 @@ def _parse_cmd(raw: str) -> list[str]:
     return shlex.split(raw, posix=os.name != "nt")
 
 
-def fetch_mcp_resource(uri: str) -> Optional[Dict[str, Any]]:
+def fetch_mcp_resource(uri: str) -> Optional[dict[str, Any]]:
     cmd = _parse_cmd(os.environ.get("WRITING_AGENT_MCP_REF_CMD", ""))
     root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
@@ -113,7 +117,7 @@ def fetch_mcp_resource(uri: str) -> Optional[Dict[str, Any]]:
         client.close()
 
 
-def _first_content_text(result: Optional[Dict[str, Any]]) -> str:
+def _first_content_text(result: Optional[dict[str, Any]]) -> str:
     if not isinstance(result, dict):
         return ""
     contents = result.get("contents")

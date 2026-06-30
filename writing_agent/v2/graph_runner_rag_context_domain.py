@@ -19,6 +19,7 @@ def _maybe_rag_context(*, instruction: str, section: str) -> str:
     top_k = int(os.environ.get("WRITING_AGENT_RAG_TOP_K", "4"))
     max_chars = int(os.environ.get("WRITING_AGENT_RAG_MAX_CHARS", "2500"))
     per_paper = int(os.environ.get("WRITING_AGENT_RAG_PER_PAPER", "2"))
+    use_kg = os.environ.get("WRITING_AGENT_RAG_USE_KG", "1").strip().lower() in {"1", "true", "yes", "on"}
 
     ctx, _ = _mcp_rag_retrieve(query=q, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
     if ctx.strip():
@@ -33,8 +34,38 @@ def _maybe_rag_context(*, instruction: str, section: str) -> str:
     data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
     rag_dir = data_dir / "rag"
 
-    res = retrieve_context(rag_dir=rag_dir, query=q, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
-    return _sanitize_rag_context(res.context, max_chars=max_chars)
+    res = retrieve_context(rag_dir=rag_dir, query=q, top_k=top_k, per_paper=per_paper, max_chars=max_chars, use_kg=use_kg)
+    sanitized = _sanitize_rag_context(res.context, max_chars=max_chars)
+    if res.kg_hits and use_kg:
+        kg_ctx = _format_kg_context(res.kg_hits, max_chars=max(max_chars // 4, 400))
+        if kg_ctx:
+            sanitized = (sanitized + "\n\n" + kg_ctx).strip()
+    return sanitized
+
+
+def _format_kg_context(kg_hits: list, max_chars: int) -> str:
+    """Format KnowledgeUnits as structured context for the LLM."""
+    if not kg_hits:
+        return ""
+    lines = ["[KG-RAG] 结构化知识点:"]
+    used = len(lines[0]) + 2
+    for ku in kg_hits:
+        claim = getattr(ku, "claim", "")
+        evidence = getattr(ku, "evidence", "")
+        source_doc = getattr(ku, "source_doc", "")
+        source_page = getattr(ku, "source_page", None)
+        confidence = getattr(ku, "confidence", 0.0)
+        block = f"  • [{confidence:.0%}] {claim}"
+        if evidence:
+            block += f"\n    依据: {evidence[:200]}"
+        if source_doc:
+            page_info = f" (p.{source_page})" if source_page else ""
+            block += f"\n    来源: {source_doc}{page_info}"
+        if used + len(block) + 2 > max_chars:
+            break
+        lines.append(block)
+        used += len(block) + 2
+    return "\n".join(lines)
 
 def _mcp_rag_enabled() -> bool:
     raw = os.environ.get("WRITING_AGENT_RAG_MCP", "1").strip().lower()

@@ -34,7 +34,33 @@ class _ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 class _Utf8SSEHandler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         length = int(self.headers.get("content-length", "0") or "0")
-        _ = self.rfile.read(length)
+        raw = self.rfile.read(length)
+        payload = json.loads(raw.decode("utf-8")) if raw else {}
+        if self.path == "/responses":
+            if not payload.get("stream"):
+                data = json.dumps(
+                    {"output": [{"content": [{"type": "output_text", "text": MOJIBAKE_BODY}]}]},
+                    ensure_ascii=False,
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            chunks = [
+                {"type": "response.output_text.delta", "delta": MOJIBAKE_BODY[:6]},
+                {"type": "response.output_text.delta", "delta": MOJIBAKE_BODY[6:]},
+                {"type": "response.completed", "response": {"output": [{"content": [{"type": "output_text", "text": MOJIBAKE_BODY}]}]}},
+            ]
+            body = "".join(f"data: {json.dumps(row, ensure_ascii=False)}\n\n" for row in chunks) + "data: [DONE]\n\n"
+            data = body.encode("utf-8")
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if self.path == "/chat/completions":
             chunks = [
                 {"choices": [{"delta": {"content": MOJIBAKE_BODY[:6]}}]},
@@ -82,6 +108,38 @@ def test_openai_compatible_provider_stream_repairs_mojibake() -> None:
     try:
         provider = OpenAICompatibleProvider(base_url=url, api_key="test-key", model="mock-model", timeout_s=3.0)
         assert "".join(provider.chat_stream(system="s", user="u")) == CN_BODY
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_openai_compatible_provider_responses_stream_repairs_mojibake() -> None:
+    server, url = _start_server()
+    try:
+        provider = OpenAICompatibleProvider(
+            base_url=url,
+            api_key="test-key",
+            model="mock-model",
+            timeout_s=3.0,
+            wire_api="responses",
+        )
+        assert "".join(provider.chat_stream(system="s", user="u")) == CN_BODY
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_openai_compatible_provider_responses_chat_repairs_mojibake() -> None:
+    server, url = _start_server()
+    try:
+        provider = OpenAICompatibleProvider(
+            base_url=url,
+            api_key="test-key",
+            model="mock-model",
+            timeout_s=3.0,
+            wire_api="responses",
+        )
+        assert provider.chat(system="s", user="u") == CN_BODY
     finally:
         server.shutdown()
         server.server_close()

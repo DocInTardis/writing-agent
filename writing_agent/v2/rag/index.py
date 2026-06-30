@@ -5,6 +5,9 @@ This module belongs to `writing_agent.v2.rag` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import base64
 import json
 import math
@@ -511,8 +514,9 @@ def _rag_stored_text_max_chars(*, default_chars: int) -> int:
     if raw:
         try:
             return max(120, min(8000, int(raw)))
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in index.py: %s", _exc, exc_info=True)
+
     return max(120, min(8000, int(default_chars)))
 
 

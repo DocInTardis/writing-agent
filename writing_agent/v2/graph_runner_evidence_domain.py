@@ -165,6 +165,17 @@ def _build_evidence_pack(
     per_paper = int(os.environ.get("WRITING_AGENT_RAG_PER_PAPER", "2"))
     res = retrieve_context(rag_dir=rag_dir, query=q, top_k=top_k, per_paper=per_paper, max_chars=max_chars)
     context = res.context or ""
+    retrieved_evidence = [
+        {
+            "evidence_id": hit.evidence.evidence_id,
+            "paper_id": hit.source.paper_id,
+            "section_id": hit.section.section_id,
+            "evidence_text": hit.evidence.evidence_text,
+            "claim": hit.evidence.claim,
+            "page": hit.evidence.page,
+        }
+        for hit in getattr(res, "evidence_hits", []) or []
+    ]
     sources = _extract_sources_from_context(context)
     section_gate_dropped: list[dict] = []
     if sources:
@@ -213,6 +224,7 @@ def _build_evidence_pack(
             "data_starvation": starvation,
             "context": context,
             "facts": [],
+            "retrieved_evidence": retrieved_evidence,
             "fact_gain_count": 0,
             "fact_density_score": 0.0,
             "online_hits": int(getattr(res, "online_hits", 0) or 0),
@@ -239,11 +251,54 @@ def _build_evidence_pack(
         "allowed_urls": allowed_urls,
         "data_starvation": starvation,
         "facts": facts,
+        "retrieved_evidence": retrieved_evidence,
         "fact_gain_count": fact_gain_count,
         "fact_density_score": fact_density_score,
         "online_hits": int(getattr(res, "online_hits", 0) or 0),
         "section_gate_dropped": section_gate_dropped,
     }
+
+
+def _register_generated_citations(
+    *,
+    document_id: str,
+    generated_section_id: str,
+    text: str,
+    evidence_rows: list[dict],
+) -> int:
+    evidence_ids = [
+        str(row.get("evidence_id") or "").strip()
+        for row in evidence_rows or []
+        if isinstance(row, dict) and str(row.get("evidence_id") or "").strip()
+    ]
+    if not evidence_ids or not str(text or "").strip():
+        return 0
+    try:
+        from writing_agent.v2.rag.citation_registry import CitationRegistry
+
+        repo_root = Path(__file__).resolve().parents[2]
+        data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
+        return len(
+            CitationRegistry(data_dir / "rag").register_supported_text(
+                document_id=document_id,
+                generated_section_id=generated_section_id,
+                text=text,
+                evidence_ids=evidence_ids,
+            )
+        )
+    except Exception:
+        return 0
+
+
+def _registered_reference_sources(*, document_id: str) -> list[dict]:
+    try:
+        from writing_agent.v2.rag.citation_registry import CitationRegistry
+
+        repo_root = Path(__file__).resolve().parents[2]
+        data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
+        return CitationRegistry(data_dir / "rag").references_as_dicts(document_id)
+    except Exception:
+        return []
 
 
 def _format_plan_hint(plan: PlanSection | None) -> str:

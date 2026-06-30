@@ -31,19 +31,9 @@ def _env_enabled(name: str, *, default: bool = True) -> bool:
 
 
 def auto_fetch_on_empty(*, rag_dir: Path, query: str, min_papers: int = 5) -> bool:
+    """Fetch papers from arXiv/OpenAlex when the RAG store has fewer than min_papers entries."""
     if not _env_enabled("WRITING_AGENT_RAG_AUTO_FETCH_ENABLED", default=True):
         return False
-    """
-    ?RAG???????????arXiv/OpenAlex??????
-
-    Args:
-        rag_dir: RAG????
-        query: ????
-        min_papers: ???????
-
-    Returns:
-        ????????
-    """
     from writing_agent.v2.rag.store import RagStore
     from writing_agent.v2.rag.arxiv import search_arxiv
     from writing_agent.v2.rag.openalex import search_openalex
@@ -64,32 +54,31 @@ def auto_fetch_on_empty(*, rag_dir: Path, query: str, min_papers: int = 5) -> bo
         if len(existing) >= min_papers:
             return False
 
-        logger.info(f"[auto-rag] ???RAG??{len(existing)}?????????...")
+        logger.info("[auto-rag] RAG store has %d papers, fetching more...", len(existing))
 
-        # ?????????
         keywords = _extract_keywords(query)
 
         added = 0
-        # ???OpenAlex????????PDF?
-        for kw in keywords[:3]:  # ??3????
+        for kw in keywords[:3]:
             try:
                 result = search_openalex(query=kw, max_results=5)
                 for work in result.works:
                     try:
-                        store.put_openalex_work(work, pdf_bytes=None)
+                        record = store.put_openalex_work(work, pdf_bytes=None)
+                        _preprocess_record(rag_dir=rag_dir, record=record)
                         added += 1
                         if len(existing) + added >= min_papers:
                             break
                     except Exception as e:
-                        logger.warning(f"[auto-rag] ????: {e}")
+                        logger.warning("[auto-rag] failed to store work: %s", e)
                 if len(existing) + added >= min_papers:
                     break
             except Exception as e:
-                logger.warning(f"[auto-rag] OpenAlex????: {e}")
+                logger.warning("[auto-rag] OpenAlex search failed: %s", e)
                 if "429" in str(e) or "Too Many Requests" in str(e):
                     break
 
-        logger.info(f"[auto-rag] ????{added}??????")
+        logger.info("[auto-rag] added %d papers", added)
         return added > 0
 
 
@@ -117,19 +106,9 @@ def _extract_keywords(query: str) -> list[str]:
 
 
 def expand_with_related(*, rag_dir: Path, paper_ids: list[str], max_expand: int = 3) -> int:
+    """Expand the RAG store by fetching related papers for the given paper IDs."""
     if not _env_enabled("WRITING_AGENT_RAG_EXPAND_ENABLED", default=True):
         return 0
-    """
-    ??????????????????/??????
-
-    Args:
-        rag_dir: RAG????
-        paper_ids: ????ID??
-        max_expand: ??????????
-
-    Returns:
-        ???????
-    """
     from writing_agent.v2.rag.store import RagStore
     from writing_agent.v2.rag.openalex import search_openalex
 
@@ -147,7 +126,7 @@ def expand_with_related(*, rag_dir: Path, paper_ids: list[str], max_expand: int 
         existing = {p.paper_id for p in store.list_papers()}
 
         added = 0
-        for pid in paper_ids[:5]:  # ????5?????
+        for pid in paper_ids[:5]:
             papers = store.list_papers()
             paper = next((p for p in papers if p.paper_id == pid), None)
             if not paper:
@@ -164,20 +143,30 @@ def expand_with_related(*, rag_dir: Path, paper_ids: list[str], max_expand: int 
                     if work.paper_id in existing:
                         continue
                     try:
-                        store.put_openalex_work(work, pdf_bytes=None)
+                        record = store.put_openalex_work(work, pdf_bytes=None)
+                        _preprocess_record(rag_dir=rag_dir, record=record)
                         existing.add(work.paper_id)
                         added += 1
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("[auto-rag] failed to store related work: %s", e)
             except Exception as e:
-                logger.warning(f"[auto-rag] ????: {e}")
+                logger.warning("[auto-rag] expand search failed: %s", e)
                 if "429" in str(e) or "Too Many Requests" in str(e):
                     break
 
         if added > 0:
-            logger.info(f"[auto-rag] ???????{added}???")
+            logger.info("[auto-rag] expanded store with %d related papers", added)
 
         return added
+
+
+def _preprocess_record(*, rag_dir: Path, record) -> None:
+    try:
+        from writing_agent.v2.rag.preprocess import DocumentPreprocessor
+
+        DocumentPreprocessor(rag_dir).process_paper(record, embed=True)
+    except Exception as exc:
+        logger.debug("Structured preprocessing skipped for %s: %s", getattr(record, "paper_id", ""), exc)
 
 
 
@@ -256,5 +245,5 @@ def smart_cache_frequent_queries(*, rag_dir: Path, query: str) -> None:
     
     try:
         cache_file.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in auto_enhance.py: %s", _exc, exc_info=True)

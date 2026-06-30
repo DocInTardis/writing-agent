@@ -5,6 +5,9 @@ This module belongs to `writing_agent.v2.rag` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import re
@@ -143,7 +146,7 @@ class UserLibrary:
         if status == "approved":
             self._index_doc(meta)
         else:
-            self.rag_index.delete_by_paper_id(_paper_id(doc_id))
+            self._delete_indexes(_paper_id(doc_id))
         return _record_from_meta(meta)
 
     def update_text(self, doc_id: str, *, text: str) -> UserDocRecord | None:
@@ -190,7 +193,7 @@ class UserLibrary:
         meta["updated_at"] = _now_iso()
         meta["trash_until"] = ""
         _write_json(self._meta_path(doc_id), meta)
-        self.rag_index.delete_by_paper_id(_paper_id(doc_id))
+        self._delete_indexes(_paper_id(doc_id))
         return _record_from_meta(meta)
 
     def trash(self, doc_id: str) -> UserDocRecord | None:
@@ -201,7 +204,7 @@ class UserLibrary:
         meta["updated_at"] = _now_iso()
         meta["trash_until"] = _trash_until(self.trash_days)
         _write_json(self._meta_path(doc_id), meta)
-        self.rag_index.delete_by_paper_id(_paper_id(doc_id))
+        self._delete_indexes(_paper_id(doc_id))
         return _record_from_meta(meta)
 
     def delete(self, doc_id: str) -> bool:
@@ -214,14 +217,26 @@ class UserLibrary:
             if path.exists():
                 try:
                     path.unlink()
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    logger.debug("Ignored error in user_library.py: %s", _exc, exc_info=True)
+
         try:
             meta_path.unlink()
-        except Exception:
-            pass
-        self.rag_index.delete_by_paper_id(_paper_id(doc_id))
+        except Exception as _exc:
+            logger.debug("Ignored error in user_library.py: %s", _exc, exc_info=True)
+
+        paper_id = _paper_id(doc_id)
+        self._delete_indexes(paper_id)
         return True
+
+    def _delete_indexes(self, paper_id: str) -> None:
+        self.rag_index.delete_by_paper_id(paper_id)
+        try:
+            from writing_agent.v2.rag.structured_store import StructuredRagStore
+
+            StructuredRagStore(self.rag_index.rag_dir).delete_document(paper_id)
+        except Exception as exc:
+            logger.debug("Structured user-document delete skipped for %s: %s", paper_id, exc)
 
     def cleanup_expired(self) -> None:
         self.ensure()
@@ -255,7 +270,20 @@ class UserLibrary:
             return
         text = text_path.read_text(encoding="utf-8", errors="replace")
         title = str(meta.get("title") or "") or "自动生成文档"
-        self.rag_index.upsert_from_text(paper_id=_paper_id(doc_id), title=title, text=text, abs_url="", embed=True)
+        paper_id = _paper_id(doc_id)
+        self.rag_index.upsert_from_text(paper_id=paper_id, title=title, text=text, abs_url="", embed=True)
+        try:
+            from writing_agent.v2.rag.preprocess import DocumentPreprocessor
+
+            DocumentPreprocessor(self.rag_index.rag_dir).process_text(
+                paper_id=paper_id,
+                title=title,
+                text=text,
+                source=str(meta.get("source") or "user"),
+                embed=True,
+            )
+        except Exception as exc:
+            logger.warning("Structured user-document indexing failed for %s: %s", paper_id, exc)
 
     def _meta_path(self, doc_id: str) -> Path:
         safe = re.sub(r"[^A-Za-z0-9_-]+", "_", doc_id or "")
@@ -367,8 +395,9 @@ def _extract_text(path: Path) -> str:
             rust_text = try_rust_import(p)
             if rust_text:
                 return rust_text
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in user_library.py: %s", _exc, exc_info=True)
+
     suffix = p.suffix.lower()
     if suffix in {".doc", ".docx"}:
         p = prepare_template_file(p)

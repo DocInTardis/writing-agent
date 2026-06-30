@@ -5,60 +5,61 @@ This module belongs to `writing_agent` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 
-def _default_refs() -> List[Dict[str, Any]]:
-    # ASCII-only defaults to avoid encoding issues in some environments.
+def _default_refs() -> list[dict[str, Any]]:
+    # Expanded default reference library covering classic AI/ML/CS works.
     return [
-        {
-            "key": "turing1950",
-            "title": "Computing Machinery and Intelligence",
-            "authors": "Turing, A. M.",
-            "year": "1950",
-            "venue": "Mind",
-            "url": "https://doi.org/10.1093/mind/LIX.236.433",
-        },
-        {
-            "key": "mccarthy1955",
-            "title": "A Proposal for the Dartmouth Summer Research Project on Artificial Intelligence",
-            "authors": "McCarthy, J.; Minsky, M.; Rochester, N.; Shannon, C.",
-            "year": "1955",
-            "venue": "Dartmouth College",
-            "url": "https://www.dartmouth.edu/~ai50/homepage/homepage.html",
-        },
-        {
-            "key": "russell2010",
-            "title": "Artificial Intelligence: A Modern Approach",
-            "authors": "Russell, S.; Norvig, P.",
-            "year": "2010",
-            "venue": "Prentice Hall",
-            "url": "https://aima.cs.berkeley.edu/",
-        },
+        {"key": "turing1950", "title": "Computing Machinery and Intelligence", "authors": "Turing, A. M.", "year": "1950", "venue": "Mind", "url": "https://doi.org/10.1093/mind/LIX.236.433"},
+        {"key": "mccarthy1955", "title": "A Proposal for the Dartmouth Summer Research Project on Artificial Intelligence", "authors": "McCarthy, J.; Minsky, M.; Rochester, N.; Shannon, C.", "year": "1955", "venue": "Dartmouth College", "url": "https://www.dartmouth.edu/~ai50/homepage/homepage.html"},
+        {"key": "russell2010", "title": "Artificial Intelligence: A Modern Approach", "authors": "Russell, S.; Norvig, P.", "year": "2010", "venue": "Prentice Hall", "url": "https://aima.cs.berkeley.edu/"},
+        {"key": "rosenblatt1958", "title": "The Perceptron: A Probabilistic Model for Information Storage and Organization in the Brain", "authors": "Rosenblatt, F.", "year": "1958", "venue": "Psychological Review", "url": "https://doi.org/10.1037/h0042519"},
+        {"key": "rumelhart1986", "title": "Learning Representations by Back-propagating Errors", "authors": "Rumelhart, D. E.; Hinton, G. E.; Williams, R. J.", "year": "1986", "venue": "Nature", "url": "https://doi.org/10.1038/323533a0"},
+        {"key": "lecun1998", "title": "Gradient-based Learning Applied to Document Recognition", "authors": "LeCun, Y.; Bottou, L.; Bengio, Y.; Haffner, P.", "year": "1998", "venue": "Proceedings of the IEEE", "url": "https://doi.org/10.1109/5.726791"},
+        {"key": "hochreiter1997", "title": "Long Short-Term Memory", "authors": "Hochreiter, S.; Schmidhuber, J.", "year": "1997", "venue": "Neural Computation", "url": "https://doi.org/10.1162/neco.1997.9.8.1735"},
+        {"key": "krizhevsky2012", "title": "ImageNet Classification with Deep Convolutional Neural Networks", "authors": "Krizhevsky, A.; Sutskever, I.; Hinton, G. E.", "year": "2012", "venue": "NeurIPS", "url": "https://doi.org/10.1145/3065386"},
+        {"key": "szegedy2015", "title": "Going Deeper with Convolutions", "authors": "Szegedy, C. et al.", "year": "2015", "venue": "CVPR", "url": "https://doi.org/10.1109/CVPR.2015.7298594"},
+        {"key": "he2016", "title": "Deep Residual Learning for Image Recognition", "authors": "He, K.; Zhang, X.; Ren, S.; Sun, J.", "year": "2016", "venue": "CVPR", "url": "https://doi.org/10.1109/CVPR.2016.90"},
+        {"key": "vaswani2017", "title": "Attention Is All You Need", "authors": "Vaswani, A. et al.", "year": "2017", "venue": "NeurIPS", "url": "https://doi.org/10.48550/arXiv.1706.03762"},
+        {"key": "devlin2019", "title": "BERT: Pre-training of Deep Bidirectional Transformers", "authors": "Devlin, J.; Chang, M. W.; Lee, K.; Toutanova, K.", "year": "2019", "venue": "NAACL", "url": "https://doi.org/10.18653/v1/N19-1423"},
+        {"key": "brown2020", "title": "Language Models are Few-Shot Learners", "authors": "Brown, T. et al.", "year": "2020", "venue": "NeurIPS", "url": "https://doi.org/10.48550/arXiv.2005.14165"},
+        {"key": "radford2019", "title": "Language Models are Unsupervised Multitask Learners", "authors": "Radford, A. et al.", "year": "2019", "venue": "OpenAI Blog", "url": "https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf"},
+        {"key": "schmidhuber2015", "title": "Deep Learning in Neural Networks: An Overview", "authors": "Schmidhuber, J.", "year": "2015", "venue": "Neural Networks", "url": "https://doi.org/10.1016/j.neunet.2014.09.003"},
+        {"key": "goodfellow2014", "title": "Generative Adversarial Nets", "authors": "Goodfellow, I. et al.", "year": "2014", "venue": "NeurIPS", "url": "https://doi.org/10.1145/3422622"},
+        {"key": "silver2016", "title": "Mastering the Game of Go with Deep Neural Networks and Tree Search", "authors": "Silver, D. et al.", "year": "2016", "venue": "Nature", "url": "https://doi.org/10.1038/nature16961"},
+        {"key": "mnih2015", "title": "Human-level Control through Deep Reinforcement Learning", "authors": "Mnih, V. et al.", "year": "2015", "venue": "Nature", "url": "https://doi.org/10.1038/nature14236"},
+        {"key": "breiman2001", "title": "Random Forests", "authors": "Breiman, L.", "year": "2001", "venue": "Machine Learning", "url": "https://doi.org/10.1023/A:1010933404324"},
+        {"key": "chen2016xgboost", "title": "XGBoost: A Scalable Tree Boosting System", "authors": "Chen, T.; Guestrin, C.", "year": "2016", "venue": "KDD", "url": "https://doi.org/10.1145/2939672.2939785"},
     ]
 
 
-def _load_refs() -> List[Dict[str, Any]]:
+def _load_refs() -> list[dict[str, Any]]:
     path = Path(os.environ.get("MCP_REF_CACHE", ".data/mcp_refs.json"))
     try:
         if path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, list):
                 return data
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in mcp_ref_server.py: %s", _exc, exc_info=True)
+
     refs = _default_refs()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(refs, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Ignored error in mcp_ref_server.py: %s", _exc, exc_info=True)
+
     return refs
 
 
@@ -71,7 +72,7 @@ def _rag_dir() -> Path:
 _RAG_CACHE: dict = {"ts": {}, "items": {}}
 
 
-def _rag_cache_get(key: str, ttl_s: float) -> Optional[Dict[str, Any]]:
+def _rag_cache_get(key: str, ttl_s: float) -> Optional[dict[str, Any]]:
     if not key:
         return None
     ts = _RAG_CACHE.get("ts", {}).get(key)
@@ -82,7 +83,7 @@ def _rag_cache_get(key: str, ttl_s: float) -> Optional[Dict[str, Any]]:
     return _RAG_CACHE.get("items", {}).get(key)
 
 
-def _rag_cache_set(key: str, value: Dict[str, Any]) -> None:
+def _rag_cache_set(key: str, value: dict[str, Any]) -> None:
     if not key:
         return
     _RAG_CACHE.setdefault("ts", {})[key] = time.time()
@@ -103,7 +104,7 @@ def _parse_rag_uri(uri: str) -> tuple[str, dict[str, str]]:
     return path, params
 
 
-def _rag_search(uri: str) -> Optional[Dict[str, Any]]:
+def _rag_search(uri: str) -> Optional[dict[str, Any]]:
     path, params = _parse_rag_uri(uri)
     if path != "search":
         return None
@@ -133,7 +134,7 @@ def _rag_search(uri: str) -> Optional[Dict[str, Any]]:
     return payload
 
 
-def _rag_search_chunks(uri: str) -> Optional[Dict[str, Any]]:
+def _rag_search_chunks(uri: str) -> Optional[dict[str, Any]]:
     path, params = _parse_rag_uri(uri)
     if path not in {"search/chunks", "search_chunks"}:
         return None
@@ -187,7 +188,7 @@ def _rag_search_chunks(uri: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def _rag_search_local(*, query: str, top_k: int) -> Dict[str, Any]:
+def _rag_search_local(*, query: str, top_k: int) -> dict[str, Any]:
     try:
         from writing_agent.v2.rag.search import search_papers
         from writing_agent.v2.rag.store import RagStore
@@ -216,7 +217,7 @@ def _rag_search_local(*, query: str, top_k: int) -> Dict[str, Any]:
     return {"results": results, "mode": "local"}
 
 
-def _rag_search_remote(*, query: str, sources: str, max_results: int) -> Dict[str, Any]:
+def _rag_search_remote(*, query: str, sources: str, max_results: int) -> dict[str, Any]:
     try:
         from writing_agent.v2.rag.arxiv import search_arxiv
         from writing_agent.v2.rag.openalex import search_openalex
@@ -246,8 +247,9 @@ def _rag_search_remote(*, query: str, sources: str, max_results: int) -> Dict[st
                         "source": "openalex",
                     }
                 )
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in mcp_ref_server.py: %s", _exc, exc_info=True)
+
     if "arxiv" in srcs:
         try:
             res = search_arxiv(query=query, max_results=max_results)
@@ -267,12 +269,13 @@ def _rag_search_remote(*, query: str, sources: str, max_results: int) -> Dict[st
                         "source": "arxiv",
                     }
                 )
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Ignored error in mcp_ref_server.py: %s", _exc, exc_info=True)
+
     return {"results": results, "mode": "remote"}
 
 
-def _rag_retrieve(uri: str) -> Optional[Dict[str, Any]]:
+def _rag_retrieve(uri: str) -> Optional[dict[str, Any]]:
     path, params = _parse_rag_uri(uri)
     if path != "retrieve":
         return None
@@ -335,7 +338,7 @@ def _rag_retrieve(uri: str) -> Optional[Dict[str, Any]]:
     return payload
 
 
-def _send(msg: Dict[str, Any]) -> None:
+def _send(msg: dict[str, Any]) -> None:
     raw = json.dumps(msg, ensure_ascii=False)
     payload = raw.encode("utf-8")
     header = f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii")
@@ -343,8 +346,8 @@ def _send(msg: Dict[str, Any]) -> None:
     sys.stdout.buffer.flush()
 
 
-def _read_message() -> Optional[Dict[str, Any]]:
-    headers: Dict[str, str] = {}
+def _read_message() -> Optional[dict[str, Any]]:
+    headers: dict[str, str] = {}
     while True:
         line = sys.stdin.buffer.readline()
         if not line:
@@ -368,7 +371,7 @@ def _read_message() -> Optional[Dict[str, Any]]:
         return None
 
 
-def _handle_request(req: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _handle_request(req: dict[str, Any]) -> Optional[dict[str, Any]]:
     req_id = req.get("id")
     method = req.get("method")
     params = req.get("params") or {}

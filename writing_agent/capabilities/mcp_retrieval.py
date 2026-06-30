@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 from typing import Any
 
 
@@ -99,9 +102,8 @@ def ensure_mcp_citations(
             doc_ir = apply_citations_to_doc_ir_fn(doc_ir, session.citations, style)
             session.doc_ir = doc_ir_to_dict_fn(doc_ir)
             session.doc_text = doc_ir_to_text_fn(doc_ir)
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in mcp_retrieval.py: %s", _exc, exc_info=True)
 
 def mcp_rag_retrieve(
     *,
