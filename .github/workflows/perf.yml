@@ -11,6 +11,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Bench
         run: cargo bench -p wa_benches --bench baseline
+        working-directory: engine
       - name: Compare
         run: python scripts/compare_bench.py
       - name: Thresholds

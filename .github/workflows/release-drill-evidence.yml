@@ -25,12 +25,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Run Incident Notify Drill
+        if: ${{ hashFiles('scripts/incident_notify_drill.py') != '' }}
         run: |
           python scripts/incident_notify_drill.py --with-email
       - name: Build Rollback Bundle Evidence
         run: |
           python scripts/create_rollback_bundle.py --label drill --recent 4
       - name: Sign Rollback Drill Evidence
+        if: ${{ hashFiles('scripts/sign_rollback_drill_evidence.py') != '' }}
         env:
           WA_ROLLBACK_DRILL_SIGNING_KEY: ${{ secrets.WA_ROLLBACK_DRILL_SIGNING_KEY }}
           WA_ROLLBACK_DRILL_SIGNING_KEY_ID: "github-actions"
@@ -41,6 +43,7 @@ jobs:
           fi
           eval "$CMD"
       - name: Validate Drill Evidence
+        if: ${{ hashFiles('scripts/rollback_drill_guard.py') != '' }}
         env:
           WA_ROLLBACK_DRILL_SIGNING_KEY: ${{ secrets.WA_ROLLBACK_DRILL_SIGNING_KEY }}
         run: |

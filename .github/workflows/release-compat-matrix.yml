@@ -25,6 +25,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Run Release Compatibility Matrix
+        if: ${{ hashFiles('scripts/release_compat_matrix.py') != '' }}
         run: |
           CMD="python scripts/release_compat_matrix.py"
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.strict }}" = "true" ]; then

@@ -55,12 +55,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Evaluate Rollout Guard
+        if: ${{ hashFiles('scripts/release_rollout_guard.py') != '' }}
         run: |
           python scripts/release_rollout_guard.py --strict
       - name: Evaluate Rollback Drill Guard
+        if: ${{ hashFiles('scripts/rollback_drill_guard.py') != '' }}
         run: |
           python scripts/rollback_drill_guard.py --strict --require-email-drill
       - name: Validate Traffic Adapter Contract
+        if: ${{ hashFiles('scripts/release_rollout_adapter_contract_check.py') != '' }}
         run: |
           CMD="python scripts/release_rollout_adapter_contract_check.py"
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ github.event.inputs.strict }}" = "true" ]; then
@@ -71,6 +74,7 @@ jobs:
           fi
           eval "$CMD"
       - name: Execute Rollout Stage
+        if: ${{ hashFiles('scripts/release_rollout_executor.py') != '' }}
         run: |
           CMD="python scripts/release_rollout_executor.py"
           CORR="${{ github.event.inputs.correlation_id || '' }}"

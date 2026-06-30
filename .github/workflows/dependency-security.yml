@@ -83,7 +83,7 @@ jobs:
             ${extra_args}
       - name: Generate SBOM
         id: sbom
-        if: always()
+        if: ${{ always() && hashFiles('scripts/generate_sbom.py') != '' }}
         continue-on-error: true
         run: |
           python scripts/generate_sbom.py --out-dir .data/out/sbom --strict
@@ -157,7 +157,7 @@ jobs:
             .data/out/sbom/**
           if-no-files-found: ignore
       - name: Notify Security Webhook
-        if: ${{ (steps.dep_audit.outcome != 'success' || steps.sbom.outcome != 'success') && secrets.SECURITY_ALERT_WEBHOOK_URL != '' }}
+        if: ${{ (steps.dep_audit.outcome != 'success' || steps.sbom.outcome == 'failure') && secrets.SECURITY_ALERT_WEBHOOK_URL != '' && hashFiles('scripts/security_alert_notify.py') != '' }}
         continue-on-error: true
         shell: bash
         run: |

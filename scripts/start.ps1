@@ -33,9 +33,40 @@ function Load-CodexAuthOpenAIKey {
   }
 }
 
+function Resolve-OpenAIBatConfigPaths {
+  $paths = New-Object System.Collections.Generic.List[string]
+  $roots = @(
+    "D:\Download",
+    "D:\下载",
+    (Join-Path $env:USERPROFILE "Downloads"),
+    (Join-Path $env:USERPROFILE "Download")
+  )
+  foreach ($root in $roots) {
+    if (-not $root) { continue }
+    if (-not (Test-Path $root)) { continue }
+    try {
+      Get-ChildItem -Path $root -Filter "*美刀配置*.bat" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        ForEach-Object {
+          if ($_.FullName -and -not $paths.Contains($_.FullName)) {
+            [void]$paths.Add($_.FullName)
+          }
+        }
+    } catch {
+      continue
+    }
+  }
+  return @($paths.ToArray())
+}
+
 # Force GPT provider/model defaults for this launcher (all runtime stages).
 $env:WRITING_AGENT_LLM_PROVIDER = "openai"
 if (-not $env:WRITING_AGENT_OPENAI_BASE_URL) { $env:WRITING_AGENT_OPENAI_BASE_URL = "https://api.openai.com/v1" }
+$batConfigPaths = Resolve-OpenAIBatConfigPaths
+if ($batConfigPaths.Count -gt 0) {
+  $env:WRITING_AGENT_OPENAI_BAT_CONFIG_PATHS = ($batConfigPaths -join ";")
+  $env:WRITING_AGENT_OPENAI_BAT_DISCOVERY = "0"
+}
 Load-CodexAuthOpenAIKey
 $env:WRITING_AGENT_OPENAI_MODEL = "gpt-5.4"
 $env:WRITING_AGENT_MODEL = "gpt-5.4"

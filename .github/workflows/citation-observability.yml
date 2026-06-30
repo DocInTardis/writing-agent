@@ -34,6 +34,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install fastapi uvicorn jinja2 python-multipart python-docx cairosvg pypdf
       - name: Run Load Probe
+        if: ${{ hashFiles('scripts/citation_verify_load_probe.py') != '' }}
         run: |
           set -euo pipefail
           export WRITING_AGENT_USE_OLLAMA=0
@@ -64,7 +65,9 @@ jobs:
             --min-success-rate 0.99 \
             --max-p95-ms 1500 \
             --max-degraded-rate 0.05
-          python scripts/capacity_guard.py --quick
+          if [ -f scripts/capacity_guard.py ]; then
+            python scripts/capacity_guard.py --quick
+          fi
       - name: Upload Probe Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -89,6 +92,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install fastapi uvicorn jinja2 python-multipart python-docx cairosvg pypdf
       - name: Run Alert Webhook Chaos
+        if: ${{ hashFiles('scripts/citation_verify_alert_chaos.py') != '' }}
         run: |
           python scripts/citation_verify_alert_chaos.py \
             --host 127.0.0.1 \

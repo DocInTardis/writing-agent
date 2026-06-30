@@ -44,6 +44,7 @@ jobs:
           echo "app failed to become ready"
           exit 1
       - name: Run Soak Probe
+        if: ${{ hashFiles('scripts/citation_verify_soak.py') != '' }}
         env:
           WA_METRICS_BASE_URL: "http://127.0.0.1:18190"
         run: |

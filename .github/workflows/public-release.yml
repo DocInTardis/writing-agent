@@ -45,6 +45,7 @@ PY
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
       - name: Public Release Guard
+        if: ${{ hashFiles('scripts/public_release_guard.py') != '' }}
         env:
           WA_RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |

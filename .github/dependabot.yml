@@ -16,6 +16,14 @@ updates:
       - "dependencies"
       - "frontend"
 
+  - package-ecosystem: "npm"
+    directory: "/gateway/node_ai_gateway"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "gateway"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

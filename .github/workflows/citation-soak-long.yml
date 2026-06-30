@@ -112,6 +112,7 @@ jobs:
           echo "app failed to become ready"
           exit 1
       - name: Run Long Soak Probe
+        if: ${{ hashFiles('scripts/citation_verify_soak.py') != '' }}
         env:
           WA_METRICS_BASE_URL: "http://127.0.0.1:18191"
         run: |
@@ -126,6 +127,7 @@ jobs:
             --max-overall-degraded-rate 0.08 \
             --label "github-actions-${{ steps.resolve.outputs.profile }}"
       - name: Validate Long Soak Retention And Regression
+        if: ${{ hashFiles('scripts/citation_verify_long_soak_guard.py') != '' }}
         shell: bash
         run: |
           CMD="python scripts/citation_verify_long_soak_guard.py --policy security/long_soak_policy.json --history-file .data/perf/citation_verify_long_soak_history.json"

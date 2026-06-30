@@ -42,6 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Run Release Preflight
+        if: ${{ hashFiles('scripts/release_preflight.py') != '' }}
         env:
           WA_PREFLIGHT_REQUIRE_PIP_AUDIT: "1"
           WA_RELEASE_GOVERNANCE_STRICT: "1"

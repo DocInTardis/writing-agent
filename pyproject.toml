@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=78.1.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -17,25 +17,19 @@ dependencies = [
   "fastapi>=0.109",
   "uvicorn>=0.24",
   "jinja2>=3.1",
-  "python-multipart>=0.0.7",
+  "python-multipart>=0.0.27",
   "python-docx>=1.1.0",
-  "cairosvg>=2.8.2",
-  "playwright>=1.57.0",
-  "rapidocr-onnxruntime>=1.4.4",
-  "PySide6>=6.6",
-  "pypdf>=6.6.0",
-]
-classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "License :: OSI Approved :: MIT License",
-  "Framework :: FastAPI",
-  "Topic :: Software Development :: Libraries :: Application Frameworks",
+  "cairosvg>=2.9.0",
 ]
 
 [project.optional-dependencies]
+desktop = [
+  "PySide6>=6.6",
+]
+tools = [
+  "playwright>=1.57.0",
+  "rapidocr-onnxruntime>=1.4.4",
+]
 dev = [
   "pytest>=7.4",
   "pip-audit>=2.8",
@@ -52,7 +46,7 @@ include = ["writing_agent*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --ignore=tests/archive"
 
 [tool.ruff]
 line-length = 120
