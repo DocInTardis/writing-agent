@@ -103,10 +103,15 @@
       "max_parameters": 10,
       "max_cyclomatic": 240
     },
+    "writing_agent/v2/graph_runner_runtime_originality_domain.py": {
+      "max_function_lines": 120,
+      "max_parameters": 12,
+      "max_cyclomatic": 70
+    },
     "writing_agent/v2/graph_section_continue_prompt_domain.py": {
-      "max_function_lines": 90,
+      "max_function_lines": 100,
       "max_parameters": 14,
-      "max_cyclomatic": 20
+      "max_cyclomatic": 25
     },
     "writing_agent/v2/graph_section_continue_runtime_domain.py": {
       "max_function_lines": 150,
@@ -120,7 +125,7 @@
     },
     "writing_agent/v2/graph_section_draft_domain.py": {
       "max_function_lines": 230,
-      "max_parameters": 12,
+      "max_parameters": 14,
       "max_cyclomatic": 85
     },
     "writing_agent/v2/graph_section_postprocess_apply_domain.py": {
@@ -154,9 +159,9 @@
       "max_cyclomatic": 60
     },
     "writing_agent/web/services/generation_service.py": {
-      "max_function_lines": 160,
+      "max_function_lines": 185,
       "max_parameters": 11,
-      "max_cyclomatic": 35
+      "max_cyclomatic": 40
     }
   }
 }

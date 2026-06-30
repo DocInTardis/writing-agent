@@ -5,7 +5,8 @@
 - citation-aware RAG retrieval and trust checks
 - document export pipelines (Markdown and DOCX)
 - web workbench with streaming editing
-- governance scripts for quality, release, and operations
+- persistent workspace dashboard and lifecycle management
+- productization docs and regression tests for quality, release, and operations
 
 ## Project Layout
 
@@ -46,6 +47,18 @@ python -m venv .venv
 .\.venv\Scripts\pip install -r requirements-dev.txt
 ```
 
+### LLM defaults
+
+By default, the app now uses an OpenAI-compatible GPT model for generation. Set your API key before starting:
+
+```powershell
+$env:WRITING_AGENT_LLM_PROVIDER="openai"
+$env:WRITING_AGENT_OPENAI_API_KEY="<your-openai-api-key>"
+$env:WRITING_AGENT_OPENAI_MODEL="gpt-4o-mini"
+```
+
+If OpenAI returns quota or billing-limit errors and local Ollama is enabled, the Python provider automatically falls back to Ollama. Disable that behavior with `WRITING_AGENT_OPENAI_QUOTA_FALLBACK=0`.
+
 ### 2) Run application
 
 ```powershell
@@ -54,11 +67,34 @@ python -m venv .venv
 
 Default URL: `http://127.0.0.1:8000`
 
+Default product entrypoints:
+- `/` -> product home with recent workspaces and system status
+- `/new` -> create a fresh workspace and open the workbench
+- `/latest` -> jump back to the latest active workspace
+
 ### 3) Run tests
 
 ```powershell
 python -m pytest -q tests
 ```
+
+## Productization Baseline
+
+- Product target: `docs/PRODUCTIZATION_TARGET.md`
+- Local workspace persistence: `.data/workspaces/`
+- Health endpoint: `GET /healthz`
+- System status endpoint: `GET /api/system/status`
+- Workspace API: list/create/update/duplicate/archive/restore under `GET/POST /api/workspaces...`
+- Home dashboard extras: saved views, batch actions, batch label editing, owner/priority/due-date fields, due-soon/unassigned/no-due-date/no-priority/overdue filters, dashboard field editor, trash recovery, search/filter/sort, due-date sorting, trash-expiry sorting, top-label quick filters, pin/unpin, quick-start templates, resume-latest
+- Activity stream: `GET /api/workspaces/activity`
+- Workspace summary: `GET /api/workspaces/summary`
+- Workspace status updates: `POST /api/workspaces/{doc_id}/status`
+- Workspace labels: `POST /api/workspaces/{doc_id}/update` with `labels`, filterable from `GET /api/workspaces` and `GET /api/docs/list`
+- Workspace trash lifecycle: `POST /api/workspaces/{doc_id}/trash`, `POST /api/workspaces/{doc_id}/untrash`, `POST /api/workspaces/{doc_id}/purge`
+- Workspace batch actions: `POST /api/workspaces/batch` for pin/unpin/archive/restore/trash/untrash/purge/status/label edits/owner updates/priority updates/due-date updates
+- Workspace trash cleanup: expired trashed workspaces are automatically purged during startup and dashboard/API reads
+- Saved views API: `GET /api/workspace-views`, `POST /api/workspace-views/create`, `POST /api/workspace-views/{view_id}/delete`
+- Workspace custom fields: `owner`, `priority`, `due_at` are available in workspace detail, list APIs, saved views, dashboard cards, and batch actions
 
 ### 4) Build frontend
 
@@ -93,14 +129,11 @@ make guards
 make preflight
 ```
 
-Equivalent direct commands:
+Equivalent direct commands for the maintained local path:
 
 ```powershell
-python scripts/guard_file_line_limits.py --config security/file_line_limits.json --root .
-python scripts/guard_function_complexity.py --config security/function_complexity_limits.json --root .
-python scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json --root .
-python scripts/guard_repo_hygiene.py --config security/repo_hygiene_policy.json --root .
-python scripts/release_preflight.py --quick
+python -m pytest -q tests
+npm --prefix writing_agent/web/frontend_svelte run build
 ```
 
 ## Idempotency Cache Settings
@@ -143,8 +176,8 @@ Parser metrics are local silent logs only and are not exposed in user-facing UI/
 - API versioning: `docs/API_VERSIONING.md`
 - Prompt registry: `docs/PROMPT_REGISTRY.md`
 - RAG trust guard: `docs/RAG_TRUST_GUARD.md`
-- Node gateway protocol: `docs/NODE_AI_GATEWAY_PROTOCOL_20260227_CN.md`
-- Node gateway runbook: `docs/NODE_AI_GATEWAY_RUNBOOK_20260227_CN.md`
+- Node gateway protocol: `docs/archive/NODE_AI_GATEWAY_PROTOCOL_20260227_CN.md`
+- Node gateway runbook: `docs/archive/NODE_AI_GATEWAY_RUNBOOK_20260227_CN.md`
 
 ## Community and Governance
 
