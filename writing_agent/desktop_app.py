@@ -5,6 +5,9 @@ This module belongs to `writing_agent` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import logging
+logger = logging.getLogger(__name__)
+
 import argparse
 import os
 import socket
@@ -22,7 +25,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 
 import uvicorn
 
-from writing_agent.llm import OllamaClient, get_ollama_settings
+from writing_agent.llm import OllamaClient, get_default_provider, get_ollama_settings
 
 
 APP_TITLE = "写作助手"
@@ -84,6 +87,9 @@ def _wait_until(predicate, timeout_s: float, interval_s: float = 0.2) -> bool:
 
 
 def ensure_ollama_ready() -> None:
+    provider = get_default_provider()
+    if not isinstance(provider, OllamaClient):
+        return
     settings = get_ollama_settings()
     if not settings.enabled:
         return
@@ -131,9 +137,8 @@ def _configure_webengine_env() -> None:
         if process.exists():
             os.environ.setdefault("QTWEBENGINEPROCESS_PATH", str(process))
             os.environ.setdefault("QTWEBENGINE_PROCESS_PATH", str(process))
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Ignored error in desktop_app.py: %s", _exc, exc_info=True)
 
 class UvicornWorker(threading.Thread):
     def __init__(self, host: str, port: int) -> None:
