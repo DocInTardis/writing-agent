@@ -15,6 +15,14 @@
     historyIndex
   } from '../stores'
   import { renderDocument, docIrToMarkdown, textToDocIr } from '../utils/markdown'
+  import {
+    DOC_TITLE_TARGET_ID,
+    isSectionTargetId,
+    normalizeBlockIds,
+    realBlockTargetIds,
+    sectionIdFromTarget,
+    targetIdForElement
+  } from '../workbench/inlineTargets'
 
   let editor = $state<HTMLDivElement | null>(null)
   let lastMarkdown = $state('')
@@ -929,18 +937,6 @@
     setEmptyFlag(text)
   }
 
-  const SECTION_TARGET_PREFIX = 'sec:'
-  const DOC_TITLE_TARGET_ID = 'doc:title'
-
-  function isSectionTargetId(id: string): boolean {
-    return String(id || '').startsWith(SECTION_TARGET_PREFIX)
-  }
-
-  function sectionIdFromTarget(id: string): string {
-    if (!isSectionTargetId(id)) return ''
-    return String(id || '').slice(SECTION_TARGET_PREFIX.length).trim()
-  }
-
   function allBlockElements(): HTMLElement[] {
     if (!editor) return []
     const nodes = editor.querySelectorAll('[data-block-id], [data-section-id], [data-doc-title="1"]')
@@ -948,13 +944,7 @@
   }
 
   function blockIdOf(el: HTMLElement | null): string {
-    if (!el) return ''
-    const blockId = String(el.dataset.blockId || '').trim()
-    if (blockId) return blockId
-    const sectionId = String(el.dataset.sectionId || '').trim()
-    if (sectionId) return `${SECTION_TARGET_PREFIX}${sectionId}`
-    if (String(el.dataset.docTitle || '').trim()) return DOC_TITLE_TARGET_ID
-    return ''
+    return targetIdForElement(el)
   }
 
   function blockById(id: string): HTMLElement | null {
@@ -1000,18 +990,6 @@
       }
     }
     return { sectionId: '', sectionTitle: '' }
-  }
-
-  function normalizeBlockIds(ids: string[]): string[] {
-    const seen = new Set<string>()
-    const out: string[] = []
-    for (const raw of ids) {
-      const id = String(raw || '').trim()
-      if (!id || seen.has(id)) continue
-      seen.add(id)
-      out.push(id)
-    }
-    return out
   }
 
   function sortIdsByDocumentOrder(ids: string[]): string[] {
@@ -1083,13 +1061,6 @@
 
   function clearSelectedBlock() {
     setSelectedBlocksByIds([])
-  }
-
-  function realBlockTargetIds(ids: string[]): string[] {
-    return (ids || []).filter((id) => {
-      const raw = String(id || '').trim()
-      return raw && raw !== DOC_TITLE_TARGET_ID && !isSectionTargetId(raw)
-    })
   }
 
   function selectionInsideEditor() {

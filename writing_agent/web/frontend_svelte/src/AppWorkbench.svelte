@@ -31,6 +31,18 @@
     guessDocTitle
   } from './lib/workbench/libraryCards'
   import {
+    DOC_TITLE_TARGET_ID,
+    blockIdFromTarget,
+    blockTargetIds,
+    buildBlockSessionKey,
+    clamp,
+    isDocTitleTargetId,
+    isSectionTargetId,
+    normalizeColorHex,
+    sectionIdFromTarget,
+    sectionTargetIds
+  } from './lib/workbench/inlineTargets'
+  import {
     buildQualityAdviceItems,
     buildQualityOverview,
     normalizeScore,
@@ -824,66 +836,8 @@
     return value.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
   }
 
-  const SECTION_TARGET_PREFIX = 'sec:'
-  const DOC_TITLE_TARGET_ID = 'doc:title'
-
-  function isSectionTargetId(id: string) {
-    return String(id || '').startsWith(SECTION_TARGET_PREFIX)
-  }
-
-  function isDocTitleTargetId(id: string) {
-    return String(id || '') === DOC_TITLE_TARGET_ID
-  }
-
-  function sectionIdFromTarget(id: string) {
-    if (!isSectionTargetId(id)) return ''
-    return String(id || '').slice(SECTION_TARGET_PREFIX.length).trim()
-  }
-
-  function blockIdFromTarget(id: string) {
-    const value = String(id || '').trim()
-    if (!value) return ''
-    if (isSectionTargetId(value) || isDocTitleTargetId(value)) return ''
-    return value
-  }
-
-  function blockTargetIds(ids: string[]) {
-    return (ids || []).map((id) => blockIdFromTarget(id)).filter(Boolean)
-  }
-
-  function sectionTargetIds(ids: string[]) {
-    return (ids || []).map((id) => sectionIdFromTarget(id)).filter(Boolean)
-  }
-
-  function normalizeColorHex(raw: string) {
-    const value = String(raw || '').trim().toLowerCase()
-    if (!value) return ''
-    if (/^#([0-9a-f]{3})$/.test(value)) {
-      const v = value.slice(1)
-      return `#${v[0]}${v[0]}${v[1]}${v[1]}${v[2]}${v[2]}`
-    }
-    if (/^#([0-9a-f]{6})$/.test(value)) return value
-    const rgb = /^rgba?\(([^)]+)\)$/.exec(value)
-    if (!rgb) return ''
-    const parts = rgb[1]
-      .split(',')
-      .map((item) => Number(item.trim()))
-      .filter((num) => Number.isFinite(num))
-    if (parts.length < 3) return ''
-    const hex = parts.slice(0, 3).map((num) => Math.max(0, Math.min(255, Math.round(num))).toString(16).padStart(2, '0'))
-    return `#${hex.join('')}`
-  }
-
   function cloneCandidates(candidates: Array<any>) {
     return (candidates || []).map((c) => ({ ...c }))
-  }
-
-  function buildBlockSessionKey(ids: string[]) {
-    return (ids || [])
-      .map((id) => String(id || '').trim())
-      .filter(Boolean)
-      .sort()
-      .join('|')
   }
 
   function saveCurrentBlockSession() {
@@ -942,10 +896,6 @@
     blockCandidates = []
     activeCandidateIndex = 0
     blockDialogInput = ''
-  }
-
-  function clamp(value: number, min: number, max: number) {
-    return Math.min(max, Math.max(min, value))
   }
 
   function selectedBlocksRect(ids: string[]) {
