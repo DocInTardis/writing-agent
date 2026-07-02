@@ -1,135 +1,33 @@
 ﻿<script lang="ts">
   import { onMount } from 'svelte'
   import { docId, pushToast } from '../stores'
+  import type {
+    Citation,
+    VerifyDebugCache,
+    VerifyDebugHistoryEntry,
+    VerifyDebugItem,
+    VerifyDebugLevel,
+    VerifyDebugObserve,
+    VerifyDebugPayload,
+    VerifyItem,
+    VerifySummary
+  } from '../citations/citationTypes'
+  import {
+    averageNumber,
+    cacheEvictRate,
+    cacheHitRate,
+    formatCitation,
+    formatRate,
+    normalizeItems,
+    normalizeResolveItem,
+    normalizeVerifyDebugLevel,
+    statusClass,
+    statusLabel,
+    toSafeFloat,
+    toSafeInt
+  } from '../citations/citationUtils'
 
   let { visible = false }: { visible?: boolean } = $props()
-
-  interface Citation {
-    id: string
-    author: string
-    title: string
-    year: string
-    source: string
-  }
-
-  interface VerifyItem {
-    id: string
-    status: 'verified' | 'possible' | 'not_found' | 'error'
-    provider?: string
-    score?: number
-    matched_title?: string
-    matched_year?: string
-    matched_source?: string
-    reason?: string
-  }
-
-  interface VerifySummary {
-    total: number
-    verified: number
-    possible: number
-    not_found: number
-    error: number
-  }
-
-  type VerifyDebugLevel = 'safe' | 'strict' | 'full'
-
-  interface VerifyDebugItem {
-    id: string
-    cache_hit: boolean
-    query: string
-    providers: Record<string, number>
-    errors: string[]
-    picked_provider: string
-    picked_title_score: number
-    picked_year_score: number
-    picked_total_score: number
-    elapsed_ms: number
-  }
-
-  interface VerifyDebugSampling {
-    input_items: number
-    output_items: number
-    limit: number
-    truncated: boolean
-  }
-
-  interface VerifyDebugRequest {
-    persist: boolean
-    debug: boolean
-    input_count: number
-    workers: number
-  }
-
-  interface VerifyDebugCache {
-    size: number
-    ttl_s: number
-    max_entries: number
-    hit: number
-    miss: number
-    set: number
-    expired: number
-    evicted: number
-  }
-
-  interface VerifyObserveCacheDelta {
-    hit: number
-    miss: number
-    set: number
-    expired: number
-    evicted: number
-    hit_rate: number
-  }
-
-  interface VerifyObserveRequest {
-    elapsed_ms: number
-    item_count: number
-    worker_count: number
-    error_count: number
-    cache_delta: VerifyObserveCacheDelta
-  }
-
-  interface VerifyObserveWindow {
-    window_s: number
-    max_runs: number
-    runs: number
-    elapsed_ms: { avg: number; p50: number; p95: number; max: number }
-    items: { total: number; avg: number; p50: number; p95: number; max: number }
-    workers: { avg: number; max: number }
-    errors: { total: number; rate_per_run: number }
-    cache_delta: VerifyObserveCacheDelta
-  }
-
-  interface VerifyDebugObserve {
-    request: VerifyObserveRequest
-    window: VerifyObserveWindow
-  }
-
-  interface VerifyDebugPayload {
-    request: VerifyDebugRequest
-    requested_level: VerifyDebugLevel
-    level: VerifyDebugLevel
-    sanitized: boolean
-    rate_limited_full: boolean
-    cache: VerifyDebugCache
-    observe: VerifyDebugObserve | null
-    sampling: VerifyDebugSampling
-    elapsed_ms: number
-    items: Record<string, VerifyDebugItem>
-  }
-
-  interface VerifyDebugHistoryEntry {
-    id: string
-    at_label: string
-    level: VerifyDebugLevel
-    workers: number
-    elapsed_ms: number
-    cache_size: number
-    cache_max: number
-    hit_rate: number
-    evict_rate: number
-    sampled_output: number
-    sampled_input: number
-  }
 
   const VERIFY_DEBUG_ENABLED = Boolean(import.meta.env.DEV)
   const VERIFY_DEBUG_HISTORY_LIMIT = 8
@@ -158,63 +56,6 @@
     source: ''
   })
 
-  function normalizeItems(items: unknown): Citation[] {
-    if (!Array.isArray(items)) return []
-    return items
-      .filter((raw) => raw && typeof raw === 'object')
-      .map((raw) => {
-        const row = raw as Record<string, unknown>
-        return {
-          id: String(row.id || '').trim(),
-          author: String(row.author || '').trim(),
-          title: String(row.title || '').trim(),
-          year: String(row.year || '').trim(),
-          source: String(row.source || '').trim()
-        }
-      })
-      .filter((c) => c.id && c.title)
-  }
-
-  function normalizeVerifyDebugLevel(value: unknown): VerifyDebugLevel {
-    const raw = String(value || '').trim().toLowerCase()
-    if (raw === 'full') return 'full'
-    if (raw === 'strict') return 'strict'
-    return 'safe'
-  }
-
-  function toSafeInt(value: unknown): number {
-    const n = Number(value)
-    if (!Number.isFinite(n)) return 0
-    return Math.max(0, Math.round(n))
-  }
-
-  function toSafeFloat(value: unknown): number {
-    const n = Number(value)
-    if (!Number.isFinite(n)) return 0
-    return Math.max(0, n)
-  }
-
-  function cacheLookupCount(cache: VerifyDebugCache): number {
-    return toSafeInt(cache.hit) + toSafeInt(cache.miss)
-  }
-
-  function cacheHitRate(cache: VerifyDebugCache): number {
-    const total = cacheLookupCount(cache)
-    if (total <= 0) return 0
-    return toSafeInt(cache.hit) / total
-  }
-
-  function cacheEvictRate(cache: VerifyDebugCache): number {
-    const sets = toSafeInt(cache.set)
-    if (sets <= 0) return 0
-    return toSafeInt(cache.evicted) / sets
-  }
-
-  function formatRate(value: number): string {
-    const clamped = Math.max(0, Math.min(1, Number(value) || 0))
-    return `${(clamped * 100).toFixed(1)}%`
-  }
-
   function debugTimeLabel(): string {
     return new Date().toLocaleTimeString('zh-CN', { hour12: false })
   }
@@ -234,11 +75,6 @@
       sampled_input: toSafeInt(payload.sampling.input_items)
     }
     verifyDebugHistory = [...verifyDebugHistory, entry].slice(-VERIFY_DEBUG_HISTORY_LIMIT)
-  }
-
-  function averageNumber(values: number[]): number {
-    if (!values.length) return 0
-    return values.reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0) / values.length
   }
 
   function historyRecent(limit = 5): VerifyDebugHistoryEntry[] {
@@ -306,20 +142,6 @@
         pushToast('保存引用失败', 'bad')
       })
     }, 300)
-  }
-
-  function normalizeResolveItem(item: unknown): Citation | null {
-    if (!item || typeof item !== 'object') return null
-    const row = item as Record<string, unknown>
-    const next = {
-      id: String(row.id || '').trim(),
-      author: String(row.author || '').trim(),
-      title: String(row.title || '').trim(),
-      year: String(row.year || '').trim(),
-      source: String(row.source || row.url || '').trim()
-    }
-    if (!next.title) return null
-    return next
   }
 
   async function resolveCitationFromUrl() {
@@ -404,16 +226,6 @@
     }
   }
 
-  function formatCitation(cite: Citation, style: 'apa' | 'mla' | 'gb'): string {
-    if (style === 'apa') {
-      return `${cite.author} (${cite.year}). ${cite.title}. ${cite.source}.`
-    }
-    if (style === 'mla') {
-      return `${cite.author}. "${cite.title}." ${cite.source}, ${cite.year}.`
-    }
-    return `${cite.author}. ${cite.title}[J]. ${cite.source}, ${cite.year}.`
-  }
-
   function exportBibliography(style: 'apa' | 'mla' | 'gb') {
     const lines = citations.map((c) => formatCitation(c, style))
     const blob = new Blob([lines.join('\n\n')], { type: 'text/plain' })
@@ -462,20 +274,6 @@
     } catch {
       pushToast('复制诊断 JSON 失败', 'bad')
     }
-  }
-
-  function statusClass(status: string): string {
-    if (status === 'verified') return 'ok'
-    if (status === 'possible') return 'warn'
-    if (status === 'error') return 'err'
-    return 'miss'
-  }
-
-  function statusLabel(status: string): string {
-    if (status === 'verified') return '已核验'
-    if (status === 'possible') return '疑似匹配'
-    if (status === 'error') return '核验失败'
-    return '未命中'
   }
 
   async function verifyCitations() {
