@@ -1,4 +1,5 @@
-ï»¿<script lang="ts">
+<script lang="ts">
+  import './EditorWorkbench.css'
   import { onMount } from 'svelte'
   import {
     editorCommand,
@@ -80,19 +81,19 @@
     keywords: string[]
   }
   const slashCommandCatalog: SlashCommandItem[] = [
-    { id: 'heading1', label: 'æ ‡é¢˜ 1', desc: 'æ’å…¥ä¸€çº§æ ‡é¢˜', command: 'heading1', keywords: ['h1', 'æ ‡é¢˜', 'ä¸€çº§'] },
-    { id: 'heading2', label: 'æ ‡é¢˜ 2', desc: 'æ’å…¥äºŒçº§æ ‡é¢˜', command: 'heading2', keywords: ['h2', 'æ ‡é¢˜', 'äºŒçº§'] },
-    { id: 'paragraph', label: 'æ­£æ–‡æ®µè½', desc: 'åˆ‡æ¢ä¸ºæ­£æ–‡æ®µè½', command: 'paragraph', keywords: ['æ­£æ–‡', 'æ®µè½', 'p'] },
-    { id: 'list-bullet', label: 'æ— åºåˆ—è¡¨', desc: 'æ’å…¥é¡¹ç›®ç¬¦å·åˆ—è¡¨', command: 'list-bullet', keywords: ['åˆ—è¡¨', 'bullet', 'æ— åº'] },
-    { id: 'list-number', label: 'æœ‰åºåˆ—è¡¨', desc: 'æ’å…¥ç¼–å·åˆ—è¡¨', command: 'list-number', keywords: ['åˆ—è¡¨', 'ç¼–å·', 'æœ‰åº'] },
-    { id: 'quote', label: 'å¼•ç”¨å—', desc: 'æ’å…¥å¼•ç”¨æ ¼å¼', command: 'quote', keywords: ['å¼•ç”¨', 'quote'] },
-    { id: 'code', label: 'ä»£ç å—', desc: 'æ’å…¥ä»£ç å—', command: 'code', keywords: ['ä»£ç ', 'code'] },
-    { id: 'table', label: 'è¡¨æ ¼', desc: 'æ’å…¥è¡¨æ ¼', command: 'table', keywords: ['è¡¨æ ¼', 'table'] },
-    { id: 'image', label: 'å›¾ç‰‡', desc: 'æ’å…¥å›¾ç‰‡', command: 'image', keywords: ['å›¾ç‰‡', 'image', 'å›¾'] },
-    { id: 'toc', label: 'ç›®å½•', desc: 'ç”Ÿæˆç›®å½•', command: 'toc', keywords: ['ç›®å½•', 'toc'] },
-    { id: 'footnote', label: 'è„šæ³¨', desc: 'æ’å…¥è„šæ³¨', command: 'footnote', keywords: ['è„šæ³¨', 'footnote'] },
-    { id: 'math-inline', label: 'è¡Œå†…å…¬å¼', desc: 'æ’å…¥è¡Œå†… LaTeX å…¬å¼', command: 'math-inline', keywords: ['å…¬å¼', 'math', 'latex'] },
-    { id: 'math-block', label: 'å…¬å¼å—', desc: 'æ’å…¥å—çº§ LaTeX å…¬å¼', command: 'math-block', keywords: ['å…¬å¼å—', 'math', 'latex'] },
+    { id: 'heading1', label: '±êÌâ 1', desc: '²åÈëÒ»¼¶±êÌâ', command: 'heading1', keywords: ['h1', '±êÌâ', 'Ò»¼¶'] },
+    { id: 'heading2', label: '±êÌâ 2', desc: '²åÈë¶ş¼¶±êÌâ', command: 'heading2', keywords: ['h2', '±êÌâ', '¶ş¼¶'] },
+    { id: 'paragraph', label: 'ÕıÎÄ¶ÎÂä', desc: 'ÇĞ»»ÎªÕıÎÄ¶ÎÂä', command: 'paragraph', keywords: ['ÕıÎÄ', '¶ÎÂä', 'p'] },
+    { id: 'list-bullet', label: 'ÎŞĞòÁĞ±í', desc: '²åÈëÏîÄ¿·ûºÅÁĞ±í', command: 'list-bullet', keywords: ['ÁĞ±í', 'bullet', 'ÎŞĞò'] },
+    { id: 'list-number', label: 'ÓĞĞòÁĞ±í', desc: '²åÈë±àºÅÁĞ±í', command: 'list-number', keywords: ['ÁĞ±í', '±àºÅ', 'ÓĞĞò'] },
+    { id: 'quote', label: 'ÒıÓÃ¿é', desc: '²åÈëÒıÓÃ¸ñÊ½', command: 'quote', keywords: ['ÒıÓÃ', 'quote'] },
+    { id: 'code', label: '´úÂë¿é', desc: '²åÈë´úÂë¿é', command: 'code', keywords: ['´úÂë', 'code'] },
+    { id: 'table', label: '±í¸ñ', desc: '²åÈë±í¸ñ', command: 'table', keywords: ['±í¸ñ', 'table'] },
+    { id: 'image', label: 'Í¼Æ¬', desc: '²åÈëÍ¼Æ¬', command: 'image', keywords: ['Í¼Æ¬', 'image', 'Í¼'] },
+    { id: 'toc', label: 'Ä¿Â¼', desc: 'Éú³ÉÄ¿Â¼', command: 'toc', keywords: ['Ä¿Â¼', 'toc'] },
+    { id: 'footnote', label: '½Å×¢', desc: '²åÈë½Å×¢', command: 'footnote', keywords: ['½Å×¢', 'footnote'] },
+    { id: 'math-inline', label: 'ĞĞÄÚ¹«Ê½', desc: '²åÈëĞĞÄÚ LaTeX ¹«Ê½', command: 'math-inline', keywords: ['¹«Ê½', 'math', 'latex'] },
+    { id: 'math-block', label: '¹«Ê½¿é', desc: '²åÈë¿é¼¶ LaTeX ¹«Ê½', command: 'math-block', keywords: ['¹«Ê½¿é', 'math', 'latex'] },
   ]
   let slashMenuOpen = $state(false)
   let slashMenuLeft = $state(0)
@@ -101,9 +102,9 @@
   let slashMenuQuery = $state('')
 
   function emptyHintText() {
-    if ($generating) return 'æ­£åœ¨ç”Ÿæˆå†…å®¹ï¼Œæš‚ä¸å¯ç›´æ¥ç¼–è¾‘â€¦'
-    if (lockEditing) return 'æ­£åœ¨æ¸²æŸ“å†…å®¹ï¼Œæš‚ä¸å¯ç¼–è¾‘ï¼Œè¯·ç¨å€™â€¦'
-    return 'åœ¨è¿™é‡Œç›´æ¥ç¼–è¾‘æˆ–ç­‰å¾…ç”Ÿæˆå†…å®¹â€¦'
+    if ($generating) return 'ÕıÔÚÉú³ÉÄÚÈİ£¬Ôİ²»¿ÉÖ±½Ó±à¼­¡­'
+    if (lockEditing) return 'ÕıÔÚäÖÈ¾ÄÚÈİ£¬Ôİ²»¿É±à¼­£¬ÇëÉÔºò¡­'
+    return 'ÔÚÕâÀïÖ±½Ó±à¼­»òµÈ´ıÉú³ÉÄÚÈİ¡­'
   }
 
   function syncEditorUiFlags() {
@@ -687,7 +688,7 @@
       const title = editor.querySelector('[data-doc-title="1"]') as HTMLElement | null
       return {
         sectionId: DOC_TITLE_TARGET_ID,
-        sectionTitle: title ? normalizeInlineText(plainTextFromElement(title)) : 'æ–‡æ¡£æ ‡é¢˜'
+        sectionTitle: title ? normalizeInlineText(plainTextFromElement(title)) : 'ÎÄµµ±êÌâ'
       }
     }
     const sectionIdTarget = sectionIdFromTarget(id)
@@ -828,11 +829,11 @@
     }
     if (t === 'table') {
       const table = block.table && typeof block.table === 'object' ? (block.table as Record<string, unknown>) : {}
-      return String(table.caption || 'è¡¨æ ¼')
+      return String(table.caption || '±í¸ñ')
     }
     if (t === 'figure') {
       const fig = block.figure && typeof block.figure === 'object' ? (block.figure as Record<string, unknown>) : {}
-      return String(fig.caption || 'å›¾ç‰‡')
+      return String(fig.caption || 'Í¼Æ¬')
     }
     return String(block.text || '').trim()
   }
@@ -1435,478 +1436,6 @@
   }
 
 
-  function htmlToMarkdown(html: string): string {
-    const container = document.createElement('div')
-    container.innerHTML = html
-    const blocks: string[] = []
-
-    const inlineText = (node: Node): string => {
-      if (node.nodeType === Node.TEXT_NODE) return (node.textContent || '').replace(/\s+/g, ' ')
-      if (!(node instanceof HTMLElement)) return ''
-      const tag = node.tagName.toLowerCase()
-      if (tag === 'br') return '\n'
-      if (tag === 'strong' || tag === 'b') return `**${childrenInline(node)}**`
-      if (tag === 'em' || tag === 'i') return `*${childrenInline(node)}*`
-      if (tag === 'u') return `++${childrenInline(node)}++`
-      if (tag === 'del' || tag === 's') return `~~${childrenInline(node)}~~`
-      if (tag === 'mark') return `==${childrenInline(node)}==`
-      if (tag === 'code') return '`' + childrenInline(node) + '`'
-      if (tag === 'a') {
-        const href = node.getAttribute('href') || ''
-        const text = childrenInline(node)
-        return href ? `[${text}](${href})` : text
-      }
-      if (tag === 'span') return childrenInline(node)
-      return childrenInline(node)
-    }
-
-    const childrenInline = (el: HTMLElement): string => {
-      const out: string[] = []
-      el.childNodes.forEach((child) => out.push(inlineText(child)))
-      return out.join('').replace(/\s+/g, ' ').trim()
-    }
-
-    const pushParagraph = (text: string) => {
-      const t = text.replace(/\s+$/g, '').trim()
-      if (t) blocks.push(t)
-    }
-
-    const walkBlock = (node: Node) => {
-      if (!(node instanceof HTMLElement)) return
-      const tag = node.tagName.toLowerCase()
-
-      if (node.dataset.waFigure === '1') {
-        const cap = node.querySelector('figcaption')?.textContent?.trim() || 'å›¾ç¤º'
-        blocks.push(`[[FIGURE:{"caption":"${escapeJson(cap)}"}]]`)
-        return
-      }
-      if (node.dataset.waTable === '1') {
-        const cap = node.querySelector('.wa-table-caption')?.textContent?.trim() || 'è¡¨æ ¼'
-        blocks.push(`[[TABLE:{"caption":"${escapeJson(cap)}"}]]`)
-        return
-      }
-
-      if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
-        const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3
-        const text = childrenInline(node)
-        if (text) blocks.push(`${'#'.repeat(level)} ${text}`)
-        return
-      }
-
-      if (tag === 'pre') {
-        const text = node.textContent || ''
-        blocks.push('```\n' + text.replace(/\n+$/, '') + '\n```')
-        return
-      }
-
-      if (tag === 'blockquote') {
-        const text = childrenInline(node)
-        if (text) blocks.push('> ' + text)
-        return
-      }
-
-      if (tag === 'ul' || tag === 'ol') {
-        const items = Array.from(node.querySelectorAll(':scope > li'))
-        items.forEach((li, idx) => {
-          const t = childrenInline(li)
-          if (!t) return
-          blocks.push(tag === 'ol' ? `${idx + 1}. ${t}` : `- ${t}`)
-        })
-        return
-      }
-
-      if (tag === 'p' || tag === 'div') {
-        const text = childrenInline(node)
-        pushParagraph(text)
-        return
-      }
-
-      if (tag === 'figure') {
-        const cap = node.querySelector('figcaption')?.textContent?.trim() || 'å›¾ç¤º'
-        blocks.push(`[[FIGURE:{"caption":"${escapeJson(cap)}"}]]`)
-        return
-      }
-
-      if (tag === 'table') {
-        blocks.push(`[[TABLE:{"caption":"è¡¨æ ¼"}]]`)
-        return
-      }
-
-      node.childNodes.forEach((child) => walkBlock(child))
-    }
-
-    container.childNodes.forEach((node) => walkBlock(node))
-    return blocks.join('\n\n').trim()
-  }
-
-  function htmlToDocIr(html: string): Record<string, unknown> | null {
-    const container = document.createElement('div')
-    container.innerHTML = html
-    const blocks: Array<Record<string, unknown>> = []
-    let title = ''
-
-    const inlineText = (node: Node): string => {
-      if (node.nodeType === Node.TEXT_NODE) return (node.textContent || '').replace(/\s+/g, ' ')
-      if (!(node instanceof HTMLElement)) return ''
-      const tag = node.tagName.toLowerCase()
-      if (tag === 'br') return '\n'
-      if (tag === 'strong' || tag === 'b') return `**${childrenInline(node)}**`
-      if (tag === 'em' || tag === 'i') return `*${childrenInline(node)}*`
-      if (tag === 'u') return `++${childrenInline(node)}++`
-      if (tag === 'del' || tag === 's') return `~~${childrenInline(node)}~~`
-      if (tag === 'mark') return `==${childrenInline(node)}==`
-      if (tag === 'code') return '`' + childrenInline(node) + '`'
-      if (tag === 'a') {
-        const href = node.getAttribute('href') || ''
-        const text = childrenInline(node)
-        return href ? `[${text}](${href})` : text
-      }
-      if (tag === 'span') return childrenInline(node)
-      return childrenInline(node)
-    }
-
-    const childrenInline = (el: HTMLElement): string => {
-      const out: string[] = []
-      el.childNodes.forEach((child) => out.push(inlineText(child)))
-      return out.join('').replace(/\s+/g, ' ').trim()
-    }
-
-    const pushParagraph = (text: string, id?: string) => {
-      const t = text.replace(/\s+$/g, '').trim()
-      if (t) blocks.push({ type: 'paragraph', text: t, id: id || undefined })
-    }
-
-    const HEADING_HINTS = [
-      'æ‘˜è¦',
-      'å¼•è¨€',
-      'ç»ªè®º',
-      'å‰è¨€',
-      'èƒŒæ™¯',
-      'ç›¸å…³æŠ€æœ¯æ¦‚è¿°',
-      'å…³é”®æŠ€æœ¯',
-      'ç ”ç©¶æ–¹æ³•',
-      'å®éªŒ',
-      'ç»“æœ',
-      'è®¨è®º',
-      'ç»“è®º',
-      'æ€»ç»“',
-      'å±•æœ›',
-      'å‚è€ƒæ–‡çŒ®',
-      'é™„å½•',
-      'è‡´è°¢',
-      'Abstract'
-    ]
-
-    const NUM_HEADING_RE = /^(\d+(?:\.\d+){0,2})\s*[\.ã€:ï¼š-]?\s*([^\s].{0,24})$/
-    const CN_NUM_HEADING_RE = /^([ä¸€äºŒä¸‰å››äº”å…­ä¸ƒå…«ä¹å]+)\s*[ã€.ï¼:ï¼š-]?\s*([^\s].{0,24})$/
-
-    const looksLikeBodySentence = (text: string) => {
-      const s = String(text || '').trim()
-      if (!s) return false
-      if (s.length >= 24) return true
-      if (/[ã€‚ï¼ï¼Ÿ!?ï¼›;ï¼Œ,]/.test(s)) return true
-      const starters = ['æœ¬æ–‡', 'æœ¬ç ”ç©¶', 'éšç€', 'é€šè¿‡', 'ç”±äº', 'å› æ­¤', 'æ­¤å¤–', 'åŒæ—¶', 'é¦–å…ˆ', 'å…¶æ¬¡', 'æœ€å']
-      const hit = starters.some((starter) => {
-        const idx = s.indexOf(starter)
-        return idx >= 1 && idx <= 18
-      })
-      if (hit) return true
-      if (s.length >= 14 && /(æ˜¯|ä¸º|é€šè¿‡|éšç€|ç”±äº|å› æ­¤|å¹¶ä¸”|èƒ½å¤Ÿ|å¯ä»¥|å®ç°|æå‡|ä¼˜åŒ–)/.test(s)) {
-        return true
-      }
-      return false
-    }
-
-    const splitTitleAndRest = (text: string) => {
-      const s = String(text || '').trim()
-      if (!s) return { title: '', rest: '' }
-      const repeated = /^(.{2,18})\s*\1(.+)$/.exec(s)
-      if (repeated) {
-        return { title: String(repeated[1] || '').trim(), rest: String(repeated[2] || '').trim() }
-      }
-      for (const kw of HEADING_HINTS) {
-        const idx = s.indexOf(kw)
-        if (idx > 1 && idx <= 20) {
-          const left = s.slice(0, idx).trim()
-          const right = s.slice(idx).trim()
-          if (left.length >= 2 && right.length >= 2) {
-            return { title: left, rest: right }
-          }
-        }
-      }
-      const numIdx = s.search(/\b\d+(?:\.\d+){0,2}\b/)
-      if (numIdx > 1 && numIdx <= 20) {
-        return { title: s.slice(0, numIdx).trim(), rest: s.slice(numIdx).trim() }
-      }
-      return { title: s, rest: '' }
-    }
-
-    const detectHeadingFromText = (text: string) => {
-      const s = String(text || '').trim()
-      if (!s) return null
-      if (s.length <= 12 && HEADING_HINTS.includes(s)) {
-        return { level: 2, heading: s, rest: '' }
-      }
-      const mNum = NUM_HEADING_RE.exec(s)
-      if (mNum) {
-        const num = String(mNum[1] || '').trim()
-        const name = String(mNum[2] || '').trim()
-        if (looksLikeBodySentence(name)) return null
-        const dots = num.split('.').length - 1
-        const level = Math.min(4, 2 + Math.max(0, dots))
-        return { level, heading: `${num} ${name}`.trim(), rest: '' }
-      }
-      const mCn = CN_NUM_HEADING_RE.exec(s)
-      if (mCn) {
-        const num = String(mCn[1] || '').trim()
-        const name = String(mCn[2] || '').trim()
-        if (looksLikeBodySentence(name)) return null
-        return { level: 2, heading: `${num} ${name}`.trim(), rest: '' }
-      }
-      if (s.length > 20) {
-        for (const kw of HEADING_HINTS) {
-          if (s.startsWith(kw) && s.length > kw.length + 8) {
-            return { level: 2, heading: kw, rest: s.slice(kw.length).trim() }
-          }
-        }
-      }
-      return null
-    }
-
-    const emitTextAsBlocks = (text: string, id?: string) => {
-      const s = String(text || '').trim()
-      if (!s) return
-      const heading = detectHeadingFromText(s)
-      if (heading) {
-        blocks.push({ type: 'heading', level: heading.level, text: heading.heading })
-        if (heading.rest) pushParagraph(heading.rest, id)
-        return
-      }
-      pushParagraph(s, id)
-    }
-
-    const extractTable = (node: HTMLElement): Record<string, unknown> | null => {
-      const tableEl = node.tagName.toLowerCase() === 'table' ? node : (node.querySelector('table') as HTMLElement | null)
-      if (!tableEl) return null
-      const captionEl =
-        node.querySelector('figcaption') ||
-        node.querySelector('.wa-table-caption') ||
-        tableEl.querySelector('caption')
-      const caption = captionEl ? (captionEl.textContent || '').trim() : ''
-      const cols: string[] = []
-      const rows: Array<Array<string>> = []
-      const headCells = Array.from(tableEl.querySelectorAll('thead th'))
-      if (headCells.length) {
-        headCells.forEach((c) => cols.push((c.textContent || '').trim()))
-      }
-      const rowEls = Array.from(tableEl.querySelectorAll('tr'))
-      rowEls.forEach((row, idx) => {
-        const cells = Array.from(row.querySelectorAll('td, th'))
-        if (!cells.length) return
-        const vals = cells.map((c) => (c.textContent || '').trim())
-        if (!cols.length && idx === 0 && row.querySelectorAll('th').length === cells.length) {
-          cols.push(...vals)
-          return
-        }
-        rows.push(vals)
-      })
-      return { caption, columns: cols, rows }
-    }
-
-    const extractFigure = (node: HTMLElement): Record<string, unknown> | null => {
-      const fig = node.tagName.toLowerCase() === 'figure' ? node : (node.querySelector('figure') as HTMLElement | null)
-      const capEl = fig?.querySelector('figcaption') || node.querySelector('figcaption')
-      const caption = capEl ? (capEl.textContent || '').trim() : ''
-      const rawSpec = fig?.dataset.figureSpec || ''
-      let spec: Record<string, unknown> = {}
-      if (rawSpec) {
-        try {
-          const parsed = JSON.parse(decodeURIComponent(rawSpec))
-          if (parsed && typeof parsed === 'object') spec = parsed
-        } catch {
-          spec = {}
-        }
-      }
-      if (caption) spec = { ...spec, caption }
-      return Object.keys(spec).length ? spec : { caption }
-    }
-
-    const walkBlock = (node: Node) => {
-      if (!(node instanceof HTMLElement)) return
-      const tag = node.tagName.toLowerCase()
-      if (tag === 'div' && node.classList.contains('wa-doc')) {
-        node.childNodes.forEach((child) => walkBlock(child))
-        return
-      }
-      if (node.classList.contains('wa-header') || node.classList.contains('wa-footer')) {
-        return
-      }
-      if (node.classList.contains('wa-body')) {
-        node.childNodes.forEach((child) => walkBlock(child))
-        return
-      }
-      if (node.classList.contains('wa-title')) {
-        const t = childrenInline(node)
-        const split = splitTitleAndRest(t)
-        if (split.title && !title) title = split.title
-        if (split.rest) {
-          emitTextAsBlocks(split.rest)
-        }
-        return
-      }
-      if (node.dataset.waTable === '1' || node.classList.contains('wa-table') || tag === 'table') {
-        const table = extractTable(node)
-        if (table) blocks.push({ type: 'table', table, id: node.dataset.blockId || undefined })
-        return
-      }
-      if (node.dataset.waFigure === '1' || node.classList.contains('wa-figure') || tag === 'figure') {
-        const fig = extractFigure(node)
-        if (fig) blocks.push({ type: 'figure', figure: fig, id: node.dataset.blockId || undefined })
-        return
-      }
-      if (tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' || tag === 'h5' || tag === 'h6') {
-        const level = Number(tag.slice(1))
-        const text = childrenInline(node)
-        if (text) {
-          if (level === 1 && !title) {
-            title = text
-            return
-          }
-          blocks.push({ type: 'heading', level, text })
-        }
-        return
-      }
-      if (tag === 'ul' || tag === 'ol') {
-        const items = Array.from(node.querySelectorAll(':scope > li'))
-          .map((li) => childrenInline(li))
-          .filter(Boolean)
-        if (items.length) blocks.push({ type: 'list', items, ordered: tag === 'ol', id: node.dataset.blockId || undefined })
-        return
-      }
-      if (tag === 'blockquote') {
-        const text = childrenInline(node)
-        if (text) blocks.push({ type: 'paragraph', text })
-        return
-      }
-      if (tag === 'pre') {
-        const text = node.textContent || ''
-        pushParagraph(text.replace(/\n+$/, ''), node.dataset.blockId || undefined)
-        return
-      }
-      if (tag === 'p' || tag === 'div') {
-        const text = childrenInline(node)
-        emitTextAsBlocks(text, node.dataset.blockId || undefined)
-        return
-      }
-      node.childNodes.forEach((child) => walkBlock(child))
-    }
-
-    container.childNodes.forEach((node) => walkBlock(node))
-    const docTitle = title || deriveTitleFromBlocks(blocks) || 'è‡ªåŠ¨ç”Ÿæˆæ–‡æ¡£'
-    return buildDocIrFromBlocks(blocks, docTitle)
-  }
-
-  function deriveTitleFromBlocks(blocks: Array<Record<string, unknown>>): string {
-    for (const b of blocks) {
-      if (String(b.type || '') === 'heading' && Number(b.level || 0) === 1 && b.text) {
-        return String(b.text || '').trim()
-      }
-      if (String(b.type || '') === 'paragraph' && b.text) {
-        const raw = String(b.text || '').trim()
-        if (raw) return raw.slice(0, 24)
-      }
-    }
-    return ''
-  }
-
-  function buildDocIrFromBlocks(blocks: Array<Record<string, unknown>>, title: string): Record<string, unknown> {
-    const docTitle = String(title || '').trim() || 'è‡ªåŠ¨ç”Ÿæˆæ–‡æ¡£'
-    const sections: Array<Record<string, unknown>> = []
-    const stack: Array<{ level: number; node: Record<string, unknown> }> = []
-    let orphan: Array<Record<string, unknown>> = []
-
-    const pushImplicit = () => {
-      if (!orphan.length) return
-      const implicit = {
-        id: makeId(),
-        title: docTitle,
-        level: 1,
-        blocks: orphan,
-        children: []
-      }
-      sections.push(implicit)
-      stack.push({ level: 1, node: implicit })
-      orphan = []
-    }
-
-    for (const b of blocks) {
-      const t = String(b.type || '').toLowerCase()
-      if (t === 'heading') {
-        const level = Math.min(6, Math.max(1, Number(b.level || 1)))
-        const text = String(b.text || '').trim() || 'ç« èŠ‚'
-        const node: Record<string, unknown> = { id: makeId(), title: text, level, blocks: [], children: [] }
-        if (orphan.length && stack.length === 0) pushImplicit()
-        while (stack.length && stack[stack.length - 1].level >= level) stack.pop()
-        if (stack.length) {
-          ;(stack[stack.length - 1].node.children as Array<Record<string, unknown>>).push(node)
-        } else {
-          sections.push(node)
-        }
-        stack.push({ level, node })
-        continue
-      }
-      const docBlock = toDocIrBlock(b)
-      if (!docBlock) continue
-      if (stack.length) {
-        ;(stack[stack.length - 1].node.blocks as Array<Record<string, unknown>>).push(docBlock)
-      } else {
-        orphan.push(docBlock)
-      }
-    }
-
-    if (orphan.length && !sections.length) {
-      sections.push({ id: makeId(), title: docTitle, level: 1, blocks: orphan, children: [] })
-    }
-    return { title: docTitle, sections }
-  }
-
-  function toDocIrBlock(block: Record<string, unknown>): Record<string, unknown> | null {
-    const t = String(block.type || 'paragraph').toLowerCase()
-    const rawId = String(block.id || '').trim()
-    const id = rawId || makeId()
-    if (t === 'paragraph') {
-      const text = String(block.text || '').trim()
-      if (!text) return null
-      return { id, type: 'paragraph', text }
-    }
-    if (t === 'list') {
-      const items = Array.isArray(block.items) ? block.items.map((v) => String(v || '').trim()).filter(Boolean) : []
-      if (!items.length) return null
-      const ordered = Boolean(block.ordered)
-      return { id, type: 'list', items, ordered }
-    }
-    if (t === 'table') {
-      return { id, type: 'table', table: block.table || {} }
-    }
-    if (t === 'figure') {
-      return { id, type: 'figure', figure: block.figure || {} }
-    }
-    const text = String(block.text || '').trim()
-    if (!text) return null
-    return { id, type: 'paragraph', text }
-  }
-
-  function makeId(): string {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      return (crypto as Crypto).randomUUID().replace(/-/g, '')
-    }
-    return `b${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`
-  }
-
-  function escapeJson(text: string) {
-    return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-  }
-
   function ensureEditableFocus(): HTMLElement | null {
     if (!editor) return null
     const active = document.activeElement as HTMLElement | null
@@ -1983,7 +1512,7 @@
     }
     if (!ensureEditableFocus()) return
     
-    // åŸºç¡€æ ¼å¼
+    // »ù´¡¸ñÊ½
     if (cmd === 'bold') return document.execCommand('bold')
     if (cmd === 'italic') return document.execCommand('italic')
     if (cmd === 'underline') return document.execCommand('underline')
@@ -1991,26 +1520,26 @@
     if (cmd === 'superscript') return document.execCommand('superscript')
     if (cmd === 'subscript') return document.execCommand('subscript')
     
-    // æ ‡é¢˜
+    // ±êÌâ
     if (cmd === 'heading1') return document.execCommand('formatBlock', false, 'H1')
     if (cmd === 'heading2') return document.execCommand('formatBlock', false, 'H2')
     if (cmd === 'heading3') return document.execCommand('formatBlock', false, 'H3')
     if (cmd === 'paragraph') return document.execCommand('formatBlock', false, 'P')
     
-    // åˆ—è¡¨ä¸ç¼©è¿›
+    // ÁĞ±íÓëËõ½ø
     if (cmd === 'list-bullet') return document.execCommand('insertUnorderedList')
     if (cmd === 'list-number') return document.execCommand('insertOrderedList')
     if (cmd === 'indent') return document.execCommand('indent')
     if (cmd === 'outdent') return document.execCommand('outdent')
     if (cmd === 'quote') return document.execCommand('formatBlock', false, 'BLOCKQUOTE')
     
-    // å¯¹é½
+    // ¶ÔÆë
     if (cmd === 'align-left') return document.execCommand('justifyLeft')
     if (cmd === 'align-center') return document.execCommand('justifyCenter')
     if (cmd === 'align-right') return document.execCommand('justifyRight')
     if (cmd === 'align-justify') return document.execCommand('justifyFull')
     
-    // è¡Œè·
+    // ĞĞ¾à
     if (cmd.startsWith('line-height:')) {
       const height = cmd.slice(12)
       const sel = window.getSelection()
@@ -2026,7 +1555,7 @@
       return
     }
     
-    // æ®µé—´è·
+    // ¶Î¼ä¾à
     if (cmd.startsWith('margin:')) {
       const margin = cmd.slice(7)
       const sel = window.getSelection()
@@ -2042,7 +1571,7 @@
       return
     }
     
-    // é¦–è¡Œç¼©è¿›
+    // Ê×ĞĞËõ½ø
     if (cmd === 'indent-first') {
       const sel = window.getSelection()
       if (sel && sel.rangeCount) {
@@ -2057,7 +1586,7 @@
       return
     }
     
-    // é¢œè‰²
+    // ÑÕÉ«
     if (cmd.startsWith('color:')) {
       const color = cmd.slice(6)
       return document.execCommand('foreColor', false, color)
@@ -2067,13 +1596,13 @@
       return document.execCommand('hiliteColor', false, color)
     }
     
-    // å­—ä½“
+    // ×ÖÌå
     if (cmd.startsWith('font:')) {
       const font = cmd.slice(5)
       return document.execCommand('fontName', false, font)
     }
     
-    // å­—å·
+    // ×ÖºÅ
     if (cmd.startsWith('size:')) {
       const size = cmd.slice(5)
       const sel = window.getSelection()
@@ -2086,14 +1615,14 @@
       return
     }
     
-    // ä»£ç å—
+    // ´úÂë¿é
     if (cmd === 'code') {
       const sel = window.getSelection()
       const text = sel && sel.rangeCount ? sel.getRangeAt(0).toString() : ''
       return document.execCommand('insertHTML', false, `<pre><code>${escapeHtml(text || '')}</code></pre>`)
     }
     
-    // å›¾ç‰‡
+    // Í¼Æ¬
     if (cmd === 'image') {
       const input = document.createElement('input')
       input.type = 'file'
@@ -2104,7 +1633,7 @@
         const reader = new FileReader()
         reader.onload = (ev) => {
           const dataUrl = ev.target?.result as string
-          document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="å›¾ç‰‡" style="max-width:100%;height:auto;" />`)
+          document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="Í¼Æ¬" style="max-width:100%;height:auto;" />`)
         }
         reader.readAsDataURL(file)
       }
@@ -2112,16 +1641,16 @@
       return
     }
     
-    // è¡¨æ ¼
+    // ±í¸ñ
     if (cmd === 'table') {
-      const rows = prompt('è¡Œæ•°ï¼š', '3')
-      const cols = prompt('åˆ—æ•°ï¼š', '3')
+      const rows = prompt('ĞĞÊı£º', '3')
+      const cols = prompt('ÁĞÊı£º', '3')
       if (!rows || !cols) return
       let html = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">'
       for (let i = 0; i < parseInt(rows); i++) {
         html += '<tr>'
         for (let j = 0; j < parseInt(cols); j++) {
-          html += '<td style="border:1px solid #ccc;padding:8px;min-width:80px;">ã€€</td>'
+          html += '<td style="border:1px solid #ccc;padding:8px;min-width:80px;">¡¡</td>'
         }
         html += '</tr>'
       }
@@ -2129,21 +1658,21 @@
       return document.execCommand('insertHTML', false, html)
     }
     
-    // é“¾æ¥
+    // Á´½Ó
     if (cmd === 'link') {
-      const url = prompt('è¯·è¾“å…¥é“¾æ¥åœ°å€ï¼š', 'https://')
+      const url = prompt('ÇëÊäÈëÁ´½ÓµØÖ·£º', 'https://')
       if (url) document.execCommand('createLink', false, url)
       return
     }
     
-    // æ°´å¹³çº¿
+    // Ë®Æ½Ïß
     if (cmd === 'hr') {
       return document.execCommand('insertHTML', false, '<hr style="border:none;border-top:1px solid #ddd;margin:16px 0;" />')
     }
     
-    // æ•°å­¦å…¬å¼
+    // ÊıÑ§¹«Ê½
     if (cmd === 'math-inline') {
-      const latex = prompt('è¾“å…¥è¡Œå†…å…¬å¼ï¼ˆLaTeXï¼‰ï¼š', 'x^2 + y^2 = r^2')
+      const latex = prompt('ÊäÈëĞĞÄÚ¹«Ê½£¨LaTeX£©£º', 'x^2 + y^2 = r^2')
       if (latex) {
         document.execCommand('insertHTML', false, `<span class="math-inline" data-latex="${escapeHtml(latex)}">$${latex}$</span>`)
       }
@@ -2151,16 +1680,16 @@
     }
     
     if (cmd === 'math-block') {
-      const latex = prompt('è¾“å…¥å…¬å¼å—ï¼ˆLaTeXï¼‰ï¼š', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')
+      const latex = prompt('ÊäÈë¹«Ê½¿é£¨LaTeX£©£º', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')
       if (latex) {
         document.execCommand('insertHTML', false, `<div class="math-block" data-latex="${escapeHtml(latex)}">$$${latex}$$</div>`)
       }
       return
     }
     
-    // è„šæ³¨
+    // ½Å×¢
     if (cmd === 'footnote') {
-      const text = prompt('è„šæ³¨å†…å®¹ï¼š')
+      const text = prompt('½Å×¢ÄÚÈİ£º')
       if (!text) return
       const footnoteId = 'fn-' + Date.now()
       const footnoteHtml = `<sup><a href="#${footnoteId}" id="ref-${footnoteId}" style="color:#a5722a;text-decoration:none;">[${getFootnoteNumber()}]</a></sup>`
@@ -2169,14 +1698,14 @@
       return
     }
     
-    // ç”Ÿæˆç›®å½•
+    // Éú³ÉÄ¿Â¼
     if (cmd === 'toc') {
       const toc = generateTableOfContents()
       document.execCommand('insertHTML', false, toc)
       return
     }
     
-    // æ’¤é”€é‡åš
+    // ³·ÏúÖØ×ö
     if (cmd === 'clear-format') return document.execCommand('removeFormat')
   }
 
@@ -2473,7 +2002,7 @@
   let showTableMenu = $state(false)
   const figureCache = new Map<string, string>()
   
-  const fontList = ['å®‹ä½“', 'é»‘ä½“', 'å¾®è½¯é›…é»‘', 'æ¥·ä½“', 'Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana']
+  const fontList = ['ËÎÌå', 'ºÚÌå', 'Î¢ÈíÑÅºÚ', '¿¬Ìå', 'Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana']
   const fontSizes = [12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 42, 48, 56, 64, 72]
   const colors = ['#000000', '#333333', '#666666', '#999999', '#CCCCCC', '#FFFFFF', 
                   '#FF0000', '#FF6600', '#FFCC00', '#00FF00', '#00CCFF', '#0000FF', '#9900FF', '#FF00FF']
@@ -2518,10 +2047,10 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
+    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
     const nextCell = cell.nextElementSibling
     if (!nextCell || (nextCell.tagName !== 'TD' && nextCell.tagName !== 'TH')) {
-      return alert('æ— æ³•åˆå¹¶ï¼šéœ€è¦é€‰ä¸­ç›¸é‚»å•å…ƒæ ¼')
+      return alert('ÎŞ·¨ºÏ²¢£ºĞèÒªÑ¡ÖĞÏàÁÚµ¥Ôª¸ñ')
     }
     const colspan = parseInt(cell.getAttribute('colspan') || '1')
     cell.setAttribute('colspan', String(colspan + 1))
@@ -2532,10 +2061,10 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
+    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
     const row = cell.parentElement as HTMLTableRowElement
     const newRow = row.cloneNode(true) as HTMLTableRowElement
-    newRow.querySelectorAll('td, th').forEach(c => (c.textContent = 'ã€€'))
+    newRow.querySelectorAll('td, th').forEach(c => (c.textContent = '¡¡'))
     row.parentElement?.insertBefore(newRow, row.nextSibling)
   }
 
@@ -2543,13 +2072,13 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
+    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
     const cellIndex = Array.from(cell.parentElement?.children || []).indexOf(cell)
     const table = cell.closest('table')
     if (!table) return
     table.querySelectorAll('tr').forEach(row => {
       const newCell = document.createElement(cell.tagName.toLowerCase())
-      newCell.textContent = 'ã€€'
+      newCell.textContent = '¡¡'
       newCell.style.cssText = cell.style.cssText
       row.insertBefore(newCell, row.children[cellIndex + 1])
     })
@@ -2559,11 +2088,11 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
+    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
     const row = cell.parentElement
     if (!row) return
     const table = row.parentElement
-    if (table && table.children.length <= 1) return alert('æ— æ³•åˆ é™¤ï¼šè¡¨æ ¼è‡³å°‘éœ€è¦ä¸€è¡Œ')
+    if (table && table.children.length <= 1) return alert('ÎŞ·¨É¾³ı£º±í¸ñÖÁÉÙĞèÒªÒ»ĞĞ')
     row.remove()
   }
 
@@ -2571,12 +2100,12 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
+    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
     const cellIndex = Array.from(cell.parentElement?.children || []).indexOf(cell)
     const table = cell.closest('table')
     if (!table) return
     const firstRow = table.querySelector('tr')
-    if (firstRow && firstRow.children.length <= 1) return alert('æ— æ³•åˆ é™¤ï¼šè¡¨æ ¼è‡³å°‘éœ€è¦ä¸€åˆ—')
+    if (firstRow && firstRow.children.length <= 1) return alert('ÎŞ·¨É¾³ı£º±í¸ñÖÁÉÙĞèÒªÒ»ÁĞ')
     table.querySelectorAll('tr').forEach(row => {
       row.children[cellIndex]?.remove()
     })
@@ -2594,7 +2123,7 @@
     if (!footnotesSection) {
       footnotesSection = document.createElement('div')
       footnotesSection.className = 'footnotes-section'
-      footnotesSection.innerHTML = '<hr style="margin-top:40px;border:none;border-top:1px solid #ddd;" /><h3>è„šæ³¨</h3>'
+      footnotesSection.innerHTML = '<hr style="margin-top:40px;border:none;border-top:1px solid #ddd;" /><h3>½Å×¢</h3>'
       editor.appendChild(footnotesSection)
     }
     const footnoteItem = document.createElement('div')
@@ -2607,9 +2136,9 @@
   function generateTableOfContents(): string {
     if (!editor) return ''
     const headings = editor.querySelectorAll('h1, h2, h3')
-    if (headings.length === 0) return '<p>æœªæ‰¾åˆ°æ ‡é¢˜</p>'
+    if (headings.length === 0) return '<p>Î´ÕÒµ½±êÌâ</p>'
     
-    let toc = '<div class="toc-section" style="border:1px solid #ddd;padding:16px;border-radius:8px;background:rgba(255,255,255,0.5);margin:20px 0;"><h3>ç›®å½•</h3><ul style="list-style:none;padding-left:0;">'
+    let toc = '<div class="toc-section" style="border:1px solid #ddd;padding:16px;border-radius:8px;background:rgba(255,255,255,0.5);margin:20px 0;"><h3>Ä¿Â¼</h3><ul style="list-style:none;padding-left:0;">'
     
     headings.forEach((heading, index) => {
       const level = parseInt(heading.tagName[1])
@@ -2673,7 +2202,7 @@
       const cacheKey = JSON.stringify(spec)
       let svg = figureCache.get(cacheKey)
       const box = fig.querySelector('.wa-figure-box') as HTMLElement | null
-      if (box) box.innerHTML = '<div class="wa-figure-loading">æ¸²æŸ“ä¸­...</div>'
+      if (box) box.innerHTML = '<div class="wa-figure-loading">äÖÈ¾ÖĞ...</div>'
       if (!svg) {
         try {
           const resp = await fetch('/api/figure/render', {
@@ -2690,7 +2219,7 @@
         }
       }
       if (box) {
-        box.innerHTML = svg || '<div class="wa-figure-loading">æ¸²æŸ“å¤±è´¥</div>'
+        box.innerHTML = svg || '<div class="wa-figure-loading">äÖÈ¾Ê§°Ü</div>'
       }
     }
   }
@@ -2753,13 +2282,13 @@
     sourceUnsub = sourceText.subscribe(() => syncFromStore())
     docIrUnsub = docIr.subscribe(() => syncFromStore())
     
-    // åŠ è½½KaTeXæ ·å¼
+    // ¼ÓÔØKaTeXÑùÊ½
     const katexCSS = document.createElement('link')
     katexCSS.rel = 'stylesheet'
     katexCSS.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css'
     document.head.appendChild(katexCSS)
     
-    // åŠ è½½KaTeXè„šæœ¬
+    // ¼ÓÔØKaTeX½Å±¾
     const katexScript = document.createElement('script')
     katexScript.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js'
     katexScript.onload = () => {
@@ -2772,13 +2301,13 @@
     }
     document.head.appendChild(katexScript)
     
-    // åŠ è½½Prismæ ·å¼
+    // ¼ÓÔØPrismÑùÊ½
     const prismCSS = document.createElement('link')
     prismCSS.rel = 'stylesheet'
     prismCSS.href = 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css'
     document.head.appendChild(prismCSS)
     
-    // åŠ è½½Prismè„šæœ¬
+    // ¼ÓÔØPrism½Å±¾
     const prismScript = document.createElement('script')
     prismScript.src = 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js'
     prismScript.onload = () => {
@@ -2809,7 +2338,7 @@
     }
     document.head.appendChild(prismScript)
     
-    // å›¾ç‰‡æ‡’åŠ è½½
+    // Í¼Æ¬ÀÁ¼ÓÔØ
     const imgObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting && entry.target instanceof HTMLImageElement) {
@@ -2919,18 +2448,18 @@
 <div class={`panel editor ${paper ? 'paper' : ''}`}>
   {#if showToolbar}
     <div class="panel-header">
-      <div class="panel-title">æ­£æ–‡ç¼–è¾‘</div>
+      <div class="panel-title">ÕıÎÄ±à¼­</div>
       <div class="editor-stats">
-        <span>{$wordCount} å­—</span>
-        <span>Â·</span>
-        <span>{Math.ceil($wordCount / 400)} åˆ†é’Ÿé˜…è¯»</span>
+        <span>{$wordCount} ×Ö</span>
+        <span>¡¤</span>
+        <span>{Math.ceil($wordCount / 400)} ·ÖÖÓÔÄ¶Á</span>
       </div>
     </div>
 
-    <!-- æ‰©å±•å·¥å…·æ  -->
+    <!-- À©Õ¹¹¤¾ßÀ¸ -->
     <div class="extended-toolbar">
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showFontPanel = !showFontPanel)} title="å­—ä½“">
+      <button class="tool-btn" onclick={() => (showFontPanel = !showFontPanel)} title="×ÖÌå">
         <span style="font-family: serif;">A</span>
       </button>
       {#if showFontPanel}
@@ -2946,7 +2475,7 @@
     
     <div class="toolbar-group">
       <select class="tool-select" onchange={(e) => applyCommand('size:' + e.currentTarget.value)}>
-        <option value="">å­—å·</option>
+        <option value="">×ÖºÅ</option>
         {#each fontSizes as size}
           <option value={size}>{size}pt</option>
         {/each}
@@ -2954,7 +2483,7 @@
     </div>
     
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showColorPanel = !showColorPanel)} title="æ–‡å­—é¢œè‰²">
+      <button class="tool-btn" onclick={() => (showColorPanel = !showColorPanel)} title="ÎÄ×ÖÑÕÉ«">
         <span style="color: #FF0000;">A</span>
       </button>
       {#if showColorPanel}
@@ -2963,7 +2492,7 @@
             <button 
               class="color-item" 
               style="background: {color};" 
-              aria-label={`æ–‡å­—é¢œè‰² ${color}`}
+              aria-label={`ÎÄ×ÖÑÕÉ« ${color}`}
               onclick={() => { applyCommand('color:' + color); showColorPanel = false }}
             ></button>
           {/each}
@@ -2972,8 +2501,8 @@
     </div>
     
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showBgColorPanel = !showBgColorPanel)} title="èƒŒæ™¯é¢œè‰²">
-        <span style="background: #FFFF00;">â–ˆ</span>
+      <button class="tool-btn" onclick={() => (showBgColorPanel = !showBgColorPanel)} title="±³¾°ÑÕÉ«">
+        <span style="background: #FFFF00;">¨€</span>
       </button>
       {#if showBgColorPanel}
         <div class="dropdown-panel color-grid">
@@ -2981,7 +2510,7 @@
             <button 
               class="color-item" 
               style="background: {color};" 
-              aria-label={`èƒŒæ™¯é¢œè‰² ${color}`}
+              aria-label={`±³¾°ÑÕÉ« ${color}`}
               onclick={() => { applyCommand('bgcolor:' + color); showBgColorPanel = false }}
             ></button>
           {/each}
@@ -2991,61 +2520,61 @@
     
     <span class="separator"></span>
     
-    <button class="tool-btn" onclick={() => applyCommand('align-left')} title="å·¦å¯¹é½">â‰¡</button>
-    <button class="tool-btn" onclick={() => applyCommand('align-center')} title="å±…ä¸­">â‰¡</button>
-    <button class="tool-btn" onclick={() => applyCommand('align-right')} title="å³å¯¹é½">â‰¡</button>
-    <button class="tool-btn" onclick={() => applyCommand('align-justify')} title="ä¸¤ç«¯å¯¹é½">â‰¡</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-left')} title="×ó¶ÔÆë">¡Ô</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-center')} title="¾ÓÖĞ">¡Ô</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-right')} title="ÓÒ¶ÔÆë">¡Ô</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-justify')} title="Á½¶Ë¶ÔÆë">¡Ô</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" onclick={() => applyCommand('superscript')} title="ä¸Šæ ‡">xÂ²</button>
-    <button class="tool-btn" onclick={() => applyCommand('subscript')} title="ä¸‹æ ‡">xâ‚‚</button>
-    <button class="tool-btn" onclick={() => applyCommand('hr')} title="æ°´å¹³çº¿">â€”</button>
+    <button class="tool-btn" onclick={() => applyCommand('superscript')} title="ÉÏ±ê">x2</button>
+    <button class="tool-btn" onclick={() => applyCommand('subscript')} title="ÏÂ±ê">x?</button>
+    <button class="tool-btn" onclick={() => applyCommand('hr')} title="Ë®Æ½Ïß">¡ª</button>
     
     <span class="separator"></span>
     
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showLineHeightPanel = !showLineHeightPanel)} title="è¡Œè·">
-        â‰£
+      <button class="tool-btn" onclick={() => (showLineHeightPanel = !showLineHeightPanel)} title="ĞĞ¾à">
+        ?
       </button>
       {#if showLineHeightPanel}
         <div class="dropdown-panel">
           {#each lineHeights as height}
             <button class="dropdown-item" onclick={() => { applyCommand('line-height:' + height); showLineHeightPanel = false }}>
-              {height}å€è¡Œè·
+              {height}±¶ĞĞ¾à
             </button>
           {/each}
         </div>
       {/if}
     </div>
     
-    <button class="tool-btn" onclick={() => applyCommand('indent-first')} title="é¦–è¡Œç¼©è¿›">Â¶</button>
-    <button class="tool-btn" onclick={() => applyCommand('margin:10px 0')} title="æ®µé—´è·">â‡•</button>
+    <button class="tool-btn" onclick={() => applyCommand('indent-first')} title="Ê×ĞĞËõ½ø">?</button>
+    <button class="tool-btn" onclick={() => applyCommand('margin:10px 0')} title="¶Î¼ä¾à">?</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" onclick={() => applyCommand('math-inline')} title="è¡Œå†…å…¬å¼">ğ‘“(ğ‘¥)</button>
-    <button class="tool-btn" onclick={() => applyCommand('math-block')} title="å…¬å¼å—">âˆ«</button>
+    <button class="tool-btn" onclick={() => applyCommand('math-inline')} title="ĞĞÄÚ¹«Ê½">??(??)</button>
+    <button class="tool-btn" onclick={() => applyCommand('math-block')} title="¹«Ê½¿é">¡Ò</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" onclick={() => applyCommand('footnote')} title="æ’å…¥è„šæ³¨">â€»</button>
-    <button class="tool-btn" onclick={() => applyCommand('toc')} title="ç”Ÿæˆç›®å½•">â˜°</button>
+    <button class="tool-btn" onclick={() => applyCommand('footnote')} title="²åÈë½Å×¢">¡ù</button>
+    <button class="tool-btn" onclick={() => applyCommand('toc')} title="Éú³ÉÄ¿Â¼">?</button>
     
     <span class="separator"></span>
     
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showTableMenu = !showTableMenu)} title="è¡¨æ ¼">
-        âŠ
+      <button class="tool-btn" onclick={() => (showTableMenu = !showTableMenu)} title="±í¸ñ">
+        ?
       </button>
       {#if showTableMenu}
         <div class="dropdown-panel">
-          <button class="dropdown-item" onclick={() => { applyCommand('table'); showTableMenu = false }}>æ’å…¥è¡¨æ ¼</button>
-          <button class="dropdown-item" onclick={() => { mergeTableCells(); showTableMenu = false }}>åˆå¹¶å•å…ƒæ ¼</button>
-          <button class="dropdown-item" onclick={() => { insertTableRow(); showTableMenu = false }}>æ’å…¥è¡Œ</button>
-          <button class="dropdown-item" onclick={() => { insertTableCol(); showTableMenu = false }}>æ’å…¥åˆ—</button>
-          <button class="dropdown-item" onclick={() => { deleteTableRow(); showTableMenu = false }}>åˆ é™¤è¡Œ</button>
-          <button class="dropdown-item" onclick={() => { deleteTableCol(); showTableMenu = false }}>åˆ é™¤åˆ—</button>
+          <button class="dropdown-item" onclick={() => { applyCommand('table'); showTableMenu = false }}>²åÈë±í¸ñ</button>
+          <button class="dropdown-item" onclick={() => { mergeTableCells(); showTableMenu = false }}>ºÏ²¢µ¥Ôª¸ñ</button>
+          <button class="dropdown-item" onclick={() => { insertTableRow(); showTableMenu = false }}>²åÈëĞĞ</button>
+          <button class="dropdown-item" onclick={() => { insertTableCol(); showTableMenu = false }}>²åÈëÁĞ</button>
+          <button class="dropdown-item" onclick={() => { deleteTableRow(); showTableMenu = false }}>É¾³ıĞĞ</button>
+          <button class="dropdown-item" onclick={() => { deleteTableCol(); showTableMenu = false }}>É¾³ıÁĞ</button>
         </div>
       {/if}
     </div>
@@ -3058,7 +2587,7 @@
     bind:this={editor}
     contenteditable={$generating || lockEditing ? 'false' : 'true'}
     role="region"
-    aria-label="æ–‡æ¡£ç¼–è¾‘åŒº"
+    aria-label="ÎÄµµ±à¼­Çø"
     onmousedown={handleEditorMouseDown}
     oninput={handleEditableInput}
     onfocusin={handleEditableFocus}
@@ -3075,15 +2604,15 @@
       style={`left:${slashMenuLeft}px;top:${slashMenuTop}px;`}
       role="listbox"
       tabindex="-1"
-      aria-label="æ’å…¥å‘½ä»¤èœå•"
+      aria-label="²åÈëÃüÁî²Ëµ¥"
       onmousedown={(e) => e.stopPropagation()}
     >
       <div class="slash-menu-head">
-        <span>/ å‘½ä»¤</span>
-        <span class="query">{slashMenuQuery || 'å…¨éƒ¨'}</span>
+        <span>/ ÃüÁî</span>
+        <span class="query">{slashMenuQuery || 'È«²¿'}</span>
       </div>
       {#if currentSlashMenuItems().length === 0}
-        <div class="slash-empty">æ— åŒ¹é…å‘½ä»¤ï¼ŒæŒ‰ Backspace åˆ é™¤å…³é”®å­—ã€‚</div>
+        <div class="slash-empty">ÎŞÆ¥ÅäÃüÁî£¬°´ Backspace É¾³ı¹Ø¼ü×Ö¡£</div>
       {:else}
         <div class="slash-list">
           {#each currentSlashMenuItems() as item, idx}
@@ -3100,7 +2629,7 @@
           {/each}
         </div>
       {/if}
-      <div class="slash-menu-foot">â†‘â†“ é€‰æ‹© Â· Enter æ‰§è¡Œ Â· Esc å…³é—­</div>
+      <div class="slash-menu-foot">¡ü¡ı Ñ¡Ôñ ¡¤ Enter Ö´ĞĞ ¡¤ Esc ¹Ø±Õ</div>
     </div>
   {/if}
 
@@ -3115,723 +2644,17 @@
   {#if showFindReplace}
     <div class="find-replace-panel">
       <div class="find-replace-row">
-        <input type="text" bind:value={findText} placeholder="æŸ¥æ‰¾..." />
-        <button class="btn-small" onclick={findNext}>ä¸‹ä¸€ä¸ª</button>
-        <button class="btn-small" onclick={() => (showFindReplace = false)}>âœ•</button>
+        <input type="text" bind:value={findText} placeholder="²éÕÒ..." />
+        <button class="btn-small" onclick={findNext}>ÏÂÒ»¸ö</button>
+        <button class="btn-small" onclick={() => (showFindReplace = false)}>?</button>
       </div>
       <div class="find-replace-row">
-        <input type="text" bind:value={replaceText} placeholder="æ›¿æ¢ä¸º..." />
-        <button class="btn-small" onclick={replaceNext}>æ›¿æ¢</button>
-        <button class="btn-small" onclick={replaceAll}>å…¨éƒ¨æ›¿æ¢</button>
+        <input type="text" bind:value={replaceText} placeholder="Ìæ»»Îª..." />
+        <button class="btn-small" onclick={replaceNext}>Ìæ»»</button>
+        <button class="btn-small" onclick={replaceAll}>È«²¿Ìæ»»</button>
       </div>
     </div>
   {/if}
 </div>
 
-<style>
-  .editor {
-    display: grid;
-    gap: 12px;
-  }
 
-  .block-marquee {
-    position: fixed;
-    z-index: 22;
-    border: 1.5px solid rgba(37, 99, 235, 0.78);
-    background: rgba(37, 99, 235, 0.14);
-    border-radius: 8px;
-    pointer-events: none;
-    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.16);
-  }
-
-  .slash-menu {
-    position: fixed;
-    z-index: 34;
-    width: 320px;
-    max-height: 320px;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 16px 36px rgba(250, 249, 247, 0.2);
-    overflow: hidden;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-  }
-
-  .slash-menu-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 12px 8px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.22);
-    font-size: 12px;
-    color: rgba(250, 249, 247, 0.75);
-    font-weight: 600;
-  }
-
-  .slash-menu-head .query {
-    color: rgba(37, 99, 235, 0.95);
-    font-weight: 700;
-  }
-
-  .slash-list {
-    max-height: 248px;
-    overflow: auto;
-    display: grid;
-    gap: 2px;
-    padding: 6px;
-  }
-
-  .slash-item {
-    border: none;
-    background: transparent;
-    width: 100%;
-    text-align: left;
-    border-radius: 10px;
-    padding: 8px 10px;
-    cursor: pointer;
-    display: grid;
-    gap: 2px;
-  }
-
-  .slash-item .slash-label {
-    font-size: 13px;
-    color: #f5f3f0;
-    font-weight: 600;
-  }
-
-  .slash-item .slash-desc {
-    font-size: 11px;
-    color: rgba(245, 243, 240, 0.8);
-  }
-
-  .slash-item:hover,
-  .slash-item.active {
-    background: rgba(37, 99, 235, 0.1);
-  }
-
-  .slash-empty {
-    padding: 14px 12px;
-    font-size: 12px;
-    color: rgba(71, 85, 105, 0.85);
-  }
-
-  .slash-menu-foot {
-    border-top: 1px solid rgba(231, 229, 228, 1);
-    padding: 8px 12px;
-    font-size: 11px;
-    color: rgba(71, 85, 105, 0.9);
-  }
-
-  :global(.editable .wa-block-selected) {
-    outline: none;
-    box-shadow: inset 3px 0 0 rgba(37, 99, 235, 0.7);
-    background: rgba(37, 99, 235, 0.04);
-    border-radius: 6px;
-  }
-
-  :global(.editable [data-wa-edit='1']:focus) {
-    outline: 2px solid rgba(90, 140, 255, 0.35);
-    border-radius: 6px;
-  }
-
-  .panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .editor-stats {
-    display: flex;
-    gap: 8px;
-    font-size: 12px;
-    color: #8b7d65;
-  }
-
-  .editable {
-    width: 100%;
-    min-height: 560px;
-    border: 1px solid rgba(90, 70, 45, 0.18);
-    border-radius: 16px;
-    padding: 24px 28px;
-    font-size: 14px;
-    line-height: 1.8;
-    outline: none;
-    background: #fffdf8;
-    white-space: pre-wrap;
-    box-shadow: none, 0 18px 40px rgba(70, 50, 20, 0.12);
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
-    position: relative;
-  }
-
-  .editable[data-render-mode='doc'] {
-    border: 1px solid #dbe2ec;
-    border-radius: 14px;
-    padding: 16px 18px 20px;
-    background: #ffffff;
-    box-shadow: 0 12px 28px rgba(250, 249, 247, 0.1);
-    min-height: 560px;
-    white-space: normal;
-    font-family: "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", sans-serif;
-    font-size: 16px;
-    line-height: 1.8;
-    color: #f5f3f0;
-    font-weight: 400;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc) {
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    padding: 0;
-    background: transparent;
-    box-shadow: none;
-    border: none;
-    font-family: inherit;
-    color: inherit;
-  }
-
-  /* ç¼–è¾‘æ€éšè—é¡µçœ‰é¡µè„šå ä½ï¼Œé¿å…ç©ºæ–‡æ¡£æ—¶è§†è§‰å™ªéŸ³ */
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-header),
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-footer) {
-    display: none;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-header),
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-footer) {
-    font-size: 12px;
-    color: #78716c;
-    text-align: center;
-    letter-spacing: 0.04em;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-header) {
-    border-bottom: 1px solid #e2e8f0;
-    padding-bottom: 6px;
-    margin-bottom: 10px;
-    min-height: 14px;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-header:empty) {
-    border-bottom: none;
-    padding-bottom: 0;
-    margin-bottom: 0;
-    min-height: 0;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-footer) {
-    border-top: 1px solid #e2e8f0;
-    padding-top: 6px;
-    margin-top: 24px;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-title) {
-    text-align: center;
-    margin-bottom: 22px;
-    font-size: 26px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc h1),
-  :global(.editable[data-render-mode='doc'] .wa-doc h2),
-  :global(.editable[data-render-mode='doc'] .wa-doc h3) {
-    margin: 18px 0 10px;
-    font-weight: 600;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc h2) {
-    text-align: center;
-    text-indent: 0;
-    letter-spacing: 0.02em;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc p) {
-    margin: 6px 0;
-    line-height: 1.8;
-    text-align: justify;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc ul),
-  :global(.editable[data-render-mode='doc'] .wa-doc ol) {
-    padding-left: 22px;
-    margin: 6px 0;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc li) {
-    line-height: 1.7;
-    margin: 2px 0;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc figure) {
-    margin: 14px 0;
-    text-align: center;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-figure-box),
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-table-box) {
-    height: 140px;
-    border: 1px dashed #78716c;
-    color: #a8a29e;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc table) {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 8px;
-    font-size: 14px;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc th),
-  :global(.editable[data-render-mode='doc'] .wa-doc td) {
-    border: 1px solid #a8a29e;
-    padding: 6px 8px;
-  }
-
-  :global(.editable[data-render-mode='doc'] .wa-doc figcaption) {
-    margin-top: 6px;
-    font-size: 12px;
-    color: #a8a29e;
-  }
-
-  .editor.paper .editable {
-    box-sizing: border-box;
-    width: min(100%, 210mm);
-    min-height: 297mm;
-    margin: 0 auto 18px;
-    padding: 18mm 16mm 20mm;
-    border-radius: 10px;
-    background: #ffffff;
-    box-shadow:
-      0 2px 0 rgba(0, 0, 0, 0.01),
-      0 20px 60px rgba(50, 30, 10, 0.12);
-    font-family: "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", sans-serif;
-    font-size: 16px;
-    line-height: 1.8;
-    color: #f5f3f0;
-  }
-
-  .editor.paper .editable[data-render-mode='doc'] {
-    box-sizing: border-box;
-    width: min(100%, 210mm);
-    min-height: 297mm;
-    margin: 0 auto 18px;
-    padding: 18mm 16mm 20mm;
-    border-radius: 10px;
-    background: #ffffff;
-    box-shadow:
-      0 2px 0 rgba(0, 0, 0, 0.01),
-      0 20px 60px rgba(50, 30, 10, 0.12);
-  }
-
-  .editable:focus {
-    border-color: rgba(140, 100, 50, 0.4);
-    box-shadow: 0 0 0 3px rgba(140, 100, 50, 0.15), 0 18px 40px rgba(70, 50, 20, 0.12);
-  }
-
-  :global(.editable[data-empty='1'])::before {
-    content: attr(data-empty-hint);
-    color: rgba(100, 90, 70, 0.5);
-    pointer-events: none;
-    user-select: none;
-    position: absolute;
-    left: 18px;
-    top: 16px;
-    z-index: 1;
-    line-height: inherit;
-    white-space: nowrap;
-  }
-
-  :global(.editor.paper .editable[data-empty='1'])::before {
-    left: 16mm;
-    top: 18mm;
-  }
-
-  :global(.editable[data-empty='1'][data-caret-active='1'])::before {
-    opacity: 0;
-  }
-
-  :global(.editable[data-empty='1'] [data-block-id]:first-of-type),
-  :global(.editable[data-empty='1'] [data-section-id]:first-of-type) {
-    text-indent: 0;
-  }
-
-  :global(.editable[data-readonly='1']) {
-    cursor: not-allowed;
-  }
-
-  :global(.editable h1),
-  :global(.editable h2),
-  :global(.editable h3) {
-    margin: 16px 0 10px;
-    font-weight: 700;
-  }
-
-  :global(.editor.paper .editable h1),
-  :global(.editor.paper .editable h2),
-  :global(.editor.paper .editable h3) {
-    text-indent: 0;
-    margin: 0 0 16pt;
-    font-weight: 700;
-  }
-
-  :global(.editable h1) {
-    font-size: 20px;
-  }
-
-  :global(.editor.paper .editable h1) {
-    font-size: 22pt;
-    text-align: center;
-    letter-spacing: 0.5pt;
-    margin-top: 0;
-  }
-
-  :global(.editable h2) {
-    font-size: 17px;
-  }
-
-  :global(.editor.paper .editable h2) {
-    font-size: 16pt;
-    margin-top: 18pt;
-    text-align: center;
-    text-indent: 0;
-    letter-spacing: 0.2pt;
-  }
-
-  :global(.editable h3) {
-    font-size: 15px;
-  }
-
-  :global(.editor.paper .editable h3) {
-    font-size: 14pt;
-    margin-top: 14pt;
-  }
-
-  :global(.editable p) {
-    margin: 8px 0;
-  }
-
-  :global(.editor.paper .editable p) {
-    margin: 0 0 12pt;
-    text-indent: 0;
-    text-align: justify;
-  }
-
-  :global(.editable ul),
-  :global(.editable ol) {
-    padding-left: 24px;
-  }
-
-  :global(.editor.paper .editable ul),
-  :global(.editor.paper .editable ol) {
-    margin: 0 0 12pt 0;
-    padding-left: 2.2em;
-  }
-
-  :global(.editor.paper .editable li) {
-    text-indent: 0;
-    margin: 0 0 8pt;
-  }
-
-  :global(.editor.paper .editable blockquote) {
-    margin: 0 0 12pt;
-    padding: 0.4em 0 0.4em 1.2em;
-    border-left: 3px solid rgba(120, 90, 50, 0.3);
-    text-indent: 0;
-    color: #4b3d2a;
-  }
-
-  :global(.editable pre) {
-    background: rgba(120, 110, 90, 0.08);
-    padding: 10px 12px;
-    border-radius: 10px;
-  }
-
-  :global(.editable .wa-figure),
-  :global(.editable .wa-table) {
-    display: grid;
-    gap: 6px;
-    border: 1px dashed rgba(37, 99, 235, 0.35);
-    border-radius: 14px;
-    padding: 10px 12px;
-    margin: 10px 0;
-    background: rgba(255, 255, 255, 0.8);
-  }
-
-  :global(.editable .wa-figure-box),
-  :global(.editable .wa-table-box) {
-    width: 100%;
-    min-height: 160px;
-    border-radius: 12px;
-    background: rgba(250, 249, 247, 0.05);
-    display: grid;
-    place-items: center;
-    font-weight: 600;
-    color: rgba(250, 249, 247, 0.6);
-    overflow: hidden;
-  }
-
-  :global(.editable .wa-figure-box svg) {
-    width: 100%;
-    height: auto;
-    display: block;
-  }
-
-  :global(.editable .wa-figure-loading) {
-    font-size: 12px;
-    color: rgba(250, 249, 247, 0.6);
-  }
-
-  :global(.editable figcaption),
-  :global(.editable .wa-table-caption) {
-    font-size: 13px;
-    color: #5b4a33;
-  }
-
-  :global(.editable img) {
-    max-width: 100%;
-    height: auto;
-    border-radius: 8px;
-    margin: 10px 0;
-    transition: opacity 0.3s ease;
-  }
-
-  :global(.editable img[data-src]) {
-    opacity: 0.3;
-    background: rgba(200, 180, 150, 0.1);
-  }
-
-  :global(.editable pre) {
-    background: #2d2d2d;
-    color: #ccc;
-    padding: 16px;
-    border-radius: 8px;
-    overflow-x: auto;
-    margin: 10px 0;
-    font-family: 'Courier New', Consolas, Monaco, monospace;
-    font-size: 14px;
-    line-height: 1.5;
-  }
-
-  :global(.editable pre code) {
-    background: none;
-    padding: 0;
-    border-radius: 0;
-  }
-
-  :global(.editable .math-inline) {
-    display: inline-block;
-    margin: 0 2px;
-    color: #1a5490;
-  }
-
-  :global(.editable .math-block) {
-    display: block;
-    margin: 16px 0;
-    padding: 12px;
-    background: rgba(26, 84, 144, 0.05);
-    border-left: 3px solid #1a5490;
-    overflow-x: auto;
-  }
-
-  :global(.editable table) {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 10px 0;
-  }
-
-  :global(.editable table td),
-  :global(.editable table th) {
-    border: 1px solid rgba(90, 70, 45, 0.25);
-    padding: 8px;
-  }
-
-  :global(.editable a) {
-    color: #a5722a;
-    text-decoration: underline;
-  }
-
-  :global(.editable u) {
-    text-decoration: underline;
-  }
-
-  :global(.editable s),
-  :global(.editable del) {
-    text-decoration: line-through;
-  }
-
-  .find-replace-panel {
-    position: fixed;
-    top: 120px;
-    right: 32px;
-    background: #fffdf8;
-    border: 1px solid rgba(90, 70, 45, 0.18);
-    border-radius: 14px;
-    padding: 12px;
-    box-shadow: 0 12px 30px rgba(70, 50, 20, 0.2);
-    display: grid;
-    gap: 8px;
-    z-index: 100;
-  }
-
-  .find-replace-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .find-replace-panel input {
-    flex: 1;
-    border: 1px solid rgba(90, 70, 45, 0.18);
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 13px;
-    background: rgba(255, 255, 255, 0.85);
-  }
-
-  .btn-small {
-    border: 1px solid rgba(90, 70, 45, 0.18);
-    background: rgba(255, 255, 255, 0.75);
-    padding: 6px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: background 0.15s;
-  }
-
-  .btn-small:hover {
-    background: rgba(240, 230, 210, 0.9);
-  }
-
-  .extended-toolbar {
-    display: flex;
-    gap: 4px;
-    padding: 8px;
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(90, 70, 45, 0.12);
-    border-radius: 12px;
-    margin-bottom: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .toolbar-group {
-    position: relative;
-  }
-
-  .tool-btn {
-    border: 1px solid rgba(90, 70, 45, 0.12);
-    background: rgba(255, 255, 255, 0.85);
-    padding: 6px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background 0.15s;
-    min-width: 32px;
-  }
-
-  .tool-btn:hover {
-    background: rgba(240, 230, 210, 0.9);
-  }
-
-  .tool-select {
-    border: 1px solid rgba(90, 70, 45, 0.12);
-    background: rgba(255, 255, 255, 0.85);
-    padding: 6px 8px;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-
-  .separator {
-    width: 1px;
-    height: 20px;
-    background: rgba(90, 70, 45, 0.2);
-    margin: 0 4px;
-  }
-
-  .dropdown-panel {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    margin-top: 4px;
-    background: #fffdf8;
-    border: 1px solid rgba(90, 70, 45, 0.18);
-    border-radius: 8px;
-    box-shadow: 0 8px 20px rgba(70, 50, 20, 0.2);
-    z-index: 100;
-    max-height: 300px;
-    overflow-y: auto;
-    min-width: 120px;
-  }
-
-  .dropdown-item {
-    display: block;
-    width: 100%;
-    border: none;
-    background: none;
-    padding: 8px 12px;
-    text-align: left;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background 0.15s;
-  }
-
-  .dropdown-item:hover {
-    background: rgba(240, 230, 210, 0.5);
-  }
-
-  .color-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
-    padding: 8px;
-    min-width: auto;
-  }
-
-  .color-item {
-    width: 28px;
-    height: 28px;
-    border: 1px solid rgba(90, 70, 45, 0.2);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: transform 0.15s;
-  }
-
-  .color-item:hover {
-    transform: scale(1.1);
-    border-color: rgba(90, 70, 45, 0.5);
-  }
-
-  :global(.editable .footnotes-section) {
-    margin-top: 40px;
-    padding-top: 20px;
-  }
-
-  :global(.editable .footnotes-section h3) {
-    font-size: 16px;
-    margin-bottom: 12px;
-  }
-
-  :global(.editable .footnote-item) {
-    font-size: 13px;
-    color: #5b4a33;
-    margin-bottom: 8px;
-    line-height: 1.6;
-  }
-
-  :global(.editable .footnote-item sup) {
-    color: #a5722a;
-    margin-right: 6px;
-  }
-
-  :global(.editable .toc-section a:hover) {
-    text-decoration: underline;
-  }
-</style>

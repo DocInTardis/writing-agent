@@ -1,4 +1,5 @@
-ï»¿<script lang="ts">
+<script lang="ts">
+  import './AppWorkbench.css'
   import { onMount } from 'svelte'
   import Chat from './lib/components/Chat.svelte'
   import Editor from './lib/components/Editor.svelte'
@@ -299,10 +300,10 @@
 
   function mapStateName(name: string) {
     const n = (name || '').toUpperCase()
-    if (n === 'PLAN') return 'è§„åˆ’'
-    if (n === 'WRITE') return 'å†™ä½œ'
-    if (n === 'DONE') return 'å®Œæˆ'
-    if (n === 'STOPPED') return 'å·²åœæ­¢'
+    if (n === 'PLAN') return '¹æ»®'
+    if (n === 'WRITE') return 'Ğ´×÷'
+    if (n === 'DONE') return 'Íê³É'
+    if (n === 'STOPPED') return 'ÒÑÍ£Ö¹'
     return name
   }
 
@@ -312,7 +313,7 @@
       .replace(/^#+\s*/, '')
       .replace(/^h[23]::/i, '')
       .replace(/\s+/g, '')
-      .replace(/[ï¼š:ï¼Œ,ã€‚.!?ï¼Ÿï¼›;ã€ï¼ˆï¼‰()ã€ã€‘\[\]ã€Šã€‹"'â€œâ€â€˜â€™]/g, '')
+      .replace(/[£º:£¬,¡£.!?£¿£»;¡¢£¨£©()¡¾¡¿\[\]¡¶¡·"'¡°¡±¡®¡¯]/g, '')
       .toLowerCase()
   }
 
@@ -326,7 +327,7 @@
     const stripped = src
       .replace(/[`~*#>\-\[\]\(\)_=|]/g, '')
       .replace(/\s+/g, '')
-      .replace(/[ï¼Œã€‚ï¼ï¼Ÿï¼›ï¼š,.!?;:]/g, '')
+      .replace(/[£¬¡££¡£¿£»£º,.!?;:]/g, '')
     return stripped.length >= 8
   }
 
@@ -334,14 +335,14 @@
     const text = String(inst || '').trim()
     if (!text) return null
     if (
-      /(?:å…¨æ–‡|æ•´ç¯‡|æ•´æ–‡|å…¨éƒ¨|ä»å¤´).{0,4}(?:é‡å†™|æ”¹å†™)|è¦†ç›–é‡å†™|æ¨å€’é‡å†™|é‡æ–°å†™ä¸€ä»½|(?:rewrite|redo|start over|from scratch|replace).{0,14}(?:entire|whole|full|document|draft)|(?:entire|whole|full).{0,14}(?:rewrite|redo|replace)|overwrite(?:\s+the)?(?:\s+whole|\s+entire|\s+full)?(?:\s+document|\s+draft)?/i.test(
+      /(?:È«ÎÄ|ÕûÆª|ÕûÎÄ|È«²¿|´ÓÍ·).{0,4}(?:ÖØĞ´|¸ÄĞ´)|¸²¸ÇÖØĞ´|ÍÆµ¹ÖØĞ´|ÖØĞÂĞ´Ò»·İ|(?:rewrite|redo|start over|from scratch|replace).{0,14}(?:entire|whole|full|document|draft)|(?:entire|whole|full).{0,14}(?:rewrite|redo|replace)|overwrite(?:\s+the)?(?:\s+whole|\s+entire|\s+full)?(?:\s+document|\s+draft)?/i.test(
         text
       )
     ) {
       return 'overwrite'
     }
     if (
-      /(?:ç»­å†™|æ¥ç€å†™|ç»§ç»­å†™|æ¥ç»­å†™|åœ¨åŸæ–‡åŸºç¡€ä¸Šç»§ç»­|å»¶ç»­å†™|(?:continue|keep writing|carry on|extend|add more|build on).{0,14}(?:current|existing|draft|document|text|content)?|(?:based on|on top of)\s+(?:the\s+)?(?:existing|current))/i.test(
+      /(?:ĞøĞ´|½Ó×ÅĞ´|¼ÌĞøĞ´|½ÓĞøĞ´|ÔÚÔ­ÎÄ»ù´¡ÉÏ¼ÌĞø|ÑÓĞøĞ´|(?:continue|keep writing|carry on|extend|add more|build on).{0,14}(?:current|existing|draft|document|text|content)?|(?:based on|on top of)\s+(?:the\s+)?(?:existing|current))/i.test(
         text
       )
     ) {
@@ -393,7 +394,7 @@
 
   function runBatchFromToolbar() {
     switchWorkspaceMode('library')
-    pushToast('å·²åˆ‡æ¢åˆ°èµ„æ–™æ¨¡å¼ï¼Œå¯ç»§ç»­æ‰§è¡Œæ‰¹å¤„ç†ã€‚', 'info')
+    pushToast('ÒÑÇĞ»»µ½×ÊÁÏÄ£Ê½£¬¿É¼ÌĞøÖ´ĞĞÅú´¦Àí¡£', 'info')
   }
 
   function switchSurface(tab: WorkbenchSurface) {
@@ -424,20 +425,20 @@
 
   function buildTopStatusLine() {
     const parts: string[] = []
-    parts.push($docStatus || 'æœªåŠ è½½')
-    parts.push(`${Math.max(0, Number($wordCount || 0))} è¯`)
+    parts.push($docStatus || 'Î´¼ÓÔØ')
+    parts.push(`${Math.max(0, Number($wordCount || 0))} ´Ê`)
     if (lastGraphMeta?.route_id || lastGraphMeta?.route_entry || lastGraphMeta?.engine) {
       parts.push(
-        `è·¯ç”± ${lastGraphMeta?.route_id || 'é»˜è®¤'}/${lastGraphMeta?.route_entry || 'planner'} Â· ${lastGraphMeta?.engine || 'legacy'}`
+        `Â·ÓÉ ${lastGraphMeta?.route_id || 'Ä¬ÈÏ'}/${lastGraphMeta?.route_entry || 'planner'} ¡¤ ${lastGraphMeta?.engine || 'legacy'}`
       )
     }
     if (feedbackItems.length > 0) {
-      parts.push(`æ»¡æ„åº¦ ${feedbackItems[0].rating}/5`)
+      parts.push(`ÂúÒâ¶È ${feedbackItems[0].rating}/5`)
     }
     if (plagiarismResults.length > 0) {
-      parts.push(`æŸ¥é‡å³°å€¼ ${Math.round(plagiarismMaxScore * 100)}%`)
+      parts.push(`²éÖØ·åÖµ ${Math.round(plagiarismMaxScore * 100)}%`)
     }
-    return parts.join(' Â· ')
+    return parts.join(' ¡¤ ')
   }
 
   function openLibraryCard(card: LibraryCard) {
@@ -550,7 +551,7 @@
 
   function ensureInlineEditAllowed(actionLabel: string) {
     if (canEditSelectedBlocksNow()) return true
-    const msg = inlineEditLockReason || `ç”Ÿæˆä¸­ï¼Œæš‚ä¸æ”¯æŒ${actionLabel}`
+    const msg = inlineEditLockReason || `Éú³ÉÖĞ£¬Ôİ²»Ö§³Ö${actionLabel}`
     blockEditError = msg
     pushToast(msg, 'info')
     return false
@@ -569,8 +570,8 @@
       if (!queuedGlobalInstructions.length) recentQueuedBadgeCount = 0
       recentQueuedBadgeTimer = null
     }, 3000)
-    appendChat('system', `å½“å‰æ­£åœ¨ç”Ÿæˆï¼Œå·²åŠ å…¥å¾…æ‰§è¡Œé˜Ÿåˆ—ï¼ˆ${queuedGlobalInstructions.length}ï¼‰`)
-    pushToast(`å·²æ’é˜Ÿï¼ˆ${queuedGlobalInstructions.length}ï¼‰`, 'info')
+    appendChat('system', `µ±Ç°ÕıÔÚÉú³É£¬ÒÑ¼ÓÈë´ıÖ´ĞĞ¶ÓÁĞ£¨${queuedGlobalInstructions.length}£©`)
+    pushToast(`ÒÑÅÅ¶Ó£¨${queuedGlobalInstructions.length}£©`, 'info')
     queueMicrotask(() => {
       void drainQueuedGlobalInstructions()
     })
@@ -596,14 +597,14 @@
           if (staleRender) {
             resetStreamTyping()
             if (!autoRecovered) {
-              pushToast('æ£€æµ‹åˆ°æ¸²æŸ“çŠ¶æ€å¡ä½ï¼Œå·²è‡ªåŠ¨æ¢å¤å¹¶ç»§ç»­æ‰§è¡Œæ’é˜ŸæŒ‡ä»¤ã€‚', 'info')
+              pushToast('¼ì²âµ½äÖÈ¾×´Ì¬¿¨×¡£¬ÒÑ×Ô¶¯»Ö¸´²¢¼ÌĞøÖ´ĞĞÅÅ¶ÓÖ¸Áî¡£', 'info')
               autoRecovered = true
             }
           } else if (waited > 150000) {
             generating.set(false)
             resetStreamTyping()
             if (!autoRecovered) {
-              pushToast('æ’é˜ŸæŒ‡ä»¤ç­‰å¾…è¶…æ—¶ï¼Œå·²å¼ºåˆ¶æ¢å¤å¹¶ç»§ç»­ã€‚', 'info')
+              pushToast('ÅÅ¶ÓÖ¸ÁîµÈ´ı³¬Ê±£¬ÒÑÇ¿ÖÆ»Ö¸´²¢¼ÌĞø¡£', 'info')
               autoRecovered = true
             }
           }
@@ -613,7 +614,7 @@
         busySince = 0
         const [next, ...rest] = queuedGlobalInstructions
         queuedGlobalInstructions = rest
-        appendChat('system', `å¼€å§‹æ‰§è¡Œæ’é˜ŸæŒ‡ä»¤ï¼ˆå‰©ä½™ ${queuedGlobalInstructions.length}ï¼‰`)
+        appendChat('system', `¿ªÊ¼Ö´ĞĞÅÅ¶ÓÖ¸Áî£¨Ê£Óà ${queuedGlobalInstructions.length}£©`)
         await handleGenerate(next.text, { fromQueue: true })
       }
     } finally {
@@ -630,7 +631,7 @@
     if (writeTimer) clearTimeout(writeTimer)
     writeTimer = setTimeout(() => {
       const preview = writeBuffer.slice(-120)
-      pushThought('å†™ä½œ', preview, formatElapsed())
+      pushThought('Ğ´×÷', preview, formatElapsed())
       writeBuffer = ''
       writeTimer = null
     }, 500)
@@ -815,7 +816,7 @@
   function ensureSkeletonInText(text: string, title: string, sections: string[]) {
     let t = String(text || '').replace(/\r/g, '')
     if (!/^#\s+/m.test(t)) {
-      t = `# ${title || 'è‡ªåŠ¨ç”Ÿæˆæ–‡æ¡£'}\n\n` + t.trimStart()
+      t = `# ${title || '×Ô¶¯Éú³ÉÎÄµµ'}\n\n` + t.trimStart()
     }
     for (const s of sections || []) {
       const name = decodeSectionTitle(String(s || '').trim())
@@ -1008,7 +1009,7 @@
       lastSavedText = txt
     }
     if (payload.meta && payload.meta.action) {
-      pushToast('å—å·²æ›´æ–°', 'ok')
+      pushToast('¿éÒÑ¸üĞÂ', 'ok')
     }
   }
 
@@ -1072,7 +1073,7 @@
     selectedBlockId = nextIds[0] || ''
     selectedBlockText =
       selectedBlocks.length > 1
-        ? selectedBlocks.map((b, idx) => `[å—${idx + 1}] ${b.text}`.trim()).join('\n\n')
+        ? selectedBlocks.map((b, idx) => `[¿é${idx + 1}] ${b.text}`.trim()).join('\n\n')
         : String(detail.text || '')
     const style = detail.style && typeof detail.style === 'object' ? detail.style : {}
     blockStyleFontFamily = String((style as any).fontFamily || '')
@@ -1234,7 +1235,7 @@
   }
 
   function applyInlineBlockStyle(patch: Record<string, string>) {
-    if (!ensureInlineEditAllowed('ä¿®æ”¹å½“å‰é€‰ä¸­å—')) return
+    if (!ensureInlineEditAllowed('ĞŞ¸Äµ±Ç°Ñ¡ÖĞ¿é')) return
     const targets = selectedBlockIds.length ? selectedBlockIds : selectedBlockId ? [selectedBlockId] : []
     if (!targets.length || !$docIr) return
     const blockTargets = blockTargetIds(targets)
@@ -1285,7 +1286,7 @@
 
   function selectedTargetText() {
     if (selectedBlocks.length > 1) {
-      return selectedBlocks.map((b, idx) => `[å—${idx + 1}] ${b.text}`.trim()).join('\n\n')
+      return selectedBlocks.map((b, idx) => `[¿é${idx + 1}] ${b.text}`.trim()).join('\n\n')
     }
     if (selectedBlocks.length === 1) return String(selectedBlocks[0].text || '')
     return selectedBlockText.trim()
@@ -1342,8 +1343,8 @@
     const details: string[] = [`code=${code}`, trimmed, fallback, recovered]
     if (source) details.push(`source=${source}`)
     if (left > 0 || right > 0) details.push(`window=${left}/${right}`)
-    if (ok) return `å±€éƒ¨æ”¹å†™æˆåŠŸï¼ˆ${details.join('; ')}ï¼‰`
-    return `å±€éƒ¨æ”¹å†™æœªå‘½ä¸­ï¼ˆ${details.join('; ')}ï¼‰ï¼Œå·²åˆ‡æ¢å…¨é‡ç”Ÿæˆå…œåº•`
+    if (ok) return `¾Ö²¿¸ÄĞ´³É¹¦£¨${details.join('; ')}£©`
+    return `¾Ö²¿¸ÄĞ´Î´ÃüÖĞ£¨${details.join('; ')}£©£¬ÒÑÇĞ»»È«Á¿Éú³É¶µµ×`
   }
 
   function openAssistantForBlock(customInstruction?: string) {
@@ -1356,26 +1357,26 @@
     if (base && ids.length > 0) {
       const hasTitleTarget = ids.some((id) => isSectionTargetId(id) || isDocTitleTargetId(id))
       const title = hasTitleTarget
-        ? 'è¯·åªä¿®æ”¹æˆ‘é€‰ä¸­çš„æ ‡é¢˜æˆ–æ®µè½ï¼Œä¸è¦æ”¹å…¶ä»–éƒ¨åˆ†ã€‚'
+        ? 'ÇëÖ»ĞŞ¸ÄÎÒÑ¡ÖĞµÄ±êÌâ»ò¶ÎÂä£¬²»Òª¸ÄÆäËû²¿·Ö¡£'
         : ids.length > 1
-          ? `è¯·åªä¿®æ”¹æˆ‘é€‰ä¸­çš„ ${ids.length} ä¸ªæ®µè½å—ï¼Œä¸è¦æ”¹å…¶ä»–æ®µè½ã€‚`
-          : 'è¯·åªä¿®æ”¹æˆ‘é€‰ä¸­çš„è¿™æ®µå†…å®¹ï¼Œä¸è¦æ”¹å…¶ä»–æ®µè½ã€‚'
-      instruction.set(`${title}\n${base}\n\nä¿®æ”¹è¦æ±‚ï¼š${req}`)
+          ? `ÇëÖ»ĞŞ¸ÄÎÒÑ¡ÖĞµÄ ${ids.length} ¸ö¶ÎÂä¿é£¬²»Òª¸ÄÆäËû¶ÎÂä¡£`
+          : 'ÇëÖ»ĞŞ¸ÄÎÒÑ¡ÖĞµÄÕâ¶ÎÄÚÈİ£¬²»Òª¸ÄÆäËû¶ÎÂä¡£'
+      instruction.set(`${title}\n${base}\n\nĞŞ¸ÄÒªÇó£º${req}`)
     }
     focusAssistantInput()
   }
 
   async function previewSelectedBlockEdit() {
-    if (!ensureInlineEditAllowed('ç”Ÿæˆå—æ”¹å†™å€™é€‰')) return
+    if (!ensureInlineEditAllowed('Éú³É¿é¸ÄĞ´ºòÑ¡')) return
     const targetIds = selectedTargetIds()
     const blockIds = selectedTargetBlockIds()
     if (!$docId || !targetIds.length) return
     if (!blockIds.length) {
-      blockEditError = 'å½“å‰é€‰ä¸­ä¸ºæ ‡é¢˜ï¼Œå»ºè®®åœ¨â€œæ ·å¼è®¾ç½®â€ä¸­ä¿®æ”¹ï¼Œæˆ–ç›´æ¥åœ¨æ ‡é¢˜å¤„è¾“å…¥ã€‚'
+      blockEditError = 'µ±Ç°Ñ¡ÖĞÎª±êÌâ£¬½¨ÒéÔÚ¡°ÑùÊ½ÉèÖÃ¡±ÖĞĞŞ¸Ä£¬»òÖ±½ÓÔÚ±êÌâ´¦ÊäÈë¡£'
       return
     }
     if (blockIds.length !== targetIds.length) {
-      blockEditError = 'æ ‡é¢˜ä¸æ­£æ–‡æ··é€‰æ—¶æš‚ä¸æ”¯æŒå€™é€‰ç”Ÿæˆï¼Œè¯·åªé€‰æ®µè½å—ã€‚'
+      blockEditError = '±êÌâÓëÕıÎÄ»ìÑ¡Ê±Ôİ²»Ö§³ÖºòÑ¡Éú³É£¬ÇëÖ»Ñ¡¶ÎÂä¿é¡£'
       return
     }
     const input = sanitizeAiInputText(blockEditCmd, { trim: true, maxChars: 2400 })
@@ -1384,7 +1385,7 @@
     blockEditError = ''
     blockCandidates = []
     try {
-      if (!$docIr || typeof $docIr !== 'object') throw new Error('æ–‡æ¡£å°šæœªå°±ç»ª')
+      if (!$docIr || typeof $docIr !== 'object') throw new Error('ÎÄµµÉĞÎ´¾ÍĞ÷')
       const baseDoc = $docIr as Record<string, unknown>
       blockOriginalText = selectedTargetText()
       if (blockIds.length === 1) {
@@ -1405,7 +1406,7 @@
         blockCandidates = rawCandidates
           .filter((c: any) => c && typeof c === 'object' && c.doc_ir && !c.error)
           .map((c: any, idx: number) => ({
-            label: String(c.label || `æ–¹æ¡ˆ${idx + 1}`),
+            label: String(c.label || `·½°¸${idx + 1}`),
             selectedAfter: sanitizeCandidateText(String(c.selected_after || ''), blockOriginalText),
             selectedBefore: String(c.selected_before || blockOriginalText || ''),
             docIr: c.doc_ir,
@@ -1413,8 +1414,8 @@
           }))
       } else {
         const variants = [
-          { label: 'æ–¹æ¡ˆA', instruction: input },
-          { label: 'æ–¹æ¡ˆB', instruction: `${input}ã€‚è¯·é‡‡ç”¨å¦ä¸€ç§è¡¨è¾¾æ–¹å¼ï¼Œä¿æŒåŸæ„ä½†åœ¨å¥å¼å’Œç»„ç»‡ä¸Šæœ‰æ˜æ˜¾å·®å¼‚ã€‚` }
+          { label: '·½°¸A', instruction: input },
+          { label: '·½°¸B', instruction: `${input}¡£Çë²ÉÓÃÁíÒ»ÖÖ±í´ï·½Ê½£¬±£³ÖÔ­Òâµ«ÔÚ¾äÊ½ºÍ×éÖ¯ÉÏÓĞÃ÷ÏÔ²îÒì¡£` }
         ]
         const collected: Array<any> = []
         for (const variant of variants) {
@@ -1442,7 +1443,7 @@
             const data = await resp.json()
             const candidate = Array.isArray(data.candidates) ? data.candidates[0] : null
             if (!candidate || !candidate.doc_ir) {
-              throw new Error(`æœªç”Ÿæˆå¯ç”¨å€™é€‰ï¼š${variant.label}`)
+              throw new Error(`Î´Éú³É¿ÉÓÃºòÑ¡£º${variant.label}`)
             }
             const before = String(data.before || '')
             const after = sanitizeCandidateText(String(candidate.selected_after || ''), before)
@@ -1461,11 +1462,11 @@
         blockCandidates = collected
       }
       if (!blockCandidates.length) {
-        throw new Error('æ²¡æœ‰ç”Ÿæˆå¯ç”¨å€™é€‰ç‰ˆæœ¬')
+        throw new Error('Ã»ÓĞÉú³É¿ÉÓÃºòÑ¡°æ±¾')
       }
       activeCandidateIndex = 0
     } catch (err) {
-      blockEditError = err instanceof Error ? err.message : 'å€™é€‰ç”Ÿæˆå¤±è´¥'
+      blockEditError = err instanceof Error ? err.message : 'ºòÑ¡Éú³ÉÊ§°Ü'
     } finally {
       blockPreviewBusy = false
     }
@@ -1473,7 +1474,7 @@
 
   function useRewritePreset(preset: string) {
     const cur = blockEditCmd.trim()
-    blockEditCmd = cur ? `${cur}ï¼›${preset}` : preset
+    blockEditCmd = cur ? `${cur}£»${preset}` : preset
     inlinePanelTab = 'rewrite'
   }
 
@@ -1530,7 +1531,7 @@
       .replace(/^\s*```[a-zA-Z0-9_-]*\s*/g, '')
       .replace(/\s*```\s*$/g, '')
       .trim()
-    const rewriteLabel = /(?:æ”¹å†™å(?:çš„)?(?:æ–‡æœ¬|ç‰ˆæœ¬)?|ä¼˜åŒ–å(?:çš„)?(?:æ–‡æœ¬|ç‰ˆæœ¬)?|é‡å†™å(?:çš„)?(?:æ–‡æœ¬|ç‰ˆæœ¬)?|æ¶¦è‰²å(?:çš„)?(?:æ–‡æœ¬|ç‰ˆæœ¬)?|rewritten\s*text|revised\s*version|final\s*version)\s*[:ï¼š]\s*/gi
+    const rewriteLabel = /(?:¸ÄĞ´ºó(?:µÄ)?(?:ÎÄ±¾|°æ±¾)?|ÓÅ»¯ºó(?:µÄ)?(?:ÎÄ±¾|°æ±¾)?|ÖØĞ´ºó(?:µÄ)?(?:ÎÄ±¾|°æ±¾)?|ÈóÉ«ºó(?:µÄ)?(?:ÎÄ±¾|°æ±¾)?|rewritten\s*text|revised\s*version|final\s*version)\s*[:£º]\s*/gi
     let last: RegExpExecArray | null = null
     while (true) {
       const m = rewriteLabel.exec(out)
@@ -1541,7 +1542,7 @@
       out = out.slice(last.index + last[0].length).trim()
     }
     if (original && out.startsWith(original)) {
-      const tail = out.slice(original.length).replace(/^[\s:ï¼š\-â€”]+/, '')
+      const tail = out.slice(original.length).replace(/^[\s:£º\-¡ª]+/, '')
       if (tail.length >= 4) out = tail
     }
     const parts = out.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
@@ -1556,19 +1557,19 @@
     const after = String(candidate?.selectedAfter || '')
     const before = String(candidate?.selectedBefore || blockOriginalText || '')
     const delta = after.length - before.length
-    if (delta === 0) return 'é•¿åº¦ä¸å˜'
-    return delta > 0 ? `å¢åŠ  ${delta} å­—` : `å‡å°‘ ${Math.abs(delta)} å­—`
+    if (delta === 0) return '³¤¶È²»±ä'
+    return delta > 0 ? `Ôö¼Ó ${delta} ×Ö` : `¼õÉÙ ${Math.abs(delta)} ×Ö`
   }
 
   function ignoreCandidateSuggestions() {
     blockCandidates = []
     activeCandidateIndex = 0
     blockEditError = ''
-    pushToast('å·²å¿½ç•¥æœ¬è½®å»ºè®®', 'info')
+    pushToast('ÒÑºöÂÔ±¾ÂÖ½¨Òé', 'info')
   }
 
   async function applyCandidateVersion(index: number) {
-    if (!ensureInlineEditAllowed('é‡‡çº³å€™é€‰æ”¹å†™')) return
+    if (!ensureInlineEditAllowed('²ÉÄÉºòÑ¡¸ÄĞ´')) return
     const candidate = blockCandidates[index]
     if (!candidate || !$docId || !candidate.docIr) return
     const nextDoc = candidate.docIr as Record<string, unknown>
@@ -1582,16 +1583,16 @@
       await fetch(`/api/doc/${$docId}/version/commit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `å—ä¿®æ”¹:${candidate.label}`, author: 'user', kind: 'minor' })
+        body: JSON.stringify({ message: `¿éĞŞ¸Ä:${candidate.label}`, author: 'user', kind: 'minor' })
       })
-      pushToast(`å·²åº”ç”¨${candidate.label}`, 'ok')
+      pushToast(`ÒÑÓ¦ÓÃ${candidate.label}`, 'ok')
       blockCandidates = []
       activeCandidateIndex = 0
       blockEditCmd = ''
       requestAnimationFrame(() => updateInlineOverlayPosition())
       await loadVersionLog()
     } catch (err) {
-      blockEditError = err instanceof Error ? err.message : 'åº”ç”¨å€™é€‰å¤±è´¥'
+      blockEditError = err instanceof Error ? err.message : 'Ó¦ÓÃºòÑ¡Ê§°Ü'
     }
   }
 
@@ -1692,8 +1693,8 @@
       id: Math.random().toString(36).slice(2),
       type: 'table',
       table: {
-        caption: 'æ–°å»ºè¡¨æ ¼',
-        columns: ['åˆ—1', 'åˆ—2', 'åˆ—3'],
+        caption: 'ĞÂ½¨±í¸ñ',
+        columns: ['ÁĞ1', 'ÁĞ2', 'ÁĞ3'],
         rows: [
           ['', '', ''],
           ['', '', '']
@@ -1707,7 +1708,7 @@
       appendBlockToDoc(doc as Record<string, unknown>, tableBlock)
     if (!nextDoc) return
     applyDocIrSnapshot(nextDoc as Record<string, unknown>)
-    pushToast('å·²æ’å…¥è¡¨æ ¼å—ï¼Œå¯ç›´æ¥ç¼–è¾‘å†…å®¹ã€‚', 'ok')
+    pushToast('ÒÑ²åÈë±í¸ñ¿é£¬¿ÉÖ±½Ó±à¼­ÄÚÈİ¡£', 'ok')
   }
 
   const blockCache = new Map<string, any>()
@@ -1774,14 +1775,14 @@
         return
       }
       let parts = clean
-        .split(/(?<=[ã€‚ï¼ï¼Ÿ!?ï¼›;])(?=[^â€â€™ã€ã€ï¼‰ã€‹ã€‘\]\s])/g)
+        .split(/(?<=[¡££¡£¿!?£»;])(?=[^¡±¡¯¡¹¡»£©¡·¡¿\]\s])/g)
         .map((part) => part.trim())
         .filter(Boolean)
       if (parts.length <= 1 && clean.length > 118) {
         const commas: number[] = []
         for (let i = 0; i < clean.length; i += 1) {
           const ch = clean[i]
-          if (ch === 'ï¼Œ' || ch === ',' || ch === 'ã€') commas.push(i)
+          if (ch === '£¬' || ch === ',' || ch === '¡¢') commas.push(i)
         }
         if (commas.length) {
           const target = Math.floor(clean.length / 2)
@@ -1829,7 +1830,7 @@
       if (!title || !para) return null
       const pureTitle = title.replace(/^\d+(?:\.\d+){0,3}\s*/, '').trim()
       if (!pureTitle || pureTitle.length > 4) return null
-      const m = /^([\u4e00-\u9fa5]{1,4})(è‡ª|æ˜¯|åœ¨|ç”±|é€šè¿‡|éšç€|å¹¶|å¯|å°†|ä¼š)([\s\S]*)$/.exec(para)
+      const m = /^([\u4e00-\u9fa5]{1,4})(×Ô|ÊÇ|ÔÚ|ÓÉ|Í¨¹ı|Ëæ×Å|²¢|¿É|½«|»á)([\s\S]*)$/.exec(para)
       if (!m) return null
       const tail = String(m[1] || '').trim()
       if (!tail || tail.length > 3) return null
@@ -1978,10 +1979,10 @@
     })
     if (!resp.ok) {
       const body = await resp.text()
-      const msg = body || resp.statusText || 'è¯·æ±‚å¤±è´¥'
+      const msg = body || resp.statusText || 'ÇëÇóÊ§°Ü'
       throw new Error(`HTTP ${resp.status}: ${msg}`)
     }
-    if (!resp.body) throw new Error('å½“å‰ç¯å¢ƒä¸æ”¯æŒæµå¼è¾“å‡º')
+    if (!resp.body) throw new Error('µ±Ç°»·¾³²»Ö§³ÖÁ÷Ê½Êä³ö')
     const reader = resp.body.getReader()
     const decoder = new TextDecoder('utf-8')
     let buf = ''
@@ -2028,7 +2029,7 @@
       }
       loadVersionLog().catch(() => {})
     } catch (err) {
-      pushToast(`åŠ è½½å¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'error')
+      pushToast(`¼ÓÔØÊ§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'error')
     } finally {
       isLoading.set(false)
     }
@@ -2078,7 +2079,7 @@
     if (!id) return
     if (satisfactionSaving) return
     if (!Number.isFinite(satisfactionRating) || satisfactionRating < 1 || satisfactionRating > 5) {
-      pushToast('è¯·é€‰æ‹© 1-5 åˆ†æ»¡æ„åº¦', 'info')
+      pushToast('ÇëÑ¡Ôñ 1-5 ·ÖÂúÒâ¶È', 'info')
       return
     }
     satisfactionSaving = true
@@ -2110,14 +2111,14 @@
       const lowRecorded = Number(data.low_recorded || 0)
       lastLowFeedbackRecorded = Number.isFinite(lowRecorded) ? lowRecorded : 0
       if (lastLowFeedbackRecorded > 0) {
-        pushToast('å·²è®°å½•ä½æ»¡æ„åº¦æ ·æœ¬ï¼Œåç»­å¯ç”¨äºå­¦ä¹ æ”¹è¿›ã€‚', 'info')
+        pushToast('ÒÑ¼ÇÂ¼µÍÂúÒâ¶ÈÑù±¾£¬ºóĞø¿ÉÓÃÓÚÑ§Ï°¸Ä½ø¡£', 'info')
       } else {
-        pushToast('æ»¡æ„åº¦å·²æäº¤', 'ok')
+        pushToast('ÂúÒâ¶ÈÒÑÌá½»', 'ok')
       }
       satisfactionNote = ''
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'æäº¤å¤±è´¥'
-      pushToast(`æ»¡æ„åº¦æäº¤å¤±è´¥: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'Ìá½»Ê§°Ü'
+      pushToast(`ÂúÒâ¶ÈÌá½»Ê§°Ü: ${msg}`, 'bad')
     } finally {
       satisfactionSaving = false
     }
@@ -2173,7 +2174,7 @@
     const refDocIds = parseReferenceDocIds(plagiarismReferenceDocIds)
     const manualText = String(plagiarismReferenceText || '').trim()
     if (!refDocIds.length && !manualText) {
-      pushToast('è¯·è‡³å°‘æä¾›ä¸€ä¸ªå¯¹æ¯”æ–‡æ¡£IDæˆ–ç²˜è´´å‚è€ƒæ–‡æœ¬', 'info')
+      pushToast('ÇëÖÁÉÙÌá¹©Ò»¸ö¶Ô±ÈÎÄµµID»òÕ³Ìù²Î¿¼ÎÄ±¾', 'info')
       return
     }
     plagiarismLoading = true
@@ -2186,7 +2187,7 @@
         reference_doc_ids: refDocIds
       }
       if (manualText) {
-        payload.reference_texts = [{ id: 'manual_text', title: 'æ‰‹åŠ¨ç²˜è´´æ–‡æœ¬', text: manualText }]
+        payload.reference_texts = [{ id: 'manual_text', title: 'ÊÖ¶¯Õ³ÌùÎÄ±¾', text: manualText }]
       }
       const resp = await fetch(`/api/doc/${id}/plagiarism/check`, {
         method: 'POST',
@@ -2208,15 +2209,15 @@
       plagiarismFlaggedCount = Number(data?.flagged_count || 0) || 0
       plagiarismMaxScore = normalizeScore(data?.max_score || 0)
       if (plagiarismResults.length === 0) {
-        pushToast('æŸ¥é‡å®Œæˆï¼šæ²¡æœ‰å¯åˆ†æçš„å‚è€ƒæ–‡æœ¬', 'info')
+        pushToast('²éÖØÍê³É£ºÃ»ÓĞ¿É·ÖÎöµÄ²Î¿¼ÎÄ±¾', 'info')
       } else if (plagiarismFlaggedCount > 0) {
-        pushToast(`æŸ¥é‡å®Œæˆï¼šå‘ç° ${plagiarismFlaggedCount} ä¸ªç–‘ä¼¼é«˜é‡å¤æ¥æº`, 'bad')
+        pushToast(`²éÖØÍê³É£º·¢ÏÖ ${plagiarismFlaggedCount} ¸öÒÉËÆ¸ßÖØ¸´À´Ô´`, 'bad')
       } else {
-        pushToast('æŸ¥é‡å®Œæˆï¼šæœªå‘ç°è¶…é˜ˆå€¼é‡å¤æ¥æº', 'ok')
+        pushToast('²éÖØÍê³É£ºÎ´·¢ÏÖ³¬ãĞÖµÖØ¸´À´Ô´', 'ok')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'æŸ¥é‡å¤±è´¥'
-      pushToast(`æŸ¥é‡å¤±è´¥: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : '²éÖØÊ§°Ü'
+      pushToast(`²éÖØÊ§°Ü: ${msg}`, 'bad')
     } finally {
       plagiarismLoading = false
     }
@@ -2268,13 +2269,13 @@
       const percent = Number(data?.ai_rate_percent || 0)
       const risk = String(data?.risk_level || '')
       if (Boolean(data?.suspected_ai)) {
-        pushToast(`AIç‡æ£€æµ‹å®Œæˆï¼š${percent}%ï¼ˆ${risk}ï¼‰`, 'bad')
+        pushToast(`AIÂÊ¼ì²âÍê³É£º${percent}%£¨${risk}£©`, 'bad')
       } else {
-        pushToast(`AIç‡æ£€æµ‹å®Œæˆï¼š${percent}%ï¼ˆ${risk}ï¼‰`, 'ok')
+        pushToast(`AIÂÊ¼ì²âÍê³É£º${percent}%£¨${risk}£©`, 'ok')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'AIç‡æ£€æµ‹å¤±è´¥'
-      pushToast(`AIç‡æ£€æµ‹å¤±è´¥: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'AIÂÊ¼ì²âÊ§°Ü'
+      pushToast(`AIÂÊ¼ì²âÊ§°Ü: ${msg}`, 'bad')
     } finally {
       aiRateLoading = false
     }
@@ -2294,7 +2295,7 @@
       }
       const manualText = String(plagiarismReferenceText || '').trim()
       if (manualText) {
-        payload.reference_texts = [{ id: 'manual_text', title: 'æ‰‹åŠ¨ç²˜è´´æ–‡æœ¬', text: manualText }]
+        payload.reference_texts = [{ id: 'manual_text', title: 'ÊÖ¶¯Õ³ÌùÎÄ±¾', text: manualText }]
       }
       const resp = await fetch(`/api/doc/${id}/plagiarism/library_scan`, {
         method: 'POST',
@@ -2327,12 +2328,12 @@
       plagiarismFlaggedCount = Number(data?.flagged_count || 0) || 0
       plagiarismMaxScore = normalizeScore(data?.max_score || 0)
       pushToast(
-        `å…¨åº“æŸ¥é‡å®Œæˆï¼šæ¥æº ${plagiarismLatestReport.total_references}ï¼Œè¶…é˜ˆå€¼ ${plagiarismLatestReport.flagged_count}`,
+        `È«¿â²éÖØÍê³É£ºÀ´Ô´ ${plagiarismLatestReport.total_references}£¬³¬ãĞÖµ ${plagiarismLatestReport.flagged_count}`,
         plagiarismLatestReport.flagged_count > 0 ? 'bad' : 'ok'
       )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'å…¨åº“æŸ¥é‡å¤±è´¥'
-      pushToast(`å…¨åº“æŸ¥é‡å¤±è´¥: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'È«¿â²éÖØÊ§°Ü'
+      pushToast(`È«¿â²éÖØÊ§°Ü: ${msg}`, 'bad')
     } finally {
       plagiarismLibraryLoading = false
     }
@@ -2343,7 +2344,7 @@
     if (!id) return
     const rid = String(plagiarismLatestReport?.report_id || '').trim()
     if (!rid) {
-      pushToast('æš‚æ— å¯ä¸‹è½½çš„æŸ¥é‡æŠ¥å‘Š', 'info')
+      pushToast('ÔİÎŞ¿ÉÏÂÔØµÄ²éÖØ±¨¸æ', 'info')
       return
     }
     window.location.href = `/api/doc/${id}/plagiarism/library_scan/download?report_id=${encodeURIComponent(rid)}&format=${format}`
@@ -2407,7 +2408,7 @@
         : null
     sectionOriginalitySummary = normalizeOriginalitySummary(qualitySnapshot?.section_originality_hot_sample)
     if (sectionOriginalitySummary) {
-      pushThought('åŸåˆ›æ€§çƒ­é‡‡æ ·', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
+      pushThought('Ô­´´ĞÔÈÈ²ÉÑù', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
     }
               sourceText.set(txt)
               lastSavedText = txt
@@ -2416,7 +2417,7 @@
               lastSavedText = $sourceText
               partialSavedSnapshot = $sourceText
             }
-            pushToast('å·²ä¿å­˜', 'ok')
+            pushToast('ÒÑ±£´æ', 'ok')
             return
           }
         } else if (ops && ops.length === 0) {
@@ -2440,9 +2441,9 @@
       } else {
         lastSavedDocIr = null
       }
-      pushToast('å·²ä¿å­˜', 'ok')
+      pushToast('ÒÑ±£´æ', 'ok')
     } catch (err) {
-      pushToast(`ä¿å­˜å¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'error')
+      pushToast(`±£´æÊ§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'error')
     }
   }
 
@@ -2457,7 +2458,7 @@
       versionList = Array.isArray(data.versions) ? data.versions : []
       versionGroups = buildVersionGroups(versionList)
     } catch (err) {
-      versionError = err instanceof Error ? err.message : 'åŠ è½½å¤±è´¥'
+      versionError = err instanceof Error ? err.message : '¼ÓÔØÊ§°Ü'
     } finally {
       versionLoading = false
     }
@@ -2472,7 +2473,7 @@
 
   async function commitVersion() {
     if (!$docId) return
-    const msg = versionMessage.trim() || 'å®šç¨¿ç‰ˆæœ¬'
+    const msg = versionMessage.trim() || '¶¨¸å°æ±¾'
     try {
       const resp = await fetch(`/api/doc/${$docId}/version/commit`, {
         method: 'POST',
@@ -2482,9 +2483,9 @@
       if (!resp.ok) throw new Error(await resp.text())
       versionMessage = ''
       await loadVersionLog()
-      pushToast('å·²æäº¤ç‰ˆæœ¬', 'ok')
+      pushToast('ÒÑÌá½»°æ±¾', 'ok')
     } catch (err) {
-      pushToast(`æäº¤å¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'error')
+      pushToast(`Ìá½»Ê§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'error')
     }
   }
 
@@ -2502,9 +2503,9 @@
       applyFinalSnapshot(txt)
       lastSavedText = txt
       await loadVersionLog()
-      pushToast('å·²åˆ‡æ¢ç‰ˆæœ¬', 'ok')
+      pushToast('ÒÑÇĞ»»°æ±¾', 'ok')
     } catch (err) {
-      pushToast(`åˆ‡æ¢å¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'error')
+      pushToast(`ÇĞ»»Ê§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'error')
     }
   }
 
@@ -2520,7 +2521,7 @@
       const diff = Array.isArray(data.diff) ? data.diff : []
       versionDiff = diff.join('\n')
     } catch (err) {
-      versionDiff = err instanceof Error ? err.message : 'å¯¹æ¯”å¤±è´¥'
+      versionDiff = err instanceof Error ? err.message : '¶Ô±ÈÊ§°Ü'
     }
   }
 
@@ -2541,16 +2542,16 @@
       const nodes = Array.isArray(data.nodes) ? data.nodes : []
       const edges = Array.isArray(data.edges) ? data.edges : []
       const lines: string[] = []
-      lines.push('èŠ‚ç‚¹ï¼š')
+      lines.push('½Úµã£º')
       for (const n of nodes) {
         const id = String(n.id || '').slice(0, 7)
         const msg = String(n.message || '')
         const ts = formatVersionTime(Number(n.timestamp || 0))
-        const cur = n.is_current ? ' *å½“å‰*' : ''
+        const cur = n.is_current ? ' *µ±Ç°*' : ''
         lines.push(`- ${id} ${msg} ${ts}${cur}`)
       }
       lines.push('')
-      lines.push('è¾¹ï¼š')
+      lines.push('±ß£º')
       for (const e of edges) {
         const from = String(e.from || '').slice(0, 7)
         const to = String(e.to || '').slice(0, 7)
@@ -2558,7 +2559,7 @@
       }
       versionTree = lines.join('\n')
     } catch (err) {
-      versionTree = err instanceof Error ? err.message : 'ç‰ˆæœ¬æ ‘åŠ è½½å¤±è´¥'
+      versionTree = err instanceof Error ? err.message : '°æ±¾Ê÷¼ÓÔØÊ§°Ü'
     }
   }
 
@@ -2569,7 +2570,7 @@
       const resp = await fetch(`/api/doc/${$docId}/export/check?format=${format}&auto_fix=1`)
       if (!resp.ok) {
         const msg = await resp.text()
-        pushToast(`å¯¼å‡ºæ ¡éªŒå¤±è´¥: ${msg || resp.statusText}`, 'bad')
+        pushToast(`µ¼³öĞ£ÑéÊ§°Ü: ${msg || resp.statusText}`, 'bad')
         return false
       }
       const data = await resp.json()
@@ -2577,15 +2578,15 @@
       const issues = Array.isArray(data?.issues) ? data.issues : []
       const warnings = Array.isArray(data?.warnings) ? data.warnings : []
       if (warnings.length > 0) {
-        pushToast('å¯¼å‡ºå‰å·²è‡ªåŠ¨ä¿®å¤æ–‡æ¡£ç»“æ„ã€‚', 'info')
+        pushToast('µ¼³öÇ°ÒÑ×Ô¶¯ĞŞ¸´ÎÄµµ½á¹¹¡£', 'info')
       }
       if (!canExport) {
         const first = issues[0]
-        const msg = String(first?.message || 'å¯¼å‡ºå‰æ ¡éªŒæœªé€šè¿‡')
+        const msg = String(first?.message || 'µ¼³öÇ°Ğ£ÑéÎ´Í¨¹ı')
         const citationBlocked = issues.some((x: any) => String(x?.code || '').startsWith('citation_'))
         if (citationBlocked) {
           showCitations = true
-          pushToast(`${msg} å·²è‡ªåŠ¨æ‰“å¼€â€œå¼•ç”¨â€é¢æ¿ï¼Œè¯·å…ˆç‚¹å‡»â€œæ ¸éªŒå¼•ç”¨â€ã€‚`, 'bad')
+          pushToast(`${msg} ÒÑ×Ô¶¯´ò¿ª¡°ÒıÓÃ¡±Ãæ°å£¬ÇëÏÈµã»÷¡°ºËÑéÒıÓÃ¡±¡£`, 'bad')
         } else {
           pushToast(msg, 'bad')
         }
@@ -2593,7 +2594,7 @@
       }
       return true
     } catch (err) {
-      pushToast(`å¯¼å‡ºæ ¡éªŒå¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'bad')
+      pushToast(`µ¼³öĞ£ÑéÊ§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'bad')
       return false
     }
   }
@@ -2602,7 +2603,7 @@
     if (!$docId) return
     const ready = await preflightExport('pdf')
     if (!ready) return
-    pushToast('æ­£åœ¨ç”ŸæˆPDF...', 'info')
+    pushToast('ÕıÔÚÉú³ÉPDF...', 'info')
     window.location.href = `/download/${$docId}.pdf`
   }
 
@@ -2615,7 +2616,7 @@
     if (!$docId) return
     const ready = await preflightExport('docx')
     if (!ready) return
-    pushToast('æ­£åœ¨ç”ŸæˆWordæ–‡æ¡£...', 'info')
+    pushToast('ÕıÔÚÉú³ÉWordÎÄµµ...', 'info')
     window.location.href = `/download/${$docId}.docx`
   }
 
@@ -2623,7 +2624,7 @@
     if (!resumeState || $generating) return
     const inst = String(resumeState.user_instruction || resumeState.request_instruction || '').trim()
     if (!inst) {
-      pushToast('æ²¡æœ‰å¯ç»­è·‘çš„å†å²æŒ‡ä»¤', 'info')
+      pushToast('Ã»ÓĞ¿ÉĞøÅÜµÄÀúÊ·Ö¸Áî', 'info')
       return
     }
     const pendingSections = pendingResumeSections(resumeState)
@@ -2663,13 +2664,13 @@
       operationsCount: Number(data.operations_count || 0)
     }
     confirmDialogBusy = false
-    docStatus.set('å¾…ç¡®è®¤ï¼šæ£€æµ‹åˆ°é«˜é£é™©ç¼–è¾‘')
-    flowStatus.set('å¾…ç¡®è®¤')
-    const from = opts?.fromStream ? 'æµå¼ç”Ÿæˆ' : 'éæµå¼ç”Ÿæˆ'
-    const reason = pendingGenerateConfirmation.note || `æ£€æµ‹åˆ°é«˜é£é™©ç¼–è¾‘ï¼Œæ¥æº ${from}ã€‚`
+    docStatus.set('´ıÈ·ÈÏ£º¼ì²âµ½¸ß·çÏÕ±à¼­')
+    flowStatus.set('´ıÈ·ÈÏ')
+    const from = opts?.fromStream ? 'Á÷Ê½Éú³É' : '·ÇÁ÷Ê½Éú³É'
+    const reason = pendingGenerateConfirmation.note || `¼ì²âµ½¸ß·çÏÕ±à¼­£¬À´Ô´ ${from}¡£`
     appendChat('system', reason)
-    pushThought('å¾…ç¡®è®¤', reason, formatElapsed())
-    pushToast('æ£€æµ‹åˆ°é«˜é£é™©ç¼–è¾‘ï¼Œè¯·ç¡®è®¤åæ‰§è¡Œã€‚', 'info')
+    pushThought('´ıÈ·ÈÏ', reason, formatElapsed())
+    pushToast('¼ì²âµ½¸ß·çÏÕ±à¼­£¬ÇëÈ·ÈÏºóÖ´ĞĞ¡£', 'info')
   }
 
   async function runNonStreamGenerate(
@@ -2696,12 +2697,12 @@
         ? (data.revision_meta as Record<string, unknown>)
         : null
     if (revisionMeta) {
-      pushThought('æ”¹å†™è¯Šæ–­', summarizeRevisionStatus(revisionMeta), formatElapsed())
+      pushThought('¸ÄĞ´Õï¶Ï', summarizeRevisionStatus(revisionMeta), formatElapsed())
     }
     const graphMeta = normalizeGraphMeta(data.graph_meta)
     if (graphMeta) {
       lastGraphMeta = graphMeta
-      pushThought('å›¾è·¯ç”±', `éæµå¼ ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
+      pushThought('Í¼Â·ÓÉ', `·ÇÁ÷Ê½ ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
     }
     const txt = String(data.text || '')
     if (!sawSectionDelta) {
@@ -2713,13 +2714,13 @@
         data.doc_ir && typeof data.doc_ir === 'object' ? (data.doc_ir as Record<string, unknown>) : null
       finalizeStreamText(txt, finalDoc)
     }
-    docStatus.set('å®Œæˆ')
-    flowStatus.set('å®Œæˆ')
+    docStatus.set('Íê³É')
+    flowStatus.set('Íê³É')
     resumeState = null
-    const doneMsg = String(opts?.completionMsg || 'å·²å®Œæˆç”Ÿæˆã€‚')
+    const doneMsg = String(opts?.completionMsg || 'ÒÑÍê³ÉÉú³É¡£')
     appendChat('system', doneMsg)
-    pushThought('å®Œæˆ', doneMsg, formatElapsed())
-    pushToast('ç”Ÿæˆå®Œæˆï¼ˆéæµå¼ï¼‰', 'ok')
+    pushThought('Íê³É', doneMsg, formatElapsed())
+    pushToast('Éú³ÉÍê³É£¨·ÇÁ÷Ê½£©', 'ok')
     saveDoc().catch(() => {})
     clearPendingGenerateConfirmation()
     return 'applied'
@@ -2729,23 +2730,23 @@
     if (!pendingGenerateConfirmation || !$docId || $generating) return
     confirmDialogBusy = true
     generating.set(true)
-    docStatus.set('æ‰§è¡Œé«˜é£é™©ç¼–è¾‘ä¸­â€¦')
+    docStatus.set('Ö´ĞĞ¸ß·çÏÕ±à¼­ÖĞ¡­')
     try {
       const payload: Record<string, unknown> = {
         ...pendingGenerateConfirmation.requestPayload,
         confirm_apply: true
       }
       const status = await runNonStreamGenerate(payload, {
-        completionMsg: 'å·²å®Œæˆé«˜é£é™©ç¼–è¾‘ï¼ˆç¡®è®¤æ‰§è¡Œï¼‰ã€‚'
+        completionMsg: 'ÒÑÍê³É¸ß·çÏÕ±à¼­£¨È·ÈÏÖ´ĞĞ£©¡£'
       })
       if (status === 'pending') {
-        pushToast('æœåŠ¡ç«¯ä»è¦æ±‚ç¡®è®¤ï¼Œè¯·æ£€æŸ¥é£é™©ç­–ç•¥é…ç½®ã€‚', 'info')
+        pushToast('·şÎñ¶ËÈÔÒªÇóÈ·ÈÏ£¬Çë¼ì²é·çÏÕ²ßÂÔÅäÖÃ¡£', 'info')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ç¡®è®¤æ‰§è¡Œå¤±è´¥'
-      docStatus.set(`ç”Ÿæˆå¤±è´¥: ${msg}`)
+      const msg = err instanceof Error ? err.message : 'È·ÈÏÖ´ĞĞÊ§°Ü'
+      docStatus.set(`Éú³ÉÊ§°Ü: ${msg}`)
       appendChat('system', msg)
-      pushThought('é”™è¯¯', String(msg), formatElapsed())
+      pushThought('´íÎó', String(msg), formatElapsed())
       pushToast(String(msg), 'bad')
     } finally {
       confirmDialogBusy = false
@@ -2756,9 +2757,9 @@
   function cancelPendingGenerate() {
     if (!pendingGenerateConfirmation) return
     clearPendingGenerateConfirmation()
-    docStatus.set('å·²å–æ¶ˆé«˜é£é™©ç¼–è¾‘')
-    flowStatus.set('å·²åœæ­¢')
-    pushToast('å·²å–æ¶ˆæ‰§è¡Œã€‚', 'info')
+    docStatus.set('ÒÑÈ¡Ïû¸ß·çÏÕ±à¼­')
+    flowStatus.set('ÒÑÍ£Ö¹')
+    pushToast('ÒÑÈ¡ÏûÖ´ĞĞ¡£', 'info')
   }
 
   function looksLikeImageFile(file: File) {
@@ -2776,11 +2777,11 @@
     const source = opts?.source || 'assistant'
     const isImage = looksLikeImageFile(file)
     if (source === 'inline-image' && !isImage) {
-      pushToast('é€‰ä¸­æ®µè½æ’å›¾ä»…æ”¯æŒå›¾ç‰‡æ–‡ä»¶ã€‚', 'info')
+      pushToast('Ñ¡ÖĞ¶ÎÂä²åÍ¼½öÖ§³ÖÍ¼Æ¬ÎÄ¼ş¡£', 'info')
       return
     }
     try {
-      pushToast(isImage ? 'æ­£åœ¨ä¸Šä¼ å›¾ç‰‡...' : 'æ­£åœ¨ä¸Šä¼ æ–‡ä»¶...', 'info')
+      pushToast(isImage ? 'ÕıÔÚÉÏ´«Í¼Æ¬...' : 'ÕıÔÚÉÏ´«ÎÄ¼ş...', 'info')
       const resp = await fetch(`/api/doc/${$docId}/upload`, {
         method: 'POST',
         body: form
@@ -2795,36 +2796,36 @@
           { targetIds: opts?.targetIds || [] }
         )
         saveDoc().catch(() => {})
-        pushToast('å›¾ç‰‡ä¸Šä¼ æˆåŠŸï¼Œå·²æ’å…¥é€‰ä¸­å†…å®¹åã€‚', 'ok')
-        appendChat('system', `å·²æ’å…¥å›¾ç‰‡ï¼š${file.name}`)
+        pushToast('Í¼Æ¬ÉÏ´«³É¹¦£¬ÒÑ²åÈëÑ¡ÖĞÄÚÈİºó¡£', 'ok')
+        appendChat('system', `ÒÑ²åÈëÍ¼Æ¬£º${file.name}`)
         return
       }
       if (uploadKind === 'template') {
-        pushToast('æ¨¡æ¿æ–‡ä»¶ä¸Šä¼ æˆåŠŸï¼Œå·²è§£æç»“æ„ã€‚', 'ok')
-        appendChat('system', `æ¨¡æ¿å·²ä¸Šä¼ å¹¶è§£æï¼š${file.name}`)
+        pushToast('Ä£°åÎÄ¼şÉÏ´«³É¹¦£¬ÒÑ½âÎö½á¹¹¡£', 'ok')
+        appendChat('system', `Ä£°åÒÑÉÏ´«²¢½âÎö£º${file.name}`)
       } else {
         const msg = isImage
-          ? 'å›¾ç‰‡å·²ä¸Šä¼ åˆ°èµ„æ–™åº“ã€‚è‹¥è¦æ’å…¥æ­£æ–‡ï¼Œè¯·é€‰ä¸­æ®µè½åç‚¹å‡»â€œæ’å›¾â€ã€‚'
-          : 'æ–‡ä»¶ä¸Šä¼ æˆåŠŸï¼Œå·²çº³å…¥èµ„æ–™åº“ã€‚'
+          ? 'Í¼Æ¬ÒÑÉÏ´«µ½×ÊÁÏ¿â¡£ÈôÒª²åÈëÕıÎÄ£¬ÇëÑ¡ÖĞ¶ÎÂäºóµã»÷¡°²åÍ¼¡±¡£'
+          : 'ÎÄ¼şÉÏ´«³É¹¦£¬ÒÑÄÉÈë×ÊÁÏ¿â¡£'
         pushToast(msg, 'ok')
-        appendChat('system', `${msg}ï¼ˆ${file.name}ï¼‰`)
+        appendChat('system', `${msg}£¨${file.name}£©`)
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ä¸Šä¼ å¤±è´¥'
+      const msg = err instanceof Error ? err.message : 'ÉÏ´«Ê§°Ü'
       pushToast(msg, 'bad')
     }
   }
 
   function triggerInlineImageUpload() {
     if (!selectedBlockIds.length) return
-    if (!ensureInlineEditAllowed('æ’å›¾')) return
+    if (!ensureInlineEditAllowed('²åÍ¼')) return
     pendingInlineImageTargets = selectedBlockIds.slice()
     uploadImageInput?.click()
   }
 
   function triggerInlineTableInsert() {
     if (!selectedBlockIds.length) return
-    if (!ensureInlineEditAllowed('æ’è¡¨')) return
+    if (!ensureInlineEditAllowed('²å±í')) return
     insertTableIntoDoc({ targetIds: selectedBlockIds.slice() })
     saveDoc().catch(() => {})
   }
@@ -2913,18 +2914,18 @@
       return
     }
     if (!$docId) {
-      const reason = 'ç¼ºå°‘æ–‡æ¡£IDï¼Œè¯·åˆ·æ–°æˆ–ä» /workbench/{id} è¿›å…¥'
-      docStatus.set(`å·²ä¸­æ­¢: ${reason}`)
-      pushThought('ä¸­æ­¢', reason, new Date().toLocaleTimeString())
+      const reason = 'È±ÉÙÎÄµµID£¬ÇëË¢ĞÂ»ò´Ó /workbench/{id} ½øÈë'
+      docStatus.set(`ÒÑÖĞÖ¹: ${reason}`)
+      pushThought('ÖĞÖ¹', reason, new Date().toLocaleTimeString())
       pushToast(reason, 'info')
       return
     }
     clearPendingGenerateConfirmation()
     lastGraphMeta = null
     if (opts?.fromQueue) {
-      appendChat('system', 'æ­£åœ¨æ‰§è¡Œæ’é˜ŸæŒ‡ä»¤â€¦')
+      appendChat('system', 'ÕıÔÚÖ´ĞĞÅÅ¶ÓÖ¸Áî¡­')
     } else if (opts?.fromResume) {
-      appendChat('system', 'æ­£åœ¨ç»­è·‘ä¸Šæ¬¡ä¸­æ–­ä»»åŠ¡â€¦')
+      appendChat('system', 'ÕıÔÚĞøÅÜÉÏ´ÎÖĞ¶ÏÈÎÎñ¡­')
     } else {
       appendChat('user', inst)
       instruction.set('')
@@ -2939,16 +2940,16 @@
         composeMode = 'continue'
       } else {
         const useContinue = window.confirm(
-          'æ£€æµ‹åˆ°ç¼–è¾‘åŒºå·²æœ‰å†…å®¹ã€‚\nç¡®å®šï¼šåœ¨å½“å‰å†…å®¹åŸºç¡€ä¸Šç»­å†™\nå–æ¶ˆï¼šè¦†ç›–é‡å†™å½“å‰æ–‡æ¡£'
+          '¼ì²âµ½±à¼­ÇøÒÑÓĞÄÚÈİ¡£\nÈ·¶¨£ºÔÚµ±Ç°ÄÚÈİ»ù´¡ÉÏĞøĞ´\nÈ¡Ïû£º¸²¸ÇÖØĞ´µ±Ç°ÎÄµµ'
         )
         composeMode = useContinue ? 'continue' : 'overwrite'
       }
     }
     let requestInstruction = inst
     if (!inferredMode && composeMode === 'continue') {
-      requestInstruction = `è¯·åœ¨ä¿ç•™ç°æœ‰å†…å®¹ç»“æ„å’Œå·²å†™æ®µè½çš„å‰æä¸‹ç»§ç»­å†™ä½œï¼Œä¸è¦åˆ é™¤æˆ–æ”¹å†™å·²æœ‰å†…å®¹ã€‚\n\nç”¨æˆ·éœ€æ±‚ï¼š${inst}`
+      requestInstruction = `ÇëÔÚ±£ÁôÏÖÓĞÄÚÈİ½á¹¹ºÍÒÑĞ´¶ÎÂäµÄÇ°ÌáÏÂ¼ÌĞøĞ´×÷£¬²»ÒªÉ¾³ı»ò¸ÄĞ´ÒÑÓĞÄÚÈİ¡£\n\nÓÃ»§ĞèÇó£º${inst}`
     } else if (!inferredMode && composeMode === 'overwrite') {
-      requestInstruction = `è¯·å¿½ç•¥å½“å‰å·²æœ‰æ­£æ–‡ï¼ŒæŒ‰ç”¨æˆ·éœ€æ±‚ä»å¤´å®Œæ•´é‡å†™ï¼Œå¹¶ç”¨æ–°å†…å®¹è¦†ç›–æ—§å†…å®¹ã€‚\n\nç”¨æˆ·éœ€æ±‚ï¼š${inst}`
+      requestInstruction = `ÇëºöÂÔµ±Ç°ÒÑÓĞÕıÎÄ£¬°´ÓÃ»§ĞèÇó´ÓÍ·ÍêÕûÖØĞ´£¬²¢ÓÃĞÂÄÚÈİ¸²¸Ç¾ÉÄÚÈİ¡£\n\nÓÃ»§ĞèÇó£º${inst}`
     }
     const resumeSections = sanitizeAiStringList(opts?.resumeSections || [], { maxItems: 64, maxItemChars: 120 })
     const cursorAnchor = sanitizeAiInputText(opts?.cursorAnchor || '', { trim: true, maxChars: 260 })
@@ -2974,8 +2975,8 @@
     generating.set(true)
     docIrDirty.set(true)
     streamingLive = true
-    flowStatus.set('åˆ†æ')
-    docStatus.set('ç”Ÿæˆä¸­â€¦')
+    flowStatus.set('·ÖÎö')
+    docStatus.set('Éú³ÉÖĞ¡­')
     genStartTs = Date.now()
     lastEventName = ''
     lastProgressMsg = ''
@@ -2993,7 +2994,7 @@
     maxEventGap = 0
     sectionFailures = []
     sectionOriginalitySummary = null
-    pushThought('å¯åŠ¨', 'å¼€å§‹ç”Ÿæˆ', new Date().toLocaleTimeString())
+    pushThought('Æô¶¯', '¿ªÊ¼Éú³É', new Date().toLocaleTimeString())
     aborter = new AbortController()
 
     isLoading.set(false)
@@ -3009,12 +3010,12 @@
       thresholdMs = Math.min(600000, thresholdMs)
       const preparing =
         /model preparing/i.test(lastProgressMsg) ||
-        /è§£æä¸­/.test(lastProgressMsg) ||
+        /½âÎöÖĞ/.test(lastProgressMsg) ||
         lastEventName === 'analysis'
       if (preparing) thresholdMs = Math.max(thresholdMs, 180000)
       if (idleMs > thresholdMs && !fallbackTriggered) {
         fallbackTriggered = true
-        aborter?.abort(`å®¢æˆ·ç«¯è¶…æ—¶ï¼š${Math.round(idleMs / 1000)}ç§’æ— äº‹ä»¶ï¼Œåˆ‡æ¢éæµå¼ç”Ÿæˆ`)
+        aborter?.abort(`¿Í»§¶Ë³¬Ê±£º${Math.round(idleMs / 1000)}ÃëÎŞÊÂ¼ş£¬ÇĞ»»·ÇÁ÷Ê½Éú³É`)
       }
     }, 1000)
 
@@ -3053,7 +3054,7 @@
           if (event === 'state') {
             const name = mapStateName(String(data.name || ''))
             flowStatus.set(name || $flowStatus)
-            pushThought('æµç¨‹', name, formatElapsed())
+            pushThought('Á÷³Ì', name, formatElapsed())
             return
           }
           if (event === 'delta') {
@@ -3061,12 +3062,12 @@
             if (msg) {
               docStatus.set(msg)
               lastProgressMsg = msg
-              pushThought('è¿›åº¦', msg, formatElapsed())
+              pushThought('½ø¶È', msg, formatElapsed())
             }
             return
           }
           if (event === 'plan') {
-            const title = String(data.title || 'è‡ªåŠ¨ç”Ÿæˆæ–‡æ¡£')
+            const title = String(data.title || '×Ô¶¯Éú³ÉÎÄµµ')
             const sectionsRaw = Array.isArray(data.sections) ? data.sections : []
             const sections = sectionsRaw.map((item) => decodeSectionTitle(String(item || ''))).filter(Boolean)
             observedPlanSections = sections.slice()
@@ -3079,7 +3080,7 @@
                 pending_sections: sections
               }
             }
-            pushThought('å¤§çº²', `æ ‡é¢˜ï¼š${title}ï¼›ç« èŠ‚ï¼š${sections.join(' / ')}`, formatElapsed())
+            pushThought('´ó¸Ù', `±êÌâ£º${title}£»ÕÂ½Ú£º${sections.join(' / ')}`, formatElapsed())
             const nextText = ensureSkeletonInText($sourceText, title, sections)
             sourceText.set(nextText)
             scheduleDocIrRefresh(nextText)
@@ -3140,10 +3141,10 @@
           }
           if (event === 'section_error') {
             const section = String(data.section || '')
-            const reason = String(data.reason || 'æœªçŸ¥')
+            const reason = String(data.reason || 'Î´Öª')
             if (section) {
               sectionFailures = [...sectionFailures, { section, reason }]
-              pushToast(`ç« èŠ‚å¤±è´¥: ${section}`, 'bad')
+              pushToast(`ÕÂ½ÚÊ§°Ü: ${section}`, 'bad')
             }
             return
           }
@@ -3151,20 +3152,20 @@
             const summary = String(data.summary || '')
             const steps = Array.isArray(data.steps) ? data.steps : []
             const missing = Array.isArray(data.missing) ? data.missing : []
-            thinkingSummary.set(summary || 'ç­‰å¾…è§£æâ€¦')
+            thinkingSummary.set(summary || 'µÈ´ı½âÎö¡­')
             thinkingSteps.set(steps)
             thinkingMissing.set(missing)
-            pushThought('è§£æ', summary || 'è§£æå®Œæˆ', formatElapsed())
+            pushThought('½âÎö', summary || '½âÎöÍê³É', formatElapsed())
             if (data.raw) {
               const rawPreview = JSON.stringify(data.raw, null, 2).slice(0, 600)
-              pushThought('è§£æJSON', rawPreview, formatElapsed())
+              pushThought('½âÎöJSON', rawPreview, formatElapsed())
             }
             return
           }
           if (event === 'revision_status') {
             const status = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
             const note = summarizeRevisionStatus(status)
-            pushThought('æ”¹å†™è¯Šæ–­', note, formatElapsed())
+            pushThought('¸ÄĞ´Õï¶Ï', note, formatElapsed())
             if (status.ok !== true) {
               pushToast(note, 'info')
             }
@@ -3183,7 +3184,7 @@
                 : null
             sectionOriginalitySummary = normalizeOriginalitySummary(qualitySnapshot?.section_originality_hot_sample)
             if (sectionOriginalitySummary) {
-              pushThought('åŸåˆ›æ€§çƒ­é‡‡æ ·', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
+              pushThought('Ô­´´ĞÔÈÈ²ÉÑù', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
             }
             const graphMeta = normalizeGraphMeta(data.graph_meta)
             const terminalStatusRaw = String(data.status || (data.graph_meta && (data.graph_meta as any).terminal_status) || 'success')
@@ -3200,10 +3201,10 @@
                 : null
             if (graphMeta) {
               lastGraphMeta = graphMeta
-              pushThought('å›¾è·¯ç”±', `æµå¼ ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
+              pushThought('Í¼Â·ÓÉ', `Á÷Ê½ ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
             }
             if (revisionMeta) {
-              pushThought('æ”¹å†™è¯Šæ–­', summarizeRevisionStatus(revisionMeta), formatElapsed())
+              pushThought('¸ÄĞ´Õï¶Ï', summarizeRevisionStatus(revisionMeta), formatElapsed())
             }
             if (!sawSectionDelta) {
               const finalDoc =
@@ -3215,43 +3216,43 @@
               finalizeStreamText(txt, finalDoc)
             }
             if (terminalStatus === 'interrupted') {
-              docStatus.set(failureReason ? `å·²ä¸­æ–­: ${failureReason}` : 'å·²ä¸­æ–­')
-              flowStatus.set('å·²ä¸­æ–­')
+              docStatus.set(failureReason ? `ÒÑÖĞ¶Ï: ${failureReason}` : 'ÒÑÖĞ¶Ï')
+              flowStatus.set('ÒÑÖĞ¶Ï')
             } else if (terminalStatus === 'failed') {
-              docStatus.set(failureReason ? `ç”Ÿæˆå¤±è´¥: ${failureReason}` : 'ç”Ÿæˆå¤±è´¥')
-              flowStatus.set('å¤±è´¥')
+              docStatus.set(failureReason ? `Éú³ÉÊ§°Ü: ${failureReason}` : 'Éú³ÉÊ§°Ü')
+              flowStatus.set('Ê§°Ü')
             } else {
-              docStatus.set('å®Œæˆ')
-              flowStatus.set('å®Œæˆ')
+              docStatus.set('Íê³É')
+              flowStatus.set('Íê³É')
             }
             sawFinal = true
             resumeState = null
             if (terminalStatus === 'interrupted') {
-              appendChat('system', failureReason ? `ä»»åŠ¡å·²ä¸­æ–­ï¼š${failureReason}` : 'ä»»åŠ¡å·²ä¸­æ–­ã€‚')
-              pushThought('ä¸­æ–­', failureReason || 'ä»»åŠ¡å·²ä¸­æ–­', formatElapsed())
-              pushToast(failureReason ? `ä»»åŠ¡å·²ä¸­æ–­ï¼š${failureReason}` : 'ä»»åŠ¡å·²ä¸­æ–­', 'info')
+              appendChat('system', failureReason ? `ÈÎÎñÒÑÖĞ¶Ï£º${failureReason}` : 'ÈÎÎñÒÑÖĞ¶Ï¡£')
+              pushThought('ÖĞ¶Ï', failureReason || 'ÈÎÎñÒÑÖĞ¶Ï', formatElapsed())
+              pushToast(failureReason ? `ÈÎÎñÒÑÖĞ¶Ï£º${failureReason}` : 'ÈÎÎñÒÑÖĞ¶Ï', 'info')
             } else if (terminalStatus === 'failed') {
-              appendChat('system', failureReason ? `ç”Ÿæˆå¤±è´¥ï¼š${failureReason}` : 'ç”Ÿæˆå¤±è´¥ã€‚')
-              pushThought('å¤±è´¥', failureReason || 'ç”Ÿæˆå¤±è´¥', formatElapsed())
-              pushToast(failureReason ? `ç”Ÿæˆå¤±è´¥ï¼š${failureReason}` : 'ç”Ÿæˆå¤±è´¥', 'bad')
+              appendChat('system', failureReason ? `Éú³ÉÊ§°Ü£º${failureReason}` : 'Éú³ÉÊ§°Ü¡£')
+              pushThought('Ê§°Ü', failureReason || 'Éú³ÉÊ§°Ü', formatElapsed())
+              pushToast(failureReason ? `Éú³ÉÊ§°Ü£º${failureReason}` : 'Éú³ÉÊ§°Ü', 'bad')
             } else {
-              appendChat('system', 'å·²å®Œæˆç”Ÿæˆã€‚')
-              pushThought('å®Œæˆ', 'ç”Ÿæˆå®Œæˆ', formatElapsed())
-              pushToast('ç”Ÿæˆå®Œæˆ', 'ok')
+              appendChat('system', 'ÒÑÍê³ÉÉú³É¡£')
+              pushThought('Íê³É', 'Éú³ÉÍê³É', formatElapsed())
+              pushToast('Éú³ÉÍê³É', 'ok')
             }
             saveDoc().catch(() => {})
             return
           }
           if (event === 'error') {
-            const msg = String(data.message || data.reason || data.detail || 'æœåŠ¡ç«¯æœªè¿”å›å…·ä½“åŸå› ')
+            const msg = String(data.message || data.reason || data.detail || '·şÎñ¶ËÎ´·µ»Ø¾ßÌåÔ­Òò')
             const code = String(data.code || data.type || '')
             const isAbort =
               code.toLowerCase().includes('abort') ||
-              /aborted|stopped|å–æ¶ˆ|ä¸­æ­¢/i.test(msg)
+              /aborted|stopped|È¡Ïû|ÖĞÖ¹/i.test(msg)
             sawError = true
-            docStatus.set(isAbort ? `å·²ä¸­æ­¢: ${msg}` : `ç”Ÿæˆå¤±è´¥: ${msg}`)
+            docStatus.set(isAbort ? `ÒÑÖĞÖ¹: ${msg}` : `Éú³ÉÊ§°Ü: ${msg}`)
             appendChat('system', msg)
-            pushThought(isAbort ? 'ä¸­æ­¢' : 'é”™è¯¯', msg, formatElapsed())
+            pushThought(isAbort ? 'ÖĞÖ¹' : '´íÎó', msg, formatElapsed())
             pushToast(msg, isAbort ? 'info' : 'bad')
           }
         },
@@ -3259,13 +3260,13 @@
       )
       if (!sawFinal && !sawError) {
         const reason = lastProgressMsg
-          ? `æµå¼ç»“æŸä½†æœªå®Œæˆï¼Œæœ€åè¿›åº¦: ${lastProgressMsg}`
+          ? `Á÷Ê½½áÊøµ«Î´Íê³É£¬×îºó½ø¶È: ${lastProgressMsg}`
           : lastEventName
-            ? `æµå¼ç»“æŸä½†æœªå®Œæˆï¼Œæœ€åäº‹ä»¶: ${lastEventName}`
-            : 'æµå¼ç»“æŸä½†æœªå®Œæˆï¼ŒæœåŠ¡ç«¯æœªè¿”å›åŸå› '
-        docStatus.set(`å·²ä¸­æ­¢: ${reason}`)
+            ? `Á÷Ê½½áÊøµ«Î´Íê³É£¬×îºóÊÂ¼ş: ${lastEventName}`
+            : 'Á÷Ê½½áÊøµ«Î´Íê³É£¬·şÎñ¶ËÎ´·µ»ØÔ­Òò'
+        docStatus.set(`ÒÑÖĞÖ¹: ${reason}`)
         appendChat('system', reason)
-        pushThought('ä¸­æ­¢', reason, formatElapsed())
+        pushThought('ÖĞÖ¹', reason, formatElapsed())
         pushToast(reason, 'info')
       }
     } catch (e: any) {
@@ -3273,36 +3274,36 @@
             const reason =
               (aborter?.signal as any)?.reason ||
               e?.message ||
-              'ç”¨æˆ·ä¸­æ­¢'
-        if (String(reason).includes('åˆ‡æ¢éæµå¼ç”Ÿæˆ')) {
-          pushThought('ä¸­æ­¢', String(reason), formatElapsed())
+              'ÓÃ»§ÖĞÖ¹'
+        if (String(reason).includes('ÇĞ»»·ÇÁ÷Ê½Éú³É')) {
+          pushThought('ÖĞÖ¹', String(reason), formatElapsed())
           pushToast(String(reason), 'info')
           try {
             const status = await runNonStreamGenerate(generatePayload, {
-              completionMsg: 'å·²å®Œæˆç”Ÿæˆï¼ˆéæµå¼å…œåº•ï¼‰ã€‚',
+              completionMsg: 'ÒÑÍê³ÉÉú³É£¨·ÇÁ÷Ê½¶µµ×£©¡£',
               fromStream: true
             })
             if (status === 'applied' || status === 'pending') {
               sawFinal = true
             }
           } catch (err: any) {
-            const msg = err?.message || 'éæµå¼ç”Ÿæˆå¤±è´¥'
-            docStatus.set(`ç”Ÿæˆå¤±è´¥: ${msg}`)
+            const msg = err?.message || '·ÇÁ÷Ê½Éú³ÉÊ§°Ü'
+            docStatus.set(`Éú³ÉÊ§°Ü: ${msg}`)
             appendChat('system', msg)
-            pushThought('é”™è¯¯', String(msg), formatElapsed())
+            pushThought('´íÎó', String(msg), formatElapsed())
             pushToast(String(msg), 'bad')
           }
         } else {
-          docStatus.set(`å·²ä¸­æ­¢: ${reason}`)
-          appendChat('system', `å·²ä¸­æ­¢ç”Ÿæˆï¼š${reason}`)
-          pushThought('ä¸­æ­¢', String(reason), formatElapsed())
+          docStatus.set(`ÒÑÖĞÖ¹: ${reason}`)
+          appendChat('system', `ÒÑÖĞÖ¹Éú³É£º${reason}`)
+          pushThought('ÖĞÖ¹', String(reason), formatElapsed())
           pushToast(String(reason), 'info')
         }
       } else {
-        const msg = e?.message || 'ç”Ÿæˆå¤±è´¥ï¼Œè¯·æ£€æŸ¥æ¨¡å‹æ˜¯å¦è¿è¡Œã€‚'
-        docStatus.set(`ç”Ÿæˆå¤±è´¥: ${msg}`)
+        const msg = e?.message || 'Éú³ÉÊ§°Ü£¬Çë¼ì²éÄ£ĞÍÊÇ·ñÔËĞĞ¡£'
+        docStatus.set(`Éú³ÉÊ§°Ü: ${msg}`)
         appendChat('system', msg)
-        pushThought('é”™è¯¯', String(msg), formatElapsed())
+        pushThought('´íÎó', String(msg), formatElapsed())
         pushToast(String(msg), 'bad')
       }
     } finally {
@@ -3388,7 +3389,7 @@
     runEditorCommand('commit')
     await saveDoc().catch(() => {})
     generating.set(true)
-    docStatus.set(`é‡è¯•ç« èŠ‚ï¼š${target}`)
+    docStatus.set(`ÖØÊÔÕÂ½Ú£º${target}`)
     try {
       const resp = await fetch(`/api/doc/${id}/generate/section`, {
         method: 'POST',
@@ -3405,13 +3406,13 @@
       const graphMeta = normalizeGraphMeta(data.graph_meta)
       if (graphMeta) {
         lastGraphMeta = graphMeta
-        pushThought('å›¾è·¯ç”±', `ç« èŠ‚é‡è¯• ${summarizeGraphMeta(graphMeta)}`, new Date().toLocaleTimeString())
+        pushThought('Í¼Â·ÓÉ', `ÕÂ½ÚÖØÊÔ ${summarizeGraphMeta(graphMeta)}`, new Date().toLocaleTimeString())
       }
       const text = String(data.text || '')
       if (text) {
         sourceText.set(text)
-        docStatus.set('å®Œæˆ')
-        appendChat('system', `ç« èŠ‚é‡è¯•å®Œæˆï¼š${target}`)
+        docStatus.set('Íê³É')
+        appendChat('system', `ÕÂ½ÚÖØÊÔÍê³É£º${target}`)
       }
       if (data.doc_ir && typeof data.doc_ir === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
@@ -3421,12 +3422,12 @@
         docIrDirty.set(true)
       }
       sectionFailures = sectionFailures.filter((f) => f.section !== target)
-      pushToast(`ç« èŠ‚é‡è¯•å®Œæˆ: ${target}`, 'ok')
+      pushToast(`ÕÂ½ÚÖØÊÔÍê³É: ${target}`, 'ok')
       saveDoc().catch(() => {})
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ç« èŠ‚é‡è¯•å¤±è´¥'
-      docStatus.set(`é‡è¯•å¤±è´¥: ${msg}`)
-      pushToast(`ç« èŠ‚é‡è¯•å¤±è´¥: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'ÕÂ½ÚÖØÊÔÊ§°Ü'
+      docStatus.set(`ÖØÊÔÊ§°Ü: ${msg}`)
+      pushToast(`ÕÂ½ÚÖØÊÔÊ§°Ü: ${msg}`, 'bad')
     } finally {
       generating.set(false)
     }
@@ -3439,14 +3440,14 @@
     runEditorCommand('commit')
     await saveDoc().catch(() => {})
     generating.set(true)
-    docStatus.set(`æ­£åœ¨ä¿®è®¢${target}`)
+    docStatus.set(`ÕıÔÚĞŞ¶©${target}`)
     try {
       const resp = await fetch(`/api/doc/${id}/revise`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instruction:
-            'ä»…é‡å†™æŒ‡å®šç« èŠ‚ï¼Œé™ä½æ¨¡æ¿åŒ–å’Œé‡å¤è¡¨è¾¾ï¼Œä¿ç•™åŸæœ‰è®ºç‚¹ã€è¯æ®ã€å¼•ç”¨ä¸ç« èŠ‚ä½ç½®ï¼Œä¸è¦æ”¹åŠ¨å…¶ä»–ç« èŠ‚ï¼Œä¸è¦è¾“å‡ºè§£é‡Šæˆ–å…ƒæŒ‡ä»¤ã€‚',
+            '½öÖØĞ´Ö¸¶¨ÕÂ½Ú£¬½µµÍÄ£°å»¯ºÍÖØ¸´±í´ï£¬±£ÁôÔ­ÓĞÂÛµã¡¢Ö¤¾İ¡¢ÒıÓÃÓëÕÂ½ÚÎ»ÖÃ£¬²»Òª¸Ä¶¯ÆäËûÕÂ½Ú£¬²»ÒªÊä³ö½âÊÍ»òÔªÖ¸Áî¡£',
           text: $sourceText || '',
           doc_ir: $docIr,
           target_section: target,
@@ -3464,8 +3465,8 @@
           : null
       if (revisedText) {
         sourceText.set(revisedText)
-        docStatus.set('å·²ä¿®è®¢')
-        appendChat('system', `å·²æŒ‰é£é™©å®šå‘ä¿®è®¢ç« èŠ‚ï¼š${target}`)
+        docStatus.set('ÒÑĞŞ¶©')
+        appendChat('system', `ÒÑ°´·çÏÕ¶¨ÏòĞŞ¶©ÕÂ½Ú£º${target}`)
       }
       if (data.doc_ir && typeof data.doc_ir === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
@@ -3475,21 +3476,21 @@
         docIrDirty.set(true)
       }
       if (revisionMeta) {
-        pushThought('å®šå‘ä¿®è®¢', `${target} Â· ${summarizeRevisionStatus(revisionMeta)}`, new Date().toLocaleTimeString())
+        pushThought('¶¨ÏòĞŞ¶©', `${target} ¡¤ ${summarizeRevisionStatus(revisionMeta)}`, new Date().toLocaleTimeString())
       }
-      pushToast(`å·²å®Œæˆé£é™©ç« èŠ‚ä¿®è®¢: ${target}`, 'ok')
+      pushToast(`ÒÑÍê³É·çÏÕÕÂ½ÚĞŞ¶©: ${target}`, 'ok')
       saveDoc().catch(() => {})
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ä¿®è®¢å¤±è´¥'
-      docStatus.set(`ä¿®è®¢å¤±è´¥: ${msg}`)
-      pushToast(`ä¿®è®¢å¤±è´¥: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'ĞŞ¶©Ê§°Ü'
+      docStatus.set(`ĞŞ¶©Ê§°Ü: ${msg}`)
+      pushToast(`ĞŞ¶©Ê§°Ü: ${msg}`, 'bad')
     } finally {
       generating.set(false)
     }
   }
 
   function handleStop() {
-    if (aborter) aborter.abort('ç”¨æˆ·ç‚¹å‡»åœæ­¢')
+    if (aborter) aborter.abort('ÓÃ»§µã»÷Í£Ö¹')
   }
 
   function runEditorCommand(cmd: EditorCommand) {
@@ -3511,19 +3512,19 @@
       inlineEditLockReason = ''
     } else if (!$generating) {
       inlineEditLocked = true
-      inlineEditLockReason = 'å½“å‰å†…å®¹ä»åœ¨æ¸²æŸ“ï¼Œè¯·ç­‰å¾…æ‰“å­—æœºè¾“å‡ºç»“æŸåå†ä¿®æ”¹ã€‚'
+      inlineEditLockReason = 'µ±Ç°ÄÚÈİÈÔÔÚäÖÈ¾£¬ÇëµÈ´ı´ò×Ö»úÊä³ö½áÊøºóÔÙĞŞ¸Ä¡£'
     } else {
       const keys = selectedSectionKeys()
       if (!keys.length) {
         inlineEditLocked = true
-        inlineEditLockReason = 'å½“å‰ä»åœ¨ç”Ÿæˆã€‚è¯·å…ˆé€‰æ‹©å·²å®Œæˆç« èŠ‚ä¸‹çš„æ®µè½å—ã€‚'
+        inlineEditLockReason = 'µ±Ç°ÈÔÔÚÉú³É¡£ÇëÏÈÑ¡ÔñÒÑÍê³ÉÕÂ½ÚÏÂµÄ¶ÎÂä¿é¡£'
       } else {
         const waiting = keys.filter(
           (key) => !completedStreamingSections.includes(key) || activeStreamingSections.includes(key)
         )
         inlineEditLocked = waiting.length > 0
         inlineEditLockReason = inlineEditLocked
-          ? 'é€‰ä¸­å—æ‰€åœ¨ç« èŠ‚ä»åœ¨ç”Ÿæˆï¼Œè¯·ç­‰å¾…è¯¥ç« èŠ‚å®Œæˆåå†ä¿®æ”¹ã€‚'
+          ? 'Ñ¡ÖĞ¿éËùÔÚÕÂ½ÚÈÔÔÚÉú³É£¬ÇëµÈ´ı¸ÃÕÂ½ÚÍê³ÉºóÔÙĞŞ¸Ä¡£'
           : ''
       }
     }
@@ -3587,8 +3588,8 @@
     <div class="brand">
       <div class="logo">IR</div>
       <div class="brand-text">
-        <div class="brand-title">Astra å†™ä½œå·¥ä½œå°</div>
-        <div class="brand-sub">å›¾è·¯ç”±å¼•æ“ Â· ç»“æ„åŒ–ç¼–è¾‘</div>
+        <div class="brand-title">Astra Ğ´×÷¹¤×÷Ì¨</div>
+        <div class="brand-sub">Í¼Â·ÓÉÒıÇæ ¡¤ ½á¹¹»¯±à¼­</div>
       </div>
     </div>
     <div class="workspace-hub">
@@ -3596,48 +3597,48 @@
         <span class="dot"></span>
         <span>{topStatusLine}</span>
       </div>
-      <nav class="menu" aria-label="å·¥ä½œåŒºæ¨¡å¼">
+      <nav class="menu" aria-label="¹¤×÷ÇøÄ£Ê½">
         <button class={`menu-item ${workspaceMode === 'editor' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('editor')}>
-          <span>ç¼–è¾‘</span>
+          <span>±à¼­</span>
         </button>
         <button class={`menu-item ${workspaceMode === 'library' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('library')}>
-          <span>èµ„æ–™</span>
+          <span>×ÊÁÏ</span>
         </button>
         <button class={`menu-item ${workspaceMode === 'collab' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('collab')}>
-          <span>åä½œ</span>
+          <span>Ğ­×÷</span>
         </button>
       </nav>
-      <div class="workspace-metrics" aria-label="å·¥ä½œå°æ¦‚è§ˆ">
+      <div class="workspace-metrics" aria-label="¹¤×÷Ì¨¸ÅÀÀ">
         <div class={`metric-pill tone-${qualityOverview.tone}`}>
-          <span class="metric-label">è´¨é‡</span>
+          <span class="metric-label">ÖÊÁ¿</span>
           <strong>{qualityOverview.label}</strong>
         </div>
         <div class="metric-pill">
-          <span class="metric-label">å­—æ•°</span>
+          <span class="metric-label">×ÖÊı</span>
           <strong>{Math.max(0, Number($wordCount || 0))}</strong>
         </div>
         <div class="metric-pill">
-          <span class="metric-label">è·¯ç”±</span>
-          <strong>{lastGraphMeta?.route_id || 'é»˜è®¤'}</strong>
+          <span class="metric-label">Â·ÓÉ</span>
+          <strong>{lastGraphMeta?.route_id || 'Ä¬ÈÏ'}</strong>
         </div>
       </div>
     </div>
     <div class="top-actions">
       <button class="btn ghost icon-btn-text" onclick={saveDoc}>
         <Icon name="save" className="ui-icon" />
-        <span>ä¿å­˜</span>
+        <span>±£´æ</span>
       </button>
       <button class="btn ghost icon-btn-text" onclick={exportDocx}>
         <Icon name="doc" className="ui-icon" />
-        <span>å¯¼å‡º Word</span>
+        <span>µ¼³ö Word</span>
       </button>
       <button class="btn ghost icon-btn-text" onclick={exportPdf}>
         <Icon name="pdf" className="ui-icon" />
-        <span>å¯¼å‡º PDF</span>
+        <span>µ¼³ö PDF</span>
       </button>
       <button class="btn ghost icon-btn-text" onclick={toggleInfoDrawer}>
         <Icon name="doc" className="ui-icon" />
-        <span>æ–‡æ¡£ä¿¡æ¯</span>
+        <span>ÎÄµµĞÅÏ¢</span>
       </button>
       <LLMConfig />
       <Settings />
@@ -3649,24 +3650,24 @@
       <div class="rail-search">
         <input
           type="text"
-          placeholder="æœç´¢èµ„æ–™å¡ç‰‡..."
+          placeholder="ËÑË÷×ÊÁÏ¿¨Æ¬..."
           bind:value={librarySearch}
         />
       </div>
       <button class="rail-upload-btn icon-btn-text" onclick={triggerLibraryUpload}>
         <Icon name="upload" className="ui-icon" />
-        <span>ä¸Šä¼ ç´ æ</span>
+        <span>ÉÏ´«ËØ²Ä</span>
       </button>
-      <div class="rail-tip">å°†å›¾ç‰‡ã€æ¨¡æ¿æˆ–å‚è€ƒæ–‡æ¡£æ‹–å…¥ç¼–è¾‘åŒºï¼Œå¯ç›´æ¥çº³å…¥å½“å‰å·¥ç¨‹ã€‚</div>
+      <div class="rail-tip">½«Í¼Æ¬¡¢Ä£°å»ò²Î¿¼ÎÄµµÍÏÈë±à¼­Çø£¬¿ÉÖ±½ÓÄÉÈëµ±Ç°¹¤³Ì¡£</div>
 
       <section class="rail-library">
         <div class="rail-group-head">
-          <span>èµ„æ–™æµ</span>
+          <span>×ÊÁÏÁ÷</span>
           <em>{filteredLibraryCards.length}</em>
         </div>
         <div class={`library-card-stream ${libraryViewMode}`}>
           {#if filteredLibraryCards.length === 0}
-            <div class="library-empty">æ²¡æœ‰åŒ¹é…é¡¹ï¼Œè¯•è¯•å…¶ä»–å…³é”®è¯ã€‚</div>
+            <div class="library-empty">Ã»ÓĞÆ¥ÅäÏî£¬ÊÔÊÔÆäËû¹Ø¼ü´Ê¡£</div>
           {:else}
             {#each filteredLibraryCards as card}
               <button
@@ -3698,34 +3699,34 @@
 
       <section class="rail-group workflow-group">
         <div class="rail-group-head">
-          <span>å¿«æ·å…¥å£</span>
+          <span>¿ì½İÈë¿Ú</span>
           <em>4</em>
         </div>
-        <button class={`nav-btn ${workspaceMode === 'editor' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('editor')} title="ç¼–è¾‘å™¨">
+        <button class={`nav-btn ${workspaceMode === 'editor' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('editor')} title="±à¼­Æ÷">
           <Icon name="editor" className="ui-icon" />
-          <span>æ­£æ–‡ç¼–è¾‘</span>
+          <span>ÕıÎÄ±à¼­</span>
         </button>
-        <button class="nav-btn" onclick={() => (canvasOpen = true)} title="ç”»å¸ƒ">
+        <button class="nav-btn" onclick={() => (canvasOpen = true)} title="»­²¼">
           <Icon name="canvas" className="ui-icon" />
-          <span>å›¾å½¢ç”»å¸ƒ</span>
+          <span>Í¼ĞÎ»­²¼</span>
         </button>
-        <button class="nav-btn" title="å¼•ç”¨" onclick={() => (showCitations = true)}>
+        <button class="nav-btn" title="ÒıÓÃ" onclick={() => (showCitations = true)}>
           <Icon name="cite" className="ui-icon" />
-          <span>å¼•ç”¨ç®¡ç†</span>
+          <span>ÒıÓÃ¹ÜÀí</span>
         </button>
-        <button class={`nav-btn ${workspaceMode === 'collab' ? 'active' : ''}`} title="åä½œåŠ©æ‰‹" onclick={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}>
+        <button class={`nav-btn ${workspaceMode === 'collab' ? 'active' : ''}`} title="Ğ­×÷ÖúÊÖ" onclick={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}>
           <Icon name="chat" className="ui-icon" />
-          <span>åä½œåŠ©æ‰‹</span>
+          <span>Ğ­×÷ÖúÊÖ</span>
         </button>
-        <button class="nav-btn" title="æ€§èƒ½" onclick={() => (showPerformanceMetrics = true)}>
+        <button class="nav-btn" title="ĞÔÄÜ" onclick={() => (showPerformanceMetrics = true)}>
           <Icon name="chart" className="ui-icon" />
-          <span>æ€§èƒ½æŒ‡æ ‡</span>
+          <span>ĞÔÄÜÖ¸±ê</span>
         </button>
       </section>
 
       <button class="rail-reset icon-btn-text" onclick={() => { librarySearch = ''; librarySelectAll = false; selectedLibraryCardId = ''; }}>
         <Icon name="clearSelection" className="ui-icon" />
-        <span>é‡ç½®ç­›é€‰</span>
+        <span>ÖØÖÃÉ¸Ñ¡</span>
       </button>
     </aside>
 
@@ -3736,68 +3737,68 @@
             <button
               class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
               onclick={() => (libraryViewMode = 'grid')}
-              title="ç½‘æ ¼è§†å›¾"
+              title="Íø¸ñÊÓÍ¼"
             >
               <Icon name="grid" className="ui-icon" />
             </button>
             <button
               class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
               onclick={() => (libraryViewMode = 'masonry')}
-              title="ç€‘å¸ƒè§†å›¾"
+              title="ÆÙ²¼ÊÓÍ¼"
             >
               <Icon name="masonry" className="ui-icon" />
             </button>
             <button
               class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
               onclick={() => (libraryViewMode = 'list')}
-              title="åˆ—è¡¨è§†å›¾"
+              title="ÁĞ±íÊÓÍ¼"
             >
               <Icon name="list" className="ui-icon" />
             </button>
           </div>
-          <div class="library-counter">{librarySearch ? `æœç´¢ï¼š${librarySearch}` : 'èµ„æ–™æ¨¡å¼ï¼šæ‹–æ‹½ç´ æã€æ•´ç†è¯æ®ã€æ‰¹é‡ç®¡ç†'}</div>
+          <div class="library-counter">{librarySearch ? `ËÑË÷£º${librarySearch}` : '×ÊÁÏÄ£Ê½£ºÍÏ×§ËØ²Ä¡¢ÕûÀíÖ¤¾İ¡¢ÅúÁ¿¹ÜÀí'}</div>
           <div class="library-actions">
             <button class="btn ghost icon-btn-text" onclick={triggerLibraryUpload}>
               <Icon name="upload" className="ui-icon" />
-              <span>ä¸Šä¼ ç´ æ</span>
+              <span>ÉÏ´«ËØ²Ä</span>
             </button>
             <button class="btn ghost icon-btn-text" onclick={() => (librarySelectAll = !librarySelectAll)}>
               <Icon name="select" className="ui-icon" />
-              <span>{librarySelectAll ? 'å–æ¶ˆå…¨é€‰' : 'å…¨é€‰èµ„æ–™'}</span>
+              <span>{librarySelectAll ? 'È¡ÏûÈ«Ñ¡' : 'È«Ñ¡×ÊÁÏ'}</span>
             </button>
             <button class="btn ghost icon-btn-text" onclick={() => switchWorkspaceMode('editor')}>
               <Icon name="open" className="ui-icon" />
-              <span>è¿”å›ç¼–è¾‘</span>
+              <span>·µ»Ø±à¼­</span>
             </button>
           </div>
         </div>
         <section
           class="library-mode-stage"
-          aria-label="èµ„æ–™æ¨¡å¼æ‹–æ‹½å·¥ä½œåŒº"
+          aria-label="×ÊÁÏÄ£Ê½ÍÏ×§¹¤×÷Çø"
           ondragover={(e) => e.preventDefault()}
           ondrop={handleLibraryDrop}
         >
           <div class="library-mode-dropzone">
-            <div class="panel-title">èµ„æ–™å·¥ä½œåŒº</div>
-            <div class="panel-sub">æ‹–æ‹½å›¾ç‰‡/æ–‡æ¡£åˆ°æ­¤å¤„ï¼Œæˆ–ç‚¹å‡»ä¸Šä¼ ç´ æã€‚èµ„æ–™æ¨¡å¼é»˜è®¤ä¸å±•ç¤ºæ­£æ–‡ç¼–è¾‘å™¨ã€‚</div>
+            <div class="panel-title">×ÊÁÏ¹¤×÷Çø</div>
+            <div class="panel-sub">ÍÏ×§Í¼Æ¬/ÎÄµµµ½´Ë´¦£¬»òµã»÷ÉÏ´«ËØ²Ä¡£×ÊÁÏÄ£Ê½Ä¬ÈÏ²»Õ¹Ê¾ÕıÎÄ±à¼­Æ÷¡£</div>
             <div class="library-mode-actions">
               <button class="btn ghost icon-btn-text" onclick={triggerLibraryUpload}>
                 <Icon name="upload" className="ui-icon" />
-                <span>ä¸Šä¼ æ–‡ä»¶</span>
+                <span>ÉÏ´«ÎÄ¼ş</span>
               </button>
               <button class="btn ghost icon-btn-text" onclick={() => (showCitations = true)}>
                 <Icon name="cite" className="ui-icon" />
-                <span>å¼•ç”¨ç®¡ç†</span>
+                <span>ÒıÓÃ¹ÜÀí</span>
               </button>
               <button class="btn ghost icon-btn-text" onclick={openVersions}>
                 <Icon name="clock" className="ui-icon" />
-                <span>ç‰ˆæœ¬è®°å½•</span>
+                <span>°æ±¾¼ÇÂ¼</span>
               </button>
             </div>
           </div>
           <div class={`library-mode-board ${libraryViewMode}`}>
             {#if filteredLibraryCards.length === 0}
-              <div class="panel-empty">æš‚æ— åŒ¹é…èµ„æ–™ï¼Œè¯·è°ƒæ•´ç­›é€‰æ¡ä»¶æˆ–ä¸Šä¼ æ–°ç´ æã€‚</div>
+              <div class="panel-empty">ÔİÎŞÆ¥Åä×ÊÁÏ£¬Çëµ÷ÕûÉ¸Ñ¡Ìõ¼ş»òÉÏ´«ĞÂËØ²Ä¡£</div>
             {:else}
               {#each filteredLibraryCards as card}
                 <button
@@ -3826,116 +3827,116 @@
           <button
             class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
             onclick={() => (libraryViewMode = 'grid')}
-            title="ç½‘æ ¼è§†å›¾"
+            title="Íø¸ñÊÓÍ¼"
           >
             <Icon name="grid" className="ui-icon" />
           </button>
           <button
             class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
             onclick={() => (libraryViewMode = 'masonry')}
-            title="ç€‘å¸ƒè§†å›¾"
+            title="ÆÙ²¼ÊÓÍ¼"
           >
             <Icon name="masonry" className="ui-icon" />
           </button>
           <button
             class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
             onclick={() => (libraryViewMode = 'list')}
-            title="åˆ—è¡¨è§†å›¾"
+            title="ÁĞ±íÊÓÍ¼"
           >
             <Icon name="list" className="ui-icon" />
           </button>
         </div>
-        <div class="library-counter">{librarySearch ? `æœç´¢ï¼š${librarySearch}` : 'å®æ—¶æ–‡æ¡£å·¥ä½œåŒº'}</div>
+        <div class="library-counter">{librarySearch ? `ËÑË÷£º${librarySearch}` : 'ÊµÊ±ÎÄµµ¹¤×÷Çø'}</div>
         <div class="library-actions">
           <button class="btn ghost icon-btn-text" onclick={() => (librarySelectAll = !librarySelectAll)}>
             <Icon name="select" className="ui-icon" />
-            <span>{librarySelectAll ? 'å–æ¶ˆå…¨é€‰' : 'å…¨é€‰èµ„æ–™'}</span>
+            <span>{librarySelectAll ? 'È¡ÏûÈ«Ñ¡' : 'È«Ñ¡×ÊÁÏ'}</span>
           </button>
           <button class="btn ghost icon-btn-text">
             <Icon name="batch" className="ui-icon" />
-            <span>æ‰¹å¤„ç† ({librarySelectAll ? filteredLibraryCards.length : 1})</span>
+            <span>Åú´¦Àí ({librarySelectAll ? filteredLibraryCards.length : 1})</span>
           </button>
           <button class="btn ghost icon-btn-text" onclick={openInfoDrawer}>
             <Icon name="doc" className="ui-icon" />
-            <span>æ–‡æ¡£ä¿¡æ¯</span>
+            <span>ÎÄµµĞÅÏ¢</span>
           </button>
         </div>
       </div>
       <div class="doc-toolbar">
         <div class="toolbar-line primary">
           <div class="toolbar-cluster core">
-            <span class="cluster-label">åˆ›ä½œæ ¸å¿ƒ</span>
-            <button class="tool-btn" onclick={() => runEditorCommand('heading1')} aria-label="ä¸€çº§æ ‡é¢˜">
+            <span class="cluster-label">´´×÷ºËĞÄ</span>
+            <button class="tool-btn" onclick={() => runEditorCommand('heading1')} aria-label="Ò»¼¶±êÌâ">
               <Icon name="h1" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" onclick={() => runEditorCommand('heading2')} aria-label="äºŒçº§æ ‡é¢˜">
+            <button class="tool-btn" onclick={() => runEditorCommand('heading2')} aria-label="¶ş¼¶±êÌâ">
               <Icon name="h2" size={14} className="ui-icon sm" />
             </button>
             <button
               class={`tool-btn ${editorToolbarState.bold ? 'active' : ''}`}
-              title="åŠ ç²— Ctrl/Cmd+B"
-              aria-label="åŠ ç²—"
+              title="¼Ó´Ö Ctrl/Cmd+B"
+              aria-label="¼Ó´Ö"
               onclick={() => runEditorCommand('bold')}
               disabled={editorToolbarState.readonly || !editorToolbarState.focused}
             >
               <Icon name="bold" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" onclick={() => runEditorCommand('list-bullet')} aria-label="æ— åºåˆ—è¡¨">
+            <button class="tool-btn" onclick={() => runEditorCommand('list-bullet')} aria-label="ÎŞĞòÁĞ±í">
               <Icon name="listBullet" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" onclick={() => runEditorCommand('list-number')} aria-label="æœ‰åºåˆ—è¡¨">
+            <button class="tool-btn" onclick={() => runEditorCommand('list-number')} aria-label="ÓĞĞòÁĞ±í">
               <Icon name="listNumber" size={14} className="ui-icon sm" />
             </button>
             <span class="tool-sep"></span>
-            <button class="tool-btn" onclick={() => (canvasOpen = true)} aria-label="å›¾å½¢ç”»å¸ƒ">
+            <button class="tool-btn" onclick={() => (canvasOpen = true)} aria-label="Í¼ĞÎ»­²¼">
               <Icon name="diagram" size={14} className="ui-icon sm" />
             </button>
-            <button class="tool-btn" onclick={() => (showCitations = true)} aria-label="å¼•ç”¨ç®¡ç†">
+            <button class="tool-btn" onclick={() => (showCitations = true)} aria-label="ÒıÓÃ¹ÜÀí">
               <Icon name="cite" size={14} className="ui-icon sm" />
             </button>
           </div>
           <button class="btn ghost btn-sm toolbar-advanced-toggle" onclick={() => (showAdvancedToolbar = !showAdvancedToolbar)}>
-            {showAdvancedToolbar ? 'æ”¶èµ·é«˜çº§' : 'é«˜çº§æ“ä½œ'}
+            {showAdvancedToolbar ? 'ÊÕÆğ¸ß¼¶' : '¸ß¼¶²Ù×÷'}
           </button>
           <button class="btn primary icon-btn-text toolbar-generate-btn" onclick={() => handleGenerate($instruction)} disabled={$generating}>
             <Icon name="play" className="ui-icon" />
-            <span>{$generating ? 'ç”Ÿæˆä¸­â€¦' : 'ç”Ÿæˆ'}</span>
+            <span>{$generating ? 'Éú³ÉÖĞ¡­' : 'Éú³É'}</span>
           </button>
         </div>
         {#if showAdvancedToolbar}
           <div class="toolbar-line secondary">
             <div class="toolbar-cluster">
-              <span class="cluster-label">ç»“æ„ä¸ç¼–è¾‘</span>
-              <button class="tool-btn" title="æ’¤é”€ Ctrl/Cmd+Z" aria-label="æ’¤é”€" onclick={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
+              <span class="cluster-label">½á¹¹Óë±à¼­</span>
+              <button class="tool-btn" title="³·Ïú Ctrl/Cmd+Z" aria-label="³·Ïú" onclick={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
                 <Icon name="undo" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="é‡åš Ctrl/Cmd+Y" aria-label="é‡åš" onclick={() => runEditorCommand('redo')} disabled={editorToolbarState.readonly}>
+              <button class="tool-btn" title="ÖØ×ö Ctrl/Cmd+Y" aria-label="ÖØ×ö" onclick={() => runEditorCommand('redo')} disabled={editorToolbarState.readonly}>
                 <Icon name="redo" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="å¤åˆ¶ Ctrl/Cmd+C" aria-label="å¤åˆ¶" onclick={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
+              <button class="tool-btn" title="¸´ÖÆ Ctrl/Cmd+C" aria-label="¸´ÖÆ" onclick={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
                 <Icon name="copy" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="å‰ªåˆ‡ Ctrl/Cmd+X" aria-label="å‰ªåˆ‡" onclick={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
+              <button class="tool-btn" title="¼ôÇĞ Ctrl/Cmd+X" aria-label="¼ôÇĞ" onclick={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
                 <Icon name="cut" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="ç²˜è´´ Ctrl/Cmd+V" aria-label="ç²˜è´´" onclick={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
+              <button class="tool-btn" title="Õ³Ìù Ctrl/Cmd+V" aria-label="Õ³Ìù" onclick={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
                 <Icon name="paste" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" title="æ¸…é™¤æ ¼å¼" aria-label="æ¸…é™¤æ ¼å¼" onclick={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
+              <button class="tool-btn" title="Çå³ı¸ñÊ½" aria-label="Çå³ı¸ñÊ½" onclick={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
                 <Icon name="clear" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" onclick={() => runEditorCommand('quote')} aria-label="å¼•ç”¨å—">
+              <button class="tool-btn" onclick={() => runEditorCommand('quote')} aria-label="ÒıÓÃ¿é">
                 <Icon name="quote" size={14} className="ui-icon sm" />
               </button>
-              <button class="tool-btn" onclick={() => runEditorCommand('code')} aria-label="ä»£ç å—">
+              <button class="tool-btn" onclick={() => runEditorCommand('code')} aria-label="´úÂë¿é">
                 <Icon name="code" size={14} className="ui-icon sm" />
               </button>
             </div>
             <div class="toolbar-cluster compact">
-              <span class="cluster-label">é«˜çº§æ“ä½œ</span>
+              <span class="cluster-label">¸ß¼¶²Ù×÷</span>
               <button class="btn ghost icon-btn-text" onclick={runBatchFromToolbar}>
                 <Icon name="batch" className="ui-icon" />
-                <span>æ‰¹å¤„ç†</span>
+                <span>Åú´¦Àí</span>
               </button>
               <button
                 class="btn ghost icon-btn-text"
@@ -3943,7 +3944,7 @@
                 onclick={() => (showAiRatePanel = !showAiRatePanel)}
               >
                 <Icon name="ai" className="ui-icon" />
-                <span>{showAiRatePanel ? 'æ”¶èµ· AI ç‡' : 'AI ç‡æ£€æµ‹'}</span>
+                <span>{showAiRatePanel ? 'ÊÕÆğ AI ÂÊ' : 'AI ÂÊ¼ì²â'}</span>
               </button>
               <button
                 class="btn ghost icon-btn-text"
@@ -3951,7 +3952,7 @@
                 onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}
               >
                 <Icon name="shield" className="ui-icon" />
-                <span>{showPlagiarismPanel ? 'æ”¶èµ·æŸ¥é‡' : 'æŸ¥é‡æ£€æµ‹'}</span>
+                <span>{showPlagiarismPanel ? 'ÊÕÆğ²éÖØ' : '²éÖØ¼ì²â'}</span>
               </button>
               <button
                 class="btn ghost icon-btn-text"
@@ -3959,20 +3960,20 @@
                 onclick={() => (showFeedbackPanel = !showFeedbackPanel)}
               >
                 <Icon name="star" className="ui-icon" />
-                <span>{showFeedbackPanel ? 'æ”¶èµ·è¯„åˆ†' : 'æ»¡æ„åº¦è¯„åˆ†'}</span>
+                <span>{showFeedbackPanel ? 'ÊÕÆğÆÀ·Ö' : 'ÂúÒâ¶ÈÆÀ·Ö'}</span>
               </button>
               <div class="plan-confirm-inline">
-                <span class="plan-confirm-label">è®¡åˆ’ç¡®è®¤</span>
+                <span class="plan-confirm-label">¼Æ»®È·ÈÏ</span>
                 <select
                   class="plan-confirm-select"
                   bind:value={planConfirmDecision}
                   onchange={() => void persistPlanConfirmPreference()}
                 >
-                  <option value="approved">é€šè¿‡</option>
-                  <option value="interrupted">ç»ˆæ­¢</option>
+                  <option value="approved">Í¨¹ı</option>
+                  <option value="interrupted">ÖÕÖ¹</option>
                 </select>
                 <label class="plan-confirm-score">
-                  <span>è¯„åˆ†</span>
+                  <span>ÆÀ·Ö</span>
                   <input
                     type="number"
                     min="0"
@@ -3985,12 +3986,12 @@
               </div>
               <button class="btn ghost icon-btn-text" onclick={handleStop} disabled={!$generating}>
                 <Icon name="stop" className="ui-icon" />
-                <span>åœæ­¢</span>
+                <span>Í£Ö¹</span>
               </button>
               {#if resumeState && !$generating}
                 <button class="btn ghost icon-btn-text" onclick={resumeInterruptedGeneration}>
                   <Icon name="resume" className="ui-icon" />
-                  <span>ç»­è·‘</span>
+                  <span>ĞøÅÜ</span>
                 </button>
               {/if}
             </div>
@@ -4000,27 +4001,27 @@
 
       {#if $generating && progress.total > 0}
         <div class="generation-banner">
-          ç”Ÿæˆä¸­ {progress.current}/{progress.total} Â· {progress.percent}% Â· é¢„è®¡å‰©ä½™ {Math.ceil(progress.etaS / 60)} åˆ† {progress.etaS % 60} ç§’
+          Éú³ÉÖĞ {progress.current}/{progress.total} ¡¤ {progress.percent}% ¡¤ Ô¤¼ÆÊ£Óà {Math.ceil(progress.etaS / 60)} ·Ö {progress.etaS % 60} Ãë
         </div>
       {/if}
 
       {#if resumeState && !$generating && resumeState.status === 'interrupted'}
         <div class="generation-banner">
-          æ£€æµ‹åˆ°æœªå®Œæˆä»»åŠ¡ï¼ˆå·²ç¼“å­˜çº¦ {resumeState.partial_chars} å­—ï¼‰
+          ¼ì²âµ½Î´Íê³ÉÈÎÎñ£¨ÒÑ»º´æÔ¼ {resumeState.partial_chars} ×Ö£©
           {#if resumeState.pending_sections && resumeState.pending_sections.length > 0}
-            ï¼Œå¾…ç»­å†™ç« èŠ‚ï¼š{resumeState.pending_sections.join(' / ')}
+            £¬´ıĞøĞ´ÕÂ½Ú£º{resumeState.pending_sections.join(' / ')}
           {/if}
-          ã€‚å¯ç‚¹å‡»â€œç»­è·‘â€ç»§ç»­ç”Ÿæˆã€‚
+          ¡£¿Éµã»÷¡°ĞøÅÜ¡±¼ÌĞøÉú³É¡£
         </div>
       {/if}
 
       {#if sectionFailures.length > 0}
         <section class="section-failures">
-          <div class="panel-title">å¤±è´¥ç« èŠ‚</div>
+          <div class="panel-title">Ê§°ÜÕÂ½Ú</div>
           {#each sectionFailures as f}
             <div class="failure-row">
               <span>{f.section}</span>
-              <button class="btn ghost" onclick={() => retrySection(f.section)}>é‡è¯•</button>
+              <button class="btn ghost" onclick={() => retrySection(f.section)}>ÖØÊÔ</button>
             </div>
           {/each}
         </section>
@@ -4028,24 +4029,24 @@
 
       {#if sectionOriginalitySummary && (sectionOriginalitySummary.checkedSectionCount > 0 || sectionOriginalitySummary.rows.length > 0)}
         <section class="section-failures originality-panel">
-          <div class="panel-title">åŸåˆ›æ€§é£é™©çƒ­åŒº</div>
+          <div class="panel-title">Ô­´´ĞÔ·çÏÕÈÈÇø</div>
           <div class="panel-sub">{summarizeOriginalitySummary(sectionOriginalitySummary)}</div>
           {#each sectionOriginalitySummary.rows as row}
             <div class="risk-row">
               <div>
                 <div class="risk-title">{row.title || row.section}</div>
                 <div class="risk-metrics">
-                  <span>å¤±è´¥ {row.failed_event_count}</span>
-                  <span>é‡å†™ {row.rewrite_count}</span>
-                  <span>é‡è¯• {row.retry_count}</span>
-                  <span>å¥—è¯ç‡ {Math.round(row.max_formulaic_opening_ratio * 100)}%</span>
+                  <span>Ê§°Ü {row.failed_event_count}</span>
+                  <span>ÖØĞ´ {row.rewrite_count}</span>
+                  <span>ÖØÊÔ {row.retry_count}</span>
+                  <span>Ì×»°ÂÊ {Math.round(row.max_formulaic_opening_ratio * 100)}%</span>
                 </div>
               </div>
               <div class="risk-actions">
                 <span class:ok={row.latest_passed} class:bad={!row.latest_passed} class="risk-badge">
-                  {row.latest_passed ? 'å·²é€šè¿‡' : 'å¾…å¤„ç†'}
+                  {row.latest_passed ? 'ÒÑÍ¨¹ı' : '´ı´¦Àí'}
                 </span>
-                <button class="btn ghost" onclick={() => reviseRiskSection(row.title || row.section)}>å®šå‘ä¿®è®¢</button>
+                <button class="btn ghost" onclick={() => reviseRiskSection(row.title || row.section)}>¶¨ÏòĞŞ¶©</button>
               </div>
             </div>
           {/each}
@@ -4056,8 +4057,8 @@
         <section class="feedback-panel quality-advice-panel">
           <div class="feedback-panel-head">
             <div>
-              <div class="panel-title">åŸåˆ›æ€§ä¿®è®¢å»ºè®®</div>
-              <div class="panel-sub">è¿™é‡Œæ±‡æ€»çš„æ˜¯è´¨é‡æ”¹è¿›å»ºè®®ï¼Œä¸æ˜¯æ£€æµ‹è§„é¿æŒ‡ä»¤ã€‚</div>
+              <div class="panel-title">Ô­´´ĞÔĞŞ¶©½¨Òé</div>
+              <div class="panel-sub">ÕâÀï»ã×ÜµÄÊÇÖÊÁ¿¸Ä½ø½¨Òé£¬²»ÊÇ¼ì²â¹æ±ÜÖ¸Áî¡£</div>
             </div>
             <span class={`quality-overview-badge tone-${qualityOverview.tone}`}>{qualityOverview.label}</span>
           </div>
@@ -4068,7 +4069,7 @@
                 <div class="quality-advice-title-row">
                   <div class="quality-advice-title">{item.title}</div>
                   <span class={`quality-tone-chip tone-${item.tone}`}>
-                    {item.tone === 'good' ? 'ç¨³å®š' : item.tone === 'warn' ? 'å…³æ³¨' : 'ä¼˜å…ˆ'}
+                    {item.tone === 'good' ? 'ÎÈ¶¨' : item.tone === 'warn' ? '¹Ø×¢' : 'ÓÅÏÈ'}
                   </span>
                 </div>
                 <div class="quality-advice-detail">{item.detail}</div>
@@ -4089,13 +4090,13 @@
         <section class="feedback-panel ai-rate-panel">
           <div class="feedback-panel-head">
             <div>
-              <div class="panel-title">AI ç‡æ£€æµ‹</div>
-              <div class="panel-sub">åŸºäº burstinessã€é‡å¤ç‡ã€è¯æ±‡ç†µã€è¿æ¥è¯å¯†åº¦ç­‰ä¿¡å·ä¼°è®¡ã€‚</div>
+              <div class="panel-title">AI ÂÊ¼ì²â</div>
+              <div class="panel-sub">»ùÓÚ burstiness¡¢ÖØ¸´ÂÊ¡¢´Ê»ãìØ¡¢Á¬½Ó´ÊÃÜ¶ÈµÈĞÅºÅ¹À¼Æ¡£</div>
             </div>
           </div>
           <div class="feedback-form">
             <div class="plagiarism-grid">
-              <label class="feedback-label" for="ai-rate-threshold">åˆ¤å®šé˜ˆå€¼</label>
+              <label class="feedback-label" for="ai-rate-threshold">ÅĞ¶¨ãĞÖµ</label>
               <input
                 id="ai-rate-threshold"
                 type="number"
@@ -4105,7 +4106,7 @@
                 bind:value={aiRateThreshold}
                 data-testid="ai-rate-threshold"
               />
-              <span class="panel-sub">å»ºè®® 0.65ï¼Œç»“æœä»…ä½œä¸ºé£é™©æç¤º</span>
+              <span class="panel-sub">½¨Òé 0.65£¬½á¹û½ö×÷Îª·çÏÕÌáÊ¾</span>
             </div>
             <div class="feedback-actions">
               <button
@@ -4114,33 +4115,33 @@
                 disabled={aiRateLoading}
                 data-testid="ai-rate-run"
               >
-                {aiRateLoading ? 'æ£€æµ‹ä¸­...' : 'å¼€å§‹ AI ç‡æ£€æµ‹'}
+                {aiRateLoading ? '¼ì²âÖĞ...' : '¿ªÊ¼ AI ÂÊ¼ì²â'}
               </button>
               {#if aiRateResult}
                 <span class="feedback-tip">
-                  ä¼°è®¡ AI ç‡ {Math.round(Number(aiRateResult.ai_rate || 0) * 100)}%ï¼Œ
-                  é£é™© {String(aiRateResult.risk_level || 'æœªçŸ¥')}ï¼Œ
-                  ç½®ä¿¡åº¦ {Math.round(Number(aiRateResult.confidence || 0) * 100)}%
+                  ¹À¼Æ AI ÂÊ {Math.round(Number(aiRateResult.ai_rate || 0) * 100)}%£¬
+                  ·çÏÕ {String(aiRateResult.risk_level || 'Î´Öª')}£¬
+                  ÖÃĞÅ¶È {Math.round(Number(aiRateResult.confidence || 0) * 100)}%
                 </span>
               {/if}
             </div>
             {#if aiRateResult}
               <div class="plagiarism-item">
                 <div class="plagiarism-item-head">
-                  <span>é˜ˆå€¼ {Math.round(Number(aiRateResult.threshold || 0.65) * 100)}%</span>
+                  <span>ãĞÖµ {Math.round(Number(aiRateResult.threshold || 0.65) * 100)}%</span>
                   <span class:danger={Boolean(aiRateResult.suspected_ai)}>
-                    åˆ¤å®š {Boolean(aiRateResult.suspected_ai) ? 'ç–‘ä¼¼AIç”Ÿæˆ' : 'æœªè¶…é˜ˆå€¼'}
+                    ÅĞ¶¨ {Boolean(aiRateResult.suspected_ai) ? 'ÒÉËÆAIÉú³É' : 'Î´³¬ãĞÖµ'}
                   </span>
                 </div>
                 <div class="plagiarism-item-metrics">
-                  <span>é‡å¤ç‡ {Math.round(Number(aiRateResult.signals?.repeated_3gram_ratio || 0) * 100)}%</span>
-                  <span>è¯æ±‡å¤šæ ·æ€§ {Math.round(Number(aiRateResult.signals?.lexical_diversity || 0) * 100)}%</span>
-                  <span>ç†µ {Math.round(Number(aiRateResult.signals?.token_entropy_norm || 0) * 100)}%</span>
-                  <span>å¥é•¿æ³¢åŠ¨ {Math.round(Number(aiRateResult.signals?.sentence_burstiness_cv || 0) * 100)}%</span>
+                  <span>ÖØ¸´ÂÊ {Math.round(Number(aiRateResult.signals?.repeated_3gram_ratio || 0) * 100)}%</span>
+                  <span>´Ê»ã¶àÑùĞÔ {Math.round(Number(aiRateResult.signals?.lexical_diversity || 0) * 100)}%</span>
+                  <span>ìØ {Math.round(Number(aiRateResult.signals?.token_entropy_norm || 0) * 100)}%</span>
+                  <span>¾ä³¤²¨¶¯ {Math.round(Number(aiRateResult.signals?.sentence_burstiness_cv || 0) * 100)}%</span>
                 </div>
                 {#if Array.isArray(aiRateResult.evidence) && aiRateResult.evidence.length > 0}
                   <div class="plagiarism-evidence">
-                    ä¾æ®ï¼š{String(aiRateResult.evidence[0] || '')}
+                    ÒÀ¾İ£º{String(aiRateResult.evidence[0] || '')}
                   </div>
                 {/if}
                 <div class="panel-sub">{String(aiRateResult.note || '')}</div>
@@ -4154,13 +4155,13 @@
         <section class="feedback-panel plagiarism-panel">
           <div class="feedback-panel-head">
             <div>
-              <div class="panel-title">å†…å®¹æŸ¥é‡æ£€æµ‹</div>
-              <div class="panel-sub">ç®—æ³•ï¼šn-gram + Winnowing + SimHash æ··åˆè¯„åˆ†ï¼Œå»ºè®®é˜ˆå€¼ 0.35ã€‚</div>
+              <div class="panel-title">ÄÚÈİ²éÖØ¼ì²â</div>
+              <div class="panel-sub">Ëã·¨£ºn-gram + Winnowing + SimHash »ìºÏÆÀ·Ö£¬½¨ÒéãĞÖµ 0.35¡£</div>
             </div>
           </div>
           <div class="feedback-form">
             <div class="plagiarism-grid">
-              <label class="feedback-label" for="plag-threshold">åˆ¤å®šé˜ˆå€¼</label>
+              <label class="feedback-label" for="plag-threshold">ÅĞ¶¨ãĞÖµ</label>
               <input
                 id="plag-threshold"
                 type="number"
@@ -4170,22 +4171,22 @@
                 bind:value={plagiarismThreshold}
                 data-testid="plagiarism-threshold"
               />
-              <label class="feedback-label" for="plag-docids">å‚è€ƒæ–‡æ¡£ID</label>
+              <label class="feedback-label" for="plag-docids">²Î¿¼ÎÄµµID</label>
               <input
                 id="plag-docids"
                 type="text"
                 bind:value={plagiarismReferenceDocIds}
-                placeholder="å¤šä¸ªIDç”¨é€—å·æˆ–ç©ºæ ¼åˆ†éš”"
+                placeholder="¶à¸öIDÓÃ¶ººÅ»ò¿Õ¸ñ·Ö¸ô"
                 data-testid="plagiarism-docids"
               />
             </div>
             <div class="feedback-row">
-              <span class="feedback-label">å‚è€ƒæ–‡æœ¬</span>
+              <span class="feedback-label">²Î¿¼ÎÄ±¾</span>
               <textarea
                 bind:value={plagiarismReferenceText}
                 rows="4"
                 maxlength="30000"
-                placeholder="å¯ç²˜è´´å¤–éƒ¨èµ„æ–™ã€å†å²ç¨¿ä»¶æˆ–æ ·æœ¬æ–‡æœ¬ç”¨äºæŸ¥é‡"
+                placeholder="¿ÉÕ³ÌùÍâ²¿×ÊÁÏ¡¢ÀúÊ·¸å¼ş»òÑù±¾ÎÄ±¾ÓÃÓÚ²éÖØ"
                 data-testid="plagiarism-text"
               ></textarea>
             </div>
@@ -4196,7 +4197,7 @@
                 disabled={plagiarismLoading}
                 data-testid="plagiarism-run"
               >
-                {plagiarismLoading ? 'æ£€æµ‹ä¸­...' : 'å¼€å§‹æŸ¥é‡'}
+                {plagiarismLoading ? '¼ì²âÖĞ...' : '¿ªÊ¼²éÖØ'}
               </button>
               <button
                 class="btn ghost"
@@ -4204,13 +4205,13 @@
                 disabled={plagiarismLibraryLoading}
                 data-testid="plagiarism-library-run"
               >
-                {plagiarismLibraryLoading ? 'å…¨åº“æ‰«æä¸­...' : 'å…¨åº“æŸ¥é‡'}
+                {plagiarismLibraryLoading ? 'È«¿âÉ¨ÃèÖĞ...' : 'È«¿â²éÖØ'}
               </button>
               {#if plagiarismResults.length > 0}
                 <span class="feedback-tip">
-                  æœ€é«˜é‡å¤åˆ†æ•° {Math.round(plagiarismMaxScore * 100)}%ï¼Œ
-                  é£é™©ç­‰çº§ {plagiarismRiskLabel(plagiarismMaxScore)}ï¼Œ
-                  è¶…é˜ˆå€¼æ¥æº {plagiarismFlaggedCount} ä¸ª
+                  ×î¸ßÖØ¸´·ÖÊı {Math.round(plagiarismMaxScore * 100)}%£¬
+                  ·çÏÕµÈ¼¶ {plagiarismRiskLabel(plagiarismMaxScore)}£¬
+                  ³¬ãĞÖµÀ´Ô´ {plagiarismFlaggedCount} ¸ö
                 </span>
               {/if}
             </div>
@@ -4218,11 +4219,11 @@
             {#if plagiarismLatestReport}
               <div class="plagiarism-report-actions">
                 <span class="panel-sub">
-                  æŠ¥å‘ŠID {plagiarismLatestReport.report_id} Â· æ¥æº {plagiarismLatestReport.total_references} Â· è¶…é˜ˆå€¼ {plagiarismLatestReport.flagged_count}
+                  ±¨¸æID {plagiarismLatestReport.report_id} ¡¤ À´Ô´ {plagiarismLatestReport.total_references} ¡¤ ³¬ãĞÖµ {plagiarismLatestReport.flagged_count}
                 </span>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('json')}>ä¸‹è½½ JSON</button>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('md')}>ä¸‹è½½ MD</button>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('csv')}>ä¸‹è½½ CSV</button>
+                <button class="btn ghost" onclick={() => downloadPlagiarismReport('json')}>ÏÂÔØ JSON</button>
+                <button class="btn ghost" onclick={() => downloadPlagiarismReport('md')}>ÏÂÔØ MD</button>
+                <button class="btn ghost" onclick={() => downloadPlagiarismReport('csv')}>ÏÂÔØ CSV</button>
               </div>
             {/if}
 
@@ -4238,7 +4239,7 @@
                         {/if}
                       </span>
                       <span class:danger={row.suspected}>
-                        åˆ†æ•° {Math.round(row.score * 100)}% / é˜ˆå€¼ {Math.round(row.threshold * 100)}%
+                        ·ÖÊı {Math.round(row.score * 100)}% / ãĞÖµ {Math.round(row.threshold * 100)}%
                       </span>
                     </div>
                     <div class="plagiarism-item-metrics">
@@ -4249,7 +4250,7 @@
                     </div>
                     {#if row.evidence && row.evidence.length > 0}
                       <div class="plagiarism-evidence">
-                        è¯æ®ç‰‡æ®µï¼š{String(row.evidence[0]?.snippet || '').slice(0, 120)}
+                        Ö¤¾İÆ¬¶Î£º{String(row.evidence[0]?.snippet || '').slice(0, 120)}
                       </div>
                     {/if}
                   </div>
@@ -4264,13 +4265,13 @@
         <section class="feedback-panel">
           <div class="feedback-panel-head">
             <div>
-              <div class="panel-title">ç”¨æˆ·æ»¡æ„åº¦</div>
-              <div class="panel-sub">1 åˆ†æœ€ä½ï¼Œ5 åˆ†æœ€é«˜ï¼›ä½åˆ†æ ·æœ¬ä¼šè¿›å…¥å­¦ä¹ æ± ã€‚</div>
+              <div class="panel-title">ÓÃ»§ÂúÒâ¶È</div>
+              <div class="panel-sub">1 ·Ö×îµÍ£¬5 ·Ö×î¸ß£»µÍ·ÖÑù±¾»á½øÈëÑ§Ï°³Ø¡£</div>
             </div>
           </div>
           <div class="feedback-form">
             <div class="feedback-row">
-              <span class="feedback-label">è¯„åˆ†</span>
+              <span class="feedback-label">ÆÀ·Ö</span>
               <div class="rating-group">
                 {#each [1, 2, 3, 4, 5] as score}
                   <button
@@ -4283,22 +4284,22 @@
                   </button>
                 {/each}
               </div>
-              <span class="feedback-label">é˜¶æ®µ</span>
+              <span class="feedback-label">½×¶Î</span>
               <select data-testid="feedback-stage" bind:value={satisfactionStage}>
-                <option value="general">é€šç”¨åé¦ˆ</option>
-                <option value="stage1">é˜¶æ®µ1 ç”Ÿæˆ</option>
-                <option value="stage2">é˜¶æ®µ2 ä¿®æ”¹</option>
-                <option value="final">æœ€ç»ˆç‰ˆæœ¬</option>
+                <option value="general">Í¨ÓÃ·´À¡</option>
+                <option value="stage1">½×¶Î1 Éú³É</option>
+                <option value="stage2">½×¶Î2 ĞŞ¸Ä</option>
+                <option value="final">×îÖÕ°æ±¾</option>
               </select>
             </div>
             <div class="feedback-row">
-              <span class="feedback-label">å¤‡æ³¨</span>
+              <span class="feedback-label">±¸×¢</span>
               <textarea
                 data-testid="feedback-note"
                 bind:value={satisfactionNote}
                 rows="2"
                 maxlength="600"
-                placeholder="å¯é€‰ï¼šä¸æ»¡æ„ç‚¹ã€ç¼ºå¤±ç‚¹ã€æ”¹è¿›å»ºè®®"
+                placeholder="¿ÉÑ¡£º²»ÂúÒâµã¡¢È±Ê§µã¡¢¸Ä½ø½¨Òé"
               ></textarea>
             </div>
             <div class="feedback-actions">
@@ -4308,19 +4309,19 @@
                 onclick={submitSatisfaction}
                 disabled={satisfactionSaving}
               >
-                {satisfactionSaving ? 'æäº¤ä¸­...' : 'æäº¤è¯„åˆ†'}
+                {satisfactionSaving ? 'Ìá½»ÖĞ...' : 'Ìá½»ÆÀ·Ö'}
               </button>
               {#if lastLowFeedbackRecorded > 0}
-                <span class="feedback-tip">å·²è®°å½•ä½æ»¡æ„åº¦æ ·æœ¬ {lastLowFeedbackRecorded} æ¡</span>
+                <span class="feedback-tip">ÒÑ¼ÇÂ¼µÍÂúÒâ¶ÈÑù±¾ {lastLowFeedbackRecorded} Ìõ</span>
               {/if}
             </div>
             {#if feedbackItems.length > 0}
               <div class="feedback-history">
-                <div class="panel-sub">æœ€è¿‘åé¦ˆ</div>
+                <div class="panel-sub">×î½ü·´À¡</div>
                 {#each feedbackItems.slice(0, 5) as item}
                   <div class="feedback-item">
                     <div class="feedback-item-head">
-                      <span>{item.rating}/5 Â· {item.stage}</span>
+                      <span>{item.rating}/5 ¡¤ {item.stage}</span>
                       <span>{formatFeedbackTime(item.created_at)}</span>
                     </div>
                     {#if item.note}
@@ -4356,34 +4357,34 @@
       <div class="panel-card version-panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">ç‰ˆæœ¬æ ‘</div>
-            <div class="panel-sub">è‡ªåŠ¨å°ç‰ˆæœ¬ Â· æ‰‹åŠ¨å¤§ç‰ˆæœ¬</div>
+            <div class="panel-title">°æ±¾Ê÷</div>
+            <div class="panel-sub">×Ô¶¯Ğ¡°æ±¾ ¡¤ ÊÖ¶¯´ó°æ±¾</div>
           </div>
-          <button class="icon-btn" onclick={loadVersionLog} title="åˆ·æ–°">åˆ·æ–°</button>
+          <button class="icon-btn" onclick={loadVersionLog} title="Ë¢ĞÂ">Ë¢ĞÂ</button>
         </div>
         <div class="major-commit">
           <input
             class="version-input"
-            placeholder="è¾“å…¥ç‰ˆæœ¬è¯´æ˜"
+            placeholder="ÊäÈë°æ±¾ËµÃ÷"
             bind:value={versionMessage}
           />
-          <button class="btn primary" onclick={commitVersion}>ä¿å­˜ç‰ˆæœ¬</button>
+          <button class="btn primary" onclick={commitVersion}>±£´æ°æ±¾</button>
         </div>
         {#if versionLoading}
-          <div class="panel-empty">åŠ è½½ä¸­...</div>
+          <div class="panel-empty">¼ÓÔØÖĞ...</div>
         {:else if versionError}
           <div class="panel-empty">{versionError}</div>
         {:else if versionGroups.length === 0}
-          <div class="panel-empty">æš‚æ— ç‰ˆæœ¬</div>
+          <div class="panel-empty">ÔİÎŞ°æ±¾</div>
         {:else}
           <div class="version-groups">
             {#each versionGroups as group}
               <div class="version-group">
                 <div class={`version-major ${group.major?.is_current ? 'current' : ''}`}>
                   <div class="version-title">
-                    <span>{group.major?.message || 'æœªå‘½å'}</span>
+                    <span>{group.major?.message || 'Î´ÃüÃû'}</span>
                     <span class={`badge ${group.major?.kind === 'major' ? 'major' : 'minor'}`}>
-                      {group.major?.kind === 'major' ? 'å¤§ç‰ˆæœ¬' : 'å°ç‰ˆæœ¬'}
+                      {group.major?.kind === 'major' ? '´ó°æ±¾' : 'Ğ¡°æ±¾'}
                     </span>
                   </div>
                   <div class="version-meta">
@@ -4394,8 +4395,8 @@
                     <div class="version-summary">{formatVersionSummary(group.major?.summary)}</div>
                   {/if}
                   <div class="version-actions">
-                    <button class="btn ghost" onclick={() => checkoutVersion(group.major?.version_id)} disabled={group.major?.is_current}>åˆ‡æ¢</button>
-                    <button class="btn ghost" onclick={() => compareWithCurrent(group.major?.version_id)} disabled={group.major?.is_current}>å¯¹æ¯”</button>
+                    <button class="btn ghost" onclick={() => checkoutVersion(group.major?.version_id)} disabled={group.major?.is_current}>ÇĞ»»</button>
+                    <button class="btn ghost" onclick={() => compareWithCurrent(group.major?.version_id)} disabled={group.major?.is_current}>¶Ô±È</button>
                   </div>
                 </div>
                 {#if group.minors && group.minors.length}
@@ -4403,15 +4404,15 @@
                     {#each group.minors as v}
                       <div class={`version-minor ${v.is_current ? 'current' : ''}`}>
                         <div>
-                          <div class="minor-title">{v.message || 'æœªå‘½å'}</div>
+                          <div class="minor-title">{v.message || 'Î´ÃüÃû'}</div>
                           {#if formatVersionSummary(v.summary)}
                             <div class="version-summary">{formatVersionSummary(v.summary)}</div>
                           {/if}
                           <div class="minor-meta">{formatVersionTime(v.timestamp)}</div>
                         </div>
                         <div class="minor-actions">
-                          <button class="btn ghost" onclick={() => checkoutVersion(v.version_id)} disabled={v.is_current}>åˆ‡æ¢</button>
-                          <button class="btn ghost" onclick={() => compareWithCurrent(v.version_id)} disabled={v.is_current}>å¯¹æ¯”</button>
+                          <button class="btn ghost" onclick={() => checkoutVersion(v.version_id)} disabled={v.is_current}>ÇĞ»»</button>
+                          <button class="btn ghost" onclick={() => compareWithCurrent(v.version_id)} disabled={v.is_current}>¶Ô±È</button>
                         </div>
                       </div>
                     {/each}
@@ -4422,8 +4423,8 @@
           </div>
         {/if}
         <div class="version-diff">
-          <div class="panel-sub">å¯¹æ¯”ç»“æœ</div>
-          <pre>{versionDiff || 'è¯·é€‰æ‹©ç‰ˆæœ¬è¿›è¡Œå¯¹æ¯”'}</pre>
+          <div class="panel-sub">¶Ô±È½á¹û</div>
+          <pre>{versionDiff || 'ÇëÑ¡Ôñ°æ±¾½øĞĞ¶Ô±È'}</pre>
         </div>
       </div>
 
@@ -4432,35 +4433,35 @@
 
   {#if infoDrawerOpen}
     <div class="info-drawer-backdrop" role="presentation">
-      <button type="button" class="sheet-backdrop-hit" onclick={closeInfoDrawer} aria-label="å…³é—­æ–‡æ¡£ä¿¡æ¯"></button>
-      <div class="info-drawer panel-card media-meta-panel" role="dialog" aria-modal="true" aria-label="æ–‡æ¡£ä¿¡æ¯">
+      <button type="button" class="sheet-backdrop-hit" onclick={closeInfoDrawer} aria-label="¹Ø±ÕÎÄµµĞÅÏ¢"></button>
+      <div class="info-drawer panel-card media-meta-panel" role="dialog" aria-modal="true" aria-label="ÎÄµµĞÅÏ¢">
         <div class="panel-header">
           <div>
-            <div class="panel-title">æ–‡æ¡£ä¿¡æ¯</div>
-            <div class="panel-sub">å½“å‰å·¥ä½œåŒºæ‘˜è¦</div>
+            <div class="panel-title">ÎÄµµĞÅÏ¢</div>
+            <div class="panel-sub">µ±Ç°¹¤×÷ÇøÕªÒª</div>
           </div>
-          <button class="btn ghost btn-sm" onclick={closeInfoDrawer}>å…³é—­</button>
+          <button class="btn ghost btn-sm" onclick={closeInfoDrawer}>¹Ø±Õ</button>
         </div>
         <div class="meta-hero">
           <div class="meta-hero-glow"></div>
-          <div class="meta-hero-text">{metaPreviewSnippet() || 'æš‚æ— å†…å®¹é¢„è§ˆ'}</div>
+          <div class="meta-hero-text">{metaPreviewSnippet() || 'ÔİÎŞÄÚÈİÔ¤ÀÀ'}</div>
         </div>
         <div class="meta-list">
-          <div><span>åç§°</span><strong>{guessDocTitle($sourceText)}</strong></div>
-          <div><span>ç±»å‹</span><strong>text/markdown</strong></div>
-          <div><span>å¤§å°</span><strong>{estimateKb($sourceText)} KB</strong></div>
-          <div><span>è¯æ•°</span><strong>{$wordCount}</strong></div>
-          <div><span>é€‰åŒº</span><strong>{selectedBlockIds.length || 0}</strong></div>
-          <div><span>è·¯ç”±</span><strong>{lastGraphMeta?.route_id || 'é»˜è®¤'}</strong></div>
+          <div><span>Ãû³Æ</span><strong>{guessDocTitle($sourceText)}</strong></div>
+          <div><span>ÀàĞÍ</span><strong>text/markdown</strong></div>
+          <div><span>´óĞ¡</span><strong>{estimateKb($sourceText)} KB</strong></div>
+          <div><span>´ÊÊı</span><strong>{$wordCount}</strong></div>
+          <div><span>Ñ¡Çø</span><strong>{selectedBlockIds.length || 0}</strong></div>
+          <div><span>Â·ÓÉ</span><strong>{lastGraphMeta?.route_id || 'Ä¬ÈÏ'}</strong></div>
         </div>
         <div class="meta-actions">
           <button class="btn ghost icon-btn-text" onclick={() => switchWorkspaceMode('editor')}>
             <Icon name="open" className="ui-icon" />
-            <span>å®šä½åˆ°ç¼–è¾‘åŒº</span>
+            <span>¶¨Î»µ½±à¼­Çø</span>
           </button>
           <button class="btn ghost danger icon-btn-text" onclick={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}>
             <Icon name="clearSelection" className="ui-icon" />
-            <span>æ¸…ç©ºé€‰åŒº</span>
+            <span>Çå¿ÕÑ¡Çø</span>
           </button>
         </div>
       </div>
@@ -4472,20 +4473,20 @@
       class="inline-selection-bar"
       style={`left:${inlineBarLeft}px;top:${inlineBarTop}px;`}
       role="toolbar"
-      aria-label="é€‰ä¸­å—å¿«æ·æ“ä½œ"
+      aria-label="Ñ¡ÖĞ¿é¿ì½İ²Ù×÷"
     >
       <div class="inline-selection-meta">
-        å·²é€‰ä¸­ {selectedBlockIds.length} é¡¹
-        <span>Ctrl/Cmd+Enter ä¸‹å¼¹çª— Â· Ctrl/Cmd+Shift+Enter ä¸Šå¼¹çª—</span>
+        ÒÑÑ¡ÖĞ {selectedBlockIds.length} Ïî
+        <span>Ctrl/Cmd+Enter ÏÂµ¯´° ¡¤ Ctrl/Cmd+Shift+Enter ÉÏµ¯´°</span>
       </div>
       <div class="inline-selection-actions">
-        <button class="mini-btn" onclick={() => openInlinePopover('rewrite', 'down')} disabled={inlineEditLocked}>æ”¹å†™</button>
-        <button class="mini-btn" onclick={() => openInlinePopover('style', 'down')} disabled={inlineEditLocked}>æ ·å¼</button>
-        <button class="mini-btn" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>æ’è¡¨</button>
-        <button class="mini-btn" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>æ’å›¾</button>
-        <button class="mini-btn" onclick={() => openInlinePopover('assistant', 'down')}>å¯¹è¯</button>
-        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>ä¸Šæ–¹</button>
-        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>ä¸‹æ–¹</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('rewrite', 'down')} disabled={inlineEditLocked}>¸ÄĞ´</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('style', 'down')} disabled={inlineEditLocked}>ÑùÊ½</button>
+        <button class="mini-btn" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>²å±í</button>
+        <button class="mini-btn" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>²åÍ¼</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('assistant', 'down')}>¶Ô»°</button>
+        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>ÉÏ·½</button>
+        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>ÏÂ·½</button>
       </div>
     </div>
   {/if}
@@ -4494,38 +4495,38 @@
     <section
       class={`inline-edit-popover ${inlinePopoverPlacement}`}
       style={`left:${inlinePopoverLeft}px;top:${inlinePopoverTop}px;`}
-      aria-label="é€‰ä¸­å†…å®¹ä¿®æ”¹çª—å£"
+      aria-label="Ñ¡ÖĞÄÚÈİĞŞ¸Ä´°¿Ú"
     >
       <div class="inline-popover-head">
         <div>
-          <div class="panel-title">é€‰ä¸­å†…å®¹è½»é‡ä¿®æ”¹</div>
-          <div class="panel-sub">å½“å‰ä¸Šä¸‹æ–‡ç‹¬ç«‹äºå…¶ä»–æ®µè½å—ï¼ŒåŒä¸€å—ä¼šç»§æ‰¿ä¿®æ”¹ä¸Šä¸‹æ–‡ã€‚</div>
+          <div class="panel-title">Ñ¡ÖĞÄÚÈİÇáÁ¿ĞŞ¸Ä</div>
+          <div class="panel-sub">µ±Ç°ÉÏÏÂÎÄ¶ÀÁ¢ÓÚÆäËû¶ÎÂä¿é£¬Í¬Ò»¿é»á¼Ì³ĞĞŞ¸ÄÉÏÏÂÎÄ¡£</div>
         </div>
         <div class="inline-popover-head-actions">
-          <button class="btn ghost btn-sm" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>æ’è¡¨</button>
-          <button class="btn ghost btn-sm" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>æ’å›¾</button>
-          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>ä¸Šæ–¹</button>
-          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>ä¸‹æ–¹</button>
-          <button class="btn ghost btn-sm" onclick={closeInlinePopover}>å…³é—­</button>
+          <button class="btn ghost btn-sm" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>²å±í</button>
+          <button class="btn ghost btn-sm" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>²åÍ¼</button>
+          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>ÉÏ·½</button>
+          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>ÏÂ·½</button>
+          <button class="btn ghost btn-sm" onclick={closeInlinePopover}>¹Ø±Õ</button>
         </div>
       </div>
 
       <div class="inline-tabs">
         <button class={`inline-tab ${inlinePanelTab === 'rewrite' ? 'active' : ''}`} onclick={() => toggleInlineTab('rewrite')}>
-          æ”¹å†™å»ºè®®
+          ¸ÄĞ´½¨Òé
         </button>
         <button class={`inline-tab ${inlinePanelTab === 'style' ? 'active' : ''}`} onclick={() => toggleInlineTab('style')}>
-          æ ·å¼è®¾ç½®
+          ÑùÊ½ÉèÖÃ
         </button>
         <button class={`inline-tab ${inlinePanelTab === 'assistant' ? 'active' : ''}`} onclick={() => toggleInlineTab('assistant')}>
-          æ”¹åŠ¨å¯¹è¯
+          ¸Ä¶¯¶Ô»°
         </button>
       </div>
 
       <div class="selected-targets">
         {#each selectedBlocks as b, idx}
           <span class="selected-chip" title={b.text}>
-            {b.kind === 'section' || b.kind === 'title' ? `æ ‡é¢˜${idx + 1}` : `å—${idx + 1}`}
+            {b.kind === 'section' || b.kind === 'title' ? `±êÌâ${idx + 1}` : `¿é${idx + 1}`}
           </span>
         {/each}
       </div>
@@ -4535,79 +4536,79 @@
 
       {#if inlinePanelTab === 'style'}
         <div class="inline-style-row compact">
-          <span>å­—ä½“</span>
+          <span>×ÖÌå</span>
           <select
             bind:value={blockStyleFontFamily}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ fontFamily: blockStyleFontFamily })}
           >
-            <option value="">é»˜è®¤</option>
-            <option value="å®‹ä½“">å®‹ä½“</option>
-            <option value="é»‘ä½“">é»‘ä½“</option>
-            <option value="å¾®è½¯é›…é»‘">å¾®è½¯é›…é»‘</option>
-            <option value="æ¥·ä½“">æ¥·ä½“</option>
-            <option value="ä»¿å®‹">ä»¿å®‹</option>
+            <option value="">Ä¬ÈÏ</option>
+            <option value="ËÎÌå">ËÎÌå</option>
+            <option value="ºÚÌå">ºÚÌå</option>
+            <option value="Î¢ÈíÑÅºÚ">Î¢ÈíÑÅºÚ</option>
+            <option value="¿¬Ìå">¿¬Ìå</option>
+            <option value="·ÂËÎ">·ÂËÎ</option>
           </select>
-          <span>å­—å·</span>
+          <span>×ÖºÅ</span>
           <select
             bind:value={blockStyleFontSize}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ fontSize: blockStyleFontSize })}
           >
-            <option value="">é»˜è®¤</option>
+            <option value="">Ä¬ÈÏ</option>
             <option value="12pt">12pt</option>
             <option value="14pt">14pt</option>
             <option value="16pt">16pt</option>
             <option value="18pt">18pt</option>
             <option value="20pt">20pt</option>
           </select>
-          <span>è¡Œè·</span>
+          <span>ĞĞ¾à</span>
           <select
             bind:value={blockStyleLineHeight}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ lineHeight: blockStyleLineHeight })}
           >
-            <option value="">é»˜è®¤</option>
+            <option value="">Ä¬ÈÏ</option>
             <option value="1.2">1.2</option>
             <option value="1.5">1.5</option>
             <option value="1.75">1.75</option>
             <option value="2">2.0</option>
           </select>
-          <span>å¯¹é½</span>
+          <span>¶ÔÆë</span>
           <select
             bind:value={blockStyleAlign}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ align: blockStyleAlign })}
           >
-            <option value="">é»˜è®¤</option>
-            <option value="left">å·¦å¯¹é½</option>
-            <option value="center">å±…ä¸­</option>
-            <option value="right">å³å¯¹é½</option>
-            <option value="justify">ä¸¤ç«¯å¯¹é½</option>
+            <option value="">Ä¬ÈÏ</option>
+            <option value="left">×ó¶ÔÆë</option>
+            <option value="center">¾ÓÖĞ</option>
+            <option value="right">ÓÒ¶ÔÆë</option>
+            <option value="justify">Á½¶Ë¶ÔÆë</option>
           </select>
-          <span>å­—é‡</span>
+          <span>×ÖÖØ</span>
           <select
             bind:value={blockStyleFontWeight}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ fontWeight: blockStyleFontWeight })}
           >
-            <option value="">é»˜è®¤</option>
-            <option value="400">å¸¸è§„</option>
-            <option value="500">ä¸­ç­‰</option>
-            <option value="600">åŠç²—</option>
-            <option value="700">åŠ ç²—</option>
+            <option value="">Ä¬ÈÏ</option>
+            <option value="400">³£¹æ</option>
+            <option value="500">ÖĞµÈ</option>
+            <option value="600">°ë´Ö</option>
+            <option value="700">¼Ó´Ö</option>
           </select>
-          <span>å­—å½¢</span>
+          <span>×ÖĞÎ</span>
           <select
             bind:value={blockStyleFontStyle}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ fontStyle: blockStyleFontStyle })}
           >
-            <option value="">é»˜è®¤</option>
-            <option value="normal">æ­£å¸¸</option>
-            <option value="italic">æ–œä½“</option>
+            <option value="">Ä¬ÈÏ</option>
+            <option value="normal">Õı³£</option>
+            <option value="italic">Ğ±Ìå</option>
           </select>
-          <span>æ–‡å­—è‰²</span>
+          <span>ÎÄ×ÖÉ«</span>
           <input
             type="text"
             placeholder="#1f2937"
@@ -4615,7 +4616,7 @@
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ color: blockStyleColor })}
           />
-          <span>èƒŒæ™¯è‰²</span>
+          <span>±³¾°É«</span>
           <input
             type="text"
             placeholder="#ffffff"
@@ -4624,15 +4625,15 @@
             onchange={() => applyInlineBlockStyle({ background: blockStyleBackground })}
           />
         </div>
-        <div class="panel-empty">æ ·å¼æ ä¼šå›æ˜¾å½“å‰é€‰ä¸­å—çš„æ ·å¼ï¼Œä¿®æ”¹ä»…ä½œç”¨äºå½“å‰é€‰åŒºã€‚</div>
+        <div class="panel-empty">ÑùÊ½À¸»á»ØÏÔµ±Ç°Ñ¡ÖĞ¿éµÄÑùÊ½£¬ĞŞ¸Ä½ö×÷ÓÃÓÚµ±Ç°Ñ¡Çø¡£</div>
       {/if}
 
       {#if inlinePanelTab === 'assistant'}
         <div class="assistant-inline-tip">
-          <div>ç”¨äºå¤„ç†å½“å‰é€‰ä¸­å—çš„å¤æ‚è¯­ä¹‰ä¿®æ”¹ã€‚</div>
+          <div>ÓÃÓÚ´¦Àíµ±Ç°Ñ¡ÖĞ¿éµÄ¸´ÔÓÓïÒåĞŞ¸Ä¡£</div>
           <textarea
             class="inline-instruction"
-            placeholder="ä¾‹å¦‚ï¼šå°†é€‰ä¸­å†…å®¹æ”¹æˆè¯¾ç¨‹è®¾è®¡æŠ¥å‘Šè¯­æ°”ï¼Œå¹¶è¡¥å…¨æœ¯è¯­è§£é‡Šã€‚"
+            placeholder="ÀıÈç£º½«Ñ¡ÖĞÄÚÈİ¸Ä³É¿Î³ÌÉè¼Æ±¨¸æÓïÆø£¬²¢²¹È«ÊõÓï½âÊÍ¡£"
             bind:value={blockDialogInput}
           ></textarea>
           <div class="assistant-inline-actions">
@@ -4643,41 +4644,41 @@
                 inlinePanelTab = 'rewrite'
               }}
             >
-              åŒæ­¥åˆ°æ”¹å†™æŒ‡ä»¤
+              Í¬²½µ½¸ÄĞ´Ö¸Áî
             </button>
-            <button class="btn ghost" onclick={() => openAssistantForBlock(blockDialogInput)}>å‘åˆ°å³ä¸‹è§’å…¨å±€åŠ©æ‰‹</button>
+            <button class="btn ghost" onclick={() => openAssistantForBlock(blockDialogInput)}>·¢µ½ÓÒÏÂ½ÇÈ«¾ÖÖúÊÖ</button>
           </div>
         </div>
       {/if}
 
       {#if inlinePanelTab === 'rewrite'}
         <div class="inline-preset-row">
-          <button class="preset-chip" onclick={() => useRewritePreset('è¯­æ°”æ›´æ­£å¼ï¼Œä¿ç•™åŸæ„')}>æ›´æ­£å¼</button>
-          <button class="preset-chip" onclick={() => useRewritePreset('å‹ç¼©åˆ°æ›´ç®€æ´ï¼Œæ§åˆ¶åœ¨80å­—å·¦å³')}>æ›´ç®€æ´</button>
-          <button class="preset-chip" onclick={() => useRewritePreset('å¢åŠ è§£é‡Šç»†èŠ‚ï¼Œä½†ä¸è¦æ‰©å±•äº‹å®')}>æ›´è¯¦ç»†</button>
-          <button class="preset-chip" onclick={() => useRewritePreset('ä¿æŒæœ¯è¯­ä¸å˜ï¼Œä»…è°ƒæ•´è¡¨è¾¾')}>ä¿ç•™æœ¯è¯­</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('ÓïÆø¸üÕıÊ½£¬±£ÁôÔ­Òâ')}>¸üÕıÊ½</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('Ñ¹Ëõµ½¸ü¼ò½à£¬¿ØÖÆÔÚ80×Ö×óÓÒ')}>¸ü¼ò½à</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('Ôö¼Ó½âÊÍÏ¸½Ú£¬µ«²»ÒªÀ©Õ¹ÊÂÊµ')}>¸üÏêÏ¸</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('±£³ÖÊõÓï²»±ä£¬½öµ÷Õû±í´ï')}>±£ÁôÊõÓï</button>
         </div>
 
         <div class="inline-ai-row">
           <textarea
             class="inline-instruction"
-            placeholder="ä¾‹å¦‚ï¼šä»…é‡å†™é€‰ä¸­æ®µè½ï¼Œè¯­æ°”æ›´æ­£å¼ï¼Œå‡å°‘20%å­—æ•°ã€‚"
+            placeholder="ÀıÈç£º½öÖØĞ´Ñ¡ÖĞ¶ÎÂä£¬ÓïÆø¸üÕıÊ½£¬¼õÉÙ20%×ÖÊı¡£"
             bind:value={blockEditCmd}
           ></textarea>
         </div>
 
         <div class="inline-action-row">
-          <button class="btn ghost" onclick={() => openInlinePopover('assistant', inlinePopoverPlacement)}>åˆ‡åˆ°æ”¹åŠ¨å¯¹è¯</button>
+          <button class="btn ghost" onclick={() => openInlinePopover('assistant', inlinePopoverPlacement)}>ÇĞµ½¸Ä¶¯¶Ô»°</button>
           <button
             class="btn primary"
             onclick={previewSelectedBlockEdit}
             disabled={inlineEditLocked || blockPreviewBusy || !blockEditCmd.trim() || hasNonBlockTargets()}
           >
-            {blockPreviewBusy ? 'æ­£åœ¨ç”Ÿæˆå»ºè®®...' : 'ç”Ÿæˆå»ºè®®ï¼ˆä¸æ”¹åŸæ–‡ï¼‰'}
+            {blockPreviewBusy ? 'ÕıÔÚÉú³É½¨Òé...' : 'Éú³É½¨Òé£¨²»¸ÄÔ­ÎÄ£©'}
           </button>
         </div>
         {#if hasNonBlockTargets()}
-          <div class="panel-empty">å½“å‰é€‰åŒºåŒ…å«æ ‡é¢˜ï¼Œè¯·ç›´æ¥ç¼–è¾‘æ ‡é¢˜æˆ–åˆ‡åˆ°â€œæ ·å¼è®¾ç½®â€ã€‚</div>
+          <div class="panel-empty">µ±Ç°Ñ¡Çø°üº¬±êÌâ£¬ÇëÖ±½Ó±à¼­±êÌâ»òÇĞµ½¡°ÑùÊ½ÉèÖÃ¡±¡£</div>
         {/if}
       {/if}
 
@@ -4688,7 +4689,7 @@
       {#if blockCandidates.length > 0}
         <div class="candidate-compare compact">
           <div class="candidate-before">
-            <div class="candidate-label">åŸæ–‡</div>
+            <div class="candidate-label">Ô­ÎÄ</div>
             <div class="candidate-text">{blockOriginalText || selectedBlockText}</div>
           </div>
           <div class="candidate-panel">
@@ -4710,11 +4711,11 @@
                   <span class="candidate-meta">{candidateLengthDelta(activeCandidate)}</span>
                 </div>
                 <div class="candidate-actions">
-                  <button class="btn primary" onclick={() => applyCandidateVersion(activeCandidateIndex)} disabled={inlineEditLocked}>é‡‡çº³åˆ°æ­£æ–‡</button>
-                  <button class="btn ghost" onclick={previewSelectedBlockEdit}>é‡æ–°ç”Ÿæˆ</button>
-                  <button class="btn ghost danger" onclick={ignoreCandidateSuggestions}>å¿½ç•¥å»ºè®®</button>
+                  <button class="btn primary" onclick={() => applyCandidateVersion(activeCandidateIndex)} disabled={inlineEditLocked}>²ÉÄÉµ½ÕıÎÄ</button>
+                  <button class="btn ghost" onclick={previewSelectedBlockEdit}>ÖØĞÂÉú³É</button>
+                  <button class="btn ghost danger" onclick={ignoreCandidateSuggestions}>ºöÂÔ½¨Òé</button>
                 </div>
-                <div class="candidate-label">å»ºè®®æ–‡æœ¬</div>
+                <div class="candidate-label">½¨ÒéÎÄ±¾</div>
                 <div class="candidate-text">{activeCandidate.selectedAfter}</div>
               </div>
             {/if}
@@ -4724,9 +4725,9 @@
     </section>
   {/if}
 
-  <button class="assistant-fab" onclick={toggleAssistantOpen} title="æ‰“å¼€æ™ºèƒ½åŠ©æ‰‹ (Ctrl/Cmd+K)">
+  <button class="assistant-fab" onclick={toggleAssistantOpen} title="´ò¿ªÖÇÄÜÖúÊÖ (Ctrl/Cmd+K)">
     <Icon name="chat" className="ui-icon" />
-    <span>åŠ©æ‰‹</span>
+    <span>ÖúÊÖ</span>
     {#if assistantBadgeCount > 0}
       <span class="assistant-queue-badge">{assistantBadgeCount}</span>
     {/if}
@@ -4734,17 +4735,17 @@
 
   {#if assistantOpen}
     <div class="assistant-sheet-backdrop" role="presentation">
-      <button type="button" class="sheet-backdrop-hit" onclick={() => setAssistantOpen(false)} aria-label="å…³é—­æ™ºèƒ½åŠ©æ‰‹"></button>
-      <div class="assistant-sheet" role="dialog" aria-modal="true" aria-label="æ™ºèƒ½åŠ©æ‰‹" tabindex="-1" onkeydown={handleAssistantSheetKeydown}>
+      <button type="button" class="sheet-backdrop-hit" onclick={() => setAssistantOpen(false)} aria-label="¹Ø±ÕÖÇÄÜÖúÊÖ"></button>
+      <div class="assistant-sheet" role="dialog" aria-modal="true" aria-label="ÖÇÄÜÖúÊÖ" tabindex="-1" onkeydown={handleAssistantSheetKeydown}>
         <div class="assistant-sheet-head">
           <div>
-            <div class="panel-title">æ™ºèƒ½åŠ©æ‰‹</div>
-            <div class="panel-sub">å¿«æ·é”®ï¼šCtrl/Cmd + K</div>
+            <div class="panel-title">ÖÇÄÜÖúÊÖ</div>
+            <div class="panel-sub">¿ì½İ¼ü£ºCtrl/Cmd + K</div>
           </div>
           {#if assistantBadgeCount > 0}
             <span class="assistant-queue-badge">{assistantBadgeCount}</span>
           {/if}
-          <button class="btn ghost btn-sm" onclick={() => setAssistantOpen(false)}>å…³é—­</button>
+          <button class="btn ghost btn-sm" onclick={() => setAssistantOpen(false)}>¹Ø±Õ</button>
         </div>
         <Chat
           variant="assistant"
@@ -4771,20 +4772,20 @@
   />
 
   {#if pendingGenerateConfirmation}
-    <div class="confirm-overlay" role="dialog" aria-modal="true" aria-label="é«˜é£é™©ç¼–è¾‘ç¡®è®¤">
+    <div class="confirm-overlay" role="dialog" aria-modal="true" aria-label="¸ß·çÏÕ±à¼­È·ÈÏ">
       <section class="confirm-dialog">
-        <div class="panel-title">æ£€æµ‹åˆ°é«˜é£é™©ç¼–è¾‘</div>
+        <div class="panel-title">¼ì²âµ½¸ß·çÏÕ±à¼­</div>
         <div class="panel-sub">
-          é£é™©ç­‰çº§ {pendingGenerateConfirmation.riskLevel} Â· è®¡åˆ’æ¥æº {pendingGenerateConfirmation.planSource}
-          Â· æ“ä½œæ•° {pendingGenerateConfirmation.operationsCount}
+          ·çÏÕµÈ¼¶ {pendingGenerateConfirmation.riskLevel} ¡¤ ¼Æ»®À´Ô´ {pendingGenerateConfirmation.planSource}
+          ¡¤ ²Ù×÷Êı {pendingGenerateConfirmation.operationsCount}
         </div>
         <div class="confirm-note">
-          {pendingGenerateConfirmation.note || 'è¯¥è¯·æ±‚ä¼šæ‰§è¡Œé«˜é£é™©æ–‡æœ¬æ”¹åŠ¨ï¼Œè¯·ç¡®è®¤æ˜¯å¦ç»§ç»­ã€‚'}
+          {pendingGenerateConfirmation.note || '¸ÃÇëÇó»áÖ´ĞĞ¸ß·çÏÕÎÄ±¾¸Ä¶¯£¬ÇëÈ·ÈÏÊÇ·ñ¼ÌĞø¡£'}
         </div>
         <div class="confirm-actions">
-          <button class="btn ghost" onclick={cancelPendingGenerate} disabled={confirmDialogBusy}>å–æ¶ˆ</button>
+          <button class="btn ghost" onclick={cancelPendingGenerate} disabled={confirmDialogBusy}>È¡Ïû</button>
           <button class="btn primary danger" onclick={confirmPendingGenerate} disabled={confirmDialogBusy}>
-            {confirmDialogBusy ? 'æ‰§è¡Œä¸­...' : 'ç¡®è®¤æ‰§è¡Œ'}
+            {confirmDialogBusy ? 'Ö´ĞĞÖĞ...' : 'È·ÈÏÖ´ĞĞ'}
           </button>
         </div>
       </section>
@@ -4810,3013 +4811,3 @@
   <PerformanceMetrics bind:visible={showPerformanceMetrics} />
 </ErrorBoundary>
 
-<style>
-  :global(body) {
-    margin: 0;
-    background: radial-gradient(700px 360px at 15% 10%, rgba(94, 175, 255, 0.12), transparent 60%),
-      radial-gradient(520px 280px at 85% 12%, rgba(56, 230, 255, 0.14), transparent 60%),
-      linear-gradient(180deg, #f6f9ff 0%, #eef3fb 50%, #f3f7ff 100%);
-    color: #f5f3f0;
-    font-family: "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", sans-serif;
-  }
-
-  :global(body)::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background:
-      repeating-linear-gradient(120deg, rgba(250, 249, 247, 0.04) 0, rgba(250, 249, 247, 0.04) 1px, transparent 1px, transparent 32px),
-      repeating-linear-gradient(200deg, rgba(217, 119, 6, 0.06) 0, rgba(217, 119, 6, 0.06) 1px, transparent 1px, transparent 36px);
-    opacity: 0.4;
-    z-index: 0;
-  }
-
-  .app {
-    --panel-bg: rgba(255, 255, 255, 0.88);
-    --panel-border: rgba(148, 163, 184, 0.22);
-    --panel-shadow: 0 18px 40px rgba(250, 249, 247, 0.12);
-    --accent: #2563eb;
-    --accent-weak: rgba(37, 99, 235, 0.12);
-    --text-muted: rgba(245, 243, 240, 0.72);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    z-index: 1;
-  }
-
-  .topbar {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 20px;
-    padding: 16px 28px;
-    background: rgba(255, 255, 255, 0.86);
-    border-bottom: 1px solid rgba(231, 229, 228, 1);
-    
-  }
-
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .logo {
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
-    display: grid;
-    place-items: center;
-    font-weight: 700;
-    color: #f5f3f0;
-    background: #faf9f7;
-    box-shadow: 0 10px 20px rgba(14, 165, 233, 0.25);
-  }
-
-  .brand-title {
-    font-size: 16px;
-    font-weight: 600;
-  }
-
-  .brand-sub {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .menu {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .menu-item {
-    border: none;
-    background: transparent;
-    font-size: 13px;
-    color: #1e293b;
-    padding: 6px 10px;
-    border-radius: 8px;
-    transition: background 0.2s ease, color 0.2s ease;
-    cursor: pointer;
-  }
-
-  .menu-item:hover {
-    background: rgba(37, 99, 235, 0.08);
-    color: #1d4ed8;
-  }
-
-  .top-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .feedback-panel {
-    padding: 12px 14px;
-    border-radius: 14px;
-    border: 1px solid var(--panel-border);
-    background: var(--panel-bg);
-    box-shadow: var(--panel-shadow);
-    display: grid;
-    gap: 10px;
-  }
-
-  .feedback-panel-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .feedback-form {
-    display: grid;
-    gap: 8px;
-  }
-
-  .feedback-row {
-    display: grid;
-    grid-template-columns: auto 1fr auto 180px;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .feedback-row textarea {
-    grid-column: span 3;
-    border: 1px solid var(--panel-border);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.82);
-    color: var(--text-main);
-    padding: 8px 10px;
-    resize: vertical;
-  }
-
-  .feedback-row select {
-    border: 1px solid var(--panel-border);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.86);
-    color: var(--text-main);
-    padding: 7px 8px;
-  }
-
-  .rating-group {
-    display: inline-flex;
-    gap: 6px;
-  }
-
-  .rating-btn {
-    border: 1px solid var(--panel-border);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.88);
-    padding: 6px 10px;
-    min-width: 34px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .rating-btn.active {
-    background: rgba(37, 99, 235, 0.14);
-    border-color: rgba(37, 99, 235, 0.5);
-    color: #1d4ed8;
-  }
-
-  .feedback-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .feedback-tip {
-    font-size: 12px;
-    color: #1d4ed8;
-  }
-
-  .feedback-history {
-    margin-top: 4px;
-    padding-top: 8px;
-    border-top: 1px dashed var(--panel-border);
-    display: grid;
-    gap: 6px;
-  }
-
-  .feedback-item {
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 10px;
-    padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.72);
-    display: grid;
-    gap: 4px;
-  }
-
-  .feedback-item-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .feedback-item-note {
-    font-size: 13px;
-    color: var(--text-main);
-    line-height: 1.45;
-  }
-
-  .plagiarism-grid {
-    display: grid;
-    grid-template-columns: auto 140px auto 1fr;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .plagiarism-grid input {
-    border: 1px solid var(--panel-border);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.86);
-    color: var(--text-main);
-    padding: 7px 8px;
-  }
-
-  .plagiarism-results {
-    margin-top: 6px;
-    border-top: 1px dashed var(--panel-border);
-    padding-top: 10px;
-    display: grid;
-    gap: 8px;
-  }
-
-  .plagiarism-report-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    border-top: 1px dashed var(--panel-border);
-    padding-top: 8px;
-  }
-
-  .plagiarism-item {
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 10px;
-    padding: 8px 10px;
-    background: rgba(255, 255, 255, 0.72);
-    display: grid;
-    gap: 6px;
-  }
-
-  .plagiarism-item-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 13px;
-    color: var(--text-main);
-  }
-
-  .plagiarism-item-head em {
-    font-style: normal;
-    color: var(--text-muted);
-    margin-left: 4px;
-  }
-
-  .plagiarism-item-head .danger {
-    color: #b91c1c;
-    font-weight: 600;
-  }
-
-  .plagiarism-item-metrics {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .plagiarism-evidence {
-    font-size: 12px;
-    color: #334155;
-    border-left: 3px solid rgba(37, 99, 235, 0.35);
-    padding-left: 8px;
-    line-height: 1.45;
-  }
-
-  .workspace {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 74px minmax(0, 1fr) 430px;
-    gap: 20px;
-    padding: 14px 22px 48px;
-  }
-
-  .nav-rail {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 12px 0;
-  }
-
-  .nav-btn {
-    border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.9);
-    color: #1e293b;
-    border-radius: 16px;
-    padding: 12px 8px;
-    font-size: 12px;
-    text-align: center;
-    cursor: pointer;
-    box-shadow: 0 10px 20px rgba(250, 249, 247, 0.08);
-    transition: transform 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
-  }
-
-  .nav-btn.active {
-    border-color: rgba(37, 99, 235, 0.5);
-    box-shadow: 0 16px 24px rgba(37, 99, 235, 0.2);
-  }
-
-  .nav-btn:hover {
-    transform: translateY(-2px);
-  }
-
-  .doc-area {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .doc-toolbar {
-    display: grid;
-    gap: 4px;
-    padding: 8px 12px;
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 16px;
-    box-shadow: var(--panel-shadow);
-  }
-
-  .toolbar-line {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .toolbar-cluster {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.78);
-    flex-wrap: wrap;
-  }
-
-  .toolbar-cluster.compact {
-    margin-left: auto;
-  }
-
-  .cluster-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    letter-spacing: 0.02em;
-    margin-right: 2px;
-    white-space: nowrap;
-  }
-
-  .tool-sep {
-    width: 1px;
-    height: 18px;
-    background: rgba(231, 229, 228, 1);
-    margin: 0 2px;
-  }
-
-  .tool-btn {
-    min-width: 34px;
-    height: 32px;
-    border-radius: 10px;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: #fff;
-    font-weight: 600;
-    padding: 0 10px;
-    cursor: pointer;
-    transition: border 0.2s ease, box-shadow 0.2s ease;
-  }
-
-  .tool-btn:hover:not(:disabled) {
-    border-color: rgba(37, 99, 235, 0.6);
-    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.15);
-  }
-
-  .tool-btn.active {
-    border-color: rgba(37, 99, 235, 0.75);
-    background: #faf9f7;
-    color: #1d4ed8;
-    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
-  }
-
-  .tool-btn:disabled {
-    opacity: 0.38;
-    cursor: not-allowed;
-    box-shadow: none;
-    transform: none;
-    border-color: rgba(231, 229, 228, 1);
-    border-style: dashed;
-    background: rgba(241, 245, 249, 0.72);
-    color: rgba(100, 116, 139, 0.9);
-    filter: grayscale(0.45);
-  }
-
-  .hidden-input {
-    display: none;
-  }
-
-  .generation-banner {
-    padding: 10px 16px;
-    border-radius: 14px;
-    background: rgba(14, 165, 233, 0.12);
-    color: #f5f3f0;
-    font-size: 13px;
-  }
-
-  .section-failures {
-    padding: 12px 16px;
-    border-radius: 14px;
-    background: rgba(239, 68, 68, 0.08);
-    border: 1px dashed rgba(239, 68, 68, 0.35);
-    display: grid;
-    gap: 8px;
-  }
-
-  .failure-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
-  }
-
-  .originality-panel {
-    background: rgba(217, 119, 6, 0.08);
-    border-color: rgba(217, 119, 6, 0.28);
-  }
-
-  .risk-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: center;
-    padding: 10px 0;
-    border-top: 1px dashed rgba(231, 229, 228, 1);
-  }
-
-  .risk-title {
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .risk-metrics {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    font-size: 12px;
-    color: rgba(250, 249, 247, 0.72);
-    margin-top: 4px;
-  }
-
-  .risk-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .risk-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.32);
-    background: rgba(255, 255, 255, 0.56);
-  }
-
-  .risk-badge.ok {
-    color: #166534;
-    border-color: rgba(22, 163, 74, 0.32);
-    background: rgba(220, 252, 231, 0.72);
-  }
-
-  .risk-badge.bad {
-    color: #991b1b;
-    border-color: rgba(239, 68, 68, 0.32);
-    background: rgba(254, 226, 226, 0.76);
-  }
-
-  .doc-stage {
-    flex: 1;
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 20px;
-    padding: 12px;
-    box-shadow: var(--panel-shadow);
-    min-height: 360px;
-  }
-
-  .inline-tabs {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .inline-tab {
-    border: 1px solid rgba(148, 163, 184, 0.32);
-    border-radius: 999px;
-    padding: 7px 14px;
-    font-size: 13px;
-    background: rgba(248, 250, 252, 0.94);
-    color: #f5f3f0;
-    cursor: pointer;
-  }
-
-  .inline-tab.active {
-    border-color: rgba(37, 99, 235, 0.45);
-    background: rgba(37, 99, 235, 0.14);
-    color: #1e3a8a;
-    font-weight: 600;
-  }
-
-  .inline-style-row {
-    display: grid;
-    grid-template-columns: auto 1fr auto 1fr auto 1fr;
-    gap: 8px;
-    align-items: center;
-    font-size: 14px;
-  }
-
-  .inline-style-row select,
-  .inline-style-row input {
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 8px;
-    padding: 7px 10px;
-    background: #fff;
-    font-size: 14px;
-  }
-
-  .inline-style-row input[type='text'] {
-    min-height: 34px;
-  }
-
-  .inline-preset-row {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .preset-chip {
-    border: 1px solid rgba(37, 99, 235, 0.28);
-    border-radius: 999px;
-    background: rgba(37, 99, 235, 0.06);
-    color: #1e3a8a;
-    padding: 7px 10px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .inline-ai-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .inline-instruction {
-    width: 100%;
-    min-height: 96px;
-    resize: vertical;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 12px;
-    padding: 12px 14px;
-    background: #fff;
-    font-size: 15px;
-    line-height: 1.5;
-  }
-
-  .inline-action-row {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .assistant-inline-tip {
-    border: 1px dashed rgba(37, 99, 235, 0.35);
-    border-radius: 12px;
-    background: rgba(239, 246, 255, 0.9);
-    padding: 12px;
-    font-size: 14px;
-    color: #1e293b;
-    display: grid;
-    gap: 10px;
-  }
-
-  .assistant-inline-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .candidate-compare {
-    display: grid;
-    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .candidate-before,
-  .candidate-card {
-    border: 1px solid rgba(231, 229, 228, 1);
-    border-radius: 12px;
-    background: rgba(248, 250, 252, 0.95);
-    padding: 12px;
-  }
-
-  .candidate-before {
-    position: sticky;
-    top: 0;
-    align-self: start;
-  }
-
-  .candidate-panel {
-    display: grid;
-    gap: 10px;
-  }
-
-  .candidate-switches {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .candidate-switch {
-    border: 1px solid rgba(148, 163, 184, 0.32);
-    border-radius: 10px;
-    background: rgba(241, 245, 249, 0.9);
-    color: #f5f3f0;
-    padding: 7px 10px;
-    font-size: 12px;
-    display: grid;
-    justify-items: start;
-    gap: 2px;
-    cursor: pointer;
-    min-width: 120px;
-  }
-
-  .candidate-switch.active {
-    border-color: rgba(37, 99, 235, 0.45);
-    background: rgba(37, 99, 235, 0.14);
-    color: #1e3a8a;
-    font-weight: 600;
-  }
-
-  .candidate-label {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-  }
-
-  .candidate-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-
-  .candidate-meta {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  .candidate-actions {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
-    flex-wrap: wrap;
-  }
-
-  .candidate-text {
-    max-height: 300px;
-    overflow: auto;
-    white-space: pre-wrap;
-    font-size: 16px;
-    line-height: 1.55;
-    color: #f5f3f0;
-  }
-
-  .btn.ghost.danger {
-    background: rgba(239, 68, 68, 0.1);
-    color: #991b1b;
-  }
-
-  .btn-sm {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-
-  .side-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .panel-card {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 18px;
-    padding: 14px;
-    box-shadow: var(--panel-shadow);
-  }
-
-  .version-panel {
-    order: 1;
-  }
-
-  .panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-
-  .panel-title {
-    font-weight: 600;
-    font-size: 14px;
-  }
-
-  .panel-sub {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .panel-empty {
-    padding: 12px;
-    color: var(--text-muted);
-    font-size: 12px;
-  }
-
-  .major-commit {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .version-input,
-  .block-input {
-    flex: 1;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 10px;
-    padding: 8px 10px;
-    background: #fff;
-    font-size: 12px;
-  }
-
-  .version-groups {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .version-major {
-    padding: 10px;
-    border-radius: 14px;
-    border: 1px solid rgba(37, 99, 235, 0.2);
-    background: rgba(37, 99, 235, 0.05);
-  }
-
-  .version-major.current {
-    border-color: rgba(22, 163, 74, 0.5);
-  }
-
-  .version-title {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: 600;
-    margin-bottom: 4px;
-  }
-
-  .badge {
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: rgba(231, 229, 228, 1);
-  }
-
-  .badge.major {
-    background: rgba(37, 99, 235, 0.15);
-    color: #1e3a8a;
-  }
-
-  .version-meta {
-    display: flex;
-    gap: 10px;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .version-summary {
-    margin-top: 6px;
-    font-size: 11px;
-    color: #f5f3f0;
-  }
-
-  .version-actions,
-  .minor-actions {
-    display: flex;
-    gap: 6px;
-    margin-top: 8px;
-  }
-
-  .version-minors {
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .version-minor {
-    padding: 8px 10px;
-    border-radius: 12px;
-    border: 1px dashed rgba(231, 229, 228, 1);
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .version-minor.current {
-    border-color: rgba(22, 163, 74, 0.5);
-  }
-
-  .minor-title {
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  .minor-meta {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .version-diff pre {
-    background: rgba(250, 249, 247, 0.06);
-    padding: 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    white-space: pre-wrap;
-    max-height: 160px;
-    overflow: auto;
-  }
-
-  .block-preview {
-    font-size: 12px;
-    color: #f5f3f0;
-    background: rgba(250, 249, 247, 0.04);
-    border-radius: 10px;
-    padding: 8px;
-    max-height: 80px;
-    overflow: auto;
-    margin-bottom: 8px;
-  }
-
-  .block-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-  }
-
-  .block-error {
-    color: #dc2626;
-    font-size: 12px;
-    margin-top: 6px;
-  }
-
-  .selected-targets {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-  }
-
-  .selected-chip {
-    border: 1px solid rgba(37, 99, 235, 0.3);
-    background: rgba(37, 99, 235, 0.1);
-    color: #1e3a8a;
-    font-size: 12px;
-    border-radius: 999px;
-    padding: 4px 10px;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .inline-style-row.compact {
-    grid-template-columns: auto 1fr;
-    gap: 6px 8px;
-  }
-
-  .inline-preset-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .inline-instruction {
-    min-height: 88px;
-  }
-
-  .candidate-compare.compact {
-    grid-template-columns: 1fr;
-  }
-
-  .candidate-before {
-    position: static;
-  }
-
-  .inline-selection-bar {
-    position: fixed;
-    z-index: 16;
-    width: min(560px, calc(100vw - 24px));
-    border-radius: 12px;
-    border: 1px solid rgba(37, 99, 235, 0.28);
-    background: rgba(255, 255, 255, 0.97);
-    box-shadow: 0 16px 30px rgba(250, 249, 247, 0.22);
-    padding: 8px 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .inline-selection-meta {
-    font-size: 12px;
-    color: #f5f3f0;
-    display: grid;
-    gap: 2px;
-  }
-
-  .inline-selection-meta > span {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .inline-selection-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .mini-btn {
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(248, 250, 252, 0.95);
-    color: #f5f3f0;
-    border-radius: 9px;
-    padding: 6px 9px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: border 0.2s ease, background 0.2s ease;
-  }
-
-  .mini-btn:hover {
-    border-color: rgba(37, 99, 235, 0.52);
-    background: rgba(239, 246, 255, 0.95);
-  }
-
-  .mini-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background: rgba(168, 162, 158, 0.7);
-  }
-
-  .inline-edit-popover {
-    position: fixed;
-    z-index: 17;
-    width: min(720px, calc(100vw - 24px));
-    max-height: min(80vh, 860px);
-    overflow: auto;
-    border-radius: 16px;
-    border: 1px solid rgba(37, 99, 235, 0.32);
-    background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 24px 48px rgba(250, 249, 247, 0.28);
-    padding: 12px;
-    display: grid;
-    gap: 10px;
-  }
-
-  .inline-edit-popover.up {
-    transform: translateY(calc(-100% - 8px));
-  }
-
-  .inline-popover-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .inline-popover-head-actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .assistant-queue-badge {
-    min-width: 18px;
-    height: 18px;
-    border-radius: 999px;
-    background: rgba(250, 249, 247, 0.8);
-    color: #fff;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    padding: 0 5px;
-  }
-
-  .btn {
-    border: none;
-    background: rgba(250, 249, 247, 0.08);
-    color: #f5f3f0;
-    padding: 8px 12px;
-    border-radius: 10px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-  }
-
-  .btn.primary {
-    background: linear-gradient(135deg, #2563eb, #0ea5e9);
-    color: #fff;
-  }
-
-  .btn.ghost {
-    background: rgba(250, 249, 247, 0.06);
-  }
-
-  .btn.primary.danger {
-    background: linear-gradient(135deg, #dc2626, #dc2626);
-  }
-
-  .confirm-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    background: rgba(250, 249, 247, 0.38);
-    display: grid;
-    place-items: center;
-    padding: 16px;
-  }
-
-  .confirm-dialog {
-    width: min(560px, calc(100vw - 32px));
-    border-radius: 16px;
-    border: 1px solid rgba(220, 38, 38, 0.25);
-    background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 26px 48px rgba(250, 249, 247, 0.3);
-    padding: 16px;
-    display: grid;
-    gap: 10px;
-  }
-
-  .confirm-note {
-    border-radius: 10px;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(248, 250, 252, 0.92);
-    color: #334155;
-    padding: 10px 12px;
-    line-height: 1.55;
-    font-size: 13px;
-    white-space: pre-wrap;
-  }
-
-  .confirm-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .btn:hover,
-  .tool-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
-  }
-
-  .icon-btn {
-    border: none;
-    background: rgba(250, 249, 247, 0.08);
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    cursor: pointer;
-  }
-
-  @media (max-width: 1200px) {
-    .workspace {
-      grid-template-columns: 64px 1fr;
-    }
-    .side-panel {
-      grid-column: 1 / -1;
-      flex-direction: row;
-      flex-wrap: wrap;
-    }
-    .panel-card {
-      flex: 1 1 320px;
-    }
-  }
-
-  @media (max-width: 900px) {
-    .topbar {
-      grid-template-columns: 1fr;
-      gap: 10px;
-    }
-    .menu {
-      flex-wrap: wrap;
-      justify-content: flex-start;
-    }
-    .workspace {
-      grid-template-columns: 1fr;
-    }
-    .nav-rail {
-      flex-direction: row;
-      justify-content: center;
-    }
-    .assistant-fab {
-      right: 12px;
-      bottom: 12px;
-    }
-    .assistant-sheet,
-    .info-drawer {
-      width: min(92vw, 560px);
-      min-width: 0;
-    }
-    .inline-selection-bar {
-      left: 12px !important;
-      right: 12px;
-      width: auto;
-      top: auto;
-      bottom: 86px;
-      flex-direction: column;
-      align-items: stretch;
-    }
-    .inline-edit-popover {
-      left: 12px !important;
-      right: 12px;
-      width: auto;
-      top: auto !important;
-      bottom: 146px;
-      max-height: 52vh;
-      transform: none !important;
-    }
-    .inline-style-row {
-      grid-template-columns: auto 1fr;
-    }
-    .inline-preset-row {
-      grid-template-columns: 1fr 1fr;
-    }
-    .candidate-compare {
-      grid-template-columns: 1fr;
-    }
-    .candidate-before {
-      position: static;
-    }
-    .candidate-switches {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-    .candidate-text {
-      font-size: 16px;
-      max-height: 180px;
-    }
-    .feedback-row {
-      grid-template-columns: 1fr;
-      align-items: stretch;
-    }
-    .plagiarism-grid {
-      grid-template-columns: 1fr;
-      align-items: stretch;
-    }
-    .feedback-row textarea {
-      grid-column: auto;
-    }
-  }
-  /* FilmLab-style dark skin overrides */
-  :global(body) {
-    background: radial-gradient(1200px 620px at -6% -18%, rgba(217, 119, 6, 0.16), transparent 68%),
-      radial-gradient(920px 520px at 106% -12%, rgba(234, 179, 8, 0.14), transparent 70%),
-      linear-gradient(180deg, #0c1220 0%, #141c2e 100%);
-    color: #e8eefb;
-  }
-
-  :global(body)::before {
-    background:
-      repeating-linear-gradient(130deg, rgba(255, 255, 255, 0.05) 0, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 40px),
-      repeating-linear-gradient(210deg, rgba(249, 222, 126, 0.05) 0, rgba(249, 222, 126, 0.05) 1px, transparent 1px, transparent 44px);
-    opacity: 0.44;
-  }
-
-  .app {
-    --panel-bg: rgba(10, 17, 32, 0.88);
-    --panel-bg-soft: rgba(16, 24, 42, 0.82);
-    --panel-border: rgba(159, 183, 216, 0.2);
-    --panel-shadow: 0 24px 44px rgba(0, 0, 0, 0.44);
-    --text-main: #e8eefb;
-    --text-muted: rgba(190, 205, 233, 0.72);
-    --accent: #8fc6ff;
-    --accent-weak: rgba(143, 198, 255, 0.16);
-    color: var(--text-main);
-    font-family: "Sora", "Manrope", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
-  }
-
-  :global(*) {
-    box-sizing: border-box;
-  }
-
-  .topbar {
-    background: rgba(7, 13, 26, 0.72);
-    border-bottom: 1px solid rgba(167, 189, 220, 0.2);
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.03);
-    
-    display: grid;
-    grid-template-columns: 280px minmax(0, 1fr) auto;
-    gap: 14px;
-    align-items: center;
-    padding: 14px 20px;
-  }
-
-  .logo {
-    color: #fff;
-    background: linear-gradient(135deg, #2563eb, #3b82f6);
-    box-shadow: 0 14px 28px rgba(35, 121, 255, 0.35);
-  }
-
-  .brand-title {
-    color: #f7fbff;
-    letter-spacing: 0.02em;
-  }
-
-  .brand-sub {
-    color: rgba(199, 213, 239, 0.7);
-  }
-
-  .menu {
-    gap: 10px;
-    justify-content: flex-start;
-  }
-
-  .menu-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: rgba(198, 214, 241, 0.9);
-    border-radius: 999px;
-    border: 1px solid rgba(170, 193, 227, 0.25);
-    background: rgba(18, 28, 50, 0.7);
-    padding: 7px 14px;
-  }
-
-  .menu-item:hover {
-    color: #f4f8ff;
-    background: rgba(45, 65, 108, 0.78);
-    border-color: rgba(174, 206, 252, 0.42);
-  }
-
-  .menu-item.active {
-    color: #ffffff;
-    background: linear-gradient(135deg, #2563eb, #3b82f6);
-    border-color: rgba(189, 220, 255, 0.66);
-    box-shadow: 0 10px 22px rgba(53, 117, 236, 0.36);
-  }
-
-  .top-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .workspace-hub {
-    min-width: 0;
-    display: grid;
-    gap: 8px;
-  }
-
-  .ui-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    flex: 0 0 auto;
-  }
-
-  .ui-icon.sm {
-    width: 14px;
-    height: 14px;
-  }
-
-  .ui-icon :global(svg) {
-    width: 100%;
-    height: 100%;
-    stroke: currentColor;
-    stroke-width: 1.85;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .icon-btn-text {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .btn {
-    background: rgba(44, 61, 96, 0.54);
-    color: #e6eefc;
-    border: 1px solid rgba(149, 177, 219, 0.26);
-  }
-
-  .btn.ghost {
-    background: rgba(28, 39, 68, 0.58);
-    color: rgba(224, 235, 253, 0.92);
-    border: 1px solid rgba(154, 181, 221, 0.24);
-  }
-
-  .btn.primary {
-    background: linear-gradient(135deg, #3b82f6, #0ea5e9);
-    border: 1px solid rgba(59, 130, 246, 0.5);
-    color: #fff;
-    box-shadow: 0 12px 24px rgba(57, 126, 245, 0.34);
-  }
-
-  .btn.primary.danger {
-    background: #faf9f7;
-    border: 1px solid rgba(255, 189, 189, 0.45);
-  }
-
-  .btn.ghost.danger {
-    background: rgba(254, 242, 242, 0.4);
-    color: #fee2e2;
-    border: 1px solid rgba(220, 38, 38, 0.45);
-  }
-
-  .btn:hover,
-  .tool-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.26);
-  }
-
-  .workspace {
-    grid-template-columns: 228px minmax(0, 1fr) 286px;
-    gap: 18px;
-    padding: 16px 20px 44px;
-  }
-
-  .workspace > * {
-    animation: rise-in 0.38s cubic-bezier(0.2, 0.62, 0.2, 1) both;
-  }
-
-  .workspace > *:nth-child(2) {
-    animation-delay: 0.06s;
-  }
-
-  .workspace > *:nth-child(3) {
-    animation-delay: 0.12s;
-  }
-
-  .workspace.hide-info {
-    grid-template-columns: 228px minmax(0, 1fr);
-  }
-
-  .workspace.hide-info .side-panel {
-    display: none;
-  }
-
-  .nav-rail {
-    gap: 12px;
-    padding: 14px;
-    border-radius: 18px;
-    border: 1px solid rgba(164, 190, 226, 0.2);
-    background: rgba(12, 18, 32, 0.85);
-    box-shadow: 0 22px 38px rgba(0, 0, 0, 0.4);
-  }
-
-  .rail-search {
-    display: block;
-  }
-
-  .rail-search input {
-    width: 100%;
-    border-radius: 12px;
-    border: 1px solid rgba(165, 190, 228, 0.24);
-    background: rgba(13, 23, 42, 0.82);
-    color: #ecf3ff;
-    padding: 8px 10px;
-    outline: none;
-  }
-
-  .rail-search input:focus {
-    border-color: rgba(160, 205, 255, 0.66);
-    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
-  }
-
-  .rail-upload-btn {
-    border: 1px solid rgba(214, 178, 97, 0.45);
-    background: #faf9f7;
-    color: #fbe4ac;
-    border-radius: 12px;
-    padding: 8px 10px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: border 0.2s ease, background 0.2s ease;
-  }
-
-  .rail-upload-btn:hover {
-    border-color: rgba(250, 214, 127, 0.74);
-    background: #faf9f7;
-  }
-
-  .rail-tip {
-    border-left: 3px solid rgba(132, 171, 255, 0.58);
-    padding-left: 10px;
-    color: rgba(187, 204, 235, 0.78);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  .rail-library {
-    border: 1px solid rgba(160, 184, 220, 0.2);
-    border-radius: 12px;
-    background: rgba(14, 24, 44, 0.54);
-    padding: 10px;
-    display: grid;
-    gap: 10px;
-  }
-
-  .rail-group {
-    border: 1px solid rgba(160, 184, 220, 0.2);
-    border-radius: 12px;
-    background: rgba(14, 24, 44, 0.54);
-    padding: 10px;
-    display: grid;
-    gap: 8px;
-  }
-
-  .rail-group-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    color: rgba(168, 162, 158, 0.82);
-  }
-
-  .rail-group-head em {
-    font-style: normal;
-    color: rgba(238, 216, 143, 0.9);
-    font-weight: 600;
-  }
-
-  .library-card-stream {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    max-height: 360px;
-    overflow: auto;
-    padding-right: 2px;
-  }
-
-  .library-card-stream.list .library-card-summary {
-    display: none;
-  }
-
-  .library-card-stream.masonry .library-card {
-    padding-bottom: 10px;
-  }
-
-  .library-empty {
-    padding: 12px 10px;
-    border: 1px dashed rgba(152, 177, 216, 0.32);
-    border-radius: 10px;
-    color: rgba(185, 204, 233, 0.78);
-    font-size: 12px;
-    text-align: center;
-    background: rgba(20, 31, 54, 0.56);
-  }
-
-  .library-card {
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(23, 35, 62, 0.78);
-    border-radius: 11px;
-    padding: 8px;
-    display: grid;
-    gap: 8px;
-    cursor: pointer;
-    text-align: left;
-    transition: border 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  }
-
-  .library-card:hover {
-    border-color: rgba(165, 208, 255, 0.54);
-    transform: translateY(-1px);
-    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.26);
-  }
-
-  .library-card.selected {
-    border-color: rgba(164, 208, 255, 0.74);
-    box-shadow: 0 0 0 1px rgba(115, 180, 255, 0.26), 0 12px 22px rgba(40, 95, 195, 0.28);
-  }
-
-  .library-card-cover {
-    border-radius: 9px;
-    min-height: 52px;
-    padding: 8px 9px;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .library-card.tone-azure .library-card-cover {
-    background: #faf9f7;
-  }
-
-  .library-card.tone-gold .library-card-cover {
-    background: #faf9f7;
-  }
-
-  .library-card.tone-violet .library-card-cover {
-    background: #faf9f7;
-  }
-
-  .library-card.tone-teal .library-card-cover {
-    background: #faf9f7;
-  }
-
-  .library-status,
-  .library-kind {
-    border-radius: 999px;
-    font-size: 11px;
-    line-height: 1;
-    padding: 5px 8px;
-    border: 1px solid transparent;
-  }
-
-  .library-status {
-    color: #edf6ff;
-    background: rgba(10, 19, 35, 0.52);
-    border-color: rgba(182, 204, 238, 0.34);
-  }
-
-  .library-status.status-synced {
-    border-color: rgba(94, 234, 212, 0.45);
-  }
-
-  .library-status.status-draft {
-    border-color: rgba(253, 230, 138, 0.48);
-  }
-
-  .library-status.status-review {
-    border-color: rgba(220, 38, 38, 0.5);
-  }
-
-  .library-kind {
-    color: rgba(227, 236, 252, 0.88);
-    border-color: rgba(174, 198, 232, 0.3);
-    background: rgba(7, 14, 26, 0.34);
-  }
-
-  .library-card-body {
-    display: grid;
-    gap: 6px;
-  }
-
-  .library-card-title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .library-card-title {
-    font-size: 12px;
-    color: #1c1917;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .library-card-time {
-    font-size: 11px;
-    color: rgba(184, 202, 230, 0.7);
-    flex: 0 0 auto;
-  }
-
-  .library-card-summary {
-    font-size: 12px;
-    color: rgba(194, 210, 235, 0.84);
-    line-height: 1.45;
-    max-height: 52px;
-    overflow: hidden;
-  }
-
-  .library-card-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .library-card-tags span {
-    font-size: 11px;
-    color: rgba(184, 211, 248, 0.88);
-    border: 1px solid rgba(145, 175, 216, 0.32);
-    background: rgba(20, 33, 58, 0.72);
-    border-radius: 999px;
-    padding: 3px 8px;
-  }
-
-  .rail-filter {
-    border: 1px solid rgba(154, 180, 218, 0.24);
-    background: rgba(245, 243, 240, 0.7);
-    color: rgba(210, 224, 247, 0.9);
-    border-radius: 10px;
-    padding: 6px 8px;
-    cursor: pointer;
-    text-align: left;
-    font-size: 12px;
-  }
-
-  .rail-filter.active {
-    border-color: rgba(158, 206, 255, 0.66);
-    background: #faf9f7;
-    color: #ffffff;
-  }
-
-  .rail-reset {
-    margin-top: auto;
-    border: 1px dashed rgba(153, 178, 214, 0.36);
-    background: rgba(20, 31, 54, 0.56);
-    color: rgba(168, 162, 158, 0.88);
-    border-radius: 10px;
-    padding: 8px 10px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .nav-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border-radius: 10px;
-    padding: 8px 10px;
-    text-align: left;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(245, 243, 240, 0.78);
-    color: rgba(214, 228, 247, 0.9);
-    box-shadow: none;
-  }
-
-  .nav-btn.active {
-    border-color: rgba(217, 119, 6, 0.2);
-    box-shadow: 0 8px 18px rgba(217, 119, 6, 0.32);
-    background: #faf9f7;
-    color: #ffffff;
-  }
-
-  .workflow-group {
-    margin-top: 2px;
-  }
-
-  .doc-area {
-    gap: 14px;
-  }
-
-  .library-command-bar {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: #ffffff;
-    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.01);
-  }
-
-  .library-view-switch {
-    display: inline-flex;
-    gap: 6px;
-    padding: 4px;
-    border-radius: 12px;
-    background: rgba(245, 243, 240, 0.88);
-    border: 1px solid rgba(148, 173, 212, 0.24);
-  }
-
-  .view-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid transparent;
-    border-radius: 9px;
-    background: transparent;
-    color: rgba(201, 218, 242, 0.76);
-    min-width: 32px;
-    height: 30px;
-    cursor: pointer;
-  }
-
-  .view-btn.active {
-    color: #ffffff;
-    border-color: rgba(217, 119, 6, 0.25);
-    background: #faf9f7;
-    box-shadow: 0 8px 16px rgba(217, 119, 6, 0.32);
-  }
-
-  .library-counter {
-    font-size: 13px;
-    color: rgba(209, 224, 249, 0.84);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .library-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .doc-toolbar,
-  .doc-stage,
-  .panel-card,
-  .feedback-panel {
-    border-color: rgba(231, 229, 228, 1);
-    background: #ffffff;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.01);
-  }
-
-  .panel-card,
-  .feedback-panel,
-  .doc-toolbar,
-  .doc-stage {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .panel-card::before,
-  .feedback-panel::before,
-  .doc-toolbar::before,
-  .doc-stage::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 38%);
-    opacity: 0.85;
-  }
-
-  .toolbar-cluster {
-    border-color: rgba(231, 229, 228, 1);
-    background: rgba(250, 249, 247, 0.76);
-  }
-
-  .cluster-label {
-    color: rgba(168, 162, 158, 0.72);
-  }
-
-  .tool-sep {
-    background: rgba(231, 229, 228, 1);
-  }
-
-  .tool-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(245, 243, 240, 0.82);
-    color: #1c1917;
-  }
-
-  .tool-btn .ui-icon {
-    width: 14px;
-    height: 14px;
-  }
-
-  .tool-btn.active {
-    border-color: rgba(217, 119, 6, 0.25);
-    background: #faf9f7;
-    color: #ffffff;
-    box-shadow: 0 10px 18px rgba(217, 119, 6, 0.36);
-  }
-
-  .tool-btn:disabled {
-    color: rgba(157, 176, 206, 0.62);
-    border-color: rgba(132, 153, 186, 0.22);
-    background: rgba(250, 249, 247, 0.58);
-  }
-
-  .generation-banner {
-    border: 1px solid rgba(217, 119, 6, 0.2);
-    background: rgba(250, 249, 247, 0.56);
-    color: rgba(214, 228, 252, 0.9);
-  }
-
-  .section-failures {
-    background: rgba(254, 242, 242, 0.34);
-    border: 1px dashed rgba(220, 38, 38, 0.44);
-    color: #fee2e2;
-  }
-
-  .failure-row {
-    color: rgba(254, 202, 202, 0.94);
-  }
-
-  .originality-panel {
-    background: rgba(255, 251, 235, 0.34);
-    border-color: rgba(217, 119, 6, 0.32);
-    color: #fef3c7;
-  }
-
-  .risk-row {
-    border-top-color: rgba(217, 119, 6, 0.22);
-  }
-
-  .risk-metrics {
-    color: rgba(253, 230, 138, 0.78);
-  }
-
-  .risk-badge {
-    background: rgba(17, 24, 39, 0.45);
-    color: rgba(168, 162, 158, 0.92);
-  }
-
-  .risk-badge.ok {
-    color: #166534;
-    background: rgba(22, 163, 74, 0.46);
-    border-color: rgba(22, 163, 74, 0.28);
-  }
-
-  .risk-badge.bad {
-    color: #fee2e2;
-    background: rgba(254, 242, 242, 0.48);
-    border-color: rgba(220, 38, 38, 0.3);
-  }
-
-  .panel-title {
-    color: #1c1917;
-    letter-spacing: 0.025em;
-  }
-
-  .media-meta-panel .panel-title {
-    color: #f8dfab;
-    letter-spacing: 0.12em;
-    font-size: 12px;
-  }
-
-  .panel-sub,
-  .panel-empty {
-    color: rgba(189, 204, 231, 0.74);
-  }
-
-  .feedback-row textarea,
-  .feedback-row select,
-  .feedback-row input,
-  .plagiarism-grid input,
-  .version-input,
-  .inline-style-row select,
-  .inline-style-row input,
-  .inline-instruction {
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(14, 25, 46, 0.84);
-    color: #1c1917;
-  }
-
-  .rating-btn {
-    border: 1px solid rgba(152, 178, 216, 0.3);
-    background: rgba(245, 243, 240, 0.82);
-    color: #1c1917;
-  }
-
-  .rating-btn.active {
-    border-color: rgba(217, 119, 6, 0.2);
-    background: #faf9f7;
-    color: #fff;
-  }
-
-  .feedback-tip {
-    color: rgba(217, 119, 6, 0.9);
-  }
-
-  .feedback-history,
-  .plagiarism-results,
-  .plagiarism-report-actions {
-    border-top-color: rgba(231, 229, 228, 1);
-  }
-
-  .feedback-item,
-  .plagiarism-item,
-  .candidate-before,
-  .candidate-card {
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(245, 243, 240, 0.72);
-  }
-
-  .feedback-item-note,
-  .plagiarism-item-head,
-  .candidate-text {
-    color: #1c1917;
-  }
-
-  .plagiarism-item-head em,
-  .plagiarism-item-metrics,
-  .candidate-label,
-  .candidate-meta,
-  .inline-selection-meta > span {
-    color: rgba(188, 205, 232, 0.72);
-  }
-
-  .plagiarism-evidence {
-    color: rgba(214, 226, 247, 0.86);
-    border-left-color: rgba(217, 119, 6, 0.2);
-  }
-
-  .candidate-switch {
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(245, 243, 240, 0.72);
-    color: rgba(168, 162, 158, 0.9);
-  }
-
-  .candidate-switch.active {
-    border-color: rgba(217, 119, 6, 0.2);
-    background: #faf9f7;
-    color: #ffffff;
-  }
-
-  .inline-tabs {
-    gap: 6px;
-  }
-
-  .inline-tab {
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(245, 243, 240, 0.72);
-    color: rgba(168, 162, 158, 0.9);
-  }
-
-  .inline-tab.active {
-    border-color: rgba(217, 119, 6, 0.2);
-    background: #faf9f7;
-    color: #ffffff;
-  }
-
-  .assistant-inline-tip {
-    border-color: rgba(217, 119, 6, 0.15);
-    background: rgba(245, 243, 240, 0.72);
-    color: rgba(168, 162, 158, 0.92);
-  }
-
-  .preset-chip {
-    border-color: rgba(217, 119, 6, 0.2);
-    background: rgba(245, 243, 240, 0.58);
-    color: rgba(205, 223, 251, 0.94);
-  }
-
-  .inline-selection-bar {
-    border: 1px solid rgba(217, 119, 6, 0.15);
-    background: rgba(250, 249, 247, 0.94);
-    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.06);
-  }
-
-  .inline-selection-meta {
-    color: #1c1917;
-  }
-
-  .mini-btn {
-    border: 1px solid rgba(150, 176, 214, 0.3);
-    background: rgba(250, 249, 247, 0.86);
-    color: #1c1917;
-  }
-
-  .mini-btn:hover {
-    border-color: rgba(217, 119, 6, 0.2);
-    background: rgba(245, 243, 240, 0.92);
-  }
-
-  .inline-edit-popover,
-  .confirm-dialog {
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 28px 52px rgba(0, 0, 0, 0.08);
-  }
-
-  .confirm-note {
-    border-color: rgba(149, 174, 214, 0.28);
-    background: rgba(245, 243, 240, 0.74);
-    color: rgba(214, 228, 250, 0.88);
-  }
-
-  .selected-chip {
-    border: 1px solid rgba(217, 119, 6, 0.15);
-    background: rgba(217, 119, 6, 0.28);
-    color: #dceaff;
-  }
-
-  .media-meta-panel {
-    border-color: rgba(208, 176, 106, 0.34);
-    background:
-      none, transparent 70%),
-      #ffffff;
-  }
-
-  .meta-hero {
-    position: relative;
-    overflow: hidden;
-    border-radius: 14px;
-    border: 1px solid rgba(205, 169, 95, 0.34);
-    background: #faf9f7;
-    min-height: 96px;
-    padding: 14px 12px;
-  }
-
-  .meta-hero-glow {
-    position: absolute;
-    width: 170px;
-    height: 170px;
-    right: -46px;
-    top: -70px;
-    border-radius: 50%;
-    background: none, rgba(245, 200, 112, 0.05) 66%, transparent 76%);
-    filter: blur(2px);
-  }
-
-  .meta-hero-text {
-    position: relative;
-    font-size: 13px;
-    line-height: 1.52;
-    color: rgba(168, 162, 158, 0.92);
-    max-height: 74px;
-    overflow: hidden;
-  }
-
-  .meta-list {
-    margin-top: 10px;
-    display: grid;
-    gap: 8px;
-  }
-
-  .meta-list > div {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    border-bottom: 1px dashed rgba(231, 229, 228, 1);
-    padding-bottom: 6px;
-  }
-
-  .meta-list span {
-    color: rgba(179, 196, 225, 0.72);
-    font-size: 12px;
-  }
-
-  .meta-list strong {
-    color: #1c1917;
-    font-size: 12px;
-    text-align: right;
-    font-weight: 600;
-    max-width: 62%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .meta-actions {
-    margin-top: 12px;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .version-groups {
-    display: grid;
-    gap: 10px;
-    max-height: 340px;
-    overflow: auto;
-    padding-right: 2px;
-  }
-
-  .version-group {
-    border: 1px solid rgba(152, 177, 215, 0.2);
-    border-radius: 12px;
-    background: rgba(19, 30, 54, 0.6);
-    padding: 10px;
-  }
-
-  .version-major,
-  .version-minor {
-    border: 1px solid rgba(153, 179, 218, 0.22);
-    border-radius: 10px;
-    background: rgba(245, 243, 240, 0.74);
-    padding: 10px;
-  }
-
-  .version-major.current,
-  .version-minor.current {
-    border-color: rgba(158, 205, 255, 0.72);
-    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.1);
-  }
-
-  .version-title {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    color: #1c1917;
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .badge {
-    border-radius: 999px;
-    font-size: 11px;
-    padding: 2px 8px;
-    border: 1px solid rgba(231, 229, 228, 1);
-  }
-
-  .badge.major {
-    color: #fef3c7;
-    border-color: rgba(245, 204, 113, 0.46);
-    background: rgba(255, 251, 235, 0.3);
-  }
-
-  .badge.minor {
-    color: #57534e;
-    border-color: rgba(147, 191, 245, 0.42);
-    background: rgba(30, 80, 164, 0.3);
-  }
-
-  .version-meta,
-  .minor-meta,
-  .version-summary {
-    margin-top: 6px;
-    color: rgba(186, 203, 232, 0.74);
-    font-size: 12px;
-  }
-
-  .version-actions,
-  .minor-actions {
-    margin-top: 8px;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .version-minors {
-    margin-top: 8px;
-    display: grid;
-    gap: 8px;
-  }
-
-  .version-diff {
-    margin-top: 12px;
-  }
-
-  .version-diff pre {
-    margin: 8px 0 0;
-    max-height: 180px;
-    overflow: auto;
-    border-radius: 10px;
-    border: 1px solid rgba(148, 173, 210, 0.26);
-    background: rgba(250, 249, 247, 0.9);
-    color: rgba(213, 228, 251, 0.88);
-    padding: 10px;
-    font-size: 12px;
-    line-height: 1.4;
-  }
-
-  .icon-btn {
-    border: 1px solid rgba(149, 174, 212, 0.28);
-    background: rgba(245, 243, 240, 0.8);
-    color: rgba(168, 162, 158, 0.9);
-  }
-
-  .assistant-queue-badge {
-    background: rgba(250, 249, 247, 0.84);
-    color: #1c1917;
-  }
-
-  /* Focus-first simplification */
-  :global(body) {
-    background: radial-gradient(1200px 720px at 18% -12%, rgba(217, 119, 6, 0.14), transparent 60%),
-      none, transparent 58%),
-      linear-gradient(180deg, #faf8f5 0%, #f5f3f0 34%, #eeede9 100%) !important;
-    color: #1c1917;
-  }
-
-  :global(body)::before {
-    display: none !important;
-    content: none !important;
-    background: none !important;
-  }
-
-  .app {
-    --panel-bg: #ffffff;
-    --panel-bg-soft: #ffffff;
-    --panel-border: rgba(164, 183, 208, 0.18);
-    --panel-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
-    --text-main: #1c1917;
-    --text-muted: rgba(171, 188, 209, 0.78);
-    --accent: #d97706;
-    --accent-weak: rgba(217, 119, 6, 0.14);
-    background: radial-gradient(620px 360px at 12% 0%, rgba(217, 119, 6, 0.08), transparent 58%);
-    font-family: "Sora", "Manrope", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
-  }
-
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 22;
-    
-    background: #ffffff;
-    border-bottom: 1px solid rgba(231, 229, 228, 1);
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
-  }
-
-  .brand-sub {
-    display: block;
-    color: rgba(168, 162, 158, 0.66);
-    letter-spacing: 0.04em;
-  }
-
-  .workspace-status-line {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    color: #78716c;
-    font-size: 12px;
-    line-height: 1.4;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-   .workspace-hub {
-    gap: 10px;
-  }
-
-  .workspace-metrics {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .metric-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 34px;
-    padding: 7px 12px;
-    border-radius: 999px;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(250, 249, 247, 0.72);
-    color: #1c1917;
-  }
-
-  .metric-pill strong {
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-  }
-
-  .metric-label {
-    font-size: 11px;
-    color: rgba(175, 191, 211, 0.74);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .metric-pill.tone-good {
-    border-color: rgba(22, 163, 74, 0.26);
-    background: rgba(22, 163, 74, 0.68);
-  }
-
-  .metric-pill.tone-warn {
-    border-color: rgba(217, 119, 6, 0.26);
-    background: rgba(255, 251, 235, 0.7);
-  }
-
-  .metric-pill.tone-alert {
-    border-color: rgba(220, 38, 38, 0.3);
-    background: rgba(254, 242, 242, 0.72);
-  }
-
-  .workspace-status-line .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: #16a34a;
-    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14);
-    flex: 0 0 auto;
-  }
-
-  .menu-item {
-    background: transparent;
-    border: 1px solid transparent;
-    color: #78716c;
-    box-shadow: none;
-  }
-
-  .menu-item:hover {
-    background: rgba(245, 243, 240, 0.8);
-    border-color: rgba(231, 229, 228, 1);
-    color: #44403c;
-  }
-
-  .menu-item.active {
-    background: rgba(245, 243, 240, 0.88);
-    border-color: rgba(231, 229, 228, 1);
-    color: #1c1917;
-    box-shadow: none;
-  }
-
-  .workspace {
-    grid-template-columns: 82px minmax(0, 1fr) 338px;
-    gap: 16px;
-    padding: 14px 18px 34px;
-  }
-
-  .workspace.mode-editor {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .workspace.mode-editor .nav-rail,
-  .workspace.mode-editor .side-panel,
-  .workspace.mode-editor .library-command-bar {
-    display: none;
-  }
-
-  .workspace.mode-library {
-    grid-template-columns: 252px minmax(0, 1fr);
-  }
-
-  .workspace.mode-library .side-panel {
-    display: none;
-  }
-
-  .workspace.mode-library .nav-rail {
-    width: 100%;
-    min-width: 0;
-    padding: 14px 0;
-    transition: none;
-  }
-
-  .nav-rail {
-    position: sticky;
-    top: 98px;
-    align-self: start;
-    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
-  }
-
-  .doc-toolbar {
-    position: sticky;
-    top: 98px;
-    z-index: 12;
-    
-  }
-
-  .doc-stage {
-    min-height: calc(100vh - 238px);
-    background:
-      none, transparent 56%),
-      #ffffff;
-  }
-
-  .side-panel {
-    position: sticky;
-    top: 98px;
-    align-self: start;
-    max-height: calc(100vh - 118px);
-    overflow: auto;
-    padding-right: 4px;
-  }
-
-  .library-mode-stage {
-    display: grid;
-    gap: 12px;
-    min-height: 360px;
-    border: 1px dashed rgba(231, 229, 228, 1);
-    border-radius: 14px;
-    padding: 12px;
-    background: rgba(250, 249, 247, 0.56);
-  }
-
-  .library-mode-dropzone {
-    border: 1px dashed rgba(231, 229, 228, 1);
-    border-radius: 12px;
-    padding: 12px;
-    background: rgba(245, 243, 240, 0.36);
-    display: grid;
-    gap: 10px;
-  }
-
-  .library-mode-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .library-mode-board {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .library-mode-board.list {
-    grid-template-columns: 1fr;
-  }
-
-  .library-mode-card {
-    border: 1px solid rgba(231, 229, 228, 1);
-    border-radius: 12px;
-    background: rgba(250, 249, 247, 0.78);
-    color: #44403c;
-    padding: 10px;
-    text-align: left;
-    display: grid;
-    gap: 8px;
-    cursor: pointer;
-  }
-
-  .library-mode-card.selected {
-    border-color: rgba(217, 119, 6, 0.68);
-    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.24);
-  }
-
-  .library-mode-card-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .library-mode-card-title {
-    font-size: 14px;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .library-mode-card-summary {
-    font-size: 12px;
-    line-height: 1.5;
-    color: #78716c;
-    min-height: 38px;
-  }
-
-  .library-mode-card-foot {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    color: #a8a29e;
-    font-size: 11px;
-  }
-
-  .workspace.mode-collab {
-    grid-template-columns: minmax(0, 1fr) 320px;
-  }
-
-  .workspace.mode-collab .nav-rail,
-  .workspace.mode-collab .library-command-bar {
-    display: none;
-  }
-
-  .doc-toolbar,
-  .doc-stage,
-  .panel-card,
-  .feedback-panel {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    box-shadow: none;
-  }
-
-  .panel-card::before,
-  .feedback-panel::before,
-  .doc-toolbar::before,
-  .doc-stage::before {
-    display: none;
-  }
-
-  .feedback-row textarea,
-  .feedback-row select,
-  .plagiarism-grid input,
-  .version-input,
-  .block-input {
-    background: rgba(250, 249, 247, 0.9);
-    border-color: rgba(164, 183, 208, 0.22);
-    color: #1c1917;
-  }
-
-  .feedback-item,
-  .plagiarism-item,
-  .version-major,
-  .version-minor {
-    background: rgba(15, 25, 42, 0.84);
-    border-color: rgba(164, 183, 208, 0.2);
-  }
-
-  .version-summary,
-  .plagiarism-item-head,
-  .plagiarism-evidence,
-  .risk-metrics {
-    color: rgba(201, 214, 233, 0.82);
-  }
-
-  .generation-banner {
-    color: #1c1917;
-    border: 1px solid rgba(217, 119, 6, 0.22);
-    background: #faf9f7;
-  }
-
-  .section-failures {
-    background: #faf9f7;
-    border-color: rgba(220, 38, 38, 0.32);
-  }
-
-  .quality-advice-panel {
-    border-color: rgba(241, 184, 76, 0.26);
-    background: radial-gradient(360px 180px at 100% 0%, rgba(217, 119, 6, 0.09), transparent 60%),
-      #faf9f7;
-  }
-
-  .quality-advice-note {
-    font-size: 12px;
-    color: rgba(191, 205, 226, 0.72);
-    line-height: 1.5;
-  }
-
-  .quality-advice-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .quality-advice-card {
-    display: grid;
-    gap: 10px;
-    padding: 12px 13px;
-    border-radius: 14px;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(14, 23, 39, 0.76);
-  }
-
-  .quality-advice-card.tone-good {
-    border-color: rgba(22, 163, 74, 0.22);
-    background: rgba(19, 38, 31, 0.7);
-  }
-
-  .quality-advice-card.tone-warn {
-    border-color: rgba(217, 119, 6, 0.22);
-    background: rgba(46, 34, 15, 0.72);
-  }
-
-  .quality-advice-card.tone-alert {
-    border-color: rgba(220, 38, 38, 0.24);
-    background: rgba(254, 242, 242, 0.74);
-  }
-
-  .quality-advice-title-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .quality-advice-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #1c1917;
-    line-height: 1.4;
-  }
-
-  .quality-advice-detail {
-    font-size: 12px;
-    line-height: 1.6;
-    color: rgba(211, 223, 241, 0.84);
-  }
-
-  .quality-advice-actions {
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .quality-overview-badge,
-  .quality-tone-chip {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    border: 1px solid rgba(168, 187, 214, 0.24);
-    padding: 4px 9px;
-    font-size: 11px;
-    line-height: 1;
-    white-space: nowrap;
-  }
-
-  .quality-overview-badge.tone-good,
-  .quality-tone-chip.tone-good {
-    color: #166534;
-    border-color: rgba(22, 163, 74, 0.24);
-    background: rgba(22, 163, 74, 0.7);
-  }
-
-  .quality-overview-badge.tone-warn,
-  .quality-tone-chip.tone-warn {
-    color: #fef3c7;
-    border-color: rgba(217, 119, 6, 0.24);
-    background: rgba(50, 39, 13, 0.74);
-  }
-
-  .quality-overview-badge.tone-alert,
-  .quality-tone-chip.tone-alert {
-    color: #fee2e2;
-    border-color: rgba(220, 38, 38, 0.26);
-    background: rgba(56, 21, 21, 0.74);
-  }
-
-  .toolbar-line.primary {
-    justify-content: space-between;
-  }
-
-  .toolbar-line.secondary {
-    padding-top: 8px;
-    border-top: 1px solid rgba(231, 229, 228, 1);
-  }
-
-  .toolbar-cluster {
-    border-radius: 10px;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(250, 249, 247, 0.74);
-  }
-
-  .toolbar-cluster.core {
-    flex: 1;
-  }
-
-  .plan-confirm-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    border: 1px dashed rgba(231, 229, 228, 1);
-    border-radius: 10px;
-    background: rgba(250, 249, 247, 0.52);
-  }
-
-  .plan-confirm-label {
-    font-size: 11px;
-    color: #78716c;
-  }
-
-  .plan-confirm-select,
-  .plan-confirm-score input {
-    height: 28px;
-    border: 1px solid rgba(231, 229, 228, 1);
-    border-radius: 8px;
-    background: rgba(250, 249, 247, 0.84);
-    color: #44403c;
-    font-size: 12px;
-    padding: 0 8px;
-  }
-
-  .plan-confirm-score {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: #78716c;
-    font-size: 11px;
-  }
-
-  .plan-confirm-score input {
-    width: 52px;
-    text-align: center;
-  }
-
-  .toolbar-advanced-toggle {
-    margin-left: auto;
-  }
-
-  .toolbar-generate-btn {
-    min-width: 96px;
-  }
-
-  .tool-btn {
-    background: rgba(250, 249, 247, 0.82);
-    border: 1px solid rgba(231, 229, 228, 1);
-    color: #a8a29e;
-    box-shadow: none;
-  }
-
-  .tool-btn.active {
-    background: rgba(217, 119, 6, 0.22);
-    border-color: rgba(217, 119, 6, 0.72);
-    color: #57534e;
-    box-shadow: none;
-  }
-
-  .btn {
-    background: transparent;
-    border: 1px solid rgba(231, 229, 228, 1);
-    color: #a8a29e;
-    box-shadow: none;
-  }
-
-  .btn.ghost {
-    background: transparent;
-    color: #a8a29e;
-    border: 1px solid rgba(231, 229, 228, 1);
-  }
-
-  .btn.primary {
-    background: transparent;
-    border: 1px solid rgba(231, 229, 228, 1);
-    color: #a8a29e;
-    box-shadow: none;
-  }
-
-  .toolbar-generate-btn.btn.primary {
-    background: linear-gradient(135deg, #3b82f6, #0ea5e9);
-    border-color: rgba(59, 130, 246, 0.5);
-    color: #fff;
-  }
-
-  .btn.primary.danger {
-    background: #b91c1c;
-    border-color: #dc2626;
-    color: #fff;
-  }
-
-  .top-actions .btn {
-    background: transparent;
-    border-color: rgba(148, 163, 184, 0.26);
-  }
-
-  .info-drawer-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 33;
-    background: rgba(0, 0, 0, 0.01);
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .sheet-backdrop-hit {
-    flex: 1;
-    border: none;
-    background: transparent;
-    cursor: default;
-  }
-
-  .info-drawer {
-    width: min(420px, 40vw);
-    min-width: 320px;
-    height: 100vh;
-    margin: 0;
-    border-radius: 0;
-    border-left: 1px solid rgba(231, 229, 228, 1);
-    padding: 16px 14px;
-    overflow: auto;
-  }
-
-  .assistant-fab {
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    width: 48px;
-    height: 48px;
-    border-radius: 999px;
-    z-index: 34;
-    border: 1px solid rgba(148, 163, 184, 0.32);
-    background: rgba(250, 249, 247, 0.95);
-    color: #44403c;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  .assistant-fab > span:not(.assistant-queue-badge) {
-    display: none;
-  }
-
-  .assistant-sheet-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 35;
-    background: rgba(2, 6, 23, 0.48);
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .assistant-sheet {
-    width: min(40vw, 560px);
-    min-width: 320px;
-    height: 100vh;
-    background: #f5f3f0;
-    border-left: 1px solid rgba(148, 163, 184, 0.26);
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .assistant-sheet-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  :global(.assistant-sheet .chat-shell.assistant) {
-    width: 100%;
-    height: 100%;
-    border-radius: 12px;
-    background: rgba(250, 249, 247, 0.85);
-    border: 1px solid rgba(231, 229, 228, 1);
-    box-shadow: none;
-  }
-
-  @keyframes rise-in {
-    from {
-      opacity: 0;
-      transform: translateY(9px) scale(0.992);
-      filter: blur(1px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-      filter: blur(0);
-    }
-  }
-
-  @media (max-width: 1320px) {
-    .workspace {
-      grid-template-columns: 214px minmax(0, 1fr) 292px;
-    }
-  }
-
-  @media (max-width: 1120px) {
-    .workspace {
-      grid-template-columns: 198px minmax(0, 1fr);
-    }
-
-    .side-panel {
-      position: static;
-      max-height: none;
-      overflow: visible;
-      grid-column: 1 / -1;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }
-
-    .workspace.hide-info .side-panel {
-      display: none;
-    }
-  }
-
-  @media (max-width: 960px) {
-    .topbar {
-      grid-template-columns: 1fr;
-      gap: 10px;
-      padding: 14px 16px;
-    }
-
-    .workspace-hub {
-      gap: 10px;
-    }
-
-    .workspace-status-line {
-      justify-content: flex-start;
-    }
-
-    .menu {
-      justify-content: flex-start;
-      flex-wrap: wrap;
-    }
-
-    .workspace {
-      grid-template-columns: 1fr;
-      padding: 12px 12px 36px;
-      gap: 12px;
-    }
-
-    .nav-rail,
-    .doc-toolbar {
-      position: static;
-      top: auto;
-    }
-
-    .workspace.hide-info {
-      grid-template-columns: 1fr;
-    }
-
-    .nav-rail {
-      order: 0;
-    }
-
-    .library-card-stream {
-      max-height: 280px;
-    }
-
-    .doc-area {
-      order: 1;
-    }
-
-    .side-panel {
-      order: 2;
-      grid-template-columns: 1fr;
-    }
-
-    .library-command-bar {
-      grid-template-columns: 1fr;
-      align-items: stretch;
-      gap: 8px;
-    }
-
-    .library-view-switch {
-      justify-content: flex-start;
-      width: max-content;
-    }
-
-    .library-actions {
-      justify-content: flex-start;
-    }
-
-    .library-mode-board {
-      grid-template-columns: 1fr;
-    }
-
-    .quality-advice-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 760px) {
-    .top-actions {
-      justify-content: flex-start;
-    }
-
-    .icon-btn-text {
-      gap: 6px;
-    }
-
-    .top-actions .btn {
-      font-size: 12px;
-      padding: 7px 9px;
-    }
-
-    .workspace-metrics {
-      gap: 6px;
-    }
-
-    .metric-pill {
-      width: 100%;
-      justify-content: space-between;
-    }
-
-    .toolbar-line {
-      gap: 6px;
-    }
-
-    .toolbar-cluster {
-      width: 100%;
-    }
-
-    .inline-preset-row {
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .assistant-fab {
-      right: 10px;
-      bottom: 10px;
-    }
-    .assistant-sheet,
-    .info-drawer {
-      width: min(96vw, 560px);
-    }
-  }
-</style>
