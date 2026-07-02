@@ -46,6 +46,23 @@
     isLoading
   } from './lib/stores'
   import type { EditorCommand } from './lib/types'
+  import type {
+    BlockSession,
+    FeedbackItem,
+    GraphMeta,
+    InlinePanelTab,
+    LibraryCard,
+    OriginalitySummary,
+    PendingGenerateConfirmation,
+    PlagiarismResult,
+    QualityAdviceAction,
+    QualityAdviceItem,
+    QualityOverview,
+    QueuedInstruction,
+    ResumeState,
+    WorkbenchSurface,
+    WorkspaceMode
+  } from './lib/workbench/types'
 
   let aborter = $state<AbortController | null>(null)
   let writeBuffer = $state('')
@@ -78,14 +95,6 @@
   let progressEvents = $state<number[]>([])
   let sectionFailures = $state<{ section: string; reason: string }[]>([])
   let sectionOriginalitySummary = $state<OriginalitySummary | null>(null)
-  type PendingGenerateConfirmation = {
-    requestPayload: Record<string, unknown>
-    note: string
-    reason: string
-    riskLevel: string
-    planSource: string
-    operationsCount: number
-  }
   let pendingGenerateConfirmation = $state<PendingGenerateConfirmation | null>(null)
   let confirmDialogBusy = $state(false)
   let planConfirmDecision = $state<'approved' | 'interrupted'>('approved')
@@ -99,70 +108,6 @@
   let partialSavedSnapshot = $state('')
   let lastSavedText = $state('')
   let lastSavedDocIr = $state<Record<string, unknown> | null>(null)
-  type ResumeState = {
-    status: 'running' | 'interrupted'
-    updated_at: number
-    user_instruction: string
-    request_instruction: string
-    compose_mode: 'auto' | 'continue' | 'overwrite'
-    partial_chars: number
-    partial_preview: string
-    plan_sections: string[]
-    completed_sections: string[]
-    pending_sections: string[]
-    cursor_anchor: string
-    error: string
-  }
-  type GraphMeta = {
-    path: 'route_graph'
-    trace_id: string
-    engine: string
-    route_id: string
-    route_entry: string
-  }
-  type OriginalityRiskRow = {
-    section: string
-    section_id: string
-    title: string
-    phases: string[]
-    checked_event_count: number
-    failed_event_count: number
-    rewrite_count: number
-    retry_count: number
-    cache_rejected_count: number
-    fast_draft_rejected_count: number
-    latest_passed: boolean
-    max_repeat_sentence_ratio: number
-    max_formulaic_opening_ratio: number
-    max_source_overlap_ratio: number
-  }
-  type OriginalitySummary = {
-    enabled: boolean
-    eventCount: number
-    checkedSectionCount: number
-    failedSectionCount: number
-    failedSectionRatio: number
-    rewriteCount: number
-    retryCount: number
-    cacheRejectedCount: number
-    fastDraftRejectedCount: number
-    rows: OriginalityRiskRow[]
-  }
-  type WorkbenchSurface = 'chat' | 'library' | 'editor' | 'canvas'
-  type WorkspaceMode = 'editor' | 'library' | 'collab'
-  type LibraryCard = {
-    id: string
-    title: string
-    summary: string
-    status: 'synced' | 'draft' | 'review'
-    status_label: string
-    kind_label: string
-    tone: 'azure' | 'gold' | 'violet' | 'teal'
-    tags: string[]
-    updated_at: number
-    size_label: string
-    action: 'editor' | 'citation' | 'metrics' | 'version' | 'assistant' | 'upload'
-  }
   let resumeState = $state<ResumeState | null>(null)
   let lastGraphMeta = $state<GraphMeta | null>(null)
   let surfaceTab = $state<WorkbenchSurface>('editor')
@@ -180,14 +125,6 @@
   let showPerformanceMetrics = $state(false)
   let showVersions = $state(false)
   let showFeedbackPanel = $state(false)
-  type FeedbackItem = {
-    id: string
-    rating: number
-    note: string
-    stage: string
-    tags?: string[]
-    created_at: number
-  }
   let feedbackItems = $state<FeedbackItem[]>([])
   let satisfactionRating = $state(0)
   let satisfactionStage = $state('general')
@@ -204,45 +141,10 @@
   let aiRateLoading = $state(false)
   let aiRateThreshold = $state(0.65)
   let aiRateResult = $state<Record<string, any> | null>(null)
-  type PlagiarismEvidence = {
-    source_start: number
-    reference_start: number
-    match_chars: number
-    snippet: string
-  }
-  type PlagiarismResult = {
-    reference_id: string
-    reference_title: string
-    score: number
-    threshold: number
-    suspected: boolean
-    metrics: Record<string, any>
-    evidence: PlagiarismEvidence[]
-  }
   let plagiarismResults = $state<PlagiarismResult[]>([])
   let plagiarismFlaggedCount = $state(0)
   let plagiarismMaxScore = $state(0)
   let plagiarismLatestReport = $state<Record<string, any> | null>(null)
-  type QualityAdviceAction =
-    | 'open-ai-panel'
-    | 'open-plagiarism-panel'
-    | 'run-ai-check'
-    | 'run-plagiarism-check'
-    | 'revise-first-risk'
-  type QualityAdviceItem = {
-    id: string
-    tone: 'good' | 'warn' | 'alert'
-    title: string
-    detail: string
-    action?: QualityAdviceAction
-    actionLabel?: string
-  }
-  type QualityOverview = {
-    tone: 'good' | 'warn' | 'alert'
-    label: string
-    note: string
-  }
-
   let versionLoading = $state(false)
   let versionList = $state<Array<any>>([])
   let versionGroups = $state<Array<any>>([])
@@ -283,24 +185,6 @@
   let activeCandidateIndex = $state(0)
 
   let blockDialogInput = $state('')
-  type InlinePanelTab = 'rewrite' | 'style' | 'assistant'
-  type BlockSession = {
-    tab: InlinePanelTab
-    cmd: string
-    styleFontSize: string
-    styleLineHeight: string
-    styleFontFamily: string
-    styleColor: string
-    styleBackground: string
-    styleAlign: string
-    styleFontWeight: string
-    styleFontStyle: string
-    candidates: Array<any>
-    activeIndex: number
-    originalText: string
-    error: string
-    dialogInput: string
-  }
   const blockSessionStore = new Map<string, BlockSession>()
   let activeBlockSessionKey = $state('')
   let inlineBarVisible = $state(false)
@@ -331,7 +215,6 @@
     canCut: false,
     canPaste: false
   })
-  type QueuedInstruction = { id: number; text: string; createdAt: number }
   let queuedInstructionSeed = $state(0)
   let queuedGlobalInstructions = $state<QueuedInstruction[]>([])
   let drainingQueuedGlobalInstructions = $state(false)
