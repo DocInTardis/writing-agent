@@ -1,4 +1,4 @@
-:global(body) {
+﻿:global(body) {
     margin: 0;
     background: radial-gradient(700px 360px at 15% 10%, rgba(94, 175, 255, 0.12), transparent 60%),
       radial-gradient(520px 280px at 85% 12%, rgba(56, 230, 255, 0.14), transparent 60%),
@@ -3006,3 +3006,4 @@
       width: min(96vw, 560px);
     }
   }
+

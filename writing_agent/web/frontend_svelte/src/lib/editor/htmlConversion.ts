@@ -1,4 +1,4 @@
-export function htmlToMarkdown(html: string): string {
+ï»¿export function htmlToMarkdown(html: string): string {
   const container = document.createElement('div')
   container.innerHTML = html
   const blocks: string[] = []
@@ -39,12 +39,12 @@ export function htmlToMarkdown(html: string): string {
     const tag = node.tagName.toLowerCase()
 
     if (node.dataset.waFigure === '1') {
-      const cap = node.querySelector('figcaption')?.textContent?.trim() || 'Í¼Ê¾'
+      const cap = node.querySelector('figcaption')?.textContent?.trim() || 'å›¾ç¤º'
       blocks.push(`[[FIGURE:{"caption":"${escapeJson(cap)}"}]]`)
       return
     }
     if (node.dataset.waTable === '1') {
-      const cap = node.querySelector('.wa-table-caption')?.textContent?.trim() || '±í¸ñ'
+      const cap = node.querySelector('.wa-table-caption')?.textContent?.trim() || 'è¡¨æ ¼'
       blocks.push(`[[TABLE:{"caption":"${escapeJson(cap)}"}]]`)
       return
     }
@@ -85,13 +85,13 @@ export function htmlToMarkdown(html: string): string {
     }
 
     if (tag === 'figure') {
-      const cap = node.querySelector('figcaption')?.textContent?.trim() || 'Í¼Ê¾'
+      const cap = node.querySelector('figcaption')?.textContent?.trim() || 'å›¾ç¤º'
       blocks.push(`[[FIGURE:{"caption":"${escapeJson(cap)}"}]]`)
       return
     }
 
     if (tag === 'table') {
-      blocks.push(`[[TABLE:{"caption":"±í¸ñ"}]]`)
+      blocks.push(`[[TABLE:{"caption":"è¡¨æ ¼"}]]`)
       return
     }
 
@@ -140,41 +140,41 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
   }
 
   const HEADING_HINTS = [
-    'ÕªÒª',
-    'ÒıÑÔ',
-    'Ğ÷ÂÛ',
-    'Ç°ÑÔ',
-    '±³¾°',
-    'Ïà¹Ø¼¼Êõ¸ÅÊö',
-    '¹Ø¼ü¼¼Êõ',
-    'ÑĞ¾¿·½·¨',
-    'ÊµÑé',
-    '½á¹û',
-    'ÌÖÂÛ',
-    '½áÂÛ',
-    '×Ü½á',
-    'Õ¹Íû',
-    '²Î¿¼ÎÄÏ×',
-    '¸½Â¼',
-    'ÖÂĞ»',
+    'æ‘˜è¦',
+    'å¼•è¨€',
+    'ç»ªè®º',
+    'å‰è¨€',
+    'èƒŒæ™¯',
+    'ç›¸å…³æŠ€æœ¯æ¦‚è¿°',
+    'å…³é”®æŠ€æœ¯',
+    'ç ”ç©¶æ–¹æ³•',
+    'å®éªŒ',
+    'ç»“æœ',
+    'è®¨è®º',
+    'ç»“è®º',
+    'æ€»ç»“',
+    'å±•æœ›',
+    'å‚è€ƒæ–‡çŒ®',
+    'é™„å½•',
+    'è‡´è°¢',
     'Abstract'
   ]
 
-  const NUM_HEADING_RE = /^(\d+(?:\.\d+){0,2})\s*[\.¡¢:£º-]?\s*([^\s].{0,24})$/
-  const CN_NUM_HEADING_RE = /^([Ò»¶şÈıËÄÎåÁùÆß°Ë¾ÅÊ®]+)\s*[¡¢.£®:£º-]?\s*([^\s].{0,24})$/
+  const NUM_HEADING_RE = /^(\d+(?:\.\d+){0,2})\s*[\.ã€:ï¼š-]?\s*([^\s].{0,24})$/
+  const CN_NUM_HEADING_RE = /^([ä¸€äºŒä¸‰å››äº”å…­ä¸ƒå…«ä¹å]+)\s*[ã€.ï¼:ï¼š-]?\s*([^\s].{0,24})$/
 
   const looksLikeBodySentence = (text: string) => {
     const s = String(text || '').trim()
     if (!s) return false
     if (s.length >= 24) return true
-    if (/[¡££¡£¿!?£»;£¬,]/.test(s)) return true
-    const starters = ['±¾ÎÄ', '±¾ÑĞ¾¿', 'Ëæ×Å', 'Í¨¹ı', 'ÓÉÓÚ', 'Òò´Ë', '´ËÍâ', 'Í¬Ê±', 'Ê×ÏÈ', 'Æä´Î', '×îºó']
+    if (/[ã€‚ï¼ï¼Ÿ!?ï¼›;ï¼Œ,]/.test(s)) return true
+    const starters = ['æœ¬æ–‡', 'æœ¬ç ”ç©¶', 'éšç€', 'é€šè¿‡', 'ç”±äº', 'å› æ­¤', 'æ­¤å¤–', 'åŒæ—¶', 'é¦–å…ˆ', 'å…¶æ¬¡', 'æœ€å']
     const hit = starters.some((starter) => {
       const idx = s.indexOf(starter)
       return idx >= 1 && idx <= 18
     })
     if (hit) return true
-    if (s.length >= 14 && /(ÊÇ|Îª|Í¨¹ı|Ëæ×Å|ÓÉÓÚ|Òò´Ë|²¢ÇÒ|ÄÜ¹»|¿ÉÒÔ|ÊµÏÖ|ÌáÉı|ÓÅ»¯)/.test(s)) {
+    if (s.length >= 14 && /(æ˜¯|ä¸º|é€šè¿‡|éšç€|ç”±äº|å› æ­¤|å¹¶ä¸”|èƒ½å¤Ÿ|å¯ä»¥|å®ç°|æå‡|ä¼˜åŒ–)/.test(s)) {
       return true
     }
     return false
@@ -365,7 +365,7 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
   }
 
   container.childNodes.forEach((node) => walkBlock(node))
-  const docTitle = title || deriveTitleFromBlocks(blocks) || '×Ô¶¯Éú³ÉÎÄµµ'
+  const docTitle = title || deriveTitleFromBlocks(blocks) || 'è‡ªåŠ¨ç”Ÿæˆæ–‡æ¡£'
   return buildDocIrFromBlocks(blocks, docTitle)
 }
 
@@ -383,7 +383,7 @@ function deriveTitleFromBlocks(blocks: Array<Record<string, unknown>>): string {
 }
 
 function buildDocIrFromBlocks(blocks: Array<Record<string, unknown>>, title: string): Record<string, unknown> {
-  const docTitle = String(title || '').trim() || '×Ô¶¯Éú³ÉÎÄµµ'
+  const docTitle = String(title || '').trim() || 'è‡ªåŠ¨ç”Ÿæˆæ–‡æ¡£'
   const sections: Array<Record<string, unknown>> = []
   const stack: Array<{ level: number; node: Record<string, unknown> }> = []
   let orphan: Array<Record<string, unknown>> = []
@@ -406,7 +406,7 @@ function buildDocIrFromBlocks(blocks: Array<Record<string, unknown>>, title: str
     const t = String(b.type || '').toLowerCase()
     if (t === 'heading') {
       const level = Math.min(6, Math.max(1, Number(b.level || 1)))
-      const text = String(b.text || '').trim() || 'ÕÂ½Ú'
+      const text = String(b.text || '').trim() || 'ç« èŠ‚'
       const node: Record<string, unknown> = { id: makeId(), title: text, level, blocks: [], children: [] }
       if (orphan.length && stack.length === 0) pushImplicit()
       while (stack.length && stack[stack.length - 1].level >= level) stack.pop()
@@ -469,5 +469,6 @@ export function makeId(): string {
 function escapeJson(text: string) {
   return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
+
 
 

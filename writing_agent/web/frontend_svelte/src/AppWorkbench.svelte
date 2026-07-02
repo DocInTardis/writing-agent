@@ -1,12 +1,9 @@
-<script lang="ts">
+ï»¿<script lang="ts">
   import './AppWorkbench.css'
   import { onMount } from 'svelte'
-  import Chat from './lib/components/Chat.svelte'
   import Editor from './lib/components/Editor.svelte'
   import DiagramCanvas from './lib/components/DiagramCanvas.svelte'
   import Toast from './lib/components/Toast.svelte'
-  import Settings from './lib/components/Settings.svelte'
-  import LLMConfig from './lib/components/LLMConfig.svelte'
   import Icon from './lib/components/Icon.svelte'
   import DocList from './lib/components/DocList.svelte'
   import LoadingSkeleton from './lib/components/LoadingSkeleton.svelte'
@@ -28,9 +25,18 @@
     buildLibraryCards,
     cardMatchesSearch,
     estimateKb,
-    formatLibraryCardTime,
     guessDocTitle
   } from './lib/workbench/libraryCards'
+  import AssistantSheet from './lib/workbench/AssistantSheet.svelte'
+  import ConfirmDialog from './lib/workbench/ConfirmDialog.svelte'
+  import EditorCommandBar from './lib/workbench/EditorCommandBar.svelte'
+  import GenerationStatusPanels from './lib/workbench/GenerationStatusPanels.svelte'
+  import InfoDrawer from './lib/workbench/InfoDrawer.svelte'
+  import LibraryModeStage from './lib/workbench/LibraryModeStage.svelte'
+  import LibraryRail from './lib/workbench/LibraryRail.svelte'
+  import QualityPanels from './lib/workbench/QualityPanels.svelte'
+  import VersionPanel from './lib/workbench/VersionPanel.svelte'
+  import WorkbenchTopbar from './lib/workbench/WorkbenchTopbar.svelte'
   import {
     DOC_TITLE_TARGET_ID,
     blockIdFromTarget,
@@ -49,7 +55,7 @@
     normalizeScore,
     plagiarismRiskLabel
   } from './lib/workbench/quality'
-  import { buildVersionGroups, formatVersionSummary, formatVersionTime } from './lib/workbench/versions'
+  import { buildVersionGroups } from './lib/workbench/versions'
   import {
     normalizeGraphMeta,
     normalizeOriginalitySummary,
@@ -279,7 +285,6 @@
     return wasmInitPromise
   }
 
-
   function readDocId(): string {
     const w = window as Window & { __DOC_ID__?: string }
     if (w.__DOC_ID__) return String(w.__DOC_ID__)
@@ -300,10 +305,10 @@
 
   function mapStateName(name: string) {
     const n = (name || '').toUpperCase()
-    if (n === 'PLAN') return '¹æ»®'
-    if (n === 'WRITE') return 'Ğ´×÷'
-    if (n === 'DONE') return 'Íê³É'
-    if (n === 'STOPPED') return 'ÒÑÍ£Ö¹'
+    if (n === 'PLAN') return 'è§„åˆ’'
+    if (n === 'WRITE') return 'å†™ä½œ'
+    if (n === 'DONE') return 'å®Œæˆ'
+    if (n === 'STOPPED') return 'å·²åœæ­¢'
     return name
   }
 
@@ -313,7 +318,7 @@
       .replace(/^#+\s*/, '')
       .replace(/^h[23]::/i, '')
       .replace(/\s+/g, '')
-      .replace(/[£º:£¬,¡£.!?£¿£»;¡¢£¨£©()¡¾¡¿\[\]¡¶¡·"'¡°¡±¡®¡¯]/g, '')
+      .replace(/[ï¼š:ï¼Œ,ã€‚.!?ï¼Ÿï¼›;ã€ï¼ˆï¼‰()ã€ã€‘\[\]ã€Šã€‹"'â€œâ€â€˜â€™]/g, '')
       .toLowerCase()
   }
 
@@ -327,7 +332,7 @@
     const stripped = src
       .replace(/[`~*#>\-\[\]\(\)_=|]/g, '')
       .replace(/\s+/g, '')
-      .replace(/[£¬¡££¡£¿£»£º,.!?;:]/g, '')
+      .replace(/[ï¼Œã€‚ï¼ï¼Ÿï¼›ï¼š,.!?;:]/g, '')
     return stripped.length >= 8
   }
 
@@ -335,14 +340,14 @@
     const text = String(inst || '').trim()
     if (!text) return null
     if (
-      /(?:È«ÎÄ|ÕûÆª|ÕûÎÄ|È«²¿|´ÓÍ·).{0,4}(?:ÖØĞ´|¸ÄĞ´)|¸²¸ÇÖØĞ´|ÍÆµ¹ÖØĞ´|ÖØĞÂĞ´Ò»·İ|(?:rewrite|redo|start over|from scratch|replace).{0,14}(?:entire|whole|full|document|draft)|(?:entire|whole|full).{0,14}(?:rewrite|redo|replace)|overwrite(?:\s+the)?(?:\s+whole|\s+entire|\s+full)?(?:\s+document|\s+draft)?/i.test(
+      /(?:å…¨æ–‡|æ•´ç¯‡|æ•´æ–‡|å…¨éƒ¨|ä»å¤´).{0,4}(?:é‡å†™|æ”¹å†™)|è¦†ç›–é‡å†™|æ¨å€’é‡å†™|é‡æ–°å†™ä¸€ä»½|(?:rewrite|redo|start over|from scratch|replace).{0,14}(?:entire|whole|full|document|draft)|(?:entire|whole|full).{0,14}(?:rewrite|redo|replace)|overwrite(?:\s+the)?(?:\s+whole|\s+entire|\s+full)?(?:\s+document|\s+draft)?/i.test(
         text
       )
     ) {
       return 'overwrite'
     }
     if (
-      /(?:ĞøĞ´|½Ó×ÅĞ´|¼ÌĞøĞ´|½ÓĞøĞ´|ÔÚÔ­ÎÄ»ù´¡ÉÏ¼ÌĞø|ÑÓĞøĞ´|(?:continue|keep writing|carry on|extend|add more|build on).{0,14}(?:current|existing|draft|document|text|content)?|(?:based on|on top of)\s+(?:the\s+)?(?:existing|current))/i.test(
+      /(?:ç»­å†™|æ¥ç€å†™|ç»§ç»­å†™|æ¥ç»­å†™|åœ¨åŸæ–‡åŸºç¡€ä¸Šç»§ç»­|å»¶ç»­å†™|(?:continue|keep writing|carry on|extend|add more|build on).{0,14}(?:current|existing|draft|document|text|content)?|(?:based on|on top of)\s+(?:the\s+)?(?:existing|current))/i.test(
         text
       )
     ) {
@@ -394,7 +399,7 @@
 
   function runBatchFromToolbar() {
     switchWorkspaceMode('library')
-    pushToast('ÒÑÇĞ»»µ½×ÊÁÏÄ£Ê½£¬¿É¼ÌĞøÖ´ĞĞÅú´¦Àí¡£', 'info')
+    pushToast('å·²åˆ‡æ¢åˆ°èµ„æ–™æ¨¡å¼ï¼Œå¯ç»§ç»­æ‰§è¡Œæ‰¹å¤„ç†ã€‚', 'info')
   }
 
   function switchSurface(tab: WorkbenchSurface) {
@@ -425,20 +430,20 @@
 
   function buildTopStatusLine() {
     const parts: string[] = []
-    parts.push($docStatus || 'Î´¼ÓÔØ')
-    parts.push(`${Math.max(0, Number($wordCount || 0))} ´Ê`)
+    parts.push($docStatus || 'æœªåŠ è½½')
+    parts.push(`${Math.max(0, Number($wordCount || 0))} è¯`)
     if (lastGraphMeta?.route_id || lastGraphMeta?.route_entry || lastGraphMeta?.engine) {
       parts.push(
-        `Â·ÓÉ ${lastGraphMeta?.route_id || 'Ä¬ÈÏ'}/${lastGraphMeta?.route_entry || 'planner'} ¡¤ ${lastGraphMeta?.engine || 'legacy'}`
+        `è·¯ç”± ${lastGraphMeta?.route_id || 'é»˜è®¤'}/${lastGraphMeta?.route_entry || 'planner'} Â· ${lastGraphMeta?.engine || 'legacy'}`
       )
     }
     if (feedbackItems.length > 0) {
-      parts.push(`ÂúÒâ¶È ${feedbackItems[0].rating}/5`)
+      parts.push(`æ»¡æ„åº¦ ${feedbackItems[0].rating}/5`)
     }
     if (plagiarismResults.length > 0) {
-      parts.push(`²éÖØ·åÖµ ${Math.round(plagiarismMaxScore * 100)}%`)
+      parts.push(`æŸ¥é‡å³°å€¼ ${Math.round(plagiarismMaxScore * 100)}%`)
     }
-    return parts.join(' ¡¤ ')
+    return parts.join(' Â· ')
   }
 
   function openLibraryCard(card: LibraryCard) {
@@ -551,7 +556,7 @@
 
   function ensureInlineEditAllowed(actionLabel: string) {
     if (canEditSelectedBlocksNow()) return true
-    const msg = inlineEditLockReason || `Éú³ÉÖĞ£¬Ôİ²»Ö§³Ö${actionLabel}`
+    const msg = inlineEditLockReason || `ç”Ÿæˆä¸­ï¼Œæš‚ä¸æ”¯æŒ${actionLabel}`
     blockEditError = msg
     pushToast(msg, 'info')
     return false
@@ -570,8 +575,8 @@
       if (!queuedGlobalInstructions.length) recentQueuedBadgeCount = 0
       recentQueuedBadgeTimer = null
     }, 3000)
-    appendChat('system', `µ±Ç°ÕıÔÚÉú³É£¬ÒÑ¼ÓÈë´ıÖ´ĞĞ¶ÓÁĞ£¨${queuedGlobalInstructions.length}£©`)
-    pushToast(`ÒÑÅÅ¶Ó£¨${queuedGlobalInstructions.length}£©`, 'info')
+    appendChat('system', `å½“å‰æ­£åœ¨ç”Ÿæˆï¼Œå·²åŠ å…¥å¾…æ‰§è¡Œé˜Ÿåˆ—ï¼ˆ${queuedGlobalInstructions.length}ï¼‰`)
+    pushToast(`å·²æ’é˜Ÿï¼ˆ${queuedGlobalInstructions.length}ï¼‰`, 'info')
     queueMicrotask(() => {
       void drainQueuedGlobalInstructions()
     })
@@ -597,14 +602,14 @@
           if (staleRender) {
             resetStreamTyping()
             if (!autoRecovered) {
-              pushToast('¼ì²âµ½äÖÈ¾×´Ì¬¿¨×¡£¬ÒÑ×Ô¶¯»Ö¸´²¢¼ÌĞøÖ´ĞĞÅÅ¶ÓÖ¸Áî¡£', 'info')
+              pushToast('æ£€æµ‹åˆ°æ¸²æŸ“çŠ¶æ€å¡ä½ï¼Œå·²è‡ªåŠ¨æ¢å¤å¹¶ç»§ç»­æ‰§è¡Œæ’é˜ŸæŒ‡ä»¤ã€‚', 'info')
               autoRecovered = true
             }
           } else if (waited > 150000) {
             generating.set(false)
             resetStreamTyping()
             if (!autoRecovered) {
-              pushToast('ÅÅ¶ÓÖ¸ÁîµÈ´ı³¬Ê±£¬ÒÑÇ¿ÖÆ»Ö¸´²¢¼ÌĞø¡£', 'info')
+              pushToast('æ’é˜ŸæŒ‡ä»¤ç­‰å¾…è¶…æ—¶ï¼Œå·²å¼ºåˆ¶æ¢å¤å¹¶ç»§ç»­ã€‚', 'info')
               autoRecovered = true
             }
           }
@@ -614,7 +619,7 @@
         busySince = 0
         const [next, ...rest] = queuedGlobalInstructions
         queuedGlobalInstructions = rest
-        appendChat('system', `¿ªÊ¼Ö´ĞĞÅÅ¶ÓÖ¸Áî£¨Ê£Óà ${queuedGlobalInstructions.length}£©`)
+        appendChat('system', `å¼€å§‹æ‰§è¡Œæ’é˜ŸæŒ‡ä»¤ï¼ˆå‰©ä½™ ${queuedGlobalInstructions.length}ï¼‰`)
         await handleGenerate(next.text, { fromQueue: true })
       }
     } finally {
@@ -631,7 +636,7 @@
     if (writeTimer) clearTimeout(writeTimer)
     writeTimer = setTimeout(() => {
       const preview = writeBuffer.slice(-120)
-      pushThought('Ğ´×÷', preview, formatElapsed())
+      pushThought('å†™ä½œ', preview, formatElapsed())
       writeBuffer = ''
       writeTimer = null
     }, 500)
@@ -816,7 +821,7 @@
   function ensureSkeletonInText(text: string, title: string, sections: string[]) {
     let t = String(text || '').replace(/\r/g, '')
     if (!/^#\s+/m.test(t)) {
-      t = `# ${title || '×Ô¶¯Éú³ÉÎÄµµ'}\n\n` + t.trimStart()
+      t = `# ${title || 'è‡ªåŠ¨ç”Ÿæˆæ–‡æ¡£'}\n\n` + t.trimStart()
     }
     for (const s of sections || []) {
       const name = decodeSectionTitle(String(s || '').trim())
@@ -1009,7 +1014,7 @@
       lastSavedText = txt
     }
     if (payload.meta && payload.meta.action) {
-      pushToast('¿éÒÑ¸üĞÂ', 'ok')
+      pushToast('å—å·²æ›´æ–°', 'ok')
     }
   }
 
@@ -1073,7 +1078,7 @@
     selectedBlockId = nextIds[0] || ''
     selectedBlockText =
       selectedBlocks.length > 1
-        ? selectedBlocks.map((b, idx) => `[¿é${idx + 1}] ${b.text}`.trim()).join('\n\n')
+        ? selectedBlocks.map((b, idx) => `[å—${idx + 1}] ${b.text}`.trim()).join('\n\n')
         : String(detail.text || '')
     const style = detail.style && typeof detail.style === 'object' ? detail.style : {}
     blockStyleFontFamily = String((style as any).fontFamily || '')
@@ -1235,7 +1240,7 @@
   }
 
   function applyInlineBlockStyle(patch: Record<string, string>) {
-    if (!ensureInlineEditAllowed('ĞŞ¸Äµ±Ç°Ñ¡ÖĞ¿é')) return
+    if (!ensureInlineEditAllowed('ä¿®æ”¹å½“å‰é€‰ä¸­å—')) return
     const targets = selectedBlockIds.length ? selectedBlockIds : selectedBlockId ? [selectedBlockId] : []
     if (!targets.length || !$docIr) return
     const blockTargets = blockTargetIds(targets)
@@ -1286,7 +1291,7 @@
 
   function selectedTargetText() {
     if (selectedBlocks.length > 1) {
-      return selectedBlocks.map((b, idx) => `[¿é${idx + 1}] ${b.text}`.trim()).join('\n\n')
+      return selectedBlocks.map((b, idx) => `[å—${idx + 1}] ${b.text}`.trim()).join('\n\n')
     }
     if (selectedBlocks.length === 1) return String(selectedBlocks[0].text || '')
     return selectedBlockText.trim()
@@ -1343,8 +1348,8 @@
     const details: string[] = [`code=${code}`, trimmed, fallback, recovered]
     if (source) details.push(`source=${source}`)
     if (left > 0 || right > 0) details.push(`window=${left}/${right}`)
-    if (ok) return `¾Ö²¿¸ÄĞ´³É¹¦£¨${details.join('; ')}£©`
-    return `¾Ö²¿¸ÄĞ´Î´ÃüÖĞ£¨${details.join('; ')}£©£¬ÒÑÇĞ»»È«Á¿Éú³É¶µµ×`
+    if (ok) return `å±€éƒ¨æ”¹å†™æˆåŠŸï¼ˆ${details.join('; ')}ï¼‰`
+    return `å±€éƒ¨æ”¹å†™æœªå‘½ä¸­ï¼ˆ${details.join('; ')}ï¼‰ï¼Œå·²åˆ‡æ¢å…¨é‡ç”Ÿæˆå…œåº•`
   }
 
   function openAssistantForBlock(customInstruction?: string) {
@@ -1357,26 +1362,26 @@
     if (base && ids.length > 0) {
       const hasTitleTarget = ids.some((id) => isSectionTargetId(id) || isDocTitleTargetId(id))
       const title = hasTitleTarget
-        ? 'ÇëÖ»ĞŞ¸ÄÎÒÑ¡ÖĞµÄ±êÌâ»ò¶ÎÂä£¬²»Òª¸ÄÆäËû²¿·Ö¡£'
+        ? 'è¯·åªä¿®æ”¹æˆ‘é€‰ä¸­çš„æ ‡é¢˜æˆ–æ®µè½ï¼Œä¸è¦æ”¹å…¶ä»–éƒ¨åˆ†ã€‚'
         : ids.length > 1
-          ? `ÇëÖ»ĞŞ¸ÄÎÒÑ¡ÖĞµÄ ${ids.length} ¸ö¶ÎÂä¿é£¬²»Òª¸ÄÆäËû¶ÎÂä¡£`
-          : 'ÇëÖ»ĞŞ¸ÄÎÒÑ¡ÖĞµÄÕâ¶ÎÄÚÈİ£¬²»Òª¸ÄÆäËû¶ÎÂä¡£'
-      instruction.set(`${title}\n${base}\n\nĞŞ¸ÄÒªÇó£º${req}`)
+          ? `è¯·åªä¿®æ”¹æˆ‘é€‰ä¸­çš„ ${ids.length} ä¸ªæ®µè½å—ï¼Œä¸è¦æ”¹å…¶ä»–æ®µè½ã€‚`
+          : 'è¯·åªä¿®æ”¹æˆ‘é€‰ä¸­çš„è¿™æ®µå†…å®¹ï¼Œä¸è¦æ”¹å…¶ä»–æ®µè½ã€‚'
+      instruction.set(`${title}\n${base}\n\nä¿®æ”¹è¦æ±‚ï¼š${req}`)
     }
     focusAssistantInput()
   }
 
   async function previewSelectedBlockEdit() {
-    if (!ensureInlineEditAllowed('Éú³É¿é¸ÄĞ´ºòÑ¡')) return
+    if (!ensureInlineEditAllowed('ç”Ÿæˆå—æ”¹å†™å€™é€‰')) return
     const targetIds = selectedTargetIds()
     const blockIds = selectedTargetBlockIds()
     if (!$docId || !targetIds.length) return
     if (!blockIds.length) {
-      blockEditError = 'µ±Ç°Ñ¡ÖĞÎª±êÌâ£¬½¨ÒéÔÚ¡°ÑùÊ½ÉèÖÃ¡±ÖĞĞŞ¸Ä£¬»òÖ±½ÓÔÚ±êÌâ´¦ÊäÈë¡£'
+      blockEditError = 'å½“å‰é€‰ä¸­ä¸ºæ ‡é¢˜ï¼Œå»ºè®®åœ¨â€œæ ·å¼è®¾ç½®â€ä¸­ä¿®æ”¹ï¼Œæˆ–ç›´æ¥åœ¨æ ‡é¢˜å¤„è¾“å…¥ã€‚'
       return
     }
     if (blockIds.length !== targetIds.length) {
-      blockEditError = '±êÌâÓëÕıÎÄ»ìÑ¡Ê±Ôİ²»Ö§³ÖºòÑ¡Éú³É£¬ÇëÖ»Ñ¡¶ÎÂä¿é¡£'
+      blockEditError = 'æ ‡é¢˜ä¸æ­£æ–‡æ··é€‰æ—¶æš‚ä¸æ”¯æŒå€™é€‰ç”Ÿæˆï¼Œè¯·åªé€‰æ®µè½å—ã€‚'
       return
     }
     const input = sanitizeAiInputText(blockEditCmd, { trim: true, maxChars: 2400 })
@@ -1385,7 +1390,7 @@
     blockEditError = ''
     blockCandidates = []
     try {
-      if (!$docIr || typeof $docIr !== 'object') throw new Error('ÎÄµµÉĞÎ´¾ÍĞ÷')
+      if (!$docIr || typeof $docIr !== 'object') throw new Error('æ–‡æ¡£å°šæœªå°±ç»ª')
       const baseDoc = $docIr as Record<string, unknown>
       blockOriginalText = selectedTargetText()
       if (blockIds.length === 1) {
@@ -1406,7 +1411,7 @@
         blockCandidates = rawCandidates
           .filter((c: any) => c && typeof c === 'object' && c.doc_ir && !c.error)
           .map((c: any, idx: number) => ({
-            label: String(c.label || `·½°¸${idx + 1}`),
+            label: String(c.label || `æ–¹æ¡ˆ${idx + 1}`),
             selectedAfter: sanitizeCandidateText(String(c.selected_after || ''), blockOriginalText),
             selectedBefore: String(c.selected_before || blockOriginalText || ''),
             docIr: c.doc_ir,
@@ -1414,8 +1419,8 @@
           }))
       } else {
         const variants = [
-          { label: '·½°¸A', instruction: input },
-          { label: '·½°¸B', instruction: `${input}¡£Çë²ÉÓÃÁíÒ»ÖÖ±í´ï·½Ê½£¬±£³ÖÔ­Òâµ«ÔÚ¾äÊ½ºÍ×éÖ¯ÉÏÓĞÃ÷ÏÔ²îÒì¡£` }
+          { label: 'æ–¹æ¡ˆA', instruction: input },
+          { label: 'æ–¹æ¡ˆB', instruction: `${input}ã€‚è¯·é‡‡ç”¨å¦ä¸€ç§è¡¨è¾¾æ–¹å¼ï¼Œä¿æŒåŸæ„ä½†åœ¨å¥å¼å’Œç»„ç»‡ä¸Šæœ‰æ˜æ˜¾å·®å¼‚ã€‚` }
         ]
         const collected: Array<any> = []
         for (const variant of variants) {
@@ -1443,7 +1448,7 @@
             const data = await resp.json()
             const candidate = Array.isArray(data.candidates) ? data.candidates[0] : null
             if (!candidate || !candidate.doc_ir) {
-              throw new Error(`Î´Éú³É¿ÉÓÃºòÑ¡£º${variant.label}`)
+              throw new Error(`æœªç”Ÿæˆå¯ç”¨å€™é€‰ï¼š${variant.label}`)
             }
             const before = String(data.before || '')
             const after = sanitizeCandidateText(String(candidate.selected_after || ''), before)
@@ -1462,11 +1467,11 @@
         blockCandidates = collected
       }
       if (!blockCandidates.length) {
-        throw new Error('Ã»ÓĞÉú³É¿ÉÓÃºòÑ¡°æ±¾')
+        throw new Error('æ²¡æœ‰ç”Ÿæˆå¯ç”¨å€™é€‰ç‰ˆæœ¬')
       }
       activeCandidateIndex = 0
     } catch (err) {
-      blockEditError = err instanceof Error ? err.message : 'ºòÑ¡Éú³ÉÊ§°Ü'
+      blockEditError = err instanceof Error ? err.message : 'å€™é€‰ç”Ÿæˆå¤±è´¥'
     } finally {
       blockPreviewBusy = false
     }
@@ -1474,7 +1479,7 @@
 
   function useRewritePreset(preset: string) {
     const cur = blockEditCmd.trim()
-    blockEditCmd = cur ? `${cur}£»${preset}` : preset
+    blockEditCmd = cur ? `${cur}ï¼›${preset}` : preset
     inlinePanelTab = 'rewrite'
   }
 
@@ -1531,7 +1536,7 @@
       .replace(/^\s*```[a-zA-Z0-9_-]*\s*/g, '')
       .replace(/\s*```\s*$/g, '')
       .trim()
-    const rewriteLabel = /(?:¸ÄĞ´ºó(?:µÄ)?(?:ÎÄ±¾|°æ±¾)?|ÓÅ»¯ºó(?:µÄ)?(?:ÎÄ±¾|°æ±¾)?|ÖØĞ´ºó(?:µÄ)?(?:ÎÄ±¾|°æ±¾)?|ÈóÉ«ºó(?:µÄ)?(?:ÎÄ±¾|°æ±¾)?|rewritten\s*text|revised\s*version|final\s*version)\s*[:£º]\s*/gi
+    const rewriteLabel = /(?:æ”¹å†™å(?:çš„)?(?:æ–‡æœ¬|ç‰ˆæœ¬)?|ä¼˜åŒ–å(?:çš„)?(?:æ–‡æœ¬|ç‰ˆæœ¬)?|é‡å†™å(?:çš„)?(?:æ–‡æœ¬|ç‰ˆæœ¬)?|æ¶¦è‰²å(?:çš„)?(?:æ–‡æœ¬|ç‰ˆæœ¬)?|rewritten\s*text|revised\s*version|final\s*version)\s*[:ï¼š]\s*/gi
     let last: RegExpExecArray | null = null
     while (true) {
       const m = rewriteLabel.exec(out)
@@ -1542,7 +1547,7 @@
       out = out.slice(last.index + last[0].length).trim()
     }
     if (original && out.startsWith(original)) {
-      const tail = out.slice(original.length).replace(/^[\s:£º\-¡ª]+/, '')
+      const tail = out.slice(original.length).replace(/^[\s:ï¼š\-â€”]+/, '')
       if (tail.length >= 4) out = tail
     }
     const parts = out.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
@@ -1557,19 +1562,19 @@
     const after = String(candidate?.selectedAfter || '')
     const before = String(candidate?.selectedBefore || blockOriginalText || '')
     const delta = after.length - before.length
-    if (delta === 0) return '³¤¶È²»±ä'
-    return delta > 0 ? `Ôö¼Ó ${delta} ×Ö` : `¼õÉÙ ${Math.abs(delta)} ×Ö`
+    if (delta === 0) return 'é•¿åº¦ä¸å˜'
+    return delta > 0 ? `å¢åŠ  ${delta} å­—` : `å‡å°‘ ${Math.abs(delta)} å­—`
   }
 
   function ignoreCandidateSuggestions() {
     blockCandidates = []
     activeCandidateIndex = 0
     blockEditError = ''
-    pushToast('ÒÑºöÂÔ±¾ÂÖ½¨Òé', 'info')
+    pushToast('å·²å¿½ç•¥æœ¬è½®å»ºè®®', 'info')
   }
 
   async function applyCandidateVersion(index: number) {
-    if (!ensureInlineEditAllowed('²ÉÄÉºòÑ¡¸ÄĞ´')) return
+    if (!ensureInlineEditAllowed('é‡‡çº³å€™é€‰æ”¹å†™')) return
     const candidate = blockCandidates[index]
     if (!candidate || !$docId || !candidate.docIr) return
     const nextDoc = candidate.docIr as Record<string, unknown>
@@ -1583,16 +1588,16 @@
       await fetch(`/api/doc/${$docId}/version/commit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `¿éĞŞ¸Ä:${candidate.label}`, author: 'user', kind: 'minor' })
+        body: JSON.stringify({ message: `å—ä¿®æ”¹:${candidate.label}`, author: 'user', kind: 'minor' })
       })
-      pushToast(`ÒÑÓ¦ÓÃ${candidate.label}`, 'ok')
+      pushToast(`å·²åº”ç”¨${candidate.label}`, 'ok')
       blockCandidates = []
       activeCandidateIndex = 0
       blockEditCmd = ''
       requestAnimationFrame(() => updateInlineOverlayPosition())
       await loadVersionLog()
     } catch (err) {
-      blockEditError = err instanceof Error ? err.message : 'Ó¦ÓÃºòÑ¡Ê§°Ü'
+      blockEditError = err instanceof Error ? err.message : 'åº”ç”¨å€™é€‰å¤±è´¥'
     }
   }
 
@@ -1693,8 +1698,8 @@
       id: Math.random().toString(36).slice(2),
       type: 'table',
       table: {
-        caption: 'ĞÂ½¨±í¸ñ',
-        columns: ['ÁĞ1', 'ÁĞ2', 'ÁĞ3'],
+        caption: 'æ–°å»ºè¡¨æ ¼',
+        columns: ['åˆ—1', 'åˆ—2', 'åˆ—3'],
         rows: [
           ['', '', ''],
           ['', '', '']
@@ -1708,7 +1713,7 @@
       appendBlockToDoc(doc as Record<string, unknown>, tableBlock)
     if (!nextDoc) return
     applyDocIrSnapshot(nextDoc as Record<string, unknown>)
-    pushToast('ÒÑ²åÈë±í¸ñ¿é£¬¿ÉÖ±½Ó±à¼­ÄÚÈİ¡£', 'ok')
+    pushToast('å·²æ’å…¥è¡¨æ ¼å—ï¼Œå¯ç›´æ¥ç¼–è¾‘å†…å®¹ã€‚', 'ok')
   }
 
   const blockCache = new Map<string, any>()
@@ -1775,14 +1780,14 @@
         return
       }
       let parts = clean
-        .split(/(?<=[¡££¡£¿!?£»;])(?=[^¡±¡¯¡¹¡»£©¡·¡¿\]\s])/g)
+        .split(/(?<=[ã€‚ï¼ï¼Ÿ!?ï¼›;])(?=[^â€â€™ã€ã€ï¼‰ã€‹ã€‘\]\s])/g)
         .map((part) => part.trim())
         .filter(Boolean)
       if (parts.length <= 1 && clean.length > 118) {
         const commas: number[] = []
         for (let i = 0; i < clean.length; i += 1) {
           const ch = clean[i]
-          if (ch === '£¬' || ch === ',' || ch === '¡¢') commas.push(i)
+          if (ch === 'ï¼Œ' || ch === ',' || ch === 'ã€') commas.push(i)
         }
         if (commas.length) {
           const target = Math.floor(clean.length / 2)
@@ -1830,7 +1835,7 @@
       if (!title || !para) return null
       const pureTitle = title.replace(/^\d+(?:\.\d+){0,3}\s*/, '').trim()
       if (!pureTitle || pureTitle.length > 4) return null
-      const m = /^([\u4e00-\u9fa5]{1,4})(×Ô|ÊÇ|ÔÚ|ÓÉ|Í¨¹ı|Ëæ×Å|²¢|¿É|½«|»á)([\s\S]*)$/.exec(para)
+      const m = /^([\u4e00-\u9fa5]{1,4})(è‡ª|æ˜¯|åœ¨|ç”±|é€šè¿‡|éšç€|å¹¶|å¯|å°†|ä¼š)([\s\S]*)$/.exec(para)
       if (!m) return null
       const tail = String(m[1] || '').trim()
       if (!tail || tail.length > 3) return null
@@ -1979,10 +1984,10 @@
     })
     if (!resp.ok) {
       const body = await resp.text()
-      const msg = body || resp.statusText || 'ÇëÇóÊ§°Ü'
+      const msg = body || resp.statusText || 'è¯·æ±‚å¤±è´¥'
       throw new Error(`HTTP ${resp.status}: ${msg}`)
     }
-    if (!resp.body) throw new Error('µ±Ç°»·¾³²»Ö§³ÖÁ÷Ê½Êä³ö')
+    if (!resp.body) throw new Error('å½“å‰ç¯å¢ƒä¸æ”¯æŒæµå¼è¾“å‡º')
     const reader = resp.body.getReader()
     const decoder = new TextDecoder('utf-8')
     let buf = ''
@@ -2029,7 +2034,7 @@
       }
       loadVersionLog().catch(() => {})
     } catch (err) {
-      pushToast(`¼ÓÔØÊ§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'error')
+      pushToast(`åŠ è½½å¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'error')
     } finally {
       isLoading.set(false)
     }
@@ -2079,7 +2084,7 @@
     if (!id) return
     if (satisfactionSaving) return
     if (!Number.isFinite(satisfactionRating) || satisfactionRating < 1 || satisfactionRating > 5) {
-      pushToast('ÇëÑ¡Ôñ 1-5 ·ÖÂúÒâ¶È', 'info')
+      pushToast('è¯·é€‰æ‹© 1-5 åˆ†æ»¡æ„åº¦', 'info')
       return
     }
     satisfactionSaving = true
@@ -2111,14 +2116,14 @@
       const lowRecorded = Number(data.low_recorded || 0)
       lastLowFeedbackRecorded = Number.isFinite(lowRecorded) ? lowRecorded : 0
       if (lastLowFeedbackRecorded > 0) {
-        pushToast('ÒÑ¼ÇÂ¼µÍÂúÒâ¶ÈÑù±¾£¬ºóĞø¿ÉÓÃÓÚÑ§Ï°¸Ä½ø¡£', 'info')
+        pushToast('å·²è®°å½•ä½æ»¡æ„åº¦æ ·æœ¬ï¼Œåç»­å¯ç”¨äºå­¦ä¹ æ”¹è¿›ã€‚', 'info')
       } else {
-        pushToast('ÂúÒâ¶ÈÒÑÌá½»', 'ok')
+        pushToast('æ»¡æ„åº¦å·²æäº¤', 'ok')
       }
       satisfactionNote = ''
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ìá½»Ê§°Ü'
-      pushToast(`ÂúÒâ¶ÈÌá½»Ê§°Ü: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'æäº¤å¤±è´¥'
+      pushToast(`æ»¡æ„åº¦æäº¤å¤±è´¥: ${msg}`, 'bad')
     } finally {
       satisfactionSaving = false
     }
@@ -2174,7 +2179,7 @@
     const refDocIds = parseReferenceDocIds(plagiarismReferenceDocIds)
     const manualText = String(plagiarismReferenceText || '').trim()
     if (!refDocIds.length && !manualText) {
-      pushToast('ÇëÖÁÉÙÌá¹©Ò»¸ö¶Ô±ÈÎÄµµID»òÕ³Ìù²Î¿¼ÎÄ±¾', 'info')
+      pushToast('è¯·è‡³å°‘æä¾›ä¸€ä¸ªå¯¹æ¯”æ–‡æ¡£IDæˆ–ç²˜è´´å‚è€ƒæ–‡æœ¬', 'info')
       return
     }
     plagiarismLoading = true
@@ -2187,7 +2192,7 @@
         reference_doc_ids: refDocIds
       }
       if (manualText) {
-        payload.reference_texts = [{ id: 'manual_text', title: 'ÊÖ¶¯Õ³ÌùÎÄ±¾', text: manualText }]
+        payload.reference_texts = [{ id: 'manual_text', title: 'æ‰‹åŠ¨ç²˜è´´æ–‡æœ¬', text: manualText }]
       }
       const resp = await fetch(`/api/doc/${id}/plagiarism/check`, {
         method: 'POST',
@@ -2209,15 +2214,15 @@
       plagiarismFlaggedCount = Number(data?.flagged_count || 0) || 0
       plagiarismMaxScore = normalizeScore(data?.max_score || 0)
       if (plagiarismResults.length === 0) {
-        pushToast('²éÖØÍê³É£ºÃ»ÓĞ¿É·ÖÎöµÄ²Î¿¼ÎÄ±¾', 'info')
+        pushToast('æŸ¥é‡å®Œæˆï¼šæ²¡æœ‰å¯åˆ†æçš„å‚è€ƒæ–‡æœ¬', 'info')
       } else if (plagiarismFlaggedCount > 0) {
-        pushToast(`²éÖØÍê³É£º·¢ÏÖ ${plagiarismFlaggedCount} ¸öÒÉËÆ¸ßÖØ¸´À´Ô´`, 'bad')
+        pushToast(`æŸ¥é‡å®Œæˆï¼šå‘ç° ${plagiarismFlaggedCount} ä¸ªç–‘ä¼¼é«˜é‡å¤æ¥æº`, 'bad')
       } else {
-        pushToast('²éÖØÍê³É£ºÎ´·¢ÏÖ³¬ãĞÖµÖØ¸´À´Ô´', 'ok')
+        pushToast('æŸ¥é‡å®Œæˆï¼šæœªå‘ç°è¶…é˜ˆå€¼é‡å¤æ¥æº', 'ok')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '²éÖØÊ§°Ü'
-      pushToast(`²éÖØÊ§°Ü: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'æŸ¥é‡å¤±è´¥'
+      pushToast(`æŸ¥é‡å¤±è´¥: ${msg}`, 'bad')
     } finally {
       plagiarismLoading = false
     }
@@ -2269,13 +2274,13 @@
       const percent = Number(data?.ai_rate_percent || 0)
       const risk = String(data?.risk_level || '')
       if (Boolean(data?.suspected_ai)) {
-        pushToast(`AIÂÊ¼ì²âÍê³É£º${percent}%£¨${risk}£©`, 'bad')
+        pushToast(`AIç‡æ£€æµ‹å®Œæˆï¼š${percent}%ï¼ˆ${risk}ï¼‰`, 'bad')
       } else {
-        pushToast(`AIÂÊ¼ì²âÍê³É£º${percent}%£¨${risk}£©`, 'ok')
+        pushToast(`AIç‡æ£€æµ‹å®Œæˆï¼š${percent}%ï¼ˆ${risk}ï¼‰`, 'ok')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'AIÂÊ¼ì²âÊ§°Ü'
-      pushToast(`AIÂÊ¼ì²âÊ§°Ü: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'AIç‡æ£€æµ‹å¤±è´¥'
+      pushToast(`AIç‡æ£€æµ‹å¤±è´¥: ${msg}`, 'bad')
     } finally {
       aiRateLoading = false
     }
@@ -2295,7 +2300,7 @@
       }
       const manualText = String(plagiarismReferenceText || '').trim()
       if (manualText) {
-        payload.reference_texts = [{ id: 'manual_text', title: 'ÊÖ¶¯Õ³ÌùÎÄ±¾', text: manualText }]
+        payload.reference_texts = [{ id: 'manual_text', title: 'æ‰‹åŠ¨ç²˜è´´æ–‡æœ¬', text: manualText }]
       }
       const resp = await fetch(`/api/doc/${id}/plagiarism/library_scan`, {
         method: 'POST',
@@ -2328,12 +2333,12 @@
       plagiarismFlaggedCount = Number(data?.flagged_count || 0) || 0
       plagiarismMaxScore = normalizeScore(data?.max_score || 0)
       pushToast(
-        `È«¿â²éÖØÍê³É£ºÀ´Ô´ ${plagiarismLatestReport.total_references}£¬³¬ãĞÖµ ${plagiarismLatestReport.flagged_count}`,
+        `å…¨åº“æŸ¥é‡å®Œæˆï¼šæ¥æº ${plagiarismLatestReport.total_references}ï¼Œè¶…é˜ˆå€¼ ${plagiarismLatestReport.flagged_count}`,
         plagiarismLatestReport.flagged_count > 0 ? 'bad' : 'ok'
       )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'È«¿â²éÖØÊ§°Ü'
-      pushToast(`È«¿â²éÖØÊ§°Ü: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'å…¨åº“æŸ¥é‡å¤±è´¥'
+      pushToast(`å…¨åº“æŸ¥é‡å¤±è´¥: ${msg}`, 'bad')
     } finally {
       plagiarismLibraryLoading = false
     }
@@ -2344,7 +2349,7 @@
     if (!id) return
     const rid = String(plagiarismLatestReport?.report_id || '').trim()
     if (!rid) {
-      pushToast('ÔİÎŞ¿ÉÏÂÔØµÄ²éÖØ±¨¸æ', 'info')
+      pushToast('æš‚æ— å¯ä¸‹è½½çš„æŸ¥é‡æŠ¥å‘Š', 'info')
       return
     }
     window.location.href = `/api/doc/${id}/plagiarism/library_scan/download?report_id=${encodeURIComponent(rid)}&format=${format}`
@@ -2408,7 +2413,7 @@
         : null
     sectionOriginalitySummary = normalizeOriginalitySummary(qualitySnapshot?.section_originality_hot_sample)
     if (sectionOriginalitySummary) {
-      pushThought('Ô­´´ĞÔÈÈ²ÉÑù', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
+      pushThought('åŸåˆ›æ€§çƒ­é‡‡æ ·', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
     }
               sourceText.set(txt)
               lastSavedText = txt
@@ -2417,7 +2422,7 @@
               lastSavedText = $sourceText
               partialSavedSnapshot = $sourceText
             }
-            pushToast('ÒÑ±£´æ', 'ok')
+            pushToast('å·²ä¿å­˜', 'ok')
             return
           }
         } else if (ops && ops.length === 0) {
@@ -2441,9 +2446,9 @@
       } else {
         lastSavedDocIr = null
       }
-      pushToast('ÒÑ±£´æ', 'ok')
+      pushToast('å·²ä¿å­˜', 'ok')
     } catch (err) {
-      pushToast(`±£´æÊ§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'error')
+      pushToast(`ä¿å­˜å¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'error')
     }
   }
 
@@ -2458,7 +2463,7 @@
       versionList = Array.isArray(data.versions) ? data.versions : []
       versionGroups = buildVersionGroups(versionList)
     } catch (err) {
-      versionError = err instanceof Error ? err.message : '¼ÓÔØÊ§°Ü'
+      versionError = err instanceof Error ? err.message : 'åŠ è½½å¤±è´¥'
     } finally {
       versionLoading = false
     }
@@ -2473,7 +2478,7 @@
 
   async function commitVersion() {
     if (!$docId) return
-    const msg = versionMessage.trim() || '¶¨¸å°æ±¾'
+    const msg = versionMessage.trim() || 'å®šç¨¿ç‰ˆæœ¬'
     try {
       const resp = await fetch(`/api/doc/${$docId}/version/commit`, {
         method: 'POST',
@@ -2483,9 +2488,9 @@
       if (!resp.ok) throw new Error(await resp.text())
       versionMessage = ''
       await loadVersionLog()
-      pushToast('ÒÑÌá½»°æ±¾', 'ok')
+      pushToast('å·²æäº¤ç‰ˆæœ¬', 'ok')
     } catch (err) {
-      pushToast(`Ìá½»Ê§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'error')
+      pushToast(`æäº¤å¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'error')
     }
   }
 
@@ -2503,9 +2508,9 @@
       applyFinalSnapshot(txt)
       lastSavedText = txt
       await loadVersionLog()
-      pushToast('ÒÑÇĞ»»°æ±¾', 'ok')
+      pushToast('å·²åˆ‡æ¢ç‰ˆæœ¬', 'ok')
     } catch (err) {
-      pushToast(`ÇĞ»»Ê§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'error')
+      pushToast(`åˆ‡æ¢å¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'error')
     }
   }
 
@@ -2521,7 +2526,7 @@
       const diff = Array.isArray(data.diff) ? data.diff : []
       versionDiff = diff.join('\n')
     } catch (err) {
-      versionDiff = err instanceof Error ? err.message : '¶Ô±ÈÊ§°Ü'
+      versionDiff = err instanceof Error ? err.message : 'å¯¹æ¯”å¤±è´¥'
     }
   }
 
@@ -2542,16 +2547,16 @@
       const nodes = Array.isArray(data.nodes) ? data.nodes : []
       const edges = Array.isArray(data.edges) ? data.edges : []
       const lines: string[] = []
-      lines.push('½Úµã£º')
+      lines.push('èŠ‚ç‚¹ï¼š')
       for (const n of nodes) {
         const id = String(n.id || '').slice(0, 7)
         const msg = String(n.message || '')
         const ts = formatVersionTime(Number(n.timestamp || 0))
-        const cur = n.is_current ? ' *µ±Ç°*' : ''
+        const cur = n.is_current ? ' *å½“å‰*' : ''
         lines.push(`- ${id} ${msg} ${ts}${cur}`)
       }
       lines.push('')
-      lines.push('±ß£º')
+      lines.push('è¾¹ï¼š')
       for (const e of edges) {
         const from = String(e.from || '').slice(0, 7)
         const to = String(e.to || '').slice(0, 7)
@@ -2559,10 +2564,9 @@
       }
       versionTree = lines.join('\n')
     } catch (err) {
-      versionTree = err instanceof Error ? err.message : '°æ±¾Ê÷¼ÓÔØÊ§°Ü'
+      versionTree = err instanceof Error ? err.message : 'ç‰ˆæœ¬æ ‘åŠ è½½å¤±è´¥'
     }
   }
-
 
   async function preflightExport(format: 'docx' | 'pdf') {
     if (!$docId) return false
@@ -2570,7 +2574,7 @@
       const resp = await fetch(`/api/doc/${$docId}/export/check?format=${format}&auto_fix=1`)
       if (!resp.ok) {
         const msg = await resp.text()
-        pushToast(`µ¼³öĞ£ÑéÊ§°Ü: ${msg || resp.statusText}`, 'bad')
+        pushToast(`å¯¼å‡ºæ ¡éªŒå¤±è´¥: ${msg || resp.statusText}`, 'bad')
         return false
       }
       const data = await resp.json()
@@ -2578,15 +2582,15 @@
       const issues = Array.isArray(data?.issues) ? data.issues : []
       const warnings = Array.isArray(data?.warnings) ? data.warnings : []
       if (warnings.length > 0) {
-        pushToast('µ¼³öÇ°ÒÑ×Ô¶¯ĞŞ¸´ÎÄµµ½á¹¹¡£', 'info')
+        pushToast('å¯¼å‡ºå‰å·²è‡ªåŠ¨ä¿®å¤æ–‡æ¡£ç»“æ„ã€‚', 'info')
       }
       if (!canExport) {
         const first = issues[0]
-        const msg = String(first?.message || 'µ¼³öÇ°Ğ£ÑéÎ´Í¨¹ı')
+        const msg = String(first?.message || 'å¯¼å‡ºå‰æ ¡éªŒæœªé€šè¿‡')
         const citationBlocked = issues.some((x: any) => String(x?.code || '').startsWith('citation_'))
         if (citationBlocked) {
           showCitations = true
-          pushToast(`${msg} ÒÑ×Ô¶¯´ò¿ª¡°ÒıÓÃ¡±Ãæ°å£¬ÇëÏÈµã»÷¡°ºËÑéÒıÓÃ¡±¡£`, 'bad')
+          pushToast(`${msg} å·²è‡ªåŠ¨æ‰“å¼€â€œå¼•ç”¨â€é¢æ¿ï¼Œè¯·å…ˆç‚¹å‡»â€œæ ¸éªŒå¼•ç”¨â€ã€‚`, 'bad')
         } else {
           pushToast(msg, 'bad')
         }
@@ -2594,7 +2598,7 @@
       }
       return true
     } catch (err) {
-      pushToast(`µ¼³öĞ£ÑéÊ§°Ü: ${err instanceof Error ? err.message : 'Î´Öª´íÎó'}`, 'bad')
+      pushToast(`å¯¼å‡ºæ ¡éªŒå¤±è´¥: ${err instanceof Error ? err.message : 'æœªçŸ¥é”™è¯¯'}`, 'bad')
       return false
     }
   }
@@ -2603,7 +2607,7 @@
     if (!$docId) return
     const ready = await preflightExport('pdf')
     if (!ready) return
-    pushToast('ÕıÔÚÉú³ÉPDF...', 'info')
+    pushToast('æ­£åœ¨ç”ŸæˆPDF...', 'info')
     window.location.href = `/download/${$docId}.pdf`
   }
 
@@ -2616,7 +2620,7 @@
     if (!$docId) return
     const ready = await preflightExport('docx')
     if (!ready) return
-    pushToast('ÕıÔÚÉú³ÉWordÎÄµµ...', 'info')
+    pushToast('æ­£åœ¨ç”ŸæˆWordæ–‡æ¡£...', 'info')
     window.location.href = `/download/${$docId}.docx`
   }
 
@@ -2624,7 +2628,7 @@
     if (!resumeState || $generating) return
     const inst = String(resumeState.user_instruction || resumeState.request_instruction || '').trim()
     if (!inst) {
-      pushToast('Ã»ÓĞ¿ÉĞøÅÜµÄÀúÊ·Ö¸Áî', 'info')
+      pushToast('æ²¡æœ‰å¯ç»­è·‘çš„å†å²æŒ‡ä»¤', 'info')
       return
     }
     const pendingSections = pendingResumeSections(resumeState)
@@ -2664,13 +2668,13 @@
       operationsCount: Number(data.operations_count || 0)
     }
     confirmDialogBusy = false
-    docStatus.set('´ıÈ·ÈÏ£º¼ì²âµ½¸ß·çÏÕ±à¼­')
-    flowStatus.set('´ıÈ·ÈÏ')
-    const from = opts?.fromStream ? 'Á÷Ê½Éú³É' : '·ÇÁ÷Ê½Éú³É'
-    const reason = pendingGenerateConfirmation.note || `¼ì²âµ½¸ß·çÏÕ±à¼­£¬À´Ô´ ${from}¡£`
+    docStatus.set('å¾…ç¡®è®¤ï¼šæ£€æµ‹åˆ°é«˜é£é™©ç¼–è¾‘')
+    flowStatus.set('å¾…ç¡®è®¤')
+    const from = opts?.fromStream ? 'æµå¼ç”Ÿæˆ' : 'éæµå¼ç”Ÿæˆ'
+    const reason = pendingGenerateConfirmation.note || `æ£€æµ‹åˆ°é«˜é£é™©ç¼–è¾‘ï¼Œæ¥æº ${from}ã€‚`
     appendChat('system', reason)
-    pushThought('´ıÈ·ÈÏ', reason, formatElapsed())
-    pushToast('¼ì²âµ½¸ß·çÏÕ±à¼­£¬ÇëÈ·ÈÏºóÖ´ĞĞ¡£', 'info')
+    pushThought('å¾…ç¡®è®¤', reason, formatElapsed())
+    pushToast('æ£€æµ‹åˆ°é«˜é£é™©ç¼–è¾‘ï¼Œè¯·ç¡®è®¤åæ‰§è¡Œã€‚', 'info')
   }
 
   async function runNonStreamGenerate(
@@ -2697,12 +2701,12 @@
         ? (data.revision_meta as Record<string, unknown>)
         : null
     if (revisionMeta) {
-      pushThought('¸ÄĞ´Õï¶Ï', summarizeRevisionStatus(revisionMeta), formatElapsed())
+      pushThought('æ”¹å†™è¯Šæ–­', summarizeRevisionStatus(revisionMeta), formatElapsed())
     }
     const graphMeta = normalizeGraphMeta(data.graph_meta)
     if (graphMeta) {
       lastGraphMeta = graphMeta
-      pushThought('Í¼Â·ÓÉ', `·ÇÁ÷Ê½ ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
+      pushThought('å›¾è·¯ç”±', `éæµå¼ ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
     }
     const txt = String(data.text || '')
     if (!sawSectionDelta) {
@@ -2714,13 +2718,13 @@
         data.doc_ir && typeof data.doc_ir === 'object' ? (data.doc_ir as Record<string, unknown>) : null
       finalizeStreamText(txt, finalDoc)
     }
-    docStatus.set('Íê³É')
-    flowStatus.set('Íê³É')
+    docStatus.set('å®Œæˆ')
+    flowStatus.set('å®Œæˆ')
     resumeState = null
-    const doneMsg = String(opts?.completionMsg || 'ÒÑÍê³ÉÉú³É¡£')
+    const doneMsg = String(opts?.completionMsg || 'å·²å®Œæˆç”Ÿæˆã€‚')
     appendChat('system', doneMsg)
-    pushThought('Íê³É', doneMsg, formatElapsed())
-    pushToast('Éú³ÉÍê³É£¨·ÇÁ÷Ê½£©', 'ok')
+    pushThought('å®Œæˆ', doneMsg, formatElapsed())
+    pushToast('ç”Ÿæˆå®Œæˆï¼ˆéæµå¼ï¼‰', 'ok')
     saveDoc().catch(() => {})
     clearPendingGenerateConfirmation()
     return 'applied'
@@ -2730,23 +2734,23 @@
     if (!pendingGenerateConfirmation || !$docId || $generating) return
     confirmDialogBusy = true
     generating.set(true)
-    docStatus.set('Ö´ĞĞ¸ß·çÏÕ±à¼­ÖĞ¡­')
+    docStatus.set('æ‰§è¡Œé«˜é£é™©ç¼–è¾‘ä¸­â€¦')
     try {
       const payload: Record<string, unknown> = {
         ...pendingGenerateConfirmation.requestPayload,
         confirm_apply: true
       }
       const status = await runNonStreamGenerate(payload, {
-        completionMsg: 'ÒÑÍê³É¸ß·çÏÕ±à¼­£¨È·ÈÏÖ´ĞĞ£©¡£'
+        completionMsg: 'å·²å®Œæˆé«˜é£é™©ç¼–è¾‘ï¼ˆç¡®è®¤æ‰§è¡Œï¼‰ã€‚'
       })
       if (status === 'pending') {
-        pushToast('·şÎñ¶ËÈÔÒªÇóÈ·ÈÏ£¬Çë¼ì²é·çÏÕ²ßÂÔÅäÖÃ¡£', 'info')
+        pushToast('æœåŠ¡ç«¯ä»è¦æ±‚ç¡®è®¤ï¼Œè¯·æ£€æŸ¥é£é™©ç­–ç•¥é…ç½®ã€‚', 'info')
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'È·ÈÏÖ´ĞĞÊ§°Ü'
-      docStatus.set(`Éú³ÉÊ§°Ü: ${msg}`)
+      const msg = err instanceof Error ? err.message : 'ç¡®è®¤æ‰§è¡Œå¤±è´¥'
+      docStatus.set(`ç”Ÿæˆå¤±è´¥: ${msg}`)
       appendChat('system', msg)
-      pushThought('´íÎó', String(msg), formatElapsed())
+      pushThought('é”™è¯¯', String(msg), formatElapsed())
       pushToast(String(msg), 'bad')
     } finally {
       confirmDialogBusy = false
@@ -2757,9 +2761,9 @@
   function cancelPendingGenerate() {
     if (!pendingGenerateConfirmation) return
     clearPendingGenerateConfirmation()
-    docStatus.set('ÒÑÈ¡Ïû¸ß·çÏÕ±à¼­')
-    flowStatus.set('ÒÑÍ£Ö¹')
-    pushToast('ÒÑÈ¡ÏûÖ´ĞĞ¡£', 'info')
+    docStatus.set('å·²å–æ¶ˆé«˜é£é™©ç¼–è¾‘')
+    flowStatus.set('å·²åœæ­¢')
+    pushToast('å·²å–æ¶ˆæ‰§è¡Œã€‚', 'info')
   }
 
   function looksLikeImageFile(file: File) {
@@ -2777,11 +2781,11 @@
     const source = opts?.source || 'assistant'
     const isImage = looksLikeImageFile(file)
     if (source === 'inline-image' && !isImage) {
-      pushToast('Ñ¡ÖĞ¶ÎÂä²åÍ¼½öÖ§³ÖÍ¼Æ¬ÎÄ¼ş¡£', 'info')
+      pushToast('é€‰ä¸­æ®µè½æ’å›¾ä»…æ”¯æŒå›¾ç‰‡æ–‡ä»¶ã€‚', 'info')
       return
     }
     try {
-      pushToast(isImage ? 'ÕıÔÚÉÏ´«Í¼Æ¬...' : 'ÕıÔÚÉÏ´«ÎÄ¼ş...', 'info')
+      pushToast(isImage ? 'æ­£åœ¨ä¸Šä¼ å›¾ç‰‡...' : 'æ­£åœ¨ä¸Šä¼ æ–‡ä»¶...', 'info')
       const resp = await fetch(`/api/doc/${$docId}/upload`, {
         method: 'POST',
         body: form
@@ -2796,36 +2800,36 @@
           { targetIds: opts?.targetIds || [] }
         )
         saveDoc().catch(() => {})
-        pushToast('Í¼Æ¬ÉÏ´«³É¹¦£¬ÒÑ²åÈëÑ¡ÖĞÄÚÈİºó¡£', 'ok')
-        appendChat('system', `ÒÑ²åÈëÍ¼Æ¬£º${file.name}`)
+        pushToast('å›¾ç‰‡ä¸Šä¼ æˆåŠŸï¼Œå·²æ’å…¥é€‰ä¸­å†…å®¹åã€‚', 'ok')
+        appendChat('system', `å·²æ’å…¥å›¾ç‰‡ï¼š${file.name}`)
         return
       }
       if (uploadKind === 'template') {
-        pushToast('Ä£°åÎÄ¼şÉÏ´«³É¹¦£¬ÒÑ½âÎö½á¹¹¡£', 'ok')
-        appendChat('system', `Ä£°åÒÑÉÏ´«²¢½âÎö£º${file.name}`)
+        pushToast('æ¨¡æ¿æ–‡ä»¶ä¸Šä¼ æˆåŠŸï¼Œå·²è§£æç»“æ„ã€‚', 'ok')
+        appendChat('system', `æ¨¡æ¿å·²ä¸Šä¼ å¹¶è§£æï¼š${file.name}`)
       } else {
         const msg = isImage
-          ? 'Í¼Æ¬ÒÑÉÏ´«µ½×ÊÁÏ¿â¡£ÈôÒª²åÈëÕıÎÄ£¬ÇëÑ¡ÖĞ¶ÎÂäºóµã»÷¡°²åÍ¼¡±¡£'
-          : 'ÎÄ¼şÉÏ´«³É¹¦£¬ÒÑÄÉÈë×ÊÁÏ¿â¡£'
+          ? 'å›¾ç‰‡å·²ä¸Šä¼ åˆ°èµ„æ–™åº“ã€‚è‹¥è¦æ’å…¥æ­£æ–‡ï¼Œè¯·é€‰ä¸­æ®µè½åç‚¹å‡»â€œæ’å›¾â€ã€‚'
+          : 'æ–‡ä»¶ä¸Šä¼ æˆåŠŸï¼Œå·²çº³å…¥èµ„æ–™åº“ã€‚'
         pushToast(msg, 'ok')
-        appendChat('system', `${msg}£¨${file.name}£©`)
+        appendChat('system', `${msg}ï¼ˆ${file.name}ï¼‰`)
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ÉÏ´«Ê§°Ü'
+      const msg = err instanceof Error ? err.message : 'ä¸Šä¼ å¤±è´¥'
       pushToast(msg, 'bad')
     }
   }
 
   function triggerInlineImageUpload() {
     if (!selectedBlockIds.length) return
-    if (!ensureInlineEditAllowed('²åÍ¼')) return
+    if (!ensureInlineEditAllowed('æ’å›¾')) return
     pendingInlineImageTargets = selectedBlockIds.slice()
     uploadImageInput?.click()
   }
 
   function triggerInlineTableInsert() {
     if (!selectedBlockIds.length) return
-    if (!ensureInlineEditAllowed('²å±í')) return
+    if (!ensureInlineEditAllowed('æ’è¡¨')) return
     insertTableIntoDoc({ targetIds: selectedBlockIds.slice() })
     saveDoc().catch(() => {})
   }
@@ -2914,18 +2918,18 @@
       return
     }
     if (!$docId) {
-      const reason = 'È±ÉÙÎÄµµID£¬ÇëË¢ĞÂ»ò´Ó /workbench/{id} ½øÈë'
-      docStatus.set(`ÒÑÖĞÖ¹: ${reason}`)
-      pushThought('ÖĞÖ¹', reason, new Date().toLocaleTimeString())
+      const reason = 'ç¼ºå°‘æ–‡æ¡£IDï¼Œè¯·åˆ·æ–°æˆ–ä» /workbench/{id} è¿›å…¥'
+      docStatus.set(`å·²ä¸­æ­¢: ${reason}`)
+      pushThought('ä¸­æ­¢', reason, new Date().toLocaleTimeString())
       pushToast(reason, 'info')
       return
     }
     clearPendingGenerateConfirmation()
     lastGraphMeta = null
     if (opts?.fromQueue) {
-      appendChat('system', 'ÕıÔÚÖ´ĞĞÅÅ¶ÓÖ¸Áî¡­')
+      appendChat('system', 'æ­£åœ¨æ‰§è¡Œæ’é˜ŸæŒ‡ä»¤â€¦')
     } else if (opts?.fromResume) {
-      appendChat('system', 'ÕıÔÚĞøÅÜÉÏ´ÎÖĞ¶ÏÈÎÎñ¡­')
+      appendChat('system', 'æ­£åœ¨ç»­è·‘ä¸Šæ¬¡ä¸­æ–­ä»»åŠ¡â€¦')
     } else {
       appendChat('user', inst)
       instruction.set('')
@@ -2940,16 +2944,16 @@
         composeMode = 'continue'
       } else {
         const useContinue = window.confirm(
-          '¼ì²âµ½±à¼­ÇøÒÑÓĞÄÚÈİ¡£\nÈ·¶¨£ºÔÚµ±Ç°ÄÚÈİ»ù´¡ÉÏĞøĞ´\nÈ¡Ïû£º¸²¸ÇÖØĞ´µ±Ç°ÎÄµµ'
+          'æ£€æµ‹åˆ°ç¼–è¾‘åŒºå·²æœ‰å†…å®¹ã€‚\nç¡®å®šï¼šåœ¨å½“å‰å†…å®¹åŸºç¡€ä¸Šç»­å†™\nå–æ¶ˆï¼šè¦†ç›–é‡å†™å½“å‰æ–‡æ¡£'
         )
         composeMode = useContinue ? 'continue' : 'overwrite'
       }
     }
     let requestInstruction = inst
     if (!inferredMode && composeMode === 'continue') {
-      requestInstruction = `ÇëÔÚ±£ÁôÏÖÓĞÄÚÈİ½á¹¹ºÍÒÑĞ´¶ÎÂäµÄÇ°ÌáÏÂ¼ÌĞøĞ´×÷£¬²»ÒªÉ¾³ı»ò¸ÄĞ´ÒÑÓĞÄÚÈİ¡£\n\nÓÃ»§ĞèÇó£º${inst}`
+      requestInstruction = `è¯·åœ¨ä¿ç•™ç°æœ‰å†…å®¹ç»“æ„å’Œå·²å†™æ®µè½çš„å‰æä¸‹ç»§ç»­å†™ä½œï¼Œä¸è¦åˆ é™¤æˆ–æ”¹å†™å·²æœ‰å†…å®¹ã€‚\n\nç”¨æˆ·éœ€æ±‚ï¼š${inst}`
     } else if (!inferredMode && composeMode === 'overwrite') {
-      requestInstruction = `ÇëºöÂÔµ±Ç°ÒÑÓĞÕıÎÄ£¬°´ÓÃ»§ĞèÇó´ÓÍ·ÍêÕûÖØĞ´£¬²¢ÓÃĞÂÄÚÈİ¸²¸Ç¾ÉÄÚÈİ¡£\n\nÓÃ»§ĞèÇó£º${inst}`
+      requestInstruction = `è¯·å¿½ç•¥å½“å‰å·²æœ‰æ­£æ–‡ï¼ŒæŒ‰ç”¨æˆ·éœ€æ±‚ä»å¤´å®Œæ•´é‡å†™ï¼Œå¹¶ç”¨æ–°å†…å®¹è¦†ç›–æ—§å†…å®¹ã€‚\n\nç”¨æˆ·éœ€æ±‚ï¼š${inst}`
     }
     const resumeSections = sanitizeAiStringList(opts?.resumeSections || [], { maxItems: 64, maxItemChars: 120 })
     const cursorAnchor = sanitizeAiInputText(opts?.cursorAnchor || '', { trim: true, maxChars: 260 })
@@ -2975,8 +2979,8 @@
     generating.set(true)
     docIrDirty.set(true)
     streamingLive = true
-    flowStatus.set('·ÖÎö')
-    docStatus.set('Éú³ÉÖĞ¡­')
+    flowStatus.set('åˆ†æ')
+    docStatus.set('ç”Ÿæˆä¸­â€¦')
     genStartTs = Date.now()
     lastEventName = ''
     lastProgressMsg = ''
@@ -2994,7 +2998,7 @@
     maxEventGap = 0
     sectionFailures = []
     sectionOriginalitySummary = null
-    pushThought('Æô¶¯', '¿ªÊ¼Éú³É', new Date().toLocaleTimeString())
+    pushThought('å¯åŠ¨', 'å¼€å§‹ç”Ÿæˆ', new Date().toLocaleTimeString())
     aborter = new AbortController()
 
     isLoading.set(false)
@@ -3010,12 +3014,12 @@
       thresholdMs = Math.min(600000, thresholdMs)
       const preparing =
         /model preparing/i.test(lastProgressMsg) ||
-        /½âÎöÖĞ/.test(lastProgressMsg) ||
+        /è§£æä¸­/.test(lastProgressMsg) ||
         lastEventName === 'analysis'
       if (preparing) thresholdMs = Math.max(thresholdMs, 180000)
       if (idleMs > thresholdMs && !fallbackTriggered) {
         fallbackTriggered = true
-        aborter?.abort(`¿Í»§¶Ë³¬Ê±£º${Math.round(idleMs / 1000)}ÃëÎŞÊÂ¼ş£¬ÇĞ»»·ÇÁ÷Ê½Éú³É`)
+        aborter?.abort(`å®¢æˆ·ç«¯è¶…æ—¶ï¼š${Math.round(idleMs / 1000)}ç§’æ— äº‹ä»¶ï¼Œåˆ‡æ¢éæµå¼ç”Ÿæˆ`)
       }
     }, 1000)
 
@@ -3054,7 +3058,7 @@
           if (event === 'state') {
             const name = mapStateName(String(data.name || ''))
             flowStatus.set(name || $flowStatus)
-            pushThought('Á÷³Ì', name, formatElapsed())
+            pushThought('æµç¨‹', name, formatElapsed())
             return
           }
           if (event === 'delta') {
@@ -3062,12 +3066,12 @@
             if (msg) {
               docStatus.set(msg)
               lastProgressMsg = msg
-              pushThought('½ø¶È', msg, formatElapsed())
+              pushThought('è¿›åº¦', msg, formatElapsed())
             }
             return
           }
           if (event === 'plan') {
-            const title = String(data.title || '×Ô¶¯Éú³ÉÎÄµµ')
+            const title = String(data.title || 'è‡ªåŠ¨ç”Ÿæˆæ–‡æ¡£')
             const sectionsRaw = Array.isArray(data.sections) ? data.sections : []
             const sections = sectionsRaw.map((item) => decodeSectionTitle(String(item || ''))).filter(Boolean)
             observedPlanSections = sections.slice()
@@ -3080,7 +3084,7 @@
                 pending_sections: sections
               }
             }
-            pushThought('´ó¸Ù', `±êÌâ£º${title}£»ÕÂ½Ú£º${sections.join(' / ')}`, formatElapsed())
+            pushThought('å¤§çº²', `æ ‡é¢˜ï¼š${title}ï¼›ç« èŠ‚ï¼š${sections.join(' / ')}`, formatElapsed())
             const nextText = ensureSkeletonInText($sourceText, title, sections)
             sourceText.set(nextText)
             scheduleDocIrRefresh(nextText)
@@ -3141,10 +3145,10 @@
           }
           if (event === 'section_error') {
             const section = String(data.section || '')
-            const reason = String(data.reason || 'Î´Öª')
+            const reason = String(data.reason || 'æœªçŸ¥')
             if (section) {
               sectionFailures = [...sectionFailures, { section, reason }]
-              pushToast(`ÕÂ½ÚÊ§°Ü: ${section}`, 'bad')
+              pushToast(`ç« èŠ‚å¤±è´¥: ${section}`, 'bad')
             }
             return
           }
@@ -3152,20 +3156,20 @@
             const summary = String(data.summary || '')
             const steps = Array.isArray(data.steps) ? data.steps : []
             const missing = Array.isArray(data.missing) ? data.missing : []
-            thinkingSummary.set(summary || 'µÈ´ı½âÎö¡­')
+            thinkingSummary.set(summary || 'ç­‰å¾…è§£æâ€¦')
             thinkingSteps.set(steps)
             thinkingMissing.set(missing)
-            pushThought('½âÎö', summary || '½âÎöÍê³É', formatElapsed())
+            pushThought('è§£æ', summary || 'è§£æå®Œæˆ', formatElapsed())
             if (data.raw) {
               const rawPreview = JSON.stringify(data.raw, null, 2).slice(0, 600)
-              pushThought('½âÎöJSON', rawPreview, formatElapsed())
+              pushThought('è§£æJSON', rawPreview, formatElapsed())
             }
             return
           }
           if (event === 'revision_status') {
             const status = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
             const note = summarizeRevisionStatus(status)
-            pushThought('¸ÄĞ´Õï¶Ï', note, formatElapsed())
+            pushThought('æ”¹å†™è¯Šæ–­', note, formatElapsed())
             if (status.ok !== true) {
               pushToast(note, 'info')
             }
@@ -3184,7 +3188,7 @@
                 : null
             sectionOriginalitySummary = normalizeOriginalitySummary(qualitySnapshot?.section_originality_hot_sample)
             if (sectionOriginalitySummary) {
-              pushThought('Ô­´´ĞÔÈÈ²ÉÑù', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
+              pushThought('åŸåˆ›æ€§çƒ­é‡‡æ ·', summarizeOriginalitySummary(sectionOriginalitySummary), formatElapsed())
             }
             const graphMeta = normalizeGraphMeta(data.graph_meta)
             const terminalStatusRaw = String(data.status || (data.graph_meta && (data.graph_meta as any).terminal_status) || 'success')
@@ -3201,10 +3205,10 @@
                 : null
             if (graphMeta) {
               lastGraphMeta = graphMeta
-              pushThought('Í¼Â·ÓÉ', `Á÷Ê½ ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
+              pushThought('å›¾è·¯ç”±', `æµå¼ ${summarizeGraphMeta(graphMeta)}`, formatElapsed())
             }
             if (revisionMeta) {
-              pushThought('¸ÄĞ´Õï¶Ï', summarizeRevisionStatus(revisionMeta), formatElapsed())
+              pushThought('æ”¹å†™è¯Šæ–­', summarizeRevisionStatus(revisionMeta), formatElapsed())
             }
             if (!sawSectionDelta) {
               const finalDoc =
@@ -3216,43 +3220,43 @@
               finalizeStreamText(txt, finalDoc)
             }
             if (terminalStatus === 'interrupted') {
-              docStatus.set(failureReason ? `ÒÑÖĞ¶Ï: ${failureReason}` : 'ÒÑÖĞ¶Ï')
-              flowStatus.set('ÒÑÖĞ¶Ï')
+              docStatus.set(failureReason ? `å·²ä¸­æ–­: ${failureReason}` : 'å·²ä¸­æ–­')
+              flowStatus.set('å·²ä¸­æ–­')
             } else if (terminalStatus === 'failed') {
-              docStatus.set(failureReason ? `Éú³ÉÊ§°Ü: ${failureReason}` : 'Éú³ÉÊ§°Ü')
-              flowStatus.set('Ê§°Ü')
+              docStatus.set(failureReason ? `ç”Ÿæˆå¤±è´¥: ${failureReason}` : 'ç”Ÿæˆå¤±è´¥')
+              flowStatus.set('å¤±è´¥')
             } else {
-              docStatus.set('Íê³É')
-              flowStatus.set('Íê³É')
+              docStatus.set('å®Œæˆ')
+              flowStatus.set('å®Œæˆ')
             }
             sawFinal = true
             resumeState = null
             if (terminalStatus === 'interrupted') {
-              appendChat('system', failureReason ? `ÈÎÎñÒÑÖĞ¶Ï£º${failureReason}` : 'ÈÎÎñÒÑÖĞ¶Ï¡£')
-              pushThought('ÖĞ¶Ï', failureReason || 'ÈÎÎñÒÑÖĞ¶Ï', formatElapsed())
-              pushToast(failureReason ? `ÈÎÎñÒÑÖĞ¶Ï£º${failureReason}` : 'ÈÎÎñÒÑÖĞ¶Ï', 'info')
+              appendChat('system', failureReason ? `ä»»åŠ¡å·²ä¸­æ–­ï¼š${failureReason}` : 'ä»»åŠ¡å·²ä¸­æ–­ã€‚')
+              pushThought('ä¸­æ–­', failureReason || 'ä»»åŠ¡å·²ä¸­æ–­', formatElapsed())
+              pushToast(failureReason ? `ä»»åŠ¡å·²ä¸­æ–­ï¼š${failureReason}` : 'ä»»åŠ¡å·²ä¸­æ–­', 'info')
             } else if (terminalStatus === 'failed') {
-              appendChat('system', failureReason ? `Éú³ÉÊ§°Ü£º${failureReason}` : 'Éú³ÉÊ§°Ü¡£')
-              pushThought('Ê§°Ü', failureReason || 'Éú³ÉÊ§°Ü', formatElapsed())
-              pushToast(failureReason ? `Éú³ÉÊ§°Ü£º${failureReason}` : 'Éú³ÉÊ§°Ü', 'bad')
+              appendChat('system', failureReason ? `ç”Ÿæˆå¤±è´¥ï¼š${failureReason}` : 'ç”Ÿæˆå¤±è´¥ã€‚')
+              pushThought('å¤±è´¥', failureReason || 'ç”Ÿæˆå¤±è´¥', formatElapsed())
+              pushToast(failureReason ? `ç”Ÿæˆå¤±è´¥ï¼š${failureReason}` : 'ç”Ÿæˆå¤±è´¥', 'bad')
             } else {
-              appendChat('system', 'ÒÑÍê³ÉÉú³É¡£')
-              pushThought('Íê³É', 'Éú³ÉÍê³É', formatElapsed())
-              pushToast('Éú³ÉÍê³É', 'ok')
+              appendChat('system', 'å·²å®Œæˆç”Ÿæˆã€‚')
+              pushThought('å®Œæˆ', 'ç”Ÿæˆå®Œæˆ', formatElapsed())
+              pushToast('ç”Ÿæˆå®Œæˆ', 'ok')
             }
             saveDoc().catch(() => {})
             return
           }
           if (event === 'error') {
-            const msg = String(data.message || data.reason || data.detail || '·şÎñ¶ËÎ´·µ»Ø¾ßÌåÔ­Òò')
+            const msg = String(data.message || data.reason || data.detail || 'æœåŠ¡ç«¯æœªè¿”å›å…·ä½“åŸå› ')
             const code = String(data.code || data.type || '')
             const isAbort =
               code.toLowerCase().includes('abort') ||
-              /aborted|stopped|È¡Ïû|ÖĞÖ¹/i.test(msg)
+              /aborted|stopped|å–æ¶ˆ|ä¸­æ­¢/i.test(msg)
             sawError = true
-            docStatus.set(isAbort ? `ÒÑÖĞÖ¹: ${msg}` : `Éú³ÉÊ§°Ü: ${msg}`)
+            docStatus.set(isAbort ? `å·²ä¸­æ­¢: ${msg}` : `ç”Ÿæˆå¤±è´¥: ${msg}`)
             appendChat('system', msg)
-            pushThought(isAbort ? 'ÖĞÖ¹' : '´íÎó', msg, formatElapsed())
+            pushThought(isAbort ? 'ä¸­æ­¢' : 'é”™è¯¯', msg, formatElapsed())
             pushToast(msg, isAbort ? 'info' : 'bad')
           }
         },
@@ -3260,13 +3264,13 @@
       )
       if (!sawFinal && !sawError) {
         const reason = lastProgressMsg
-          ? `Á÷Ê½½áÊøµ«Î´Íê³É£¬×îºó½ø¶È: ${lastProgressMsg}`
+          ? `æµå¼ç»“æŸä½†æœªå®Œæˆï¼Œæœ€åè¿›åº¦: ${lastProgressMsg}`
           : lastEventName
-            ? `Á÷Ê½½áÊøµ«Î´Íê³É£¬×îºóÊÂ¼ş: ${lastEventName}`
-            : 'Á÷Ê½½áÊøµ«Î´Íê³É£¬·şÎñ¶ËÎ´·µ»ØÔ­Òò'
-        docStatus.set(`ÒÑÖĞÖ¹: ${reason}`)
+            ? `æµå¼ç»“æŸä½†æœªå®Œæˆï¼Œæœ€åäº‹ä»¶: ${lastEventName}`
+            : 'æµå¼ç»“æŸä½†æœªå®Œæˆï¼ŒæœåŠ¡ç«¯æœªè¿”å›åŸå› '
+        docStatus.set(`å·²ä¸­æ­¢: ${reason}`)
         appendChat('system', reason)
-        pushThought('ÖĞÖ¹', reason, formatElapsed())
+        pushThought('ä¸­æ­¢', reason, formatElapsed())
         pushToast(reason, 'info')
       }
     } catch (e: any) {
@@ -3274,36 +3278,36 @@
             const reason =
               (aborter?.signal as any)?.reason ||
               e?.message ||
-              'ÓÃ»§ÖĞÖ¹'
-        if (String(reason).includes('ÇĞ»»·ÇÁ÷Ê½Éú³É')) {
-          pushThought('ÖĞÖ¹', String(reason), formatElapsed())
+              'ç”¨æˆ·ä¸­æ­¢'
+        if (String(reason).includes('åˆ‡æ¢éæµå¼ç”Ÿæˆ')) {
+          pushThought('ä¸­æ­¢', String(reason), formatElapsed())
           pushToast(String(reason), 'info')
           try {
             const status = await runNonStreamGenerate(generatePayload, {
-              completionMsg: 'ÒÑÍê³ÉÉú³É£¨·ÇÁ÷Ê½¶µµ×£©¡£',
+              completionMsg: 'å·²å®Œæˆç”Ÿæˆï¼ˆéæµå¼å…œåº•ï¼‰ã€‚',
               fromStream: true
             })
             if (status === 'applied' || status === 'pending') {
               sawFinal = true
             }
           } catch (err: any) {
-            const msg = err?.message || '·ÇÁ÷Ê½Éú³ÉÊ§°Ü'
-            docStatus.set(`Éú³ÉÊ§°Ü: ${msg}`)
+            const msg = err?.message || 'éæµå¼ç”Ÿæˆå¤±è´¥'
+            docStatus.set(`ç”Ÿæˆå¤±è´¥: ${msg}`)
             appendChat('system', msg)
-            pushThought('´íÎó', String(msg), formatElapsed())
+            pushThought('é”™è¯¯', String(msg), formatElapsed())
             pushToast(String(msg), 'bad')
           }
         } else {
-          docStatus.set(`ÒÑÖĞÖ¹: ${reason}`)
-          appendChat('system', `ÒÑÖĞÖ¹Éú³É£º${reason}`)
-          pushThought('ÖĞÖ¹', String(reason), formatElapsed())
+          docStatus.set(`å·²ä¸­æ­¢: ${reason}`)
+          appendChat('system', `å·²ä¸­æ­¢ç”Ÿæˆï¼š${reason}`)
+          pushThought('ä¸­æ­¢', String(reason), formatElapsed())
           pushToast(String(reason), 'info')
         }
       } else {
-        const msg = e?.message || 'Éú³ÉÊ§°Ü£¬Çë¼ì²éÄ£ĞÍÊÇ·ñÔËĞĞ¡£'
-        docStatus.set(`Éú³ÉÊ§°Ü: ${msg}`)
+        const msg = e?.message || 'ç”Ÿæˆå¤±è´¥ï¼Œè¯·æ£€æŸ¥æ¨¡å‹æ˜¯å¦è¿è¡Œã€‚'
+        docStatus.set(`ç”Ÿæˆå¤±è´¥: ${msg}`)
         appendChat('system', msg)
-        pushThought('´íÎó', String(msg), formatElapsed())
+        pushThought('é”™è¯¯', String(msg), formatElapsed())
         pushToast(String(msg), 'bad')
       }
     } finally {
@@ -3389,7 +3393,7 @@
     runEditorCommand('commit')
     await saveDoc().catch(() => {})
     generating.set(true)
-    docStatus.set(`ÖØÊÔÕÂ½Ú£º${target}`)
+    docStatus.set(`é‡è¯•ç« èŠ‚ï¼š${target}`)
     try {
       const resp = await fetch(`/api/doc/${id}/generate/section`, {
         method: 'POST',
@@ -3406,13 +3410,13 @@
       const graphMeta = normalizeGraphMeta(data.graph_meta)
       if (graphMeta) {
         lastGraphMeta = graphMeta
-        pushThought('Í¼Â·ÓÉ', `ÕÂ½ÚÖØÊÔ ${summarizeGraphMeta(graphMeta)}`, new Date().toLocaleTimeString())
+        pushThought('å›¾è·¯ç”±', `ç« èŠ‚é‡è¯• ${summarizeGraphMeta(graphMeta)}`, new Date().toLocaleTimeString())
       }
       const text = String(data.text || '')
       if (text) {
         sourceText.set(text)
-        docStatus.set('Íê³É')
-        appendChat('system', `ÕÂ½ÚÖØÊÔÍê³É£º${target}`)
+        docStatus.set('å®Œæˆ')
+        appendChat('system', `ç« èŠ‚é‡è¯•å®Œæˆï¼š${target}`)
       }
       if (data.doc_ir && typeof data.doc_ir === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
@@ -3422,12 +3426,12 @@
         docIrDirty.set(true)
       }
       sectionFailures = sectionFailures.filter((f) => f.section !== target)
-      pushToast(`ÕÂ½ÚÖØÊÔÍê³É: ${target}`, 'ok')
+      pushToast(`ç« èŠ‚é‡è¯•å®Œæˆ: ${target}`, 'ok')
       saveDoc().catch(() => {})
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ÕÂ½ÚÖØÊÔÊ§°Ü'
-      docStatus.set(`ÖØÊÔÊ§°Ü: ${msg}`)
-      pushToast(`ÕÂ½ÚÖØÊÔÊ§°Ü: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'ç« èŠ‚é‡è¯•å¤±è´¥'
+      docStatus.set(`é‡è¯•å¤±è´¥: ${msg}`)
+      pushToast(`ç« èŠ‚é‡è¯•å¤±è´¥: ${msg}`, 'bad')
     } finally {
       generating.set(false)
     }
@@ -3440,14 +3444,14 @@
     runEditorCommand('commit')
     await saveDoc().catch(() => {})
     generating.set(true)
-    docStatus.set(`ÕıÔÚĞŞ¶©${target}`)
+    docStatus.set(`æ­£åœ¨ä¿®è®¢${target}`)
     try {
       const resp = await fetch(`/api/doc/${id}/revise`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instruction:
-            '½öÖØĞ´Ö¸¶¨ÕÂ½Ú£¬½µµÍÄ£°å»¯ºÍÖØ¸´±í´ï£¬±£ÁôÔ­ÓĞÂÛµã¡¢Ö¤¾İ¡¢ÒıÓÃÓëÕÂ½ÚÎ»ÖÃ£¬²»Òª¸Ä¶¯ÆäËûÕÂ½Ú£¬²»ÒªÊä³ö½âÊÍ»òÔªÖ¸Áî¡£',
+            'ä»…é‡å†™æŒ‡å®šç« èŠ‚ï¼Œé™ä½æ¨¡æ¿åŒ–å’Œé‡å¤è¡¨è¾¾ï¼Œä¿ç•™åŸæœ‰è®ºç‚¹ã€è¯æ®ã€å¼•ç”¨ä¸ç« èŠ‚ä½ç½®ï¼Œä¸è¦æ”¹åŠ¨å…¶ä»–ç« èŠ‚ï¼Œä¸è¦è¾“å‡ºè§£é‡Šæˆ–å…ƒæŒ‡ä»¤ã€‚',
           text: $sourceText || '',
           doc_ir: $docIr,
           target_section: target,
@@ -3465,8 +3469,8 @@
           : null
       if (revisedText) {
         sourceText.set(revisedText)
-        docStatus.set('ÒÑĞŞ¶©')
-        appendChat('system', `ÒÑ°´·çÏÕ¶¨ÏòĞŞ¶©ÕÂ½Ú£º${target}`)
+        docStatus.set('å·²ä¿®è®¢')
+        appendChat('system', `å·²æŒ‰é£é™©å®šå‘ä¿®è®¢ç« èŠ‚ï¼š${target}`)
       }
       if (data.doc_ir && typeof data.doc_ir === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
@@ -3476,21 +3480,21 @@
         docIrDirty.set(true)
       }
       if (revisionMeta) {
-        pushThought('¶¨ÏòĞŞ¶©', `${target} ¡¤ ${summarizeRevisionStatus(revisionMeta)}`, new Date().toLocaleTimeString())
+        pushThought('å®šå‘ä¿®è®¢', `${target} Â· ${summarizeRevisionStatus(revisionMeta)}`, new Date().toLocaleTimeString())
       }
-      pushToast(`ÒÑÍê³É·çÏÕÕÂ½ÚĞŞ¶©: ${target}`, 'ok')
+      pushToast(`å·²å®Œæˆé£é™©ç« èŠ‚ä¿®è®¢: ${target}`, 'ok')
       saveDoc().catch(() => {})
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'ĞŞ¶©Ê§°Ü'
-      docStatus.set(`ĞŞ¶©Ê§°Ü: ${msg}`)
-      pushToast(`ĞŞ¶©Ê§°Ü: ${msg}`, 'bad')
+      const msg = err instanceof Error ? err.message : 'ä¿®è®¢å¤±è´¥'
+      docStatus.set(`ä¿®è®¢å¤±è´¥: ${msg}`)
+      pushToast(`ä¿®è®¢å¤±è´¥: ${msg}`, 'bad')
     } finally {
       generating.set(false)
     }
   }
 
   function handleStop() {
-    if (aborter) aborter.abort('ÓÃ»§µã»÷Í£Ö¹')
+    if (aborter) aborter.abort('ç”¨æˆ·ç‚¹å‡»åœæ­¢')
   }
 
   function runEditorCommand(cmd: EditorCommand) {
@@ -3512,19 +3516,19 @@
       inlineEditLockReason = ''
     } else if (!$generating) {
       inlineEditLocked = true
-      inlineEditLockReason = 'µ±Ç°ÄÚÈİÈÔÔÚäÖÈ¾£¬ÇëµÈ´ı´ò×Ö»úÊä³ö½áÊøºóÔÙĞŞ¸Ä¡£'
+      inlineEditLockReason = 'å½“å‰å†…å®¹ä»åœ¨æ¸²æŸ“ï¼Œè¯·ç­‰å¾…æ‰“å­—æœºè¾“å‡ºç»“æŸåå†ä¿®æ”¹ã€‚'
     } else {
       const keys = selectedSectionKeys()
       if (!keys.length) {
         inlineEditLocked = true
-        inlineEditLockReason = 'µ±Ç°ÈÔÔÚÉú³É¡£ÇëÏÈÑ¡ÔñÒÑÍê³ÉÕÂ½ÚÏÂµÄ¶ÎÂä¿é¡£'
+        inlineEditLockReason = 'å½“å‰ä»åœ¨ç”Ÿæˆã€‚è¯·å…ˆé€‰æ‹©å·²å®Œæˆç« èŠ‚ä¸‹çš„æ®µè½å—ã€‚'
       } else {
         const waiting = keys.filter(
           (key) => !completedStreamingSections.includes(key) || activeStreamingSections.includes(key)
         )
         inlineEditLocked = waiting.length > 0
         inlineEditLockReason = inlineEditLocked
-          ? 'Ñ¡ÖĞ¿éËùÔÚÕÂ½ÚÈÔÔÚÉú³É£¬ÇëµÈ´ı¸ÃÕÂ½ÚÍê³ÉºóÔÙĞŞ¸Ä¡£'
+          ? 'é€‰ä¸­å—æ‰€åœ¨ç« èŠ‚ä»åœ¨ç”Ÿæˆï¼Œè¯·ç­‰å¾…è¯¥ç« èŠ‚å®Œæˆåå†ä¿®æ”¹ã€‚'
           : ''
       }
     }
@@ -3584,756 +3588,121 @@
 </script>
 
 <main class="app" class:dark={$darkMode}>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">IR</div>
-      <div class="brand-text">
-        <div class="brand-title">Astra Ğ´×÷¹¤×÷Ì¨</div>
-        <div class="brand-sub">Í¼Â·ÓÉÒıÇæ ¡¤ ½á¹¹»¯±à¼­</div>
-      </div>
-    </div>
-    <div class="workspace-hub">
-      <div class="workspace-status-line" title={topStatusLine}>
-        <span class="dot"></span>
-        <span>{topStatusLine}</span>
-      </div>
-      <nav class="menu" aria-label="¹¤×÷ÇøÄ£Ê½">
-        <button class={`menu-item ${workspaceMode === 'editor' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('editor')}>
-          <span>±à¼­</span>
-        </button>
-        <button class={`menu-item ${workspaceMode === 'library' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('library')}>
-          <span>×ÊÁÏ</span>
-        </button>
-        <button class={`menu-item ${workspaceMode === 'collab' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('collab')}>
-          <span>Ğ­×÷</span>
-        </button>
-      </nav>
-      <div class="workspace-metrics" aria-label="¹¤×÷Ì¨¸ÅÀÀ">
-        <div class={`metric-pill tone-${qualityOverview.tone}`}>
-          <span class="metric-label">ÖÊÁ¿</span>
-          <strong>{qualityOverview.label}</strong>
-        </div>
-        <div class="metric-pill">
-          <span class="metric-label">×ÖÊı</span>
-          <strong>{Math.max(0, Number($wordCount || 0))}</strong>
-        </div>
-        <div class="metric-pill">
-          <span class="metric-label">Â·ÓÉ</span>
-          <strong>{lastGraphMeta?.route_id || 'Ä¬ÈÏ'}</strong>
-        </div>
-      </div>
-    </div>
-    <div class="top-actions">
-      <button class="btn ghost icon-btn-text" onclick={saveDoc}>
-        <Icon name="save" className="ui-icon" />
-        <span>±£´æ</span>
-      </button>
-      <button class="btn ghost icon-btn-text" onclick={exportDocx}>
-        <Icon name="doc" className="ui-icon" />
-        <span>µ¼³ö Word</span>
-      </button>
-      <button class="btn ghost icon-btn-text" onclick={exportPdf}>
-        <Icon name="pdf" className="ui-icon" />
-        <span>µ¼³ö PDF</span>
-      </button>
-      <button class="btn ghost icon-btn-text" onclick={toggleInfoDrawer}>
-        <Icon name="doc" className="ui-icon" />
-        <span>ÎÄµµĞÅÏ¢</span>
-      </button>
-      <LLMConfig />
-      <Settings />
-    </div>
-  </header>
+  <WorkbenchTopbar
+    {workspaceMode}
+    {qualityOverview}
+    wordCount={Number($wordCount || 0)}
+    routeId={lastGraphMeta?.route_id || 'é»˜è®¤'}
+    {topStatusLine}
+    onSwitchMode={switchWorkspaceMode}
+    onSave={saveDoc}
+    onExportDocx={exportDocx}
+    onExportPdf={exportPdf}
+    onToggleInfo={toggleInfoDrawer}
+  />
 
   <div class={`workspace ${hideLibraryInfo ? 'hide-info' : ''} mode-${workspaceMode}`}>
-    <aside class="nav-rail">
-      <div class="rail-search">
-        <input
-          type="text"
-          placeholder="ËÑË÷×ÊÁÏ¿¨Æ¬..."
-          bind:value={librarySearch}
-        />
-      </div>
-      <button class="rail-upload-btn icon-btn-text" onclick={triggerLibraryUpload}>
-        <Icon name="upload" className="ui-icon" />
-        <span>ÉÏ´«ËØ²Ä</span>
-      </button>
-      <div class="rail-tip">½«Í¼Æ¬¡¢Ä£°å»ò²Î¿¼ÎÄµµÍÏÈë±à¼­Çø£¬¿ÉÖ±½ÓÄÉÈëµ±Ç°¹¤³Ì¡£</div>
-
-      <section class="rail-library">
-        <div class="rail-group-head">
-          <span>×ÊÁÏÁ÷</span>
-          <em>{filteredLibraryCards.length}</em>
-        </div>
-        <div class={`library-card-stream ${libraryViewMode}`}>
-          {#if filteredLibraryCards.length === 0}
-            <div class="library-empty">Ã»ÓĞÆ¥ÅäÏî£¬ÊÔÊÔÆäËû¹Ø¼ü´Ê¡£</div>
-          {:else}
-            {#each filteredLibraryCards as card}
-              <button
-                class={`library-card tone-${card.tone} ${librarySelectAll || selectedLibraryCardId === card.id ? 'selected' : ''}`}
-                onclick={() => openLibraryCard(card)}
-                title={card.summary}
-              >
-                <div class="library-card-cover">
-                  <span class={`library-status status-${card.status}`}>{card.status_label}</span>
-                  <span class="library-kind">{card.kind_label}</span>
-                </div>
-                <div class="library-card-body">
-                  <div class="library-card-title-row">
-                    <span class="library-card-title">{card.title}</span>
-                    <span class="library-card-time">{formatLibraryCardTime(card.updated_at)}</span>
-                  </div>
-                  <div class="library-card-summary">{card.summary}</div>
-                  <div class="library-card-tags">
-                    {#each card.tags as tag}
-                      <span>#{tag}</span>
-                    {/each}
-                  </div>
-                </div>
-              </button>
-            {/each}
-          {/if}
-        </div>
-      </section>
-
-      <section class="rail-group workflow-group">
-        <div class="rail-group-head">
-          <span>¿ì½İÈë¿Ú</span>
-          <em>4</em>
-        </div>
-        <button class={`nav-btn ${workspaceMode === 'editor' ? 'active' : ''}`} onclick={() => switchWorkspaceMode('editor')} title="±à¼­Æ÷">
-          <Icon name="editor" className="ui-icon" />
-          <span>ÕıÎÄ±à¼­</span>
-        </button>
-        <button class="nav-btn" onclick={() => (canvasOpen = true)} title="»­²¼">
-          <Icon name="canvas" className="ui-icon" />
-          <span>Í¼ĞÎ»­²¼</span>
-        </button>
-        <button class="nav-btn" title="ÒıÓÃ" onclick={() => (showCitations = true)}>
-          <Icon name="cite" className="ui-icon" />
-          <span>ÒıÓÃ¹ÜÀí</span>
-        </button>
-        <button class={`nav-btn ${workspaceMode === 'collab' ? 'active' : ''}`} title="Ğ­×÷ÖúÊÖ" onclick={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}>
-          <Icon name="chat" className="ui-icon" />
-          <span>Ğ­×÷ÖúÊÖ</span>
-        </button>
-        <button class="nav-btn" title="ĞÔÄÜ" onclick={() => (showPerformanceMetrics = true)}>
-          <Icon name="chart" className="ui-icon" />
-          <span>ĞÔÄÜÖ¸±ê</span>
-        </button>
-      </section>
-
-      <button class="rail-reset icon-btn-text" onclick={() => { librarySearch = ''; librarySelectAll = false; selectedLibraryCardId = ''; }}>
-        <Icon name="clearSelection" className="ui-icon" />
-        <span>ÖØÖÃÉ¸Ñ¡</span>
-      </button>
-    </aside>
+    <LibraryRail
+      {workspaceMode}
+      bind:librarySearch
+      bind:librarySelectAll
+      bind:selectedLibraryCardId
+      {libraryViewMode}
+      {filteredLibraryCards}
+      onUpload={triggerLibraryUpload}
+      onOpenCard={openLibraryCard}
+      onSwitchMode={switchWorkspaceMode}
+      onOpenCanvas={() => (canvasOpen = true)}
+      onOpenCitations={() => (showCitations = true)}
+      onOpenAssistant={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}
+      onOpenMetrics={() => (showPerformanceMetrics = true)}
+    />
 
     <section class="doc-area">
       {#if workspaceMode === 'library'}
-        <div class="library-command-bar">
-          <div class="library-view-switch">
-            <button
-              class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
-              onclick={() => (libraryViewMode = 'grid')}
-              title="Íø¸ñÊÓÍ¼"
-            >
-              <Icon name="grid" className="ui-icon" />
-            </button>
-            <button
-              class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
-              onclick={() => (libraryViewMode = 'masonry')}
-              title="ÆÙ²¼ÊÓÍ¼"
-            >
-              <Icon name="masonry" className="ui-icon" />
-            </button>
-            <button
-              class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
-              onclick={() => (libraryViewMode = 'list')}
-              title="ÁĞ±íÊÓÍ¼"
-            >
-              <Icon name="list" className="ui-icon" />
-            </button>
-          </div>
-          <div class="library-counter">{librarySearch ? `ËÑË÷£º${librarySearch}` : '×ÊÁÏÄ£Ê½£ºÍÏ×§ËØ²Ä¡¢ÕûÀíÖ¤¾İ¡¢ÅúÁ¿¹ÜÀí'}</div>
-          <div class="library-actions">
-            <button class="btn ghost icon-btn-text" onclick={triggerLibraryUpload}>
-              <Icon name="upload" className="ui-icon" />
-              <span>ÉÏ´«ËØ²Ä</span>
-            </button>
-            <button class="btn ghost icon-btn-text" onclick={() => (librarySelectAll = !librarySelectAll)}>
-              <Icon name="select" className="ui-icon" />
-              <span>{librarySelectAll ? 'È¡ÏûÈ«Ñ¡' : 'È«Ñ¡×ÊÁÏ'}</span>
-            </button>
-            <button class="btn ghost icon-btn-text" onclick={() => switchWorkspaceMode('editor')}>
-              <Icon name="open" className="ui-icon" />
-              <span>·µ»Ø±à¼­</span>
-            </button>
-          </div>
-        </div>
-        <section
-          class="library-mode-stage"
-          aria-label="×ÊÁÏÄ£Ê½ÍÏ×§¹¤×÷Çø"
-          ondragover={(e) => e.preventDefault()}
-          ondrop={handleLibraryDrop}
-        >
-          <div class="library-mode-dropzone">
-            <div class="panel-title">×ÊÁÏ¹¤×÷Çø</div>
-            <div class="panel-sub">ÍÏ×§Í¼Æ¬/ÎÄµµµ½´Ë´¦£¬»òµã»÷ÉÏ´«ËØ²Ä¡£×ÊÁÏÄ£Ê½Ä¬ÈÏ²»Õ¹Ê¾ÕıÎÄ±à¼­Æ÷¡£</div>
-            <div class="library-mode-actions">
-              <button class="btn ghost icon-btn-text" onclick={triggerLibraryUpload}>
-                <Icon name="upload" className="ui-icon" />
-                <span>ÉÏ´«ÎÄ¼ş</span>
-              </button>
-              <button class="btn ghost icon-btn-text" onclick={() => (showCitations = true)}>
-                <Icon name="cite" className="ui-icon" />
-                <span>ÒıÓÃ¹ÜÀí</span>
-              </button>
-              <button class="btn ghost icon-btn-text" onclick={openVersions}>
-                <Icon name="clock" className="ui-icon" />
-                <span>°æ±¾¼ÇÂ¼</span>
-              </button>
-            </div>
-          </div>
-          <div class={`library-mode-board ${libraryViewMode}`}>
-            {#if filteredLibraryCards.length === 0}
-              <div class="panel-empty">ÔİÎŞÆ¥Åä×ÊÁÏ£¬Çëµ÷ÕûÉ¸Ñ¡Ìõ¼ş»òÉÏ´«ĞÂËØ²Ä¡£</div>
-            {:else}
-              {#each filteredLibraryCards as card}
-                <button
-                  class={`library-mode-card tone-${card.tone} ${librarySelectAll || selectedLibraryCardId === card.id ? 'selected' : ''}`}
-                  onclick={() => openLibraryCard(card)}
-                  title={card.summary}
-                >
-                  <div class="library-mode-card-head">
-                    <span class={`library-status status-${card.status}`}>{card.status_label}</span>
-                    <span class="library-kind">{card.kind_label}</span>
-                  </div>
-                  <div class="library-mode-card-title">{card.title}</div>
-                  <div class="library-mode-card-summary">{card.summary}</div>
-                  <div class="library-mode-card-foot">
-                    <span>{formatLibraryCardTime(card.updated_at)}</span>
-                    <span>{card.size_label}</span>
-                  </div>
-                </button>
-              {/each}
-            {/if}
-          </div>
-        </section>
+        <LibraryModeStage
+          bind:libraryViewMode
+          {librarySearch}
+          {filteredLibraryCards}
+          {librarySelectAll}
+          {selectedLibraryCardId}
+          onUpload={triggerLibraryUpload}
+          onOpenCitations={() => (showCitations = true)}
+          onOpenVersions={openVersions}
+          onOpenCard={openLibraryCard}
+          onDrop={handleLibraryDrop}
+          onBack={() => switchWorkspaceMode('editor')}
+        />
       {:else}
-      <div class="library-command-bar">
-        <div class="library-view-switch">
-          <button
-            class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
-            onclick={() => (libraryViewMode = 'grid')}
-            title="Íø¸ñÊÓÍ¼"
-          >
-            <Icon name="grid" className="ui-icon" />
-          </button>
-          <button
-            class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
-            onclick={() => (libraryViewMode = 'masonry')}
-            title="ÆÙ²¼ÊÓÍ¼"
-          >
-            <Icon name="masonry" className="ui-icon" />
-          </button>
-          <button
-            class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
-            onclick={() => (libraryViewMode = 'list')}
-            title="ÁĞ±íÊÓÍ¼"
-          >
-            <Icon name="list" className="ui-icon" />
-          </button>
-        </div>
-        <div class="library-counter">{librarySearch ? `ËÑË÷£º${librarySearch}` : 'ÊµÊ±ÎÄµµ¹¤×÷Çø'}</div>
-        <div class="library-actions">
-          <button class="btn ghost icon-btn-text" onclick={() => (librarySelectAll = !librarySelectAll)}>
-            <Icon name="select" className="ui-icon" />
-            <span>{librarySelectAll ? 'È¡ÏûÈ«Ñ¡' : 'È«Ñ¡×ÊÁÏ'}</span>
-          </button>
-          <button class="btn ghost icon-btn-text">
-            <Icon name="batch" className="ui-icon" />
-            <span>Åú´¦Àí ({librarySelectAll ? filteredLibraryCards.length : 1})</span>
-          </button>
-          <button class="btn ghost icon-btn-text" onclick={openInfoDrawer}>
-            <Icon name="doc" className="ui-icon" />
-            <span>ÎÄµµĞÅÏ¢</span>
-          </button>
-        </div>
-      </div>
-      <div class="doc-toolbar">
-        <div class="toolbar-line primary">
-          <div class="toolbar-cluster core">
-            <span class="cluster-label">´´×÷ºËĞÄ</span>
-            <button class="tool-btn" onclick={() => runEditorCommand('heading1')} aria-label="Ò»¼¶±êÌâ">
-              <Icon name="h1" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" onclick={() => runEditorCommand('heading2')} aria-label="¶ş¼¶±êÌâ">
-              <Icon name="h2" size={14} className="ui-icon sm" />
-            </button>
-            <button
-              class={`tool-btn ${editorToolbarState.bold ? 'active' : ''}`}
-              title="¼Ó´Ö Ctrl/Cmd+B"
-              aria-label="¼Ó´Ö"
-              onclick={() => runEditorCommand('bold')}
-              disabled={editorToolbarState.readonly || !editorToolbarState.focused}
-            >
-              <Icon name="bold" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" onclick={() => runEditorCommand('list-bullet')} aria-label="ÎŞĞòÁĞ±í">
-              <Icon name="listBullet" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" onclick={() => runEditorCommand('list-number')} aria-label="ÓĞĞòÁĞ±í">
-              <Icon name="listNumber" size={14} className="ui-icon sm" />
-            </button>
-            <span class="tool-sep"></span>
-            <button class="tool-btn" onclick={() => (canvasOpen = true)} aria-label="Í¼ĞÎ»­²¼">
-              <Icon name="diagram" size={14} className="ui-icon sm" />
-            </button>
-            <button class="tool-btn" onclick={() => (showCitations = true)} aria-label="ÒıÓÃ¹ÜÀí">
-              <Icon name="cite" size={14} className="ui-icon sm" />
-            </button>
-          </div>
-          <button class="btn ghost btn-sm toolbar-advanced-toggle" onclick={() => (showAdvancedToolbar = !showAdvancedToolbar)}>
-            {showAdvancedToolbar ? 'ÊÕÆğ¸ß¼¶' : '¸ß¼¶²Ù×÷'}
-          </button>
-          <button class="btn primary icon-btn-text toolbar-generate-btn" onclick={() => handleGenerate($instruction)} disabled={$generating}>
-            <Icon name="play" className="ui-icon" />
-            <span>{$generating ? 'Éú³ÉÖĞ¡­' : 'Éú³É'}</span>
-          </button>
-        </div>
-        {#if showAdvancedToolbar}
-          <div class="toolbar-line secondary">
-            <div class="toolbar-cluster">
-              <span class="cluster-label">½á¹¹Óë±à¼­</span>
-              <button class="tool-btn" title="³·Ïú Ctrl/Cmd+Z" aria-label="³·Ïú" onclick={() => runEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
-                <Icon name="undo" size={14} className="ui-icon sm" />
-              </button>
-              <button class="tool-btn" title="ÖØ×ö Ctrl/Cmd+Y" aria-label="ÖØ×ö" onclick={() => runEditorCommand('redo')} disabled={editorToolbarState.readonly}>
-                <Icon name="redo" size={14} className="ui-icon sm" />
-              </button>
-              <button class="tool-btn" title="¸´ÖÆ Ctrl/Cmd+C" aria-label="¸´ÖÆ" onclick={() => runEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
-                <Icon name="copy" size={14} className="ui-icon sm" />
-              </button>
-              <button class="tool-btn" title="¼ôÇĞ Ctrl/Cmd+X" aria-label="¼ôÇĞ" onclick={() => runEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
-                <Icon name="cut" size={14} className="ui-icon sm" />
-              </button>
-              <button class="tool-btn" title="Õ³Ìù Ctrl/Cmd+V" aria-label="Õ³Ìù" onclick={() => runEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
-                <Icon name="paste" size={14} className="ui-icon sm" />
-              </button>
-              <button class="tool-btn" title="Çå³ı¸ñÊ½" aria-label="Çå³ı¸ñÊ½" onclick={() => runEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
-                <Icon name="clear" size={14} className="ui-icon sm" />
-              </button>
-              <button class="tool-btn" onclick={() => runEditorCommand('quote')} aria-label="ÒıÓÃ¿é">
-                <Icon name="quote" size={14} className="ui-icon sm" />
-              </button>
-              <button class="tool-btn" onclick={() => runEditorCommand('code')} aria-label="´úÂë¿é">
-                <Icon name="code" size={14} className="ui-icon sm" />
-              </button>
-            </div>
-            <div class="toolbar-cluster compact">
-              <span class="cluster-label">¸ß¼¶²Ù×÷</span>
-              <button class="btn ghost icon-btn-text" onclick={runBatchFromToolbar}>
-                <Icon name="batch" className="ui-icon" />
-                <span>Åú´¦Àí</span>
-              </button>
-              <button
-                class="btn ghost icon-btn-text"
-                data-testid="ai-rate-toggle"
-                onclick={() => (showAiRatePanel = !showAiRatePanel)}
-              >
-                <Icon name="ai" className="ui-icon" />
-                <span>{showAiRatePanel ? 'ÊÕÆğ AI ÂÊ' : 'AI ÂÊ¼ì²â'}</span>
-              </button>
-              <button
-                class="btn ghost icon-btn-text"
-                data-testid="plagiarism-toggle"
-                onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}
-              >
-                <Icon name="shield" className="ui-icon" />
-                <span>{showPlagiarismPanel ? 'ÊÕÆğ²éÖØ' : '²éÖØ¼ì²â'}</span>
-              </button>
-              <button
-                class="btn ghost icon-btn-text"
-                data-testid="feedback-toggle"
-                onclick={() => (showFeedbackPanel = !showFeedbackPanel)}
-              >
-                <Icon name="star" className="ui-icon" />
-                <span>{showFeedbackPanel ? 'ÊÕÆğÆÀ·Ö' : 'ÂúÒâ¶ÈÆÀ·Ö'}</span>
-              </button>
-              <div class="plan-confirm-inline">
-                <span class="plan-confirm-label">¼Æ»®È·ÈÏ</span>
-                <select
-                  class="plan-confirm-select"
-                  bind:value={planConfirmDecision}
-                  onchange={() => void persistPlanConfirmPreference()}
-                >
-                  <option value="approved">Í¨¹ı</option>
-                  <option value="interrupted">ÖÕÖ¹</option>
-                </select>
-                <label class="plan-confirm-score">
-                  <span>ÆÀ·Ö</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="5"
-                    step="1"
-                    bind:value={planConfirmScore}
-                    onchange={() => void persistPlanConfirmPreference()}
-                  />
-                </label>
-              </div>
-              <button class="btn ghost icon-btn-text" onclick={handleStop} disabled={!$generating}>
-                <Icon name="stop" className="ui-icon" />
-                <span>Í£Ö¹</span>
-              </button>
-              {#if resumeState && !$generating}
-                <button class="btn ghost icon-btn-text" onclick={resumeInterruptedGeneration}>
-                  <Icon name="resume" className="ui-icon" />
-                  <span>ĞøÅÜ</span>
-                </button>
-              {/if}
-            </div>
-          </div>
-        {/if}
-      </div>
+      <EditorCommandBar
+        bind:libraryViewMode
+        {librarySearch}
+        bind:librarySelectAll
+        filteredCount={filteredLibraryCards.length}
+        bind:showAdvancedToolbar
+        bind:showAiRatePanel
+        bind:showPlagiarismPanel
+        bind:showFeedbackPanel
+        bind:planConfirmDecision
+        bind:planConfirmScore
+        {editorToolbarState}
+        generating={$generating}
+        instruction={$instruction}
+        {resumeState}
+        onRunEditorCommand={runEditorCommand}
+        onOpenCanvas={() => (canvasOpen = true)}
+        onOpenCitations={() => (showCitations = true)}
+        onOpenInfoDrawer={openInfoDrawer}
+        onRunBatch={runBatchFromToolbar}
+        onGenerate={handleGenerate}
+        onPersistPlanConfirmPreference={persistPlanConfirmPreference}
+        onStop={handleStop}
+        onResume={resumeInterruptedGeneration}
+      />
 
-      {#if $generating && progress.total > 0}
-        <div class="generation-banner">
-          Éú³ÉÖĞ {progress.current}/{progress.total} ¡¤ {progress.percent}% ¡¤ Ô¤¼ÆÊ£Óà {Math.ceil(progress.etaS / 60)} ·Ö {progress.etaS % 60} Ãë
-        </div>
-      {/if}
+      <GenerationStatusPanels
+        generating={$generating}
+        {progress}
+        {resumeState}
+        {sectionFailures}
+        {sectionOriginalitySummary}
+        {retrySection}
+        {reviseRiskSection}
+      />
 
-      {#if resumeState && !$generating && resumeState.status === 'interrupted'}
-        <div class="generation-banner">
-          ¼ì²âµ½Î´Íê³ÉÈÎÎñ£¨ÒÑ»º´æÔ¼ {resumeState.partial_chars} ×Ö£©
-          {#if resumeState.pending_sections && resumeState.pending_sections.length > 0}
-            £¬´ıĞøĞ´ÕÂ½Ú£º{resumeState.pending_sections.join(' / ')}
-          {/if}
-          ¡£¿Éµã»÷¡°ĞøÅÜ¡±¼ÌĞøÉú³É¡£
-        </div>
-      {/if}
-
-      {#if sectionFailures.length > 0}
-        <section class="section-failures">
-          <div class="panel-title">Ê§°ÜÕÂ½Ú</div>
-          {#each sectionFailures as f}
-            <div class="failure-row">
-              <span>{f.section}</span>
-              <button class="btn ghost" onclick={() => retrySection(f.section)}>ÖØÊÔ</button>
-            </div>
-          {/each}
-        </section>
-      {/if}
-
-      {#if sectionOriginalitySummary && (sectionOriginalitySummary.checkedSectionCount > 0 || sectionOriginalitySummary.rows.length > 0)}
-        <section class="section-failures originality-panel">
-          <div class="panel-title">Ô­´´ĞÔ·çÏÕÈÈÇø</div>
-          <div class="panel-sub">{summarizeOriginalitySummary(sectionOriginalitySummary)}</div>
-          {#each sectionOriginalitySummary.rows as row}
-            <div class="risk-row">
-              <div>
-                <div class="risk-title">{row.title || row.section}</div>
-                <div class="risk-metrics">
-                  <span>Ê§°Ü {row.failed_event_count}</span>
-                  <span>ÖØĞ´ {row.rewrite_count}</span>
-                  <span>ÖØÊÔ {row.retry_count}</span>
-                  <span>Ì×»°ÂÊ {Math.round(row.max_formulaic_opening_ratio * 100)}%</span>
-                </div>
-              </div>
-              <div class="risk-actions">
-                <span class:ok={row.latest_passed} class:bad={!row.latest_passed} class="risk-badge">
-                  {row.latest_passed ? 'ÒÑÍ¨¹ı' : '´ı´¦Àí'}
-                </span>
-                <button class="btn ghost" onclick={() => reviseRiskSection(row.title || row.section)}>¶¨ÏòĞŞ¶©</button>
-              </div>
-            </div>
-          {/each}
-        </section>
-      {/if}
-
-      {#if qualityAdviceItems.length > 0}
-        <section class="feedback-panel quality-advice-panel">
-          <div class="feedback-panel-head">
-            <div>
-              <div class="panel-title">Ô­´´ĞÔĞŞ¶©½¨Òé</div>
-              <div class="panel-sub">ÕâÀï»ã×ÜµÄÊÇÖÊÁ¿¸Ä½ø½¨Òé£¬²»ÊÇ¼ì²â¹æ±ÜÖ¸Áî¡£</div>
-            </div>
-            <span class={`quality-overview-badge tone-${qualityOverview.tone}`}>{qualityOverview.label}</span>
-          </div>
-          <div class="quality-advice-note">{qualityOverview.note}</div>
-          <div class="quality-advice-grid">
-            {#each qualityAdviceItems as item}
-              <article class={`quality-advice-card tone-${item.tone}`}>
-                <div class="quality-advice-title-row">
-                  <div class="quality-advice-title">{item.title}</div>
-                  <span class={`quality-tone-chip tone-${item.tone}`}>
-                    {item.tone === 'good' ? 'ÎÈ¶¨' : item.tone === 'warn' ? '¹Ø×¢' : 'ÓÅÏÈ'}
-                  </span>
-                </div>
-                <div class="quality-advice-detail">{item.detail}</div>
-                {#if item.action && item.actionLabel}
-                  <div class="quality-advice-actions">
-                    <button class="btn ghost btn-sm" onclick={() => runQualityAdviceAction(item.action)}>
-                      {item.actionLabel}
-                    </button>
-                  </div>
-                {/if}
-              </article>
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      {#if showAiRatePanel}
-        <section class="feedback-panel ai-rate-panel">
-          <div class="feedback-panel-head">
-            <div>
-              <div class="panel-title">AI ÂÊ¼ì²â</div>
-              <div class="panel-sub">»ùÓÚ burstiness¡¢ÖØ¸´ÂÊ¡¢´Ê»ãìØ¡¢Á¬½Ó´ÊÃÜ¶ÈµÈĞÅºÅ¹À¼Æ¡£</div>
-            </div>
-          </div>
-          <div class="feedback-form">
-            <div class="plagiarism-grid">
-              <label class="feedback-label" for="ai-rate-threshold">ÅĞ¶¨ãĞÖµ</label>
-              <input
-                id="ai-rate-threshold"
-                type="number"
-                min="0.05"
-                max="0.95"
-                step="0.01"
-                bind:value={aiRateThreshold}
-                data-testid="ai-rate-threshold"
-              />
-              <span class="panel-sub">½¨Òé 0.65£¬½á¹û½ö×÷Îª·çÏÕÌáÊ¾</span>
-            </div>
-            <div class="feedback-actions">
-              <button
-                class="btn primary"
-                onclick={runAiRateCheck}
-                disabled={aiRateLoading}
-                data-testid="ai-rate-run"
-              >
-                {aiRateLoading ? '¼ì²âÖĞ...' : '¿ªÊ¼ AI ÂÊ¼ì²â'}
-              </button>
-              {#if aiRateResult}
-                <span class="feedback-tip">
-                  ¹À¼Æ AI ÂÊ {Math.round(Number(aiRateResult.ai_rate || 0) * 100)}%£¬
-                  ·çÏÕ {String(aiRateResult.risk_level || 'Î´Öª')}£¬
-                  ÖÃĞÅ¶È {Math.round(Number(aiRateResult.confidence || 0) * 100)}%
-                </span>
-              {/if}
-            </div>
-            {#if aiRateResult}
-              <div class="plagiarism-item">
-                <div class="plagiarism-item-head">
-                  <span>ãĞÖµ {Math.round(Number(aiRateResult.threshold || 0.65) * 100)}%</span>
-                  <span class:danger={Boolean(aiRateResult.suspected_ai)}>
-                    ÅĞ¶¨ {Boolean(aiRateResult.suspected_ai) ? 'ÒÉËÆAIÉú³É' : 'Î´³¬ãĞÖµ'}
-                  </span>
-                </div>
-                <div class="plagiarism-item-metrics">
-                  <span>ÖØ¸´ÂÊ {Math.round(Number(aiRateResult.signals?.repeated_3gram_ratio || 0) * 100)}%</span>
-                  <span>´Ê»ã¶àÑùĞÔ {Math.round(Number(aiRateResult.signals?.lexical_diversity || 0) * 100)}%</span>
-                  <span>ìØ {Math.round(Number(aiRateResult.signals?.token_entropy_norm || 0) * 100)}%</span>
-                  <span>¾ä³¤²¨¶¯ {Math.round(Number(aiRateResult.signals?.sentence_burstiness_cv || 0) * 100)}%</span>
-                </div>
-                {#if Array.isArray(aiRateResult.evidence) && aiRateResult.evidence.length > 0}
-                  <div class="plagiarism-evidence">
-                    ÒÀ¾İ£º{String(aiRateResult.evidence[0] || '')}
-                  </div>
-                {/if}
-                <div class="panel-sub">{String(aiRateResult.note || '')}</div>
-              </div>
-            {/if}
-          </div>
-        </section>
-      {/if}
-
-      {#if showPlagiarismPanel}
-        <section class="feedback-panel plagiarism-panel">
-          <div class="feedback-panel-head">
-            <div>
-              <div class="panel-title">ÄÚÈİ²éÖØ¼ì²â</div>
-              <div class="panel-sub">Ëã·¨£ºn-gram + Winnowing + SimHash »ìºÏÆÀ·Ö£¬½¨ÒéãĞÖµ 0.35¡£</div>
-            </div>
-          </div>
-          <div class="feedback-form">
-            <div class="plagiarism-grid">
-              <label class="feedback-label" for="plag-threshold">ÅĞ¶¨ãĞÖµ</label>
-              <input
-                id="plag-threshold"
-                type="number"
-                min="0.05"
-                max="0.95"
-                step="0.01"
-                bind:value={plagiarismThreshold}
-                data-testid="plagiarism-threshold"
-              />
-              <label class="feedback-label" for="plag-docids">²Î¿¼ÎÄµµID</label>
-              <input
-                id="plag-docids"
-                type="text"
-                bind:value={plagiarismReferenceDocIds}
-                placeholder="¶à¸öIDÓÃ¶ººÅ»ò¿Õ¸ñ·Ö¸ô"
-                data-testid="plagiarism-docids"
-              />
-            </div>
-            <div class="feedback-row">
-              <span class="feedback-label">²Î¿¼ÎÄ±¾</span>
-              <textarea
-                bind:value={plagiarismReferenceText}
-                rows="4"
-                maxlength="30000"
-                placeholder="¿ÉÕ³ÌùÍâ²¿×ÊÁÏ¡¢ÀúÊ·¸å¼ş»òÑù±¾ÎÄ±¾ÓÃÓÚ²éÖØ"
-                data-testid="plagiarism-text"
-              ></textarea>
-            </div>
-            <div class="feedback-actions">
-              <button
-                class="btn primary"
-                onclick={runPlagiarismCheck}
-                disabled={plagiarismLoading}
-                data-testid="plagiarism-run"
-              >
-                {plagiarismLoading ? '¼ì²âÖĞ...' : '¿ªÊ¼²éÖØ'}
-              </button>
-              <button
-                class="btn ghost"
-                onclick={runPlagiarismLibraryScan}
-                disabled={plagiarismLibraryLoading}
-                data-testid="plagiarism-library-run"
-              >
-                {plagiarismLibraryLoading ? 'È«¿âÉ¨ÃèÖĞ...' : 'È«¿â²éÖØ'}
-              </button>
-              {#if plagiarismResults.length > 0}
-                <span class="feedback-tip">
-                  ×î¸ßÖØ¸´·ÖÊı {Math.round(plagiarismMaxScore * 100)}%£¬
-                  ·çÏÕµÈ¼¶ {plagiarismRiskLabel(plagiarismMaxScore)}£¬
-                  ³¬ãĞÖµÀ´Ô´ {plagiarismFlaggedCount} ¸ö
-                </span>
-              {/if}
-            </div>
-
-            {#if plagiarismLatestReport}
-              <div class="plagiarism-report-actions">
-                <span class="panel-sub">
-                  ±¨¸æID {plagiarismLatestReport.report_id} ¡¤ À´Ô´ {plagiarismLatestReport.total_references} ¡¤ ³¬ãĞÖµ {plagiarismLatestReport.flagged_count}
-                </span>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('json')}>ÏÂÔØ JSON</button>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('md')}>ÏÂÔØ MD</button>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('csv')}>ÏÂÔØ CSV</button>
-              </div>
-            {/if}
-
-            {#if plagiarismResults.length > 0}
-              <div class="plagiarism-results">
-                {#each plagiarismResults as row}
-                  <div class="plagiarism-item">
-                    <div class="plagiarism-item-head">
-                      <span>
-                        {row.reference_title || row.reference_id}
-                        {#if row.reference_id}
-                          <em>({row.reference_id})</em>
-                        {/if}
-                      </span>
-                      <span class:danger={row.suspected}>
-                        ·ÖÊı {Math.round(row.score * 100)}% / ãĞÖµ {Math.round(row.threshold * 100)}%
-                      </span>
-                    </div>
-                    <div class="plagiarism-item-metrics">
-                      <span>Containment {Math.round((Number(row.metrics?.containment || 0)) * 100)}%</span>
-                      <span>Jaccard {Math.round((Number(row.metrics?.jaccard_resemblance || 0)) * 100)}%</span>
-                      <span>Winnowing {Math.round((Number(row.metrics?.winnowing_overlap || 0)) * 100)}%</span>
-                      <span>Longest {Number(row.metrics?.longest_match_chars || 0)} chars</span>
-                    </div>
-                    {#if row.evidence && row.evidence.length > 0}
-                      <div class="plagiarism-evidence">
-                        Ö¤¾İÆ¬¶Î£º{String(row.evidence[0]?.snippet || '').slice(0, 120)}
-                      </div>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        </section>
-      {/if}
-
-      {#if showFeedbackPanel}
-        <section class="feedback-panel">
-          <div class="feedback-panel-head">
-            <div>
-              <div class="panel-title">ÓÃ»§ÂúÒâ¶È</div>
-              <div class="panel-sub">1 ·Ö×îµÍ£¬5 ·Ö×î¸ß£»µÍ·ÖÑù±¾»á½øÈëÑ§Ï°³Ø¡£</div>
-            </div>
-          </div>
-          <div class="feedback-form">
-            <div class="feedback-row">
-              <span class="feedback-label">ÆÀ·Ö</span>
-              <div class="rating-group">
-                {#each [1, 2, 3, 4, 5] as score}
-                  <button
-                    class={`rating-btn ${satisfactionRating === score ? 'active' : ''}`}
-                    data-testid={`rating-${score}`}
-                    onclick={() => (satisfactionRating = score)}
-                    type="button"
-                  >
-                    {score}
-                  </button>
-                {/each}
-              </div>
-              <span class="feedback-label">½×¶Î</span>
-              <select data-testid="feedback-stage" bind:value={satisfactionStage}>
-                <option value="general">Í¨ÓÃ·´À¡</option>
-                <option value="stage1">½×¶Î1 Éú³É</option>
-                <option value="stage2">½×¶Î2 ĞŞ¸Ä</option>
-                <option value="final">×îÖÕ°æ±¾</option>
-              </select>
-            </div>
-            <div class="feedback-row">
-              <span class="feedback-label">±¸×¢</span>
-              <textarea
-                data-testid="feedback-note"
-                bind:value={satisfactionNote}
-                rows="2"
-                maxlength="600"
-                placeholder="¿ÉÑ¡£º²»ÂúÒâµã¡¢È±Ê§µã¡¢¸Ä½ø½¨Òé"
-              ></textarea>
-            </div>
-            <div class="feedback-actions">
-              <button
-                class="btn primary"
-                data-testid="feedback-submit"
-                onclick={submitSatisfaction}
-                disabled={satisfactionSaving}
-              >
-                {satisfactionSaving ? 'Ìá½»ÖĞ...' : 'Ìá½»ÆÀ·Ö'}
-              </button>
-              {#if lastLowFeedbackRecorded > 0}
-                <span class="feedback-tip">ÒÑ¼ÇÂ¼µÍÂúÒâ¶ÈÑù±¾ {lastLowFeedbackRecorded} Ìõ</span>
-              {/if}
-            </div>
-            {#if feedbackItems.length > 0}
-              <div class="feedback-history">
-                <div class="panel-sub">×î½ü·´À¡</div>
-                {#each feedbackItems.slice(0, 5) as item}
-                  <div class="feedback-item">
-                    <div class="feedback-item-head">
-                      <span>{item.rating}/5 ¡¤ {item.stage}</span>
-                      <span>{formatFeedbackTime(item.created_at)}</span>
-                    </div>
-                    {#if item.note}
-                      <div class="feedback-item-note">{item.note}</div>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        </section>
-      {/if}
+      <QualityPanels
+        {qualityAdviceItems}
+        {qualityOverview}
+        {runQualityAdviceAction}
+        {showAiRatePanel}
+        bind:aiRateThreshold
+        {aiRateLoading}
+        {aiRateResult}
+        {runAiRateCheck}
+        {showPlagiarismPanel}
+        bind:plagiarismThreshold
+        bind:plagiarismReferenceDocIds
+        bind:plagiarismReferenceText
+        {plagiarismLoading}
+        {plagiarismLibraryLoading}
+        {plagiarismResults}
+        {plagiarismMaxScore}
+        {plagiarismFlaggedCount}
+        {plagiarismLatestReport}
+        {runPlagiarismCheck}
+        {runPlagiarismLibraryScan}
+        {downloadPlagiarismReport}
+        {plagiarismRiskLabel}
+        {showFeedbackPanel}
+        bind:satisfactionRating
+        bind:satisfactionStage
+        bind:satisfactionNote
+        {satisfactionSaving}
+        {lastLowFeedbackRecorded}
+        {feedbackItems}
+        {submitSatisfaction}
+        {formatFeedbackTime}
+      />
 
       <div class="doc-stage">
         {#if $isLoading}
@@ -4353,119 +3722,31 @@
 
     </section>
 
-    <aside class="side-panel">
-      <div class="panel-card version-panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">°æ±¾Ê÷</div>
-            <div class="panel-sub">×Ô¶¯Ğ¡°æ±¾ ¡¤ ÊÖ¶¯´ó°æ±¾</div>
-          </div>
-          <button class="icon-btn" onclick={loadVersionLog} title="Ë¢ĞÂ">Ë¢ĞÂ</button>
-        </div>
-        <div class="major-commit">
-          <input
-            class="version-input"
-            placeholder="ÊäÈë°æ±¾ËµÃ÷"
-            bind:value={versionMessage}
-          />
-          <button class="btn primary" onclick={commitVersion}>±£´æ°æ±¾</button>
-        </div>
-        {#if versionLoading}
-          <div class="panel-empty">¼ÓÔØÖĞ...</div>
-        {:else if versionError}
-          <div class="panel-empty">{versionError}</div>
-        {:else if versionGroups.length === 0}
-          <div class="panel-empty">ÔİÎŞ°æ±¾</div>
-        {:else}
-          <div class="version-groups">
-            {#each versionGroups as group}
-              <div class="version-group">
-                <div class={`version-major ${group.major?.is_current ? 'current' : ''}`}>
-                  <div class="version-title">
-                    <span>{group.major?.message || 'Î´ÃüÃû'}</span>
-                    <span class={`badge ${group.major?.kind === 'major' ? 'major' : 'minor'}`}>
-                      {group.major?.kind === 'major' ? '´ó°æ±¾' : 'Ğ¡°æ±¾'}
-                    </span>
-                  </div>
-                  <div class="version-meta">
-                    <span>{formatVersionTime(group.major?.timestamp || 0)}</span>
-                    <span>{String(group.major?.version_id || '').slice(0, 7)}</span>
-                  </div>
-                  {#if formatVersionSummary(group.major?.summary)}
-                    <div class="version-summary">{formatVersionSummary(group.major?.summary)}</div>
-                  {/if}
-                  <div class="version-actions">
-                    <button class="btn ghost" onclick={() => checkoutVersion(group.major?.version_id)} disabled={group.major?.is_current}>ÇĞ»»</button>
-                    <button class="btn ghost" onclick={() => compareWithCurrent(group.major?.version_id)} disabled={group.major?.is_current}>¶Ô±È</button>
-                  </div>
-                </div>
-                {#if group.minors && group.minors.length}
-                  <div class="version-minors">
-                    {#each group.minors as v}
-                      <div class={`version-minor ${v.is_current ? 'current' : ''}`}>
-                        <div>
-                          <div class="minor-title">{v.message || 'Î´ÃüÃû'}</div>
-                          {#if formatVersionSummary(v.summary)}
-                            <div class="version-summary">{formatVersionSummary(v.summary)}</div>
-                          {/if}
-                          <div class="minor-meta">{formatVersionTime(v.timestamp)}</div>
-                        </div>
-                        <div class="minor-actions">
-                          <button class="btn ghost" onclick={() => checkoutVersion(v.version_id)} disabled={v.is_current}>ÇĞ»»</button>
-                          <button class="btn ghost" onclick={() => compareWithCurrent(v.version_id)} disabled={v.is_current}>¶Ô±È</button>
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-        <div class="version-diff">
-          <div class="panel-sub">¶Ô±È½á¹û</div>
-          <pre>{versionDiff || 'ÇëÑ¡Ôñ°æ±¾½øĞĞ¶Ô±È'}</pre>
-        </div>
-      </div>
-
-    </aside>
+    <VersionPanel
+      {versionLoading}
+      {versionError}
+      {versionGroups}
+      bind:versionMessage
+      {versionDiff}
+      onRefresh={loadVersionLog}
+      onCommit={commitVersion}
+      onCheckout={checkoutVersion}
+      onCompare={compareWithCurrent}
+    />
   </div>
 
   {#if infoDrawerOpen}
-    <div class="info-drawer-backdrop" role="presentation">
-      <button type="button" class="sheet-backdrop-hit" onclick={closeInfoDrawer} aria-label="¹Ø±ÕÎÄµµĞÅÏ¢"></button>
-      <div class="info-drawer panel-card media-meta-panel" role="dialog" aria-modal="true" aria-label="ÎÄµµĞÅÏ¢">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">ÎÄµµĞÅÏ¢</div>
-            <div class="panel-sub">µ±Ç°¹¤×÷ÇøÕªÒª</div>
-          </div>
-          <button class="btn ghost btn-sm" onclick={closeInfoDrawer}>¹Ø±Õ</button>
-        </div>
-        <div class="meta-hero">
-          <div class="meta-hero-glow"></div>
-          <div class="meta-hero-text">{metaPreviewSnippet() || 'ÔİÎŞÄÚÈİÔ¤ÀÀ'}</div>
-        </div>
-        <div class="meta-list">
-          <div><span>Ãû³Æ</span><strong>{guessDocTitle($sourceText)}</strong></div>
-          <div><span>ÀàĞÍ</span><strong>text/markdown</strong></div>
-          <div><span>´óĞ¡</span><strong>{estimateKb($sourceText)} KB</strong></div>
-          <div><span>´ÊÊı</span><strong>{$wordCount}</strong></div>
-          <div><span>Ñ¡Çø</span><strong>{selectedBlockIds.length || 0}</strong></div>
-          <div><span>Â·ÓÉ</span><strong>{lastGraphMeta?.route_id || 'Ä¬ÈÏ'}</strong></div>
-        </div>
-        <div class="meta-actions">
-          <button class="btn ghost icon-btn-text" onclick={() => switchWorkspaceMode('editor')}>
-            <Icon name="open" className="ui-icon" />
-            <span>¶¨Î»µ½±à¼­Çø</span>
-          </button>
-          <button class="btn ghost danger icon-btn-text" onclick={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}>
-            <Icon name="clearSelection" className="ui-icon" />
-            <span>Çå¿ÕÑ¡Çø</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <InfoDrawer
+      preview={metaPreviewSnippet()}
+      title={guessDocTitle($sourceText)}
+      sizeKb={estimateKb($sourceText)}
+      wordCount={Number($wordCount || 0)}
+      selectedCount={selectedBlockIds.length}
+      routeId={lastGraphMeta?.route_id || 'é»˜è®¤'}
+      onClose={closeInfoDrawer}
+      onSwitchToEditor={() => switchWorkspaceMode('editor')}
+      onClearSelection={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}
+    />
   {/if}
 
   {#if selectedBlockIds.length > 0 && inlineBarVisible}
@@ -4473,20 +3754,20 @@
       class="inline-selection-bar"
       style={`left:${inlineBarLeft}px;top:${inlineBarTop}px;`}
       role="toolbar"
-      aria-label="Ñ¡ÖĞ¿é¿ì½İ²Ù×÷"
+      aria-label="é€‰ä¸­å—å¿«æ·æ“ä½œ"
     >
       <div class="inline-selection-meta">
-        ÒÑÑ¡ÖĞ {selectedBlockIds.length} Ïî
-        <span>Ctrl/Cmd+Enter ÏÂµ¯´° ¡¤ Ctrl/Cmd+Shift+Enter ÉÏµ¯´°</span>
+        å·²é€‰ä¸­ {selectedBlockIds.length} é¡¹
+        <span>Ctrl/Cmd+Enter ä¸‹å¼¹çª— Â· Ctrl/Cmd+Shift+Enter ä¸Šå¼¹çª—</span>
       </div>
       <div class="inline-selection-actions">
-        <button class="mini-btn" onclick={() => openInlinePopover('rewrite', 'down')} disabled={inlineEditLocked}>¸ÄĞ´</button>
-        <button class="mini-btn" onclick={() => openInlinePopover('style', 'down')} disabled={inlineEditLocked}>ÑùÊ½</button>
-        <button class="mini-btn" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>²å±í</button>
-        <button class="mini-btn" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>²åÍ¼</button>
-        <button class="mini-btn" onclick={() => openInlinePopover('assistant', 'down')}>¶Ô»°</button>
-        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>ÉÏ·½</button>
-        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>ÏÂ·½</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('rewrite', 'down')} disabled={inlineEditLocked}>æ”¹å†™</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('style', 'down')} disabled={inlineEditLocked}>æ ·å¼</button>
+        <button class="mini-btn" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>æ’è¡¨</button>
+        <button class="mini-btn" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>æ’å›¾</button>
+        <button class="mini-btn" onclick={() => openInlinePopover('assistant', 'down')}>å¯¹è¯</button>
+        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>ä¸Šæ–¹</button>
+        <button class="mini-btn" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>ä¸‹æ–¹</button>
       </div>
     </div>
   {/if}
@@ -4495,38 +3776,38 @@
     <section
       class={`inline-edit-popover ${inlinePopoverPlacement}`}
       style={`left:${inlinePopoverLeft}px;top:${inlinePopoverTop}px;`}
-      aria-label="Ñ¡ÖĞÄÚÈİĞŞ¸Ä´°¿Ú"
+      aria-label="é€‰ä¸­å†…å®¹ä¿®æ”¹çª—å£"
     >
       <div class="inline-popover-head">
         <div>
-          <div class="panel-title">Ñ¡ÖĞÄÚÈİÇáÁ¿ĞŞ¸Ä</div>
-          <div class="panel-sub">µ±Ç°ÉÏÏÂÎÄ¶ÀÁ¢ÓÚÆäËû¶ÎÂä¿é£¬Í¬Ò»¿é»á¼Ì³ĞĞŞ¸ÄÉÏÏÂÎÄ¡£</div>
+          <div class="panel-title">é€‰ä¸­å†…å®¹è½»é‡ä¿®æ”¹</div>
+          <div class="panel-sub">å½“å‰ä¸Šä¸‹æ–‡ç‹¬ç«‹äºå…¶ä»–æ®µè½å—ï¼ŒåŒä¸€å—ä¼šç»§æ‰¿ä¿®æ”¹ä¸Šä¸‹æ–‡ã€‚</div>
         </div>
         <div class="inline-popover-head-actions">
-          <button class="btn ghost btn-sm" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>²å±í</button>
-          <button class="btn ghost btn-sm" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>²åÍ¼</button>
-          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>ÉÏ·½</button>
-          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>ÏÂ·½</button>
-          <button class="btn ghost btn-sm" onclick={closeInlinePopover}>¹Ø±Õ</button>
+          <button class="btn ghost btn-sm" onclick={triggerInlineTableInsert} disabled={inlineEditLocked}>æ’è¡¨</button>
+          <button class="btn ghost btn-sm" onclick={triggerInlineImageUpload} disabled={inlineEditLocked}>æ’å›¾</button>
+          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'up')}>ä¸Šæ–¹</button>
+          <button class="btn ghost btn-sm" onclick={() => openInlinePopover(inlinePanelTab as InlinePanelTab, 'down')}>ä¸‹æ–¹</button>
+          <button class="btn ghost btn-sm" onclick={closeInlinePopover}>å…³é—­</button>
         </div>
       </div>
 
       <div class="inline-tabs">
         <button class={`inline-tab ${inlinePanelTab === 'rewrite' ? 'active' : ''}`} onclick={() => toggleInlineTab('rewrite')}>
-          ¸ÄĞ´½¨Òé
+          æ”¹å†™å»ºè®®
         </button>
         <button class={`inline-tab ${inlinePanelTab === 'style' ? 'active' : ''}`} onclick={() => toggleInlineTab('style')}>
-          ÑùÊ½ÉèÖÃ
+          æ ·å¼è®¾ç½®
         </button>
         <button class={`inline-tab ${inlinePanelTab === 'assistant' ? 'active' : ''}`} onclick={() => toggleInlineTab('assistant')}>
-          ¸Ä¶¯¶Ô»°
+          æ”¹åŠ¨å¯¹è¯
         </button>
       </div>
 
       <div class="selected-targets">
         {#each selectedBlocks as b, idx}
           <span class="selected-chip" title={b.text}>
-            {b.kind === 'section' || b.kind === 'title' ? `±êÌâ${idx + 1}` : `¿é${idx + 1}`}
+            {b.kind === 'section' || b.kind === 'title' ? `æ ‡é¢˜${idx + 1}` : `å—${idx + 1}`}
           </span>
         {/each}
       </div>
@@ -4536,79 +3817,79 @@
 
       {#if inlinePanelTab === 'style'}
         <div class="inline-style-row compact">
-          <span>×ÖÌå</span>
+          <span>å­—ä½“</span>
           <select
             bind:value={blockStyleFontFamily}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ fontFamily: blockStyleFontFamily })}
           >
-            <option value="">Ä¬ÈÏ</option>
-            <option value="ËÎÌå">ËÎÌå</option>
-            <option value="ºÚÌå">ºÚÌå</option>
-            <option value="Î¢ÈíÑÅºÚ">Î¢ÈíÑÅºÚ</option>
-            <option value="¿¬Ìå">¿¬Ìå</option>
-            <option value="·ÂËÎ">·ÂËÎ</option>
+            <option value="">é»˜è®¤</option>
+            <option value="å®‹ä½“">å®‹ä½“</option>
+            <option value="é»‘ä½“">é»‘ä½“</option>
+            <option value="å¾®è½¯é›…é»‘">å¾®è½¯é›…é»‘</option>
+            <option value="æ¥·ä½“">æ¥·ä½“</option>
+            <option value="ä»¿å®‹">ä»¿å®‹</option>
           </select>
-          <span>×ÖºÅ</span>
+          <span>å­—å·</span>
           <select
             bind:value={blockStyleFontSize}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ fontSize: blockStyleFontSize })}
           >
-            <option value="">Ä¬ÈÏ</option>
+            <option value="">é»˜è®¤</option>
             <option value="12pt">12pt</option>
             <option value="14pt">14pt</option>
             <option value="16pt">16pt</option>
             <option value="18pt">18pt</option>
             <option value="20pt">20pt</option>
           </select>
-          <span>ĞĞ¾à</span>
+          <span>è¡Œè·</span>
           <select
             bind:value={blockStyleLineHeight}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ lineHeight: blockStyleLineHeight })}
           >
-            <option value="">Ä¬ÈÏ</option>
+            <option value="">é»˜è®¤</option>
             <option value="1.2">1.2</option>
             <option value="1.5">1.5</option>
             <option value="1.75">1.75</option>
             <option value="2">2.0</option>
           </select>
-          <span>¶ÔÆë</span>
+          <span>å¯¹é½</span>
           <select
             bind:value={blockStyleAlign}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ align: blockStyleAlign })}
           >
-            <option value="">Ä¬ÈÏ</option>
-            <option value="left">×ó¶ÔÆë</option>
-            <option value="center">¾ÓÖĞ</option>
-            <option value="right">ÓÒ¶ÔÆë</option>
-            <option value="justify">Á½¶Ë¶ÔÆë</option>
+            <option value="">é»˜è®¤</option>
+            <option value="left">å·¦å¯¹é½</option>
+            <option value="center">å±…ä¸­</option>
+            <option value="right">å³å¯¹é½</option>
+            <option value="justify">ä¸¤ç«¯å¯¹é½</option>
           </select>
-          <span>×ÖÖØ</span>
+          <span>å­—é‡</span>
           <select
             bind:value={blockStyleFontWeight}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ fontWeight: blockStyleFontWeight })}
           >
-            <option value="">Ä¬ÈÏ</option>
-            <option value="400">³£¹æ</option>
-            <option value="500">ÖĞµÈ</option>
-            <option value="600">°ë´Ö</option>
-            <option value="700">¼Ó´Ö</option>
+            <option value="">é»˜è®¤</option>
+            <option value="400">å¸¸è§„</option>
+            <option value="500">ä¸­ç­‰</option>
+            <option value="600">åŠç²—</option>
+            <option value="700">åŠ ç²—</option>
           </select>
-          <span>×ÖĞÎ</span>
+          <span>å­—å½¢</span>
           <select
             bind:value={blockStyleFontStyle}
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ fontStyle: blockStyleFontStyle })}
           >
-            <option value="">Ä¬ÈÏ</option>
-            <option value="normal">Õı³£</option>
-            <option value="italic">Ğ±Ìå</option>
+            <option value="">é»˜è®¤</option>
+            <option value="normal">æ­£å¸¸</option>
+            <option value="italic">æ–œä½“</option>
           </select>
-          <span>ÎÄ×ÖÉ«</span>
+          <span>æ–‡å­—è‰²</span>
           <input
             type="text"
             placeholder="#1f2937"
@@ -4616,7 +3897,7 @@
             disabled={inlineEditLocked}
             onchange={() => applyInlineBlockStyle({ color: blockStyleColor })}
           />
-          <span>±³¾°É«</span>
+          <span>èƒŒæ™¯è‰²</span>
           <input
             type="text"
             placeholder="#ffffff"
@@ -4625,15 +3906,15 @@
             onchange={() => applyInlineBlockStyle({ background: blockStyleBackground })}
           />
         </div>
-        <div class="panel-empty">ÑùÊ½À¸»á»ØÏÔµ±Ç°Ñ¡ÖĞ¿éµÄÑùÊ½£¬ĞŞ¸Ä½ö×÷ÓÃÓÚµ±Ç°Ñ¡Çø¡£</div>
+        <div class="panel-empty">æ ·å¼æ ä¼šå›æ˜¾å½“å‰é€‰ä¸­å—çš„æ ·å¼ï¼Œä¿®æ”¹ä»…ä½œç”¨äºå½“å‰é€‰åŒºã€‚</div>
       {/if}
 
       {#if inlinePanelTab === 'assistant'}
         <div class="assistant-inline-tip">
-          <div>ÓÃÓÚ´¦Àíµ±Ç°Ñ¡ÖĞ¿éµÄ¸´ÔÓÓïÒåĞŞ¸Ä¡£</div>
+          <div>ç”¨äºå¤„ç†å½“å‰é€‰ä¸­å—çš„å¤æ‚è¯­ä¹‰ä¿®æ”¹ã€‚</div>
           <textarea
             class="inline-instruction"
-            placeholder="ÀıÈç£º½«Ñ¡ÖĞÄÚÈİ¸Ä³É¿Î³ÌÉè¼Æ±¨¸æÓïÆø£¬²¢²¹È«ÊõÓï½âÊÍ¡£"
+            placeholder="ä¾‹å¦‚ï¼šå°†é€‰ä¸­å†…å®¹æ”¹æˆè¯¾ç¨‹è®¾è®¡æŠ¥å‘Šè¯­æ°”ï¼Œå¹¶è¡¥å…¨æœ¯è¯­è§£é‡Šã€‚"
             bind:value={blockDialogInput}
           ></textarea>
           <div class="assistant-inline-actions">
@@ -4644,41 +3925,41 @@
                 inlinePanelTab = 'rewrite'
               }}
             >
-              Í¬²½µ½¸ÄĞ´Ö¸Áî
+              åŒæ­¥åˆ°æ”¹å†™æŒ‡ä»¤
             </button>
-            <button class="btn ghost" onclick={() => openAssistantForBlock(blockDialogInput)}>·¢µ½ÓÒÏÂ½ÇÈ«¾ÖÖúÊÖ</button>
+            <button class="btn ghost" onclick={() => openAssistantForBlock(blockDialogInput)}>å‘åˆ°å³ä¸‹è§’å…¨å±€åŠ©æ‰‹</button>
           </div>
         </div>
       {/if}
 
       {#if inlinePanelTab === 'rewrite'}
         <div class="inline-preset-row">
-          <button class="preset-chip" onclick={() => useRewritePreset('ÓïÆø¸üÕıÊ½£¬±£ÁôÔ­Òâ')}>¸üÕıÊ½</button>
-          <button class="preset-chip" onclick={() => useRewritePreset('Ñ¹Ëõµ½¸ü¼ò½à£¬¿ØÖÆÔÚ80×Ö×óÓÒ')}>¸ü¼ò½à</button>
-          <button class="preset-chip" onclick={() => useRewritePreset('Ôö¼Ó½âÊÍÏ¸½Ú£¬µ«²»ÒªÀ©Õ¹ÊÂÊµ')}>¸üÏêÏ¸</button>
-          <button class="preset-chip" onclick={() => useRewritePreset('±£³ÖÊõÓï²»±ä£¬½öµ÷Õû±í´ï')}>±£ÁôÊõÓï</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('è¯­æ°”æ›´æ­£å¼ï¼Œä¿ç•™åŸæ„')}>æ›´æ­£å¼</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('å‹ç¼©åˆ°æ›´ç®€æ´ï¼Œæ§åˆ¶åœ¨80å­—å·¦å³')}>æ›´ç®€æ´</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('å¢åŠ è§£é‡Šç»†èŠ‚ï¼Œä½†ä¸è¦æ‰©å±•äº‹å®')}>æ›´è¯¦ç»†</button>
+          <button class="preset-chip" onclick={() => useRewritePreset('ä¿æŒæœ¯è¯­ä¸å˜ï¼Œä»…è°ƒæ•´è¡¨è¾¾')}>ä¿ç•™æœ¯è¯­</button>
         </div>
 
         <div class="inline-ai-row">
           <textarea
             class="inline-instruction"
-            placeholder="ÀıÈç£º½öÖØĞ´Ñ¡ÖĞ¶ÎÂä£¬ÓïÆø¸üÕıÊ½£¬¼õÉÙ20%×ÖÊı¡£"
+            placeholder="ä¾‹å¦‚ï¼šä»…é‡å†™é€‰ä¸­æ®µè½ï¼Œè¯­æ°”æ›´æ­£å¼ï¼Œå‡å°‘20%å­—æ•°ã€‚"
             bind:value={blockEditCmd}
           ></textarea>
         </div>
 
         <div class="inline-action-row">
-          <button class="btn ghost" onclick={() => openInlinePopover('assistant', inlinePopoverPlacement)}>ÇĞµ½¸Ä¶¯¶Ô»°</button>
+          <button class="btn ghost" onclick={() => openInlinePopover('assistant', inlinePopoverPlacement)}>åˆ‡åˆ°æ”¹åŠ¨å¯¹è¯</button>
           <button
             class="btn primary"
             onclick={previewSelectedBlockEdit}
             disabled={inlineEditLocked || blockPreviewBusy || !blockEditCmd.trim() || hasNonBlockTargets()}
           >
-            {blockPreviewBusy ? 'ÕıÔÚÉú³É½¨Òé...' : 'Éú³É½¨Òé£¨²»¸ÄÔ­ÎÄ£©'}
+            {blockPreviewBusy ? 'æ­£åœ¨ç”Ÿæˆå»ºè®®...' : 'ç”Ÿæˆå»ºè®®ï¼ˆä¸æ”¹åŸæ–‡ï¼‰'}
           </button>
         </div>
         {#if hasNonBlockTargets()}
-          <div class="panel-empty">µ±Ç°Ñ¡Çø°üº¬±êÌâ£¬ÇëÖ±½Ó±à¼­±êÌâ»òÇĞµ½¡°ÑùÊ½ÉèÖÃ¡±¡£</div>
+          <div class="panel-empty">å½“å‰é€‰åŒºåŒ…å«æ ‡é¢˜ï¼Œè¯·ç›´æ¥ç¼–è¾‘æ ‡é¢˜æˆ–åˆ‡åˆ°â€œæ ·å¼è®¾ç½®â€ã€‚</div>
         {/if}
       {/if}
 
@@ -4689,7 +3970,7 @@
       {#if blockCandidates.length > 0}
         <div class="candidate-compare compact">
           <div class="candidate-before">
-            <div class="candidate-label">Ô­ÎÄ</div>
+            <div class="candidate-label">åŸæ–‡</div>
             <div class="candidate-text">{blockOriginalText || selectedBlockText}</div>
           </div>
           <div class="candidate-panel">
@@ -4711,11 +3992,11 @@
                   <span class="candidate-meta">{candidateLengthDelta(activeCandidate)}</span>
                 </div>
                 <div class="candidate-actions">
-                  <button class="btn primary" onclick={() => applyCandidateVersion(activeCandidateIndex)} disabled={inlineEditLocked}>²ÉÄÉµ½ÕıÎÄ</button>
-                  <button class="btn ghost" onclick={previewSelectedBlockEdit}>ÖØĞÂÉú³É</button>
-                  <button class="btn ghost danger" onclick={ignoreCandidateSuggestions}>ºöÂÔ½¨Òé</button>
+                  <button class="btn primary" onclick={() => applyCandidateVersion(activeCandidateIndex)} disabled={inlineEditLocked}>é‡‡çº³åˆ°æ­£æ–‡</button>
+                  <button class="btn ghost" onclick={previewSelectedBlockEdit}>é‡æ–°ç”Ÿæˆ</button>
+                  <button class="btn ghost danger" onclick={ignoreCandidateSuggestions}>å¿½ç•¥å»ºè®®</button>
                 </div>
-                <div class="candidate-label">½¨ÒéÎÄ±¾</div>
+                <div class="candidate-label">å»ºè®®æ–‡æœ¬</div>
                 <div class="candidate-text">{activeCandidate.selectedAfter}</div>
               </div>
             {/if}
@@ -4725,35 +4006,22 @@
     </section>
   {/if}
 
-  <button class="assistant-fab" onclick={toggleAssistantOpen} title="´ò¿ªÖÇÄÜÖúÊÖ (Ctrl/Cmd+K)">
+  <button class="assistant-fab" onclick={toggleAssistantOpen} title="æ‰“å¼€æ™ºèƒ½åŠ©æ‰‹ (Ctrl/Cmd+K)">
     <Icon name="chat" className="ui-icon" />
-    <span>ÖúÊÖ</span>
+    <span>åŠ©æ‰‹</span>
     {#if assistantBadgeCount > 0}
       <span class="assistant-queue-badge">{assistantBadgeCount}</span>
     {/if}
   </button>
 
   {#if assistantOpen}
-    <div class="assistant-sheet-backdrop" role="presentation">
-      <button type="button" class="sheet-backdrop-hit" onclick={() => setAssistantOpen(false)} aria-label="¹Ø±ÕÖÇÄÜÖúÊÖ"></button>
-      <div class="assistant-sheet" role="dialog" aria-modal="true" aria-label="ÖÇÄÜÖúÊÖ" tabindex="-1" onkeydown={handleAssistantSheetKeydown}>
-        <div class="assistant-sheet-head">
-          <div>
-            <div class="panel-title">ÖÇÄÜÖúÊÖ</div>
-            <div class="panel-sub">¿ì½İ¼ü£ºCtrl/Cmd + K</div>
-          </div>
-          {#if assistantBadgeCount > 0}
-            <span class="assistant-queue-badge">{assistantBadgeCount}</span>
-          {/if}
-          <button class="btn ghost btn-sm" onclick={() => setAssistantOpen(false)}>¹Ø±Õ</button>
-        </div>
-        <Chat
-          variant="assistant"
-          onsend={(text) => handleGenerate(text)}
-          onupload={handleAssistantUpload}
-        />
-      </div>
-    </div>
+    <AssistantSheet
+      badgeCount={assistantBadgeCount}
+      onClose={() => setAssistantOpen(false)}
+      onKeydown={handleAssistantSheetKeydown}
+      onSend={(text) => handleGenerate(text)}
+      onUpload={handleAssistantUpload}
+    />
   {/if}
 
   <input
@@ -4772,24 +4040,12 @@
   />
 
   {#if pendingGenerateConfirmation}
-    <div class="confirm-overlay" role="dialog" aria-modal="true" aria-label="¸ß·çÏÕ±à¼­È·ÈÏ">
-      <section class="confirm-dialog">
-        <div class="panel-title">¼ì²âµ½¸ß·çÏÕ±à¼­</div>
-        <div class="panel-sub">
-          ·çÏÕµÈ¼¶ {pendingGenerateConfirmation.riskLevel} ¡¤ ¼Æ»®À´Ô´ {pendingGenerateConfirmation.planSource}
-          ¡¤ ²Ù×÷Êı {pendingGenerateConfirmation.operationsCount}
-        </div>
-        <div class="confirm-note">
-          {pendingGenerateConfirmation.note || '¸ÃÇëÇó»áÖ´ĞĞ¸ß·çÏÕÎÄ±¾¸Ä¶¯£¬ÇëÈ·ÈÏÊÇ·ñ¼ÌĞø¡£'}
-        </div>
-        <div class="confirm-actions">
-          <button class="btn ghost" onclick={cancelPendingGenerate} disabled={confirmDialogBusy}>È¡Ïû</button>
-          <button class="btn primary danger" onclick={confirmPendingGenerate} disabled={confirmDialogBusy}>
-            {confirmDialogBusy ? 'Ö´ĞĞÖĞ...' : 'È·ÈÏÖ´ĞĞ'}
-          </button>
-        </div>
-      </section>
-    </div>
+    <ConfirmDialog
+      confirmation={pendingGenerateConfirmation}
+      busy={confirmDialogBusy}
+      onCancel={cancelPendingGenerate}
+      onConfirm={confirmPendingGenerate}
+    />
   {/if}
 
 {#if $generating}
@@ -4810,4 +4066,5 @@
   <CitationManager bind:visible={showCitations} />
   <PerformanceMetrics bind:visible={showPerformanceMetrics} />
 </ErrorBoundary>
+
 

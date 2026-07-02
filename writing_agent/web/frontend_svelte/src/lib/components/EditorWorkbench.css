@@ -1,4 +1,4 @@
-.editor {
+ï»¿.editor {
     display: grid;
     gap: 12px;
   }
@@ -162,7 +162,7 @@
     color: inherit;
   }
 
-  /* ±à¼­Ì¬Òş²ØÒ³Ã¼Ò³½ÅÕ¼Î»£¬±ÜÃâ¿ÕÎÄµµÊ±ÊÓ¾õÔëÒô */
+  /* ç¼–è¾‘æ€éšè—é¡µçœ‰é¡µè„šå ä½ï¼Œé¿å…ç©ºæ–‡æ¡£æ—¶è§†è§‰å™ªéŸ³ */
   :global(.editable[data-render-mode='doc'] .wa-doc .wa-header),
   :global(.editable[data-render-mode='doc'] .wa-doc .wa-footer) {
     display: none;
@@ -703,3 +703,4 @@
   :global(.editable .toc-section a:hover) {
     text-decoration: underline;
   }
+

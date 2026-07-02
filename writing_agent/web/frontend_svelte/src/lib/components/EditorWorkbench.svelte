@@ -1,4 +1,4 @@
-<script lang="ts">
+ï»¿<script lang="ts">
   import './EditorWorkbench.css'
   import { onMount } from 'svelte'
   import {
@@ -81,19 +81,19 @@
     keywords: string[]
   }
   const slashCommandCatalog: SlashCommandItem[] = [
-    { id: 'heading1', label: '±êÌâ 1', desc: '²åÈëÒ»¼¶±êÌâ', command: 'heading1', keywords: ['h1', '±êÌâ', 'Ò»¼¶'] },
-    { id: 'heading2', label: '±êÌâ 2', desc: '²åÈë¶ş¼¶±êÌâ', command: 'heading2', keywords: ['h2', '±êÌâ', '¶ş¼¶'] },
-    { id: 'paragraph', label: 'ÕıÎÄ¶ÎÂä', desc: 'ÇĞ»»ÎªÕıÎÄ¶ÎÂä', command: 'paragraph', keywords: ['ÕıÎÄ', '¶ÎÂä', 'p'] },
-    { id: 'list-bullet', label: 'ÎŞĞòÁĞ±í', desc: '²åÈëÏîÄ¿·ûºÅÁĞ±í', command: 'list-bullet', keywords: ['ÁĞ±í', 'bullet', 'ÎŞĞò'] },
-    { id: 'list-number', label: 'ÓĞĞòÁĞ±í', desc: '²åÈë±àºÅÁĞ±í', command: 'list-number', keywords: ['ÁĞ±í', '±àºÅ', 'ÓĞĞò'] },
-    { id: 'quote', label: 'ÒıÓÃ¿é', desc: '²åÈëÒıÓÃ¸ñÊ½', command: 'quote', keywords: ['ÒıÓÃ', 'quote'] },
-    { id: 'code', label: '´úÂë¿é', desc: '²åÈë´úÂë¿é', command: 'code', keywords: ['´úÂë', 'code'] },
-    { id: 'table', label: '±í¸ñ', desc: '²åÈë±í¸ñ', command: 'table', keywords: ['±í¸ñ', 'table'] },
-    { id: 'image', label: 'Í¼Æ¬', desc: '²åÈëÍ¼Æ¬', command: 'image', keywords: ['Í¼Æ¬', 'image', 'Í¼'] },
-    { id: 'toc', label: 'Ä¿Â¼', desc: 'Éú³ÉÄ¿Â¼', command: 'toc', keywords: ['Ä¿Â¼', 'toc'] },
-    { id: 'footnote', label: '½Å×¢', desc: '²åÈë½Å×¢', command: 'footnote', keywords: ['½Å×¢', 'footnote'] },
-    { id: 'math-inline', label: 'ĞĞÄÚ¹«Ê½', desc: '²åÈëĞĞÄÚ LaTeX ¹«Ê½', command: 'math-inline', keywords: ['¹«Ê½', 'math', 'latex'] },
-    { id: 'math-block', label: '¹«Ê½¿é', desc: '²åÈë¿é¼¶ LaTeX ¹«Ê½', command: 'math-block', keywords: ['¹«Ê½¿é', 'math', 'latex'] },
+    { id: 'heading1', label: 'æ ‡é¢˜ 1', desc: 'æ’å…¥ä¸€çº§æ ‡é¢˜', command: 'heading1', keywords: ['h1', 'æ ‡é¢˜', 'ä¸€çº§'] },
+    { id: 'heading2', label: 'æ ‡é¢˜ 2', desc: 'æ’å…¥äºŒçº§æ ‡é¢˜', command: 'heading2', keywords: ['h2', 'æ ‡é¢˜', 'äºŒçº§'] },
+    { id: 'paragraph', label: 'æ­£æ–‡æ®µè½', desc: 'åˆ‡æ¢ä¸ºæ­£æ–‡æ®µè½', command: 'paragraph', keywords: ['æ­£æ–‡', 'æ®µè½', 'p'] },
+    { id: 'list-bullet', label: 'æ— åºåˆ—è¡¨', desc: 'æ’å…¥é¡¹ç›®ç¬¦å·åˆ—è¡¨', command: 'list-bullet', keywords: ['åˆ—è¡¨', 'bullet', 'æ— åº'] },
+    { id: 'list-number', label: 'æœ‰åºåˆ—è¡¨', desc: 'æ’å…¥ç¼–å·åˆ—è¡¨', command: 'list-number', keywords: ['åˆ—è¡¨', 'ç¼–å·', 'æœ‰åº'] },
+    { id: 'quote', label: 'å¼•ç”¨å—', desc: 'æ’å…¥å¼•ç”¨æ ¼å¼', command: 'quote', keywords: ['å¼•ç”¨', 'quote'] },
+    { id: 'code', label: 'ä»£ç å—', desc: 'æ’å…¥ä»£ç å—', command: 'code', keywords: ['ä»£ç ', 'code'] },
+    { id: 'table', label: 'è¡¨æ ¼', desc: 'æ’å…¥è¡¨æ ¼', command: 'table', keywords: ['è¡¨æ ¼', 'table'] },
+    { id: 'image', label: 'å›¾ç‰‡', desc: 'æ’å…¥å›¾ç‰‡', command: 'image', keywords: ['å›¾ç‰‡', 'image', 'å›¾'] },
+    { id: 'toc', label: 'ç›®å½•', desc: 'ç”Ÿæˆç›®å½•', command: 'toc', keywords: ['ç›®å½•', 'toc'] },
+    { id: 'footnote', label: 'è„šæ³¨', desc: 'æ’å…¥è„šæ³¨', command: 'footnote', keywords: ['è„šæ³¨', 'footnote'] },
+    { id: 'math-inline', label: 'è¡Œå†…å…¬å¼', desc: 'æ’å…¥è¡Œå†… LaTeX å…¬å¼', command: 'math-inline', keywords: ['å…¬å¼', 'math', 'latex'] },
+    { id: 'math-block', label: 'å…¬å¼å—', desc: 'æ’å…¥å—çº§ LaTeX å…¬å¼', command: 'math-block', keywords: ['å…¬å¼å—', 'math', 'latex'] },
   ]
   let slashMenuOpen = $state(false)
   let slashMenuLeft = $state(0)
@@ -102,9 +102,9 @@
   let slashMenuQuery = $state('')
 
   function emptyHintText() {
-    if ($generating) return 'ÕıÔÚÉú³ÉÄÚÈİ£¬Ôİ²»¿ÉÖ±½Ó±à¼­¡­'
-    if (lockEditing) return 'ÕıÔÚäÖÈ¾ÄÚÈİ£¬Ôİ²»¿É±à¼­£¬ÇëÉÔºò¡­'
-    return 'ÔÚÕâÀïÖ±½Ó±à¼­»òµÈ´ıÉú³ÉÄÚÈİ¡­'
+    if ($generating) return 'æ­£åœ¨ç”Ÿæˆå†…å®¹ï¼Œæš‚ä¸å¯ç›´æ¥ç¼–è¾‘â€¦'
+    if (lockEditing) return 'æ­£åœ¨æ¸²æŸ“å†…å®¹ï¼Œæš‚ä¸å¯ç¼–è¾‘ï¼Œè¯·ç¨å€™â€¦'
+    return 'åœ¨è¿™é‡Œç›´æ¥ç¼–è¾‘æˆ–ç­‰å¾…ç”Ÿæˆå†…å®¹â€¦'
   }
 
   function syncEditorUiFlags() {
@@ -688,7 +688,7 @@
       const title = editor.querySelector('[data-doc-title="1"]') as HTMLElement | null
       return {
         sectionId: DOC_TITLE_TARGET_ID,
-        sectionTitle: title ? normalizeInlineText(plainTextFromElement(title)) : 'ÎÄµµ±êÌâ'
+        sectionTitle: title ? normalizeInlineText(plainTextFromElement(title)) : 'æ–‡æ¡£æ ‡é¢˜'
       }
     }
     const sectionIdTarget = sectionIdFromTarget(id)
@@ -829,11 +829,11 @@
     }
     if (t === 'table') {
       const table = block.table && typeof block.table === 'object' ? (block.table as Record<string, unknown>) : {}
-      return String(table.caption || '±í¸ñ')
+      return String(table.caption || 'è¡¨æ ¼')
     }
     if (t === 'figure') {
       const fig = block.figure && typeof block.figure === 'object' ? (block.figure as Record<string, unknown>) : {}
-      return String(fig.caption || 'Í¼Æ¬')
+      return String(fig.caption || 'å›¾ç‰‡')
     }
     return String(block.text || '').trim()
   }
@@ -1512,7 +1512,7 @@
     }
     if (!ensureEditableFocus()) return
     
-    // »ù´¡¸ñÊ½
+    // åŸºç¡€æ ¼å¼
     if (cmd === 'bold') return document.execCommand('bold')
     if (cmd === 'italic') return document.execCommand('italic')
     if (cmd === 'underline') return document.execCommand('underline')
@@ -1520,26 +1520,26 @@
     if (cmd === 'superscript') return document.execCommand('superscript')
     if (cmd === 'subscript') return document.execCommand('subscript')
     
-    // ±êÌâ
+    // æ ‡é¢˜
     if (cmd === 'heading1') return document.execCommand('formatBlock', false, 'H1')
     if (cmd === 'heading2') return document.execCommand('formatBlock', false, 'H2')
     if (cmd === 'heading3') return document.execCommand('formatBlock', false, 'H3')
     if (cmd === 'paragraph') return document.execCommand('formatBlock', false, 'P')
     
-    // ÁĞ±íÓëËõ½ø
+    // åˆ—è¡¨ä¸ç¼©è¿›
     if (cmd === 'list-bullet') return document.execCommand('insertUnorderedList')
     if (cmd === 'list-number') return document.execCommand('insertOrderedList')
     if (cmd === 'indent') return document.execCommand('indent')
     if (cmd === 'outdent') return document.execCommand('outdent')
     if (cmd === 'quote') return document.execCommand('formatBlock', false, 'BLOCKQUOTE')
     
-    // ¶ÔÆë
+    // å¯¹é½
     if (cmd === 'align-left') return document.execCommand('justifyLeft')
     if (cmd === 'align-center') return document.execCommand('justifyCenter')
     if (cmd === 'align-right') return document.execCommand('justifyRight')
     if (cmd === 'align-justify') return document.execCommand('justifyFull')
     
-    // ĞĞ¾à
+    // è¡Œè·
     if (cmd.startsWith('line-height:')) {
       const height = cmd.slice(12)
       const sel = window.getSelection()
@@ -1555,7 +1555,7 @@
       return
     }
     
-    // ¶Î¼ä¾à
+    // æ®µé—´è·
     if (cmd.startsWith('margin:')) {
       const margin = cmd.slice(7)
       const sel = window.getSelection()
@@ -1571,7 +1571,7 @@
       return
     }
     
-    // Ê×ĞĞËõ½ø
+    // é¦–è¡Œç¼©è¿›
     if (cmd === 'indent-first') {
       const sel = window.getSelection()
       if (sel && sel.rangeCount) {
@@ -1586,7 +1586,7 @@
       return
     }
     
-    // ÑÕÉ«
+    // é¢œè‰²
     if (cmd.startsWith('color:')) {
       const color = cmd.slice(6)
       return document.execCommand('foreColor', false, color)
@@ -1596,13 +1596,13 @@
       return document.execCommand('hiliteColor', false, color)
     }
     
-    // ×ÖÌå
+    // å­—ä½“
     if (cmd.startsWith('font:')) {
       const font = cmd.slice(5)
       return document.execCommand('fontName', false, font)
     }
     
-    // ×ÖºÅ
+    // å­—å·
     if (cmd.startsWith('size:')) {
       const size = cmd.slice(5)
       const sel = window.getSelection()
@@ -1615,14 +1615,14 @@
       return
     }
     
-    // ´úÂë¿é
+    // ä»£ç å—
     if (cmd === 'code') {
       const sel = window.getSelection()
       const text = sel && sel.rangeCount ? sel.getRangeAt(0).toString() : ''
       return document.execCommand('insertHTML', false, `<pre><code>${escapeHtml(text || '')}</code></pre>`)
     }
     
-    // Í¼Æ¬
+    // å›¾ç‰‡
     if (cmd === 'image') {
       const input = document.createElement('input')
       input.type = 'file'
@@ -1633,7 +1633,7 @@
         const reader = new FileReader()
         reader.onload = (ev) => {
           const dataUrl = ev.target?.result as string
-          document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="Í¼Æ¬" style="max-width:100%;height:auto;" />`)
+          document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="å›¾ç‰‡" style="max-width:100%;height:auto;" />`)
         }
         reader.readAsDataURL(file)
       }
@@ -1641,16 +1641,16 @@
       return
     }
     
-    // ±í¸ñ
+    // è¡¨æ ¼
     if (cmd === 'table') {
-      const rows = prompt('ĞĞÊı£º', '3')
-      const cols = prompt('ÁĞÊı£º', '3')
+      const rows = prompt('è¡Œæ•°ï¼š', '3')
+      const cols = prompt('åˆ—æ•°ï¼š', '3')
       if (!rows || !cols) return
       let html = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">'
       for (let i = 0; i < parseInt(rows); i++) {
         html += '<tr>'
         for (let j = 0; j < parseInt(cols); j++) {
-          html += '<td style="border:1px solid #ccc;padding:8px;min-width:80px;">¡¡</td>'
+          html += '<td style="border:1px solid #ccc;padding:8px;min-width:80px;">ã€€</td>'
         }
         html += '</tr>'
       }
@@ -1658,21 +1658,21 @@
       return document.execCommand('insertHTML', false, html)
     }
     
-    // Á´½Ó
+    // é“¾æ¥
     if (cmd === 'link') {
-      const url = prompt('ÇëÊäÈëÁ´½ÓµØÖ·£º', 'https://')
+      const url = prompt('è¯·è¾“å…¥é“¾æ¥åœ°å€ï¼š', 'https://')
       if (url) document.execCommand('createLink', false, url)
       return
     }
     
-    // Ë®Æ½Ïß
+    // æ°´å¹³çº¿
     if (cmd === 'hr') {
       return document.execCommand('insertHTML', false, '<hr style="border:none;border-top:1px solid #ddd;margin:16px 0;" />')
     }
     
-    // ÊıÑ§¹«Ê½
+    // æ•°å­¦å…¬å¼
     if (cmd === 'math-inline') {
-      const latex = prompt('ÊäÈëĞĞÄÚ¹«Ê½£¨LaTeX£©£º', 'x^2 + y^2 = r^2')
+      const latex = prompt('è¾“å…¥è¡Œå†…å…¬å¼ï¼ˆLaTeXï¼‰ï¼š', 'x^2 + y^2 = r^2')
       if (latex) {
         document.execCommand('insertHTML', false, `<span class="math-inline" data-latex="${escapeHtml(latex)}">$${latex}$</span>`)
       }
@@ -1680,16 +1680,16 @@
     }
     
     if (cmd === 'math-block') {
-      const latex = prompt('ÊäÈë¹«Ê½¿é£¨LaTeX£©£º', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')
+      const latex = prompt('è¾“å…¥å…¬å¼å—ï¼ˆLaTeXï¼‰ï¼š', '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}')
       if (latex) {
         document.execCommand('insertHTML', false, `<div class="math-block" data-latex="${escapeHtml(latex)}">$$${latex}$$</div>`)
       }
       return
     }
     
-    // ½Å×¢
+    // è„šæ³¨
     if (cmd === 'footnote') {
-      const text = prompt('½Å×¢ÄÚÈİ£º')
+      const text = prompt('è„šæ³¨å†…å®¹ï¼š')
       if (!text) return
       const footnoteId = 'fn-' + Date.now()
       const footnoteHtml = `<sup><a href="#${footnoteId}" id="ref-${footnoteId}" style="color:#a5722a;text-decoration:none;">[${getFootnoteNumber()}]</a></sup>`
@@ -1698,14 +1698,14 @@
       return
     }
     
-    // Éú³ÉÄ¿Â¼
+    // ç”Ÿæˆç›®å½•
     if (cmd === 'toc') {
       const toc = generateTableOfContents()
       document.execCommand('insertHTML', false, toc)
       return
     }
     
-    // ³·ÏúÖØ×ö
+    // æ’¤é”€é‡åš
     if (cmd === 'clear-format') return document.execCommand('removeFormat')
   }
 
@@ -2002,7 +2002,7 @@
   let showTableMenu = $state(false)
   const figureCache = new Map<string, string>()
   
-  const fontList = ['ËÎÌå', 'ºÚÌå', 'Î¢ÈíÑÅºÚ', '¿¬Ìå', 'Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana']
+  const fontList = ['å®‹ä½“', 'é»‘ä½“', 'å¾®è½¯é›…é»‘', 'æ¥·ä½“', 'Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana']
   const fontSizes = [12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 42, 48, 56, 64, 72]
   const colors = ['#000000', '#333333', '#666666', '#999999', '#CCCCCC', '#FFFFFF', 
                   '#FF0000', '#FF6600', '#FFCC00', '#00FF00', '#00CCFF', '#0000FF', '#9900FF', '#FF00FF']
@@ -2047,10 +2047,10 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
+    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
     const nextCell = cell.nextElementSibling
     if (!nextCell || (nextCell.tagName !== 'TD' && nextCell.tagName !== 'TH')) {
-      return alert('ÎŞ·¨ºÏ²¢£ºĞèÒªÑ¡ÖĞÏàÁÚµ¥Ôª¸ñ')
+      return alert('æ— æ³•åˆå¹¶ï¼šéœ€è¦é€‰ä¸­ç›¸é‚»å•å…ƒæ ¼')
     }
     const colspan = parseInt(cell.getAttribute('colspan') || '1')
     cell.setAttribute('colspan', String(colspan + 1))
@@ -2061,10 +2061,10 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
+    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
     const row = cell.parentElement as HTMLTableRowElement
     const newRow = row.cloneNode(true) as HTMLTableRowElement
-    newRow.querySelectorAll('td, th').forEach(c => (c.textContent = '¡¡'))
+    newRow.querySelectorAll('td, th').forEach(c => (c.textContent = 'ã€€'))
     row.parentElement?.insertBefore(newRow, row.nextSibling)
   }
 
@@ -2072,13 +2072,13 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
+    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
     const cellIndex = Array.from(cell.parentElement?.children || []).indexOf(cell)
     const table = cell.closest('table')
     if (!table) return
     table.querySelectorAll('tr').forEach(row => {
       const newCell = document.createElement(cell.tagName.toLowerCase())
-      newCell.textContent = '¡¡'
+      newCell.textContent = 'ã€€'
       newCell.style.cssText = cell.style.cssText
       row.insertBefore(newCell, row.children[cellIndex + 1])
     })
@@ -2088,11 +2088,11 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
+    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
     const row = cell.parentElement
     if (!row) return
     const table = row.parentElement
-    if (table && table.children.length <= 1) return alert('ÎŞ·¨É¾³ı£º±í¸ñÖÁÉÙĞèÒªÒ»ĞĞ')
+    if (table && table.children.length <= 1) return alert('æ— æ³•åˆ é™¤ï¼šè¡¨æ ¼è‡³å°‘éœ€è¦ä¸€è¡Œ')
     row.remove()
   }
 
@@ -2100,12 +2100,12 @@
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const cell = sel.anchorNode?.parentElement?.closest('td, th')
-    if (!cell) return alert('ÇëÏÈÑ¡ÖĞ±í¸ñµ¥Ôª¸ñ')
+    if (!cell) return alert('è¯·å…ˆé€‰ä¸­è¡¨æ ¼å•å…ƒæ ¼')
     const cellIndex = Array.from(cell.parentElement?.children || []).indexOf(cell)
     const table = cell.closest('table')
     if (!table) return
     const firstRow = table.querySelector('tr')
-    if (firstRow && firstRow.children.length <= 1) return alert('ÎŞ·¨É¾³ı£º±í¸ñÖÁÉÙĞèÒªÒ»ÁĞ')
+    if (firstRow && firstRow.children.length <= 1) return alert('æ— æ³•åˆ é™¤ï¼šè¡¨æ ¼è‡³å°‘éœ€è¦ä¸€åˆ—')
     table.querySelectorAll('tr').forEach(row => {
       row.children[cellIndex]?.remove()
     })
@@ -2123,7 +2123,7 @@
     if (!footnotesSection) {
       footnotesSection = document.createElement('div')
       footnotesSection.className = 'footnotes-section'
-      footnotesSection.innerHTML = '<hr style="margin-top:40px;border:none;border-top:1px solid #ddd;" /><h3>½Å×¢</h3>'
+      footnotesSection.innerHTML = '<hr style="margin-top:40px;border:none;border-top:1px solid #ddd;" /><h3>è„šæ³¨</h3>'
       editor.appendChild(footnotesSection)
     }
     const footnoteItem = document.createElement('div')
@@ -2136,9 +2136,9 @@
   function generateTableOfContents(): string {
     if (!editor) return ''
     const headings = editor.querySelectorAll('h1, h2, h3')
-    if (headings.length === 0) return '<p>Î´ÕÒµ½±êÌâ</p>'
+    if (headings.length === 0) return '<p>æœªæ‰¾åˆ°æ ‡é¢˜</p>'
     
-    let toc = '<div class="toc-section" style="border:1px solid #ddd;padding:16px;border-radius:8px;background:rgba(255,255,255,0.5);margin:20px 0;"><h3>Ä¿Â¼</h3><ul style="list-style:none;padding-left:0;">'
+    let toc = '<div class="toc-section" style="border:1px solid #ddd;padding:16px;border-radius:8px;background:rgba(255,255,255,0.5);margin:20px 0;"><h3>ç›®å½•</h3><ul style="list-style:none;padding-left:0;">'
     
     headings.forEach((heading, index) => {
       const level = parseInt(heading.tagName[1])
@@ -2202,7 +2202,7 @@
       const cacheKey = JSON.stringify(spec)
       let svg = figureCache.get(cacheKey)
       const box = fig.querySelector('.wa-figure-box') as HTMLElement | null
-      if (box) box.innerHTML = '<div class="wa-figure-loading">äÖÈ¾ÖĞ...</div>'
+      if (box) box.innerHTML = '<div class="wa-figure-loading">æ¸²æŸ“ä¸­...</div>'
       if (!svg) {
         try {
           const resp = await fetch('/api/figure/render', {
@@ -2219,7 +2219,7 @@
         }
       }
       if (box) {
-        box.innerHTML = svg || '<div class="wa-figure-loading">äÖÈ¾Ê§°Ü</div>'
+        box.innerHTML = svg || '<div class="wa-figure-loading">æ¸²æŸ“å¤±è´¥</div>'
       }
     }
   }
@@ -2282,13 +2282,13 @@
     sourceUnsub = sourceText.subscribe(() => syncFromStore())
     docIrUnsub = docIr.subscribe(() => syncFromStore())
     
-    // ¼ÓÔØKaTeXÑùÊ½
+    // åŠ è½½KaTeXæ ·å¼
     const katexCSS = document.createElement('link')
     katexCSS.rel = 'stylesheet'
     katexCSS.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css'
     document.head.appendChild(katexCSS)
     
-    // ¼ÓÔØKaTeX½Å±¾
+    // åŠ è½½KaTeXè„šæœ¬
     const katexScript = document.createElement('script')
     katexScript.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js'
     katexScript.onload = () => {
@@ -2301,13 +2301,13 @@
     }
     document.head.appendChild(katexScript)
     
-    // ¼ÓÔØPrismÑùÊ½
+    // åŠ è½½Prismæ ·å¼
     const prismCSS = document.createElement('link')
     prismCSS.rel = 'stylesheet'
     prismCSS.href = 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css'
     document.head.appendChild(prismCSS)
     
-    // ¼ÓÔØPrism½Å±¾
+    // åŠ è½½Prismè„šæœ¬
     const prismScript = document.createElement('script')
     prismScript.src = 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js'
     prismScript.onload = () => {
@@ -2338,7 +2338,7 @@
     }
     document.head.appendChild(prismScript)
     
-    // Í¼Æ¬ÀÁ¼ÓÔØ
+    // å›¾ç‰‡æ‡’åŠ è½½
     const imgObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting && entry.target instanceof HTMLImageElement) {
@@ -2448,18 +2448,18 @@
 <div class={`panel editor ${paper ? 'paper' : ''}`}>
   {#if showToolbar}
     <div class="panel-header">
-      <div class="panel-title">ÕıÎÄ±à¼­</div>
+      <div class="panel-title">æ­£æ–‡ç¼–è¾‘</div>
       <div class="editor-stats">
-        <span>{$wordCount} ×Ö</span>
-        <span>¡¤</span>
-        <span>{Math.ceil($wordCount / 400)} ·ÖÖÓÔÄ¶Á</span>
+        <span>{$wordCount} å­—</span>
+        <span>Â·</span>
+        <span>{Math.ceil($wordCount / 400)} åˆ†é’Ÿé˜…è¯»</span>
       </div>
     </div>
 
-    <!-- À©Õ¹¹¤¾ßÀ¸ -->
+    <!-- æ‰©å±•å·¥å…·æ  -->
     <div class="extended-toolbar">
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showFontPanel = !showFontPanel)} title="×ÖÌå">
+      <button class="tool-btn" onclick={() => (showFontPanel = !showFontPanel)} title="å­—ä½“">
         <span style="font-family: serif;">A</span>
       </button>
       {#if showFontPanel}
@@ -2475,7 +2475,7 @@
     
     <div class="toolbar-group">
       <select class="tool-select" onchange={(e) => applyCommand('size:' + e.currentTarget.value)}>
-        <option value="">×ÖºÅ</option>
+        <option value="">å­—å·</option>
         {#each fontSizes as size}
           <option value={size}>{size}pt</option>
         {/each}
@@ -2483,7 +2483,7 @@
     </div>
     
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showColorPanel = !showColorPanel)} title="ÎÄ×ÖÑÕÉ«">
+      <button class="tool-btn" onclick={() => (showColorPanel = !showColorPanel)} title="æ–‡å­—é¢œè‰²">
         <span style="color: #FF0000;">A</span>
       </button>
       {#if showColorPanel}
@@ -2492,7 +2492,7 @@
             <button 
               class="color-item" 
               style="background: {color};" 
-              aria-label={`ÎÄ×ÖÑÕÉ« ${color}`}
+              aria-label={`æ–‡å­—é¢œè‰² ${color}`}
               onclick={() => { applyCommand('color:' + color); showColorPanel = false }}
             ></button>
           {/each}
@@ -2501,8 +2501,8 @@
     </div>
     
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showBgColorPanel = !showBgColorPanel)} title="±³¾°ÑÕÉ«">
-        <span style="background: #FFFF00;">¨€</span>
+      <button class="tool-btn" onclick={() => (showBgColorPanel = !showBgColorPanel)} title="èƒŒæ™¯é¢œè‰²">
+        <span style="background: #FFFF00;">â–ˆ</span>
       </button>
       {#if showBgColorPanel}
         <div class="dropdown-panel color-grid">
@@ -2510,7 +2510,7 @@
             <button 
               class="color-item" 
               style="background: {color};" 
-              aria-label={`±³¾°ÑÕÉ« ${color}`}
+              aria-label={`èƒŒæ™¯é¢œè‰² ${color}`}
               onclick={() => { applyCommand('bgcolor:' + color); showBgColorPanel = false }}
             ></button>
           {/each}
@@ -2520,61 +2520,61 @@
     
     <span class="separator"></span>
     
-    <button class="tool-btn" onclick={() => applyCommand('align-left')} title="×ó¶ÔÆë">¡Ô</button>
-    <button class="tool-btn" onclick={() => applyCommand('align-center')} title="¾ÓÖĞ">¡Ô</button>
-    <button class="tool-btn" onclick={() => applyCommand('align-right')} title="ÓÒ¶ÔÆë">¡Ô</button>
-    <button class="tool-btn" onclick={() => applyCommand('align-justify')} title="Á½¶Ë¶ÔÆë">¡Ô</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-left')} title="å·¦å¯¹é½">â‰¡</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-center')} title="å±…ä¸­">â‰¡</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-right')} title="å³å¯¹é½">â‰¡</button>
+    <button class="tool-btn" onclick={() => applyCommand('align-justify')} title="ä¸¤ç«¯å¯¹é½">â‰¡</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" onclick={() => applyCommand('superscript')} title="ÉÏ±ê">x2</button>
-    <button class="tool-btn" onclick={() => applyCommand('subscript')} title="ÏÂ±ê">x?</button>
-    <button class="tool-btn" onclick={() => applyCommand('hr')} title="Ë®Æ½Ïß">¡ª</button>
+    <button class="tool-btn" onclick={() => applyCommand('superscript')} title="ä¸Šæ ‡">x2</button>
+    <button class="tool-btn" onclick={() => applyCommand('subscript')} title="ä¸‹æ ‡">x?</button>
+    <button class="tool-btn" onclick={() => applyCommand('hr')} title="æ°´å¹³çº¿">â€”</button>
     
     <span class="separator"></span>
     
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showLineHeightPanel = !showLineHeightPanel)} title="ĞĞ¾à">
+      <button class="tool-btn" onclick={() => (showLineHeightPanel = !showLineHeightPanel)} title="è¡Œè·">
         ?
       </button>
       {#if showLineHeightPanel}
         <div class="dropdown-panel">
           {#each lineHeights as height}
             <button class="dropdown-item" onclick={() => { applyCommand('line-height:' + height); showLineHeightPanel = false }}>
-              {height}±¶ĞĞ¾à
+              {height}å€è¡Œè·
             </button>
           {/each}
         </div>
       {/if}
     </div>
     
-    <button class="tool-btn" onclick={() => applyCommand('indent-first')} title="Ê×ĞĞËõ½ø">?</button>
-    <button class="tool-btn" onclick={() => applyCommand('margin:10px 0')} title="¶Î¼ä¾à">?</button>
+    <button class="tool-btn" onclick={() => applyCommand('indent-first')} title="é¦–è¡Œç¼©è¿›">?</button>
+    <button class="tool-btn" onclick={() => applyCommand('margin:10px 0')} title="æ®µé—´è·">?</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" onclick={() => applyCommand('math-inline')} title="ĞĞÄÚ¹«Ê½">??(??)</button>
-    <button class="tool-btn" onclick={() => applyCommand('math-block')} title="¹«Ê½¿é">¡Ò</button>
+    <button class="tool-btn" onclick={() => applyCommand('math-inline')} title="è¡Œå†…å…¬å¼">??(??)</button>
+    <button class="tool-btn" onclick={() => applyCommand('math-block')} title="å…¬å¼å—">âˆ«</button>
     
     <span class="separator"></span>
     
-    <button class="tool-btn" onclick={() => applyCommand('footnote')} title="²åÈë½Å×¢">¡ù</button>
-    <button class="tool-btn" onclick={() => applyCommand('toc')} title="Éú³ÉÄ¿Â¼">?</button>
+    <button class="tool-btn" onclick={() => applyCommand('footnote')} title="æ’å…¥è„šæ³¨">â€»</button>
+    <button class="tool-btn" onclick={() => applyCommand('toc')} title="ç”Ÿæˆç›®å½•">?</button>
     
     <span class="separator"></span>
     
     <div class="toolbar-group">
-      <button class="tool-btn" onclick={() => (showTableMenu = !showTableMenu)} title="±í¸ñ">
+      <button class="tool-btn" onclick={() => (showTableMenu = !showTableMenu)} title="è¡¨æ ¼">
         ?
       </button>
       {#if showTableMenu}
         <div class="dropdown-panel">
-          <button class="dropdown-item" onclick={() => { applyCommand('table'); showTableMenu = false }}>²åÈë±í¸ñ</button>
-          <button class="dropdown-item" onclick={() => { mergeTableCells(); showTableMenu = false }}>ºÏ²¢µ¥Ôª¸ñ</button>
-          <button class="dropdown-item" onclick={() => { insertTableRow(); showTableMenu = false }}>²åÈëĞĞ</button>
-          <button class="dropdown-item" onclick={() => { insertTableCol(); showTableMenu = false }}>²åÈëÁĞ</button>
-          <button class="dropdown-item" onclick={() => { deleteTableRow(); showTableMenu = false }}>É¾³ıĞĞ</button>
-          <button class="dropdown-item" onclick={() => { deleteTableCol(); showTableMenu = false }}>É¾³ıÁĞ</button>
+          <button class="dropdown-item" onclick={() => { applyCommand('table'); showTableMenu = false }}>æ’å…¥è¡¨æ ¼</button>
+          <button class="dropdown-item" onclick={() => { mergeTableCells(); showTableMenu = false }}>åˆå¹¶å•å…ƒæ ¼</button>
+          <button class="dropdown-item" onclick={() => { insertTableRow(); showTableMenu = false }}>æ’å…¥è¡Œ</button>
+          <button class="dropdown-item" onclick={() => { insertTableCol(); showTableMenu = false }}>æ’å…¥åˆ—</button>
+          <button class="dropdown-item" onclick={() => { deleteTableRow(); showTableMenu = false }}>åˆ é™¤è¡Œ</button>
+          <button class="dropdown-item" onclick={() => { deleteTableCol(); showTableMenu = false }}>åˆ é™¤åˆ—</button>
         </div>
       {/if}
     </div>
@@ -2587,7 +2587,7 @@
     bind:this={editor}
     contenteditable={$generating || lockEditing ? 'false' : 'true'}
     role="region"
-    aria-label="ÎÄµµ±à¼­Çø"
+    aria-label="æ–‡æ¡£ç¼–è¾‘åŒº"
     onmousedown={handleEditorMouseDown}
     oninput={handleEditableInput}
     onfocusin={handleEditableFocus}
@@ -2604,15 +2604,15 @@
       style={`left:${slashMenuLeft}px;top:${slashMenuTop}px;`}
       role="listbox"
       tabindex="-1"
-      aria-label="²åÈëÃüÁî²Ëµ¥"
+      aria-label="æ’å…¥å‘½ä»¤èœå•"
       onmousedown={(e) => e.stopPropagation()}
     >
       <div class="slash-menu-head">
-        <span>/ ÃüÁî</span>
-        <span class="query">{slashMenuQuery || 'È«²¿'}</span>
+        <span>/ å‘½ä»¤</span>
+        <span class="query">{slashMenuQuery || 'å…¨éƒ¨'}</span>
       </div>
       {#if currentSlashMenuItems().length === 0}
-        <div class="slash-empty">ÎŞÆ¥ÅäÃüÁî£¬°´ Backspace É¾³ı¹Ø¼ü×Ö¡£</div>
+        <div class="slash-empty">æ— åŒ¹é…å‘½ä»¤ï¼ŒæŒ‰ Backspace åˆ é™¤å…³é”®å­—ã€‚</div>
       {:else}
         <div class="slash-list">
           {#each currentSlashMenuItems() as item, idx}
@@ -2629,7 +2629,7 @@
           {/each}
         </div>
       {/if}
-      <div class="slash-menu-foot">¡ü¡ı Ñ¡Ôñ ¡¤ Enter Ö´ĞĞ ¡¤ Esc ¹Ø±Õ</div>
+      <div class="slash-menu-foot">â†‘â†“ é€‰æ‹© Â· Enter æ‰§è¡Œ Â· Esc å…³é—­</div>
     </div>
   {/if}
 
@@ -2644,17 +2644,18 @@
   {#if showFindReplace}
     <div class="find-replace-panel">
       <div class="find-replace-row">
-        <input type="text" bind:value={findText} placeholder="²éÕÒ..." />
-        <button class="btn-small" onclick={findNext}>ÏÂÒ»¸ö</button>
+        <input type="text" bind:value={findText} placeholder="æŸ¥æ‰¾..." />
+        <button class="btn-small" onclick={findNext}>ä¸‹ä¸€ä¸ª</button>
         <button class="btn-small" onclick={() => (showFindReplace = false)}>?</button>
       </div>
       <div class="find-replace-row">
-        <input type="text" bind:value={replaceText} placeholder="Ìæ»»Îª..." />
-        <button class="btn-small" onclick={replaceNext}>Ìæ»»</button>
-        <button class="btn-small" onclick={replaceAll}>È«²¿Ìæ»»</button>
+        <input type="text" bind:value={replaceText} placeholder="æ›¿æ¢ä¸º..." />
+        <button class="btn-small" onclick={replaceNext}>æ›¿æ¢</button>
+        <button class="btn-small" onclick={replaceAll}>å…¨éƒ¨æ›¿æ¢</button>
       </div>
     </div>
   {/if}
 </div>
+
 
 
