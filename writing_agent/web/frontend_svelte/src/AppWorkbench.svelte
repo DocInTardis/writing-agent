@@ -22,6 +22,21 @@
     sanitizeAiSelectionPayload,
     sanitizeAiStringList
   } from './lib/utils/ai_payload'
+  import { buildDocIrOps } from './lib/workbench/docIrOps'
+  import {
+    buildLibraryCards,
+    cardMatchesSearch,
+    estimateKb,
+    formatLibraryCardTime,
+    guessDocTitle
+  } from './lib/workbench/libraryCards'
+  import {
+    normalizeGraphMeta,
+    normalizeOriginalitySummary,
+    normalizeResumeState,
+    summarizeGraphMeta,
+    summarizeOriginalitySummary
+  } from './lib/workbench/metadata'
   import {
     appendChat,
     docId,
@@ -317,110 +332,6 @@
     return null
   }
 
-  function normalizeStringArray(raw: unknown): string[] {
-    if (!Array.isArray(raw)) return []
-    const out: string[] = []
-    const seen = new Set<string>()
-    for (const item of raw) {
-      const v = String(item || '').trim()
-      if (!v || seen.has(v)) continue
-      seen.add(v)
-      out.push(v)
-    }
-    return out
-  }
-
-  function normalizeResumeState(raw: any): ResumeState | null {
-    if (!raw || typeof raw !== 'object') return null
-    const status = String(raw.status || '').trim().toLowerCase()
-    if (status !== 'running' && status !== 'interrupted') return null
-    const composeModeRaw = String(raw.compose_mode || 'auto').trim().toLowerCase()
-    const composeMode =
-      composeModeRaw === 'continue' || composeModeRaw === 'overwrite' || composeModeRaw === 'auto'
-        ? (composeModeRaw as ResumeState['compose_mode'])
-        : 'auto'
-    return {
-      status: status as ResumeState['status'],
-      updated_at: Number(raw.updated_at || 0),
-      user_instruction: String(raw.user_instruction || '').trim(),
-      request_instruction: String(raw.request_instruction || '').trim(),
-      compose_mode: composeMode,
-      partial_chars: Number(raw.partial_chars || 0),
-      partial_preview: String(raw.partial_preview || '').trim(),
-      plan_sections: normalizeStringArray(raw.plan_sections),
-      completed_sections: normalizeStringArray(raw.completed_sections),
-      pending_sections: normalizeStringArray(raw.pending_sections),
-      cursor_anchor: String(raw.cursor_anchor || '').trim(),
-      error: String(raw.error || '').trim()
-    }
-  }
-
-  function normalizeGraphMeta(raw: unknown): GraphMeta | null {
-    if (!raw || typeof raw !== 'object') return null
-    const obj = raw as Record<string, unknown>
-    const path = String(obj.path || '').trim()
-    if (path !== 'route_graph') return null
-    return {
-      path: 'route_graph',
-      trace_id: String(obj.trace_id || '').trim(),
-      engine: String(obj.engine || '').trim(),
-      route_id: String(obj.route_id || '').trim(),
-      route_entry: String(obj.route_entry || '').trim()
-    }
-  }
-
-  function summarizeGraphMeta(meta: GraphMeta) {
-    const routeId = meta.route_id || 'default'
-    const routeEntry = meta.route_entry || 'planner'
-    const engine = meta.engine || 'legacy'
-    const trace = meta.trace_id ? meta.trace_id.slice(0, 8) : '-'
-    return `route=${routeId}; entry=${routeEntry}; engine=${engine}; trace=${trace}`
-  }
-
-  function normalizeOriginalitySummary(raw: unknown): OriginalitySummary | null {
-    if (!raw || typeof raw !== 'object') return null
-    const obj = raw as Record<string, unknown>
-    const rowsRaw = Array.isArray(obj.rows) ? obj.rows : []
-    const rows: OriginalityRiskRow[] = rowsRaw
-      .filter((row) => row && typeof row === 'object')
-      .map((row) => {
-        const item = row as Record<string, unknown>
-        return {
-          section: String(item.section || '').trim(),
-          section_id: String(item.section_id || '').trim(),
-          title: String(item.title || item.section || '').trim(),
-          phases: Array.isArray(item.phases) ? item.phases.map((v) => String(v || '').trim()).filter(Boolean) : [],
-          checked_event_count: Number(item.checked_event_count || 0),
-          failed_event_count: Number(item.failed_event_count || 0),
-          rewrite_count: Number(item.rewrite_count || 0),
-          retry_count: Number(item.retry_count || 0),
-          cache_rejected_count: Number(item.cache_rejected_count || 0),
-          fast_draft_rejected_count: Number(item.fast_draft_rejected_count || 0),
-          latest_passed: Boolean(item.latest_passed ?? true),
-          max_repeat_sentence_ratio: Number(item.max_repeat_sentence_ratio || 0),
-          max_formulaic_opening_ratio: Number(item.max_formulaic_opening_ratio || 0),
-          max_source_overlap_ratio: Number(item.max_source_overlap_ratio || 0)
-        }
-      })
-    return {
-      enabled: Boolean(obj.enabled ?? false),
-      eventCount: Number(obj.event_count || 0),
-      checkedSectionCount: Number(obj.checked_section_count || 0),
-      failedSectionCount: Number(obj.failed_section_count || 0),
-      failedSectionRatio: Number(obj.failed_section_ratio || 0),
-      rewriteCount: Number(obj.rewrite_count || 0),
-      retryCount: Number(obj.retry_count || 0),
-      cacheRejectedCount: Number(obj.cache_rejected_count || 0),
-      fastDraftRejectedCount: Number(obj.fast_draft_rejected_count || 0),
-      rows
-    }
-  }
-
-  function summarizeOriginalitySummary(summary: OriginalitySummary | null) {
-    if (!summary) return '原创性热采样未启用'
-    return `已检查 ${summary.checkedSectionCount} 节 · 风险 ${summary.failedSectionCount} 节 · 重写 ${summary.rewriteCount} 次 · 重试 ${summary.retryCount} 次`
-  }
-
   function focusAssistantInput() {
     queueMicrotask(() => {
       const input = document.querySelector('.assistant-sheet .composer textarea') as HTMLTextAreaElement | null
@@ -487,35 +398,10 @@
     }
   }
 
-  function guessDocTitle(text: string) {
-    const src = String(text || '')
-    const m = src.match(/^\s*#\s+(.+)$/m)
-    if (m && m[1]) return m[1].trim()
-    return '未命名文档'
-  }
-
-  function estimateKb(text: string) {
-    const chars = String(text || '').length
-    const bytes = chars * 2
-    return Math.max(1, Math.round(bytes / 1024))
-  }
-
   function metaPreviewSnippet() {
     const selected = selectedTargetPlainText()
     if (selected) return selected.slice(0, 140)
     return String($sourceText || '').replace(/\s+/g, ' ').trim().slice(0, 140)
-  }
-
-  function formatLibraryCardTime(ts: number) {
-    const now = Date.now()
-    const diff = Math.max(0, now - Number(ts || 0))
-    const minute = 60 * 1000
-    const hour = 60 * minute
-    const day = 24 * hour
-    if (diff < minute) return '刚刚更新'
-    if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
-    if (diff < day) return `${Math.floor(diff / hour)} 小时前`
-    return `${Math.floor(diff / day)} 天前`
   }
 
   function buildTopStatusLine() {
@@ -534,85 +420,6 @@
       parts.push(`查重峰值 ${Math.round(plagiarismMaxScore * 100)}%`)
     }
     return parts.join(' · ')
-  }
-
-  function buildLibraryCards(): LibraryCard[] {
-    const now = Date.now()
-    const docTitle = guessDocTitle($sourceText)
-    const wordLabel = `${Math.max(1, Number($wordCount || 0))} 词`
-    const routeLabel = lastGraphMeta?.route_id ? `路由:${lastGraphMeta.route_id}` : '路由:default'
-    const feedbackLabel =
-      feedbackItems.length > 0 ? `满意度 ${feedbackItems[0].rating}/5` : '待收集反馈'
-    const cards: LibraryCard[] = [
-      {
-        id: 'doc-main',
-        title: docTitle,
-        summary: metaPreviewSnippet() || '当前文档正文摘要',
-        status: 'draft',
-        status_label: '草稿',
-        kind_label: '正文',
-        tone: 'azure',
-        tags: ['当前文档', routeLabel, feedbackLabel],
-        updated_at: now - 2 * 60 * 1000,
-        size_label: wordLabel,
-        action: 'editor'
-      },
-      {
-        id: 'route-context',
-        title: '路由与上下文策略',
-        summary: lastGraphMeta ? summarizeGraphMeta(lastGraphMeta) : '默认图路由生效，可用于追踪生成链路。',
-        status: 'synced',
-        status_label: '已同步',
-        kind_label: '策略',
-        tone: 'teal',
-        tags: ['图路由', '上下文窗口', '可追踪'],
-        updated_at: now - 17 * 60 * 1000,
-        size_label: '策略卡',
-        action: 'metrics'
-      },
-      {
-        id: 'citation-kit',
-        title: '引用与证据包',
-        summary: '维护引用、脚注与来源一致性，导出前建议先核验。',
-        status: 'review',
-        status_label: '待核验',
-        kind_label: '引用',
-        tone: 'gold',
-        tags: ['引用', '脚注', '导出检查'],
-        updated_at: now - 48 * 60 * 1000,
-        size_label: '证据集',
-        action: 'citation'
-      },
-      {
-        id: 'version-archive',
-        title: '版本归档',
-        summary: versionGroups.length > 0
-          ? `已记录 ${versionGroups.length} 组版本，可随时回退。`
-          : '尚未创建版本，建议在关键阶段手动归档。',
-        status: versionGroups.length > 0 ? 'synced' : 'draft',
-        status_label: versionGroups.length > 0 ? '已同步' : '草稿',
-        kind_label: '版本',
-        tone: 'violet',
-        tags: ['回滚', '对比', '里程碑'],
-        updated_at: now - 2 * 60 * 60 * 1000,
-        size_label: `${versionGroups.length} 组`,
-        action: 'version'
-      },
-      {
-        id: 'asset-upload',
-        title: '上传新素材',
-        summary: '支持图片、文档、模板上传，自动纳入资料库并可插入正文。',
-        status: 'draft',
-        status_label: '待上传',
-        kind_label: '素材',
-        tone: 'azure',
-        tags: ['图片', '文档', '模板'],
-        updated_at: now - 8 * 60 * 60 * 1000,
-        size_label: '上传入口',
-        action: 'upload'
-      }
-    ]
-    return cards
   }
 
   function openLibraryCard(card: LibraryCard) {
@@ -643,15 +450,15 @@
     }
   }
 
-  function cardMatchesSearch(card: LibraryCard, query: string) {
-    if (!query) return true
-    const q = query.toLowerCase()
-    const haystack = `${card.title} ${card.summary} ${card.tags.join(' ')}`.toLowerCase()
-    return haystack.includes(q)
-  }
-
   $effect(() => {
-    const cards = buildLibraryCards()
+    const cards = buildLibraryCards({
+      sourceText: $sourceText,
+      wordCount: Number($wordCount || 0),
+      previewSnippet: metaPreviewSnippet(),
+      lastGraphMeta,
+      feedbackItems,
+      versionGroupCount: versionGroups.length
+    })
     const query = librarySearch.trim()
     filteredLibraryCards = cards.filter((card) => cardMatchesSearch(card, query))
     if (!librarySelectAll && selectedLibraryCardId && !filteredLibraryCards.some((card) => card.id === selectedLibraryCardId)) {
@@ -2714,116 +2521,6 @@
       return
     }
     window.location.href = `/api/doc/${id}/plagiarism/library_scan/download?report_id=${encodeURIComponent(rid)}&format=${format}`
-  }
-
-  function flattenSections(doc: any): any[] {
-    const out: any[] = []
-    const sections = Array.isArray(doc?.sections) ? doc.sections : []
-    const walk = (sec: any) => {
-      out.push(sec)
-      const children = Array.isArray(sec?.children) ? sec.children : []
-      children.forEach((child: any) => walk(child))
-    }
-    sections.forEach((sec: any) => walk(sec))
-    return out
-  }
-
-  function sectionSignature(sec: any): string {
-    const level = Math.max(1, Math.min(6, Number(sec?.level || 1)))
-    const title = String(sec?.title || '').trim()
-    const style = sec?.style && typeof sec.style === 'object' ? JSON.stringify(sec.style) : ''
-    return `${level}:${title}:${style}`
-  }
-
-  function blockPayload(block: any): Record<string, unknown> {
-    const t = String(block?.type || 'paragraph').toLowerCase()
-    const style = block?.style && typeof block.style === 'object' ? block.style : null
-    const runs = Array.isArray(block?.runs) ? block.runs : null
-    if (t === 'list') {
-      const items = Array.isArray(block?.items) ? block.items : []
-      const ordered = Boolean(block?.ordered)
-      const payload: Record<string, unknown> = { type: 'list', items, ordered }
-      if (style) payload.style = style
-      if (runs) payload.runs = runs
-      return payload
-    }
-    if (t === 'table') {
-      const payload: Record<string, unknown> = { type: 'table', table: block?.table || {} }
-      if (style) payload.style = style
-      if (runs) payload.runs = runs
-      return payload
-    }
-    if (t === 'figure') {
-      const payload: Record<string, unknown> = { type: 'figure', figure: block?.figure || {} }
-      if (style) payload.style = style
-      if (runs) payload.runs = runs
-      return payload
-    }
-    const text = String(block?.text || '')
-    const payload: Record<string, unknown> = { type: 'paragraph', text }
-    if (style) payload.style = style
-    if (runs) payload.runs = runs
-    return payload
-  }
-
-  function blockKey(block: any): string {
-    const t = String(block?.type || 'paragraph').toLowerCase()
-    const styleSig = block?.style ? `:style=${JSON.stringify(block?.style || {})}` : ''
-    const runSig = block?.runs ? `:runs=${JSON.stringify(block?.runs || [])}` : ''
-    if (t === 'list') return `list:${JSON.stringify(block?.items || [])}:${Boolean(block?.ordered)}${styleSig}`
-    if (t === 'table') return `table:${JSON.stringify(block?.table || {})}${styleSig}`
-    if (t === 'figure') return `figure:${JSON.stringify(block?.figure || {})}${styleSig}`
-    return `paragraph:${String(block?.text || '')}${styleSig}${runSig}`
-  }
-
-  function buildDocIrOps(baseDoc: any, nextDoc: any): Array<Record<string, unknown>> | null {
-    if (!baseDoc || !nextDoc) return null
-    const oldSecs = flattenSections(baseDoc)
-    const newSecs = flattenSections(nextDoc)
-    if (oldSecs.length !== newSecs.length) return null
-    for (let i = 0; i < oldSecs.length; i++) {
-      if (sectionSignature(oldSecs[i]) !== sectionSignature(newSecs[i])) return null
-      if (!oldSecs[i]?.id) return null
-    }
-    const ops: Array<Record<string, unknown>> = []
-    for (let i = 0; i < oldSecs.length; i++) {
-      const oldSec = oldSecs[i]
-      const newSec = newSecs[i]
-      const oldBlocks = Array.isArray(oldSec?.blocks) ? oldSec.blocks : []
-      const newBlocks = Array.isArray(newSec?.blocks) ? newSec.blocks : []
-      const oldIds = oldBlocks.map((b: any) => String(b?.id || '')).filter(Boolean)
-      const newIds = newBlocks.map((b: any) => String(b?.id || '')).filter(Boolean)
-      const oldIdSet = new Set(oldIds)
-      const newIdSet = new Set(newIds)
-      const oldMap = new Map(oldBlocks.map((b: any) => [String(b?.id || ''), b]))
-      for (const id of oldIds) {
-        if (!newIdSet.has(id)) ops.push({ op: 'delete', target_id: id })
-      }
-      const sharedNew = newIds.filter((id) => oldIdSet.has(id))
-      const working = oldIds.filter((id) => newIdSet.has(id))
-      sharedNew.forEach((id, idx) => {
-        const curIndex = working.indexOf(id)
-        if (curIndex === -1) return
-        if (curIndex !== idx) {
-          ops.push({ op: 'move', target_id: id, parent_id: String(oldSec.id), index: idx })
-          working.splice(curIndex, 1)
-          working.splice(idx, 0, id)
-        }
-      })
-      newBlocks.forEach((b: any, idx: number) => {
-        const id = String(b?.id || '')
-        if (id && oldIdSet.has(id)) {
-          const prev = oldMap.get(id)
-          if (prev && blockKey(prev) !== blockKey(b)) {
-            ops.push({ op: 'update', target_id: id, payload: blockPayload(b) })
-          }
-          return
-        }
-        const payload = blockPayload(b)
-        ops.push({ op: 'insert', parent_id: String(oldSec.id), index: idx, payload })
-      })
-    }
-    return ops
   }
 
   async function savePartialDraft() {
