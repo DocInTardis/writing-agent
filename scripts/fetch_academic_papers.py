@@ -1,4 +1,4 @@
-"""批量抓取学术论文，结合目录结构抽取知识点。
+r"""批量抓取学术论文，结合目录结构抽取知识点。
 
 流程：
     1. arXiv API 搜索 → 拿到论文 ID + 摘要
@@ -14,9 +14,7 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 import logging
-import os
 import re
 import sys
 import tarfile
@@ -104,7 +102,7 @@ def download_arxiv_source(arxiv_id: str, timeout: float = 30.0) -> bytes | None:
 
 
 def extract_toc_from_latex(tar_bytes: bytes) -> list[dict[str, Any]]:
-    """Extract \section{} and \subsection{} from LaTeX source in tarball."""
+    r"""Extract \section{} and \subsection{} from LaTeX source in tarball."""
     sections: list[dict[str, Any]] = []
     try:
         tf = tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz")
@@ -221,8 +219,8 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from writing_agent.v2.rag.knowledge_unit import KUStore
     from writing_agent.v2.rag.knowledge_graph import KnowledgeGraph
+    from writing_agent.v2.rag.knowledge_unit import KUStore
 
     store = KUStore(out_dir)
     kg = KnowledgeGraph()

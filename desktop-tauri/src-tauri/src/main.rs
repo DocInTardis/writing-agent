@@ -1,10 +1,11 @@
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::State;
-use wa_core::{Document, Editor, EditorCommand, Block, Inline, Style};
-use wa_engine::{LayoutEngine, LayoutCache, LayoutConfig};
+use wa_core::{Block, Document, Editor, EditorCommand, Inline, Style};
+use wa_engine::{LayoutCache, LayoutConfig, LayoutEngine};
 
 struct EditorState {
     editor: Editor,
@@ -15,6 +16,17 @@ struct EditorState {
 #[allow(dead_code)]
 struct SidecarState {
     process: Mutex<Option<Child>>,
+}
+
+impl Drop for SidecarState {
+    fn drop(&mut self) {
+        if let Ok(process) = self.process.get_mut() {
+            if let Some(child) = process.as_mut() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -157,13 +169,22 @@ fn count_in_inlines(inlines: &[Inline], query: &str) -> usize {
 
 fn count_in_block(block: &Block, query: &str) -> usize {
     match block {
-        Block::Heading { content, .. } | Block::Paragraph { content, .. } => count_in_inlines(content, query),
-        Block::List { items, .. } => items.iter().map(|i| count_in_inlines(&i.content, query)).sum(),
+        Block::Heading { content, .. } | Block::Paragraph { content, .. } => {
+            count_in_inlines(content, query)
+        }
+        Block::List { items, .. } => items
+            .iter()
+            .map(|i| count_in_inlines(&i.content, query))
+            .sum(),
         Block::Quote { content, .. } => content.iter().map(|b| count_in_block(b, query)).sum(),
         Block::Code { code, .. } => count_in_text(code.as_ref(), query),
         Block::Table { rows, .. } => rows
             .iter()
-            .map(|r| r.iter().map(|c| count_in_inlines(&c.content, query)).sum::<usize>())
+            .map(|r| {
+                r.iter()
+                    .map(|c| count_in_inlines(&c.content, query))
+                    .sum::<usize>()
+            })
             .sum(),
         Block::Figure { caption, .. } => caption
             .as_ref()
@@ -276,8 +297,8 @@ fn replace_in_block(block: &mut Block, query: &str, replacement: &str) -> usize 
 
 #[tauri::command]
 fn load_json(state: State<Mutex<EditorState>>, json: &str) -> Result<(), String> {
-    let doc: Document = serde_json::from_str(json)
-        .map_err(|e| format!("JSON parse error: {}", e))?;
+    let doc: Document =
+        serde_json::from_str(json).map_err(|e| format!("JSON parse error: {}", e))?;
     let mut guard = state.lock().map_err(|e| e.to_string())?;
     guard.editor = Editor::new(doc);
     Ok(())
@@ -286,14 +307,15 @@ fn load_json(state: State<Mutex<EditorState>>, json: &str) -> Result<(), String>
 #[tauri::command]
 fn export_json(state: State<Mutex<EditorState>>) -> Result<String, String> {
     let guard = state.lock().map_err(|e| e.to_string())?;
-    serde_json::to_string(&guard.editor.doc)
-        .map_err(|e| e.to_string())
+    serde_json::to_string(&guard.editor.doc).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn insert_text(state: State<Mutex<EditorState>>, text: &str) -> Result<(), String> {
     let mut guard = state.lock().map_err(|e| e.to_string())?;
-    guard.editor.execute(EditorCommand::InsertText(text.to_string()));
+    guard
+        .editor
+        .execute(EditorCommand::InsertText(text.to_string()));
     Ok(())
 }
 
@@ -364,7 +386,9 @@ fn insert_table(state: State<Mutex<EditorState>>, rows: usize, cols: usize) -> R
 #[tauri::command]
 fn insert_code(state: State<Mutex<EditorState>>, lang: String, code: String) -> Result<(), String> {
     let mut guard = state.lock().map_err(|e| e.to_string())?;
-    guard.editor.execute(EditorCommand::InsertCode { lang, code });
+    guard
+        .editor
+        .execute(EditorCommand::InsertCode { lang, code });
     Ok(())
 }
 
@@ -376,9 +400,15 @@ fn insert_image(state: State<Mutex<EditorState>>, url: String) -> Result<(), Str
 }
 
 #[tauri::command]
-fn insert_figure(state: State<Mutex<EditorState>>, url: String, caption: Option<String>) -> Result<(), String> {
+fn insert_figure(
+    state: State<Mutex<EditorState>>,
+    url: String,
+    caption: Option<String>,
+) -> Result<(), String> {
     let mut guard = state.lock().map_err(|e| e.to_string())?;
-    guard.editor.execute(EditorCommand::InsertFigure { url, caption });
+    guard
+        .editor
+        .execute(EditorCommand::InsertFigure { url, caption });
     Ok(())
 }
 
@@ -392,7 +422,9 @@ fn insert_quote(state: State<Mutex<EditorState>>, text: String) -> Result<(), St
 #[tauri::command]
 fn insert_link(state: State<Mutex<EditorState>>, url: String, text: String) -> Result<(), String> {
     let mut guard = state.lock().map_err(|e| e.to_string())?;
-    guard.editor.execute(EditorCommand::InsertLink { url, text });
+    guard
+        .editor
+        .execute(EditorCommand::InsertLink { url, text });
     Ok(())
 }
 
@@ -465,25 +497,36 @@ fn get_cursor_position(state: State<Mutex<EditorState>>) -> Result<CursorPositio
 #[tauri::command]
 fn get_stats(state: State<Mutex<EditorState>>) -> Result<DocStats, String> {
     let guard = state.lock().map_err(|e| e.to_string())?;
-    let char_count: usize = guard.editor.doc.blocks.iter().map(|b| {
-        match b {
-            Block::Paragraph { content, .. } | Block::Heading { content, .. } => {
-                content.iter().map(|i| match i {
+    let char_count: usize = guard
+        .editor
+        .doc
+        .blocks
+        .iter()
+        .map(|b| match b {
+            Block::Paragraph { content, .. } | Block::Heading { content, .. } => content
+                .iter()
+                .map(|i| match i {
                     Inline::Text { value } => value.chars().count(),
                     Inline::CodeSpan { value } => value.chars().count(),
-                    Inline::Link { text, .. } => text.iter().map(|t| match t {
-                        Inline::Text { value } => value.chars().count(),
-                        _ => 0,
-                    }).sum(),
-                    Inline::Styled { content, .. } => content.iter().map(|t| match t {
-                        Inline::Text { value } => value.chars().count(),
-                        _ => 0,
-                    }).sum(),
-                }).sum()
-            }
+                    Inline::Link { text, .. } => text
+                        .iter()
+                        .map(|t| match t {
+                            Inline::Text { value } => value.chars().count(),
+                            _ => 0,
+                        })
+                        .sum(),
+                    Inline::Styled { content, .. } => content
+                        .iter()
+                        .map(|t| match t {
+                            Inline::Text { value } => value.chars().count(),
+                            _ => 0,
+                        })
+                        .sum(),
+                })
+                .sum(),
             _ => 0,
-        }
-    }).sum();
+        })
+        .sum();
 
     Ok(DocStats {
         char_count,
@@ -500,12 +543,12 @@ fn layout(state: State<Mutex<EditorState>>, width: f32) -> Result<Vec<LayoutBloc
         ..Default::default()
     };
 
-    let EditorState { editor, layout_engine, layout_cache } = &mut *guard;
-    let layout_tree = layout_engine.layout_cached(
-        &editor.doc,
-        &config,
+    let EditorState {
+        editor,
+        layout_engine,
         layout_cache,
-    );
+    } = &mut *guard;
+    let layout_tree = layout_engine.layout_cached(&editor.doc, &config, layout_cache);
 
     let mut blocks_info = Vec::new();
     for page in &layout_tree.pages {
@@ -566,7 +609,11 @@ fn find(state: State<Mutex<EditorState>>, query: &str) -> Result<Vec<FindHit>, S
 }
 
 #[tauri::command]
-fn replace(state: State<Mutex<EditorState>>, query: &str, replacement: &str) -> Result<usize, String> {
+fn replace(
+    state: State<Mutex<EditorState>>,
+    query: &str,
+    replacement: &str,
+) -> Result<usize, String> {
     let mut guard = state.lock().map_err(|e| e.to_string())?;
     if query.is_empty() {
         return Ok(0);
@@ -601,14 +648,53 @@ fn ping() -> String {
     "pong".to_string()
 }
 
+fn project_root() -> Option<PathBuf> {
+    if let Some(value) = std::env::var_os("WRITING_AGENT_PROJECT_ROOT") {
+        return Some(PathBuf::from(value));
+    }
+    let cwd = std::env::current_dir().ok()?;
+    if cwd.file_name().and_then(|name| name.to_str()) == Some("desktop-tauri") {
+        return cwd.parent().map(Path::to_path_buf);
+    }
+    Some(cwd)
+}
+
 fn start_python_backend() -> Result<Child, String> {
-    let exe_path = std::path::PathBuf::from("python-backend.exe");
-    let child = Command::new(&exe_path)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+    let root = project_root().ok_or_else(|| "could not resolve project root".to_string())?;
+    let bundled = PathBuf::from("python-backend.exe");
+    let configured = std::env::var_os("WRITING_AGENT_PYTHON_BACKEND").map(PathBuf::from);
+    let windows_venv = root.join(".venv").join("Scripts").join("python.exe");
+    let unix_venv = root.join(".venv").join("bin").join("python");
+
+    let executable = configured
+        .or_else(|| bundled.exists().then_some(bundled))
+        .or_else(|| windows_venv.exists().then_some(windows_venv))
+        .or_else(|| unix_venv.exists().then_some(unix_venv))
+        .ok_or_else(|| {
+            "Python backend not found; set WRITING_AGENT_PYTHON_BACKEND or create the project .venv"
+                .to_string()
+        })?;
+
+    let is_bundled =
+        executable.file_name().and_then(|name| name.to_str()) == Some("python-backend.exe");
+    let mut command = Command::new(&executable);
+    if !is_bundled {
+        command
+            .args(["-m", "writing_agent.launch"])
+            .current_dir(&root);
+    }
+    command
+        // The desktop shell does not consume child output; piping could block
+        // the backend once the OS pipe buffer fills.
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("Failed to start python backend: {}", e))?;
-    Ok(child)
+        .map_err(|e| {
+            format!(
+                "failed to start Python backend with {}: {e}",
+                executable.display()
+            )
+        })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -622,11 +708,15 @@ pub fn run() {
     let sidecar = match start_python_backend() {
         Ok(child) => {
             println!("Python backend started with PID: {}", child.id());
-            SidecarState { process: Mutex::new(Some(child)) }
+            SidecarState {
+                process: Mutex::new(Some(child)),
+            }
         }
         Err(e) => {
             eprintln!("Warning: could not start Python backend sidecar: {}", e);
-            SidecarState { process: Mutex::new(None) }
+            SidecarState {
+                process: Mutex::new(None),
+            }
         }
     };
 

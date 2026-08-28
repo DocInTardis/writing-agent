@@ -1,4 +1,4 @@
-"""Batch paper fetcher with resume support and progress tracking.
+r"""Batch paper fetcher with resume support and progress tracking.
 
 Run this and it will keep going until the target is reached.
 If interrupted, re-run and it will resume from where it left off.
@@ -26,14 +26,13 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 logger = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from writing_agent.v2.rag.knowledge_unit import KUStore
-from writing_agent.v2.rag.knowledge_graph import KnowledgeGraph
-from scripts.fetch_academic_papers import (
-    fetch_arxiv_ids,
+from scripts.fetch_academic_papers import (  # noqa: E402
     download_arxiv_source,
     extract_toc_from_latex,
+    fetch_arxiv_ids,
 )
-
+from writing_agent.v2.rag.knowledge_graph import KnowledgeGraph  # noqa: E402
+from writing_agent.v2.rag.knowledge_unit import KUStore  # noqa: E402
 
 PROGRESS_FILE = Path(".data/kg/batch_progress.json")
 PROCESSED_IDS_FILE = Path(".data/kg/processed_ids.json")

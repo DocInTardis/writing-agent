@@ -6,7 +6,7 @@ This module belongs to `writing_agent.v2` in the writing-agent codebase.
 from __future__ import annotations
 
 import re
-from typing import Callable
+from collections.abc import Callable
 
 
 def clean_section_title(
@@ -88,7 +88,7 @@ def clean_section_title(
     for key in sorted(anchors, key=len, reverse=True):
         if key in s:
             return key
-    s = re.split(r"[\u3002\uff01\uff1f\uff1b;\uff1a\uff0c,、…]", s, 1)[0].strip()
+    s = re.split(r"[\u3002\uff01\uff1f\uff1b;\uff1a\uff0c,、…]", s, maxsplit=1)[0].strip()
     if len(s) > 18:
         s = s[:18].strip()
     return s

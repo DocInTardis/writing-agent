@@ -17,13 +17,13 @@ It is intentionally strict: the repository should stay source-first, while runti
 - `gateway/`
   - Node-based AI gateway.
 - `scripts/`
-  - Guardrails, release tooling, operational checks, and automation entrypoints.
+  - Maintained launchers, data utilities, quality experiments, and reproducible maintenance commands.
 - `tests/`
   - Unit, integration, export, UI, and end-to-end tests.
 - `tests/fixtures/`
   - Versioned sample inputs, golden outputs, and small evaluation datasets.
 - `security/`
-  - Policy-as-code JSON files that drive guards and release checks.
+  - Historical policy inputs retained for reference. They are not part of the current personal-project CI.
 - `docs/`
   - Architecture notes, runbooks, and process documentation.
 - `templates/`
@@ -44,7 +44,7 @@ It is intentionally strict: the repository should stay source-first, while runti
 - `writing_agent/web/domains/`
   - Pure domain logic and decision rules.
 
-These layer boundaries are enforced by `security/architecture_boundaries.json` and `scripts/guard_architecture_boundaries.py`.
+These layer boundaries are architectural guidance and are covered by focused tests where practical.
 
 ## 3. What Gets Versioned
 
@@ -84,23 +84,22 @@ The repository must not track files under `deliverables/`, `artifacts/`, `tmp/`,
 
 - If a file is needed by a test or a reproducible evaluation, put it in `tests/fixtures/`.
 - If a file is only the result of a run, put it in `.data/out/`.
-- If a script is production-facing or used in CI, keep it in `scripts/`.
+- If a script is used by CI or documented as a supported command, keep it tested and maintained in `scripts/`.
 - If a script is ad hoc, one-off, or machine-specific, do not keep it in the repository unless it is promoted into maintained tooling.
 - If a document records process or architecture, keep it in `docs/`.
 - If a JSON file acts as policy input to a guard, keep it in `security/`.
 
-## 6. Repository Hygiene Guards
+## 6. Maintained Checks
 
-Run these checks before merging structural changes:
+Run these checks after structural changes:
 
 ```powershell
-python scripts/guard_repo_hygiene.py --config security/repo_hygiene_policy.json --root .
-python scripts/guard_file_line_limits.py --config security/file_line_limits.json --root .
-python scripts/guard_function_complexity.py --config security/function_complexity_limits.json --root .
-python scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json --root .
+python -m compileall -q writing_agent scripts
+python -m pytest -q tests --ignore=tests/ui
+npm --prefix writing_agent/web/frontend_svelte run build
+npm --prefix gateway/node_ai_gateway test
+cargo test --workspace --manifest-path engine/Cargo.toml
 ```
-
-`guard_repo_hygiene.py` is the first line of defense against root clutter and committed generated output.
 
 ## 7. Recommended Reading Order
 

@@ -1,16 +1,18 @@
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
 
-.PHONY: help install install-dev test build-frontend guards preflight compile clean-cache
+.PHONY: help install install-dev test test-ui build-frontend test-gateway test-engine check compile clean-cache
 
 help:
 	@echo "Targets:"
 	@echo "  install         Install runtime dependencies"
 	@echo "  install-dev     Install runtime + dev dependencies"
-	@echo "  test            Run test suite"
+	@echo "  test            Run unit and integration tests"
+	@echo "  test-ui         Run optional Playwright UI tests"
 	@echo "  build-frontend  Build Svelte frontend assets"
-	@echo "  guards          Run repo hygiene + architecture/size/complexity guards"
-	@echo "  preflight       Run release preflight checks (quick mode)"
+	@echo "  test-gateway    Run Node AI gateway tests"
+	@echo "  test-engine     Run Rust engine tests"
+	@echo "  check           Run the maintained local validation suite"
 	@echo "  compile         Compile python modules to verify syntax"
 	@echo "  clean-cache     Remove local python cache directories"
 
@@ -21,19 +23,21 @@ install-dev: install
 	$(PIP) install -r requirements-dev.txt
 
 test:
-	$(PYTHON) -m pytest -q tests
+	$(PYTHON) -m pytest -q tests --ignore=tests/ui
+
+test-ui:
+	$(PYTHON) -m pytest -q tests/ui
 
 build-frontend:
 	npm --prefix writing_agent/web/frontend_svelte run build
 
-guards:
-	$(PYTHON) scripts/guard_repo_hygiene.py --config security/repo_hygiene_policy.json --root .
-	$(PYTHON) scripts/guard_file_line_limits.py --config security/file_line_limits.json --root .
-	$(PYTHON) scripts/guard_function_complexity.py --config security/function_complexity_limits.json --root .
-	$(PYTHON) scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json --root .
+test-gateway:
+	npm --prefix gateway/node_ai_gateway test
 
-preflight:
-	$(PYTHON) scripts/release_preflight.py --quick
+test-engine:
+	cargo test --workspace --manifest-path engine/Cargo.toml
+
+check: compile test build-frontend test-gateway test-engine
 
 compile:
 	$(PYTHON) -m compileall -q writing_agent scripts

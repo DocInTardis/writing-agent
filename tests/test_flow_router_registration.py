@@ -7,11 +7,23 @@ import writing_agent.web.app_v2 as app_v2
 
 def _path_endpoint_modules():
     mapping: dict[str, set[str]] = defaultdict(set)
-    for route in app_v2.app.routes:
-        path = getattr(route, "path", "")
-        endpoint = getattr(route, "endpoint", None)
-        module = getattr(endpoint, "__module__", "") if endpoint else ""
-        mapping[path].add(module)
+
+    def visit(routes, prefix: str = "") -> None:
+        for route in routes:
+            path = f"{prefix}{getattr(route, 'path', '')}"
+            endpoint = getattr(route, "endpoint", None)
+            if endpoint is not None:
+                mapping[path].add(getattr(endpoint, "__module__", ""))
+            child_routes = getattr(route, "routes", None)
+            if child_routes is None:
+                original_router = getattr(route, "original_router", None)
+                child_routes = getattr(original_router, "routes", None)
+            if child_routes:
+                visit(child_routes, path)
+
+    # FastAPI 0.141+ may preserve included routers as nested route groups,
+    # while older versions flatten them into app.routes.  Walk both shapes.
+    visit(app_v2.app.routes)
     return mapping
 
 

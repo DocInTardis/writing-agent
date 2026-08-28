@@ -1,4 +1,4 @@
-﻿.editor {
+.editor {
     display: grid;
     gap: 12px;
   }
@@ -92,14 +92,14 @@
     color: rgba(71, 85, 105, 0.9);
   }
 
-  :global(.editable .wa-block-selected) {
+  .editable .wa-block-selected {
     outline: none;
     box-shadow: inset 3px 0 0 rgba(37, 99, 235, 0.7);
     background: rgba(37, 99, 235, 0.04);
     border-radius: 6px;
   }
 
-  :global(.editable [data-wa-edit='1']:focus) {
+  .editable [data-wa-edit='1']:focus {
     outline: 2px solid rgba(90, 140, 255, 0.35);
     border-radius: 6px;
   }
@@ -150,7 +150,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc) {
+  .editable[data-render-mode='doc'] .wa-doc {
     width: 100%;
     max-width: none;
     margin: 0;
@@ -163,40 +163,40 @@
   }
 
   /* 编辑态隐藏页眉页脚占位，避免空文档时视觉噪音 */
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-header),
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-footer) {
+  .editable[data-render-mode='doc'] .wa-doc .wa-header,
+  .editable[data-render-mode='doc'] .wa-doc .wa-footer {
     display: none;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-header),
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-footer) {
+  .editable[data-render-mode='doc'] .wa-doc .wa-header,
+  .editable[data-render-mode='doc'] .wa-doc .wa-footer {
     font-size: 12px;
     color: #78716c;
     text-align: center;
     letter-spacing: 0.04em;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-header) {
+  .editable[data-render-mode='doc'] .wa-doc .wa-header {
     border-bottom: 1px solid #e2e8f0;
     padding-bottom: 6px;
     margin-bottom: 10px;
     min-height: 14px;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-header:empty) {
+  .editable[data-render-mode='doc'] .wa-doc .wa-header:empty {
     border-bottom: none;
     padding-bottom: 0;
     margin-bottom: 0;
     min-height: 0;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-footer) {
+  .editable[data-render-mode='doc'] .wa-doc .wa-footer {
     border-top: 1px solid #e2e8f0;
     padding-top: 6px;
     margin-top: 24px;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-title) {
+  .editable[data-render-mode='doc'] .wa-doc .wa-title {
     text-align: center;
     margin-bottom: 22px;
     font-size: 26px;
@@ -204,43 +204,43 @@
     letter-spacing: 0.02em;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc h1),
-  :global(.editable[data-render-mode='doc'] .wa-doc h2),
-  :global(.editable[data-render-mode='doc'] .wa-doc h3) {
+  .editable[data-render-mode='doc'] .wa-doc h1,
+  .editable[data-render-mode='doc'] .wa-doc h2,
+  .editable[data-render-mode='doc'] .wa-doc h3 {
     margin: 18px 0 10px;
     font-weight: 600;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc h2) {
+  .editable[data-render-mode='doc'] .wa-doc h2 {
     text-align: center;
     text-indent: 0;
     letter-spacing: 0.02em;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc p) {
+  .editable[data-render-mode='doc'] .wa-doc p {
     margin: 6px 0;
     line-height: 1.8;
     text-align: justify;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc ul),
-  :global(.editable[data-render-mode='doc'] .wa-doc ol) {
+  .editable[data-render-mode='doc'] .wa-doc ul,
+  .editable[data-render-mode='doc'] .wa-doc ol {
     padding-left: 22px;
     margin: 6px 0;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc li) {
+  .editable[data-render-mode='doc'] .wa-doc li {
     line-height: 1.7;
     margin: 2px 0;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc figure) {
+  .editable[data-render-mode='doc'] .wa-doc figure {
     margin: 14px 0;
     text-align: center;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-figure-box),
-  :global(.editable[data-render-mode='doc'] .wa-doc .wa-table-box) {
+  .editable[data-render-mode='doc'] .wa-doc .wa-figure-box,
+  .editable[data-render-mode='doc'] .wa-doc .wa-table-box {
     height: 140px;
     border: 1px dashed #78716c;
     color: #a8a29e;
@@ -250,20 +250,20 @@
     font-size: 14px;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc table) {
+  .editable[data-render-mode='doc'] .wa-doc table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 8px;
     font-size: 14px;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc th),
-  :global(.editable[data-render-mode='doc'] .wa-doc td) {
+  .editable[data-render-mode='doc'] .wa-doc th,
+  .editable[data-render-mode='doc'] .wa-doc td {
     border: 1px solid #a8a29e;
     padding: 6px 8px;
   }
 
-  :global(.editable[data-render-mode='doc'] .wa-doc figcaption) {
+  .editable[data-render-mode='doc'] .wa-doc figcaption {
     margin-top: 6px;
     font-size: 12px;
     color: #a8a29e;
@@ -304,7 +304,7 @@
     box-shadow: 0 0 0 3px rgba(140, 100, 50, 0.15), 0 18px 40px rgba(70, 50, 20, 0.12);
   }
 
-  :global(.editable[data-empty='1'])::before {
+  .editable[data-empty='1']::before {
     content: attr(data-empty-hint);
     color: rgba(100, 90, 70, 0.5);
     pointer-events: none;
@@ -317,55 +317,55 @@
     white-space: nowrap;
   }
 
-  :global(.editor.paper .editable[data-empty='1'])::before {
+  .editor.paper .editable[data-empty='1']::before {
     left: 16mm;
     top: 18mm;
   }
 
-  :global(.editable[data-empty='1'][data-caret-active='1'])::before {
+  .editable[data-empty='1'][data-caret-active='1']::before {
     opacity: 0;
   }
 
-  :global(.editable[data-empty='1'] [data-block-id]:first-of-type),
-  :global(.editable[data-empty='1'] [data-section-id]:first-of-type) {
+  .editable[data-empty='1'] [data-block-id]:first-of-type,
+  .editable[data-empty='1'] [data-section-id]:first-of-type {
     text-indent: 0;
   }
 
-  :global(.editable[data-readonly='1']) {
+  .editable[data-readonly='1'] {
     cursor: not-allowed;
   }
 
-  :global(.editable h1),
-  :global(.editable h2),
-  :global(.editable h3) {
+  .editable h1,
+  .editable h2,
+  .editable h3 {
     margin: 16px 0 10px;
     font-weight: 700;
   }
 
-  :global(.editor.paper .editable h1),
-  :global(.editor.paper .editable h2),
-  :global(.editor.paper .editable h3) {
+  .editor.paper .editable h1,
+  .editor.paper .editable h2,
+  .editor.paper .editable h3 {
     text-indent: 0;
     margin: 0 0 16pt;
     font-weight: 700;
   }
 
-  :global(.editable h1) {
+  .editable h1 {
     font-size: 20px;
   }
 
-  :global(.editor.paper .editable h1) {
+  .editor.paper .editable h1 {
     font-size: 22pt;
     text-align: center;
     letter-spacing: 0.5pt;
     margin-top: 0;
   }
 
-  :global(.editable h2) {
+  .editable h2 {
     font-size: 17px;
   }
 
-  :global(.editor.paper .editable h2) {
+  .editor.paper .editable h2 {
     font-size: 16pt;
     margin-top: 18pt;
     text-align: center;
@@ -373,42 +373,42 @@
     letter-spacing: 0.2pt;
   }
 
-  :global(.editable h3) {
+  .editable h3 {
     font-size: 15px;
   }
 
-  :global(.editor.paper .editable h3) {
+  .editor.paper .editable h3 {
     font-size: 14pt;
     margin-top: 14pt;
   }
 
-  :global(.editable p) {
+  .editable p {
     margin: 8px 0;
   }
 
-  :global(.editor.paper .editable p) {
+  .editor.paper .editable p {
     margin: 0 0 12pt;
     text-indent: 0;
     text-align: justify;
   }
 
-  :global(.editable ul),
-  :global(.editable ol) {
+  .editable ul,
+  .editable ol {
     padding-left: 24px;
   }
 
-  :global(.editor.paper .editable ul),
-  :global(.editor.paper .editable ol) {
+  .editor.paper .editable ul,
+  .editor.paper .editable ol {
     margin: 0 0 12pt 0;
     padding-left: 2.2em;
   }
 
-  :global(.editor.paper .editable li) {
+  .editor.paper .editable li {
     text-indent: 0;
     margin: 0 0 8pt;
   }
 
-  :global(.editor.paper .editable blockquote) {
+  .editor.paper .editable blockquote {
     margin: 0 0 12pt;
     padding: 0.4em 0 0.4em 1.2em;
     border-left: 3px solid rgba(120, 90, 50, 0.3);
@@ -416,14 +416,14 @@
     color: #4b3d2a;
   }
 
-  :global(.editable pre) {
+  .editable pre {
     background: rgba(120, 110, 90, 0.08);
     padding: 10px 12px;
     border-radius: 10px;
   }
 
-  :global(.editable .wa-figure),
-  :global(.editable .wa-table) {
+  .editable .wa-figure,
+  .editable .wa-table {
     display: grid;
     gap: 6px;
     border: 1px dashed rgba(37, 99, 235, 0.35);
@@ -433,8 +433,8 @@
     background: rgba(255, 255, 255, 0.8);
   }
 
-  :global(.editable .wa-figure-box),
-  :global(.editable .wa-table-box) {
+  .editable .wa-figure-box,
+  .editable .wa-table-box {
     width: 100%;
     min-height: 160px;
     border-radius: 12px;
@@ -446,24 +446,24 @@
     overflow: hidden;
   }
 
-  :global(.editable .wa-figure-box svg) {
+  .editable .wa-figure-box svg {
     width: 100%;
     height: auto;
     display: block;
   }
 
-  :global(.editable .wa-figure-loading) {
+  .editable .wa-figure-loading {
     font-size: 12px;
     color: rgba(250, 249, 247, 0.6);
   }
 
-  :global(.editable figcaption),
-  :global(.editable .wa-table-caption) {
+  .editable figcaption,
+  .editable .wa-table-caption {
     font-size: 13px;
     color: #5b4a33;
   }
 
-  :global(.editable img) {
+  .editable img {
     max-width: 100%;
     height: auto;
     border-radius: 8px;
@@ -471,12 +471,12 @@
     transition: opacity 0.3s ease;
   }
 
-  :global(.editable img[data-src]) {
+  .editable img[data-src] {
     opacity: 0.3;
     background: rgba(200, 180, 150, 0.1);
   }
 
-  :global(.editable pre) {
+  .editable pre {
     background: #2d2d2d;
     color: #ccc;
     padding: 16px;
@@ -488,19 +488,19 @@
     line-height: 1.5;
   }
 
-  :global(.editable pre code) {
+  .editable pre code {
     background: none;
     padding: 0;
     border-radius: 0;
   }
 
-  :global(.editable .math-inline) {
+  .editable .math-inline {
     display: inline-block;
     margin: 0 2px;
     color: #1a5490;
   }
 
-  :global(.editable .math-block) {
+  .editable .math-block {
     display: block;
     margin: 16px 0;
     padding: 12px;
@@ -509,29 +509,29 @@
     overflow-x: auto;
   }
 
-  :global(.editable table) {
+  .editable table {
     width: 100%;
     border-collapse: collapse;
     margin: 10px 0;
   }
 
-  :global(.editable table td),
-  :global(.editable table th) {
+  .editable table td,
+  .editable table th {
     border: 1px solid rgba(90, 70, 45, 0.25);
     padding: 8px;
   }
 
-  :global(.editable a) {
+  .editable a {
     color: #a5722a;
     text-decoration: underline;
   }
 
-  :global(.editable u) {
+  .editable u {
     text-decoration: underline;
   }
 
-  :global(.editable s),
-  :global(.editable del) {
+  .editable s,
+  .editable del {
     text-decoration: line-through;
   }
 
@@ -678,29 +678,29 @@
     border-color: rgba(90, 70, 45, 0.5);
   }
 
-  :global(.editable .footnotes-section) {
+  .editable .footnotes-section {
     margin-top: 40px;
     padding-top: 20px;
   }
 
-  :global(.editable .footnotes-section h3) {
+  .editable .footnotes-section h3 {
     font-size: 16px;
     margin-bottom: 12px;
   }
 
-  :global(.editable .footnote-item) {
+  .editable .footnote-item {
     font-size: 13px;
     color: #5b4a33;
     margin-bottom: 8px;
     line-height: 1.6;
   }
 
-  :global(.editable .footnote-item sup) {
+  .editable .footnote-item sup {
     color: #a5722a;
     margin-right: 6px;
   }
 
-  :global(.editable .toc-section a:hover) {
+  .editable .toc-section a:hover {
     text-decoration: underline;
   }
 

@@ -1,235 +1,34 @@
-Param(
+param(
   [string]$HostAddress = "127.0.0.1",
   [int]$Port = 8000,
-  [string]$Model = "qwen2.5:3b",
-  [string]$OllamaHost = "http://127.0.0.1:11434",
   [string]$IndexUrl = "",
-  [switch]$SkipInstall,
-  [switch]$SkipPull
+  [switch]$SkipInstall
 )
 
 $ErrorActionPreference = "Stop"
-
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
+Remove-Item Env:PYTHON_HOME -ErrorAction SilentlyContinue
 
-function Load-CodexAuthOpenAIKey {
-  if ($env:WRITING_AGENT_OPENAI_API_KEY -and $env:WRITING_AGENT_OPENAI_API_KEY.Trim().Length -gt 0) {
-    return
-  }
-  try {
-    $authPath = Join-Path $env:USERPROFILE ".codex\auth.json"
-    if (-not (Test-Path $authPath)) { return }
-    $raw = Get-Content $authPath -Raw -ErrorAction Stop
-    if (-not $raw) { return }
-    $obj = $raw | ConvertFrom-Json -ErrorAction Stop
-    $k = [string]$obj.OPENAI_API_KEY
-    if ($k -and $k.Trim().Length -gt 0) {
-      $env:WRITING_AGENT_OPENAI_API_KEY = $k.Trim()
-    }
-  } catch {
-    # keep startup resilient; key can still be supplied via env
-  }
-}
-
-function Resolve-OpenAIBatConfigPaths {
-  $paths = New-Object System.Collections.Generic.List[string]
-  $roots = @(
-    "D:\Download",
-    "D:\下载",
-    (Join-Path $env:USERPROFILE "Downloads"),
-    (Join-Path $env:USERPROFILE "Download")
-  )
-  foreach ($root in $roots) {
-    if (-not $root) { continue }
-    if (-not (Test-Path $root)) { continue }
-    try {
-      Get-ChildItem -Path $root -Filter "*美刀配置*.bat" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
-        ForEach-Object {
-          if ($_.FullName -and -not $paths.Contains($_.FullName)) {
-            [void]$paths.Add($_.FullName)
-          }
-        }
-    } catch {
-      continue
-    }
-  }
-  return @($paths.ToArray())
-}
-
-# Force GPT provider/model defaults for this launcher (all runtime stages).
-$env:WRITING_AGENT_LLM_PROVIDER = "openai"
-if (-not $env:WRITING_AGENT_OPENAI_BASE_URL) { $env:WRITING_AGENT_OPENAI_BASE_URL = "https://api.openai.com/v1" }
-$batConfigPaths = Resolve-OpenAIBatConfigPaths
-if ($batConfigPaths.Count -gt 0) {
-  $env:WRITING_AGENT_OPENAI_BAT_CONFIG_PATHS = ($batConfigPaths -join ";")
-  $env:WRITING_AGENT_OPENAI_BAT_DISCOVERY = "0"
-}
-Load-CodexAuthOpenAIKey
-$env:WRITING_AGENT_OPENAI_MODEL = "gpt-5.4"
-$env:WRITING_AGENT_MODEL = "gpt-5.4"
-$env:WRITING_AGENT_AGG_MODEL = "gpt-5.4"
-$env:WRITING_AGENT_WORKER_MODELS = "gpt-5.4"
-$env:WRITING_AGENT_DRAFT_MAIN_MODEL = "gpt-5.4"
-$env:WRITING_AGENT_DRAFT_SUPPORT_MODEL = "gpt-5.4"
-$env:WRITING_AGENT_OPENAI_TIMEOUT_S = "180"
-$env:WRITING_AGENT_USE_OLLAMA = "0"
-$env:WRITING_AGENT_RAG_USE_EMBEDDINGS = "0"
-$SkipPull = $true
-
+$python = Join-Path $repoRoot ".venv\Scripts\python.exe"
 if (-not $SkipInstall) {
-  function Invoke-PipInstall([string]$Index) {
-    if ($Index -and $Index.Trim().Length -gt 0) {
-      .\\.venv\\Scripts\\pip install -r requirements.txt -i $Index
-    } else {
-      .\\.venv\\Scripts\\pip install -r requirements.txt
-    }
-    if ($LASTEXITCODE -ne 0) {
-      throw "pip install failed with exit code $LASTEXITCODE"
-    }
-  }
-
-  if (-not (Test-Path ".venv\\Scripts\\python.exe")) {
+  if (-not (Test-Path $python)) {
     python -m venv .venv
   }
-
-  try {
-    Invoke-PipInstall $IndexUrl
-  } catch {
-    if (-not ($IndexUrl -and $IndexUrl.Trim().Length -gt 0)) {
-      Write-Host "pip install failed. Retrying with official index (https://pypi.org/simple) ..."
-      Invoke-PipInstall "https://pypi.org/simple"
-    } else {
-      throw
-    }
+  $pipArgs = @("-m", "pip", "install", "-e", ".[desktop]")
+  if ($IndexUrl.Trim()) {
+    $pipArgs += @("--index-url", $IndexUrl.Trim())
+  }
+  & $python @pipArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "Desktop dependency installation failed."
   }
 }
 
-$env:OLLAMA_HOST = $OllamaHost
-$env:OLLAMA_MODEL = $Model
-
-function Resolve-OllamaExe {
-  $cmd = Get-Command ollama -ErrorAction SilentlyContinue
-  if ($cmd) { return $cmd.Source }
-  $candidates = @(
-    Join-Path $env:LOCALAPPDATA "Programs\\Ollama\\ollama.exe",
-    Join-Path $env:ProgramFiles "Ollama\\ollama.exe"
-  )
-  foreach ($c in $candidates) {
-    if ($c -and (Test-Path $c)) { return $c }
-  }
-  return $null
-}
-
-$OllamaExe = Resolve-OllamaExe
-if ($OllamaExe) {
-  $ollamaDir = Split-Path $OllamaExe -Parent
-  if ($env:PATH -notlike "*$ollamaDir*") { $env:PATH = "$ollamaDir;$env:PATH" }
-} else {
-  Write-Host "ollama not found. Continuing without Ollama (WRITING_AGENT_USE_OLLAMA=0)."
-  $env:WRITING_AGENT_USE_OLLAMA = "0"
-  $SkipPull = $true
-}
-
-function Test-OllamaPort {
-  try {
-    $uri = [Uri]$env:OLLAMA_HOST
-    $host = $uri.Host
-    $port = $uri.Port
-    $client = New-Object System.Net.Sockets.TcpClient
-    $iar = $client.BeginConnect($host, $port, $null, $null)
-    $ok = $iar.AsyncWaitHandle.WaitOne(500)
-    if ($ok -and $client.Connected) {
-      $client.EndConnect($iar) | Out-Null
-      $client.Close()
-      return $true
-    }
-    try { $client.Close() } catch {}
-    return $false
-  } catch {
-    return $false
-  }
-}
-
-if (-not (Test-OllamaPort)) {
-  if ($env:WRITING_AGENT_USE_OLLAMA -ne "0") {
-    Write-Host "Starting Ollama service (ollama serve) ..."
-    try {
-      $exe = $OllamaExe
-      if (-not $exe) { $exe = "ollama" }
-      Start-Process -WindowStyle Hidden -FilePath $exe -ArgumentList "serve"
-      Start-Sleep -Milliseconds 800
-    } catch {
-      Write-Host "Failed to start Ollama. Continuing without Ollama."
-      $env:WRITING_AGENT_USE_OLLAMA = "0"
-      $SkipPull = $true
-    }
-  }
-}
-
-if (-not $SkipPull) {
-  $hasModel = $false
-  try {
-    $exe = $OllamaExe
-    if (-not $exe) { $exe = "ollama" }
-    $list = & $exe list 2>$null
-    if ($list) {
-      $hasModel = [bool]($list | Select-String -SimpleMatch $Model)
-    }
-  } catch {
-    $hasModel = $false
-  }
-
-  if (-not $hasModel) {
-    Write-Host "Ensuring model is available (ollama pull $Model) ..."
-    $exe = $OllamaExe
-    if (-not $exe) { $exe = "ollama" }
-    & $exe pull $Model
-  } else {
-    Write-Host "Model already available: $Model"
-  }
+if (-not (Test-Path $python)) {
+  throw "Virtual environment not found. Run this script without -SkipInstall first."
 }
 
 $env:WRITING_AGENT_HOST = $HostAddress
-$env:WRITING_AGENT_PORT = "$Port"
-if (-not $env:WRITING_AGENT_USE_OLLAMA) { $env:WRITING_AGENT_USE_OLLAMA = "0" }
-if (-not $env:WRITING_AGENT_WORKERS) { $env:WRITING_AGENT_WORKERS = "4" }
-if (-not $env:WRITING_AGENT_ANALYSIS_TIMEOUT_S) { $env:WRITING_AGENT_ANALYSIS_TIMEOUT_S = "45" }
-if (-not $env:WRITING_AGENT_EDIT_PLAN_ENABLE) { $env:WRITING_AGENT_EDIT_PLAN_ENABLE = "1" }
-if (-not $env:WRITING_AGENT_EDIT_PLAN_TIMEOUT_S) { $env:WRITING_AGENT_EDIT_PLAN_TIMEOUT_S = "20" }
-if (-not $env:WRITING_AGENT_EDIT_REQUIRE_CONFIRM_HIGH) { $env:WRITING_AGENT_EDIT_REQUIRE_CONFIRM_HIGH = "1" }
-if (-not $env:WRITING_AGENT_EDIT_PLAN_METRICS_ENABLE) { $env:WRITING_AGENT_EDIT_PLAN_METRICS_ENABLE = "1" }
-if (-not $env:WRITING_AGENT_EDIT_PLAN_METRICS_PATH) { $env:WRITING_AGENT_EDIT_PLAN_METRICS_PATH = ".data/metrics/edit_plan_events.jsonl" }
-if (-not $env:WRITING_AGENT_EDIT_PLAN_METRICS_MAX_BYTES) { $env:WRITING_AGENT_EDIT_PLAN_METRICS_MAX_BYTES = "2097152" }
-if (-not $env:WRITING_AGENT_EXTRACT_TIMEOUT_S) { $env:WRITING_AGENT_EXTRACT_TIMEOUT_S = "20" }
-if (-not $env:WRITING_AGENT_PLAN_TIMEOUT_S) { $env:WRITING_AGENT_PLAN_TIMEOUT_S = "45" }
-if (-not $env:WRITING_AGENT_DRAFT_MAX_MODELS) { $env:WRITING_AGENT_DRAFT_MAX_MODELS = "1" }
-if (-not $env:WRITING_AGENT_DRAFT_PARALLEL) { $env:WRITING_AGENT_DRAFT_PARALLEL = "1" }
-if (-not $env:WRITING_AGENT_PER_MODEL_CONCURRENCY) { $env:WRITING_AGENT_PER_MODEL_CONCURRENCY = "3" }
-if (-not $env:WRITING_AGENT_RAG_ENABLED) { $env:WRITING_AGENT_RAG_ENABLED = "1" }
-if (-not $env:WRITING_AGENT_EMBED_MODEL) { $env:WRITING_AGENT_EMBED_MODEL = "" }
-if (-not $env:WRITING_AGENT_RAG_MAX_CHARS) { $env:WRITING_AGENT_RAG_MAX_CHARS = "6000" }
-if (-not $env:WRITING_AGENT_RAG_TOP_K) { $env:WRITING_AGENT_RAG_TOP_K = "8" }
-if (-not $env:WRITING_AGENT_RAG_PER_PAPER) { $env:WRITING_AGENT_RAG_PER_PAPER = "3" }
-if (-not $env:WRITING_AGENT_EVIDENCE_ENABLED) { $env:WRITING_AGENT_EVIDENCE_ENABLED = "0" }
-if (-not $env:WRITING_AGENT_VALIDATE_PLAN) { $env:WRITING_AGENT_VALIDATE_PLAN = "0" }
-if (-not $env:WRITING_AGENT_ENSURE_MIN_LENGTH) { $env:WRITING_AGENT_ENSURE_MIN_LENGTH = "1" }
-if (-not $env:WRITING_AGENT_SECTION_CONTINUE_ROUNDS) { $env:WRITING_AGENT_SECTION_CONTINUE_ROUNDS = "0" }
-if (-not $env:WRITING_AGENT_SECTION_RETRIES) { $env:WRITING_AGENT_SECTION_RETRIES = "2" }
-if (-not $env:WRITING_AGENT_IDEMPOTENCY_TTL_S) { $env:WRITING_AGENT_IDEMPOTENCY_TTL_S = "21600" }
-if (-not $env:WRITING_AGENT_IDEMPOTENCY_MAX_ENTRIES) { $env:WRITING_AGENT_IDEMPOTENCY_MAX_ENTRIES = "2000" }
-if (-not $env:WRITING_AGENT_IDEMPOTENCY_SWEEP_INTERVAL_S) { $env:WRITING_AGENT_IDEMPOTENCY_SWEEP_INTERVAL_S = "60" }
-if (-not $env:WRITING_AGENT_SECTION_TIMEOUT_S) { $env:WRITING_AGENT_SECTION_TIMEOUT_S = "60" }
-if (-not $env:WRITING_AGENT_FAST_DRAFT) { $env:WRITING_AGENT_FAST_DRAFT = "0" }
-if (-not $env:WRITING_AGENT_STRIP_FILLER) { $env:WRITING_AGENT_STRIP_FILLER = "1" }
-if (-not $env:WRITING_AGENT_TARGET_TOTAL_CHARS) { $env:WRITING_AGENT_TARGET_TOTAL_CHARS = "8000" }
-if (-not $env:WRITING_AGENT_MAX_TOKENS) { $env:WRITING_AGENT_MAX_TOKENS = "200" }
-if (-not $env:WRITING_AGENT_OLLAMA_RETRIES) { $env:WRITING_AGENT_OLLAMA_RETRIES = "3" }
-if (-not $env:WRITING_AGENT_OLLAMA_RETRY_BACKOFF_S) { $env:WRITING_AGENT_OLLAMA_RETRY_BACKOFF_S = "1.5" }
-
-if (-not (Test-Path ".venv\\Scripts\\python.exe")) {
-  throw "Virtualenv not found. Run without -SkipInstall first."
-}
-
-.\\.venv\\Scripts\\python -m writing_agent.desktop_app
+$env:WRITING_AGENT_PORT = [string]$Port
+& $python -m writing_agent.desktop_app

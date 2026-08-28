@@ -2,6 +2,7 @@
 
 ## Start Here
 - `START_HERE.md`
+- `FEATURES_AND_IMPLEMENTATION.md`
 - `READING_GUIDE.md`
 - `PROJECT_STRUCTURE.md`
 - `DEVELOPMENT.md`
@@ -21,7 +22,10 @@
 - `API_SCHEMA_AND_ERRORS.md`
 - `ASYNC_JOB_QUEUE.md`
 
-## Ops and Release
+## Historical Ops and Release Notes
+
+The project now uses the single maintained `.github/workflows/ci.yml` workflow.
+The documents below are retained as design history; they are not required for local use.
 - `OPERATIONS_RUNBOOK.md`
 - `RELEASE_AND_ROLLBACK.md`
 - `RELEASE_ENGINEERING.md`

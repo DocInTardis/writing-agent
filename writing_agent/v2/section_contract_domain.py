@@ -6,12 +6,12 @@ import os
 import re
 from dataclasses import replace
 
-
 # -- Low-level rules and numeric helpers --
 
 
 def _base():
     from writing_agent.v2 import section_contract as base
+
     return base
 
 
@@ -220,9 +220,9 @@ def _extract_terms(text: str) -> list[str]:
     raw = str(text or "").strip()
     if not raw:
         return []
-    normalized = re.sub(f"(?i)^{base._ZH_KEYWORDS}\s*[:{base._ZH_COLON}]\s*", "", raw).strip()
+    normalized = re.sub(rf"(?i)^{base._ZH_KEYWORDS}\s*[:{base._ZH_COLON}]\s*", "", raw).strip()
     normalized = normalized.replace("\n", base._ZH_SEP)
-    chunks = re.split(f"[\s,{base._ZH_COMMA};{base._ZH_SEP}]+", normalized)
+    chunks = re.split(rf"[\s,{base._ZH_COMMA};{base._ZH_SEP}]+", normalized)
     out: list[str] = []
     seen: set[str] = set()
     for chunk in chunks:

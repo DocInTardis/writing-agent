@@ -21,7 +21,7 @@
 核心生成路径：
 
 1. `writing_agent/web/services/generation_service.py`
-2. `writing_agent/web/app_v2_generate_stream_runtime.py`
+2. `writing_agent/web/services/generation_service.py`
 3. `writing_agent/v2/graph_runner_runtime.py`
 4. `writing_agent/v2/graph_runner.py`
 5. `writing_agent/v2/graph_runner_post_domain.py`
@@ -76,9 +76,9 @@
 
 建议阅读：
 
-1. `scripts/` 下的守护脚本（规模、复杂度、架构边界）
-2. `security/*.json`（policy-as-code）
-3. `.github/workflows/`
+1. `tests/test_flow_router_registration.py`（API 模块边界）
+2. `tests/unit/`（核心生成与文档规则）
+3. `.github/workflows/ci.yml`（当前维护的自动检查）
 
 重点关注：
 - CI 中哪些质量门禁是强制的
@@ -99,7 +99,7 @@
 出现问题时可优先定位：
 
 - 生成结果异常：`writing_agent/v2/graph_runner_runtime.py`
-- 流式中断：`writing_agent/web/app_v2_generate_stream_runtime.py`
+- 流式中断：`writing_agent/web/legacy_fragments/generation_stream.py`
 - 导出问题：`writing_agent/web/api/export_flow.py`
 - 引用核验问题：`writing_agent/web/api/citation_flow.py`
 - UI 渲染或交互问题：`writing_agent/web/frontend_svelte/src/lib/components/`

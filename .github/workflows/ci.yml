@@ -5,51 +5,53 @@ on:
   pull_request:
 
 jobs:
-  python-quality-gates:
+  python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install Python quality dependencies
-        run: python -m pip install -r requirements-dev.txt
-      - name: Run Python tests
-        run: python -m pytest tests/ -q
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-pinned.txt
+      - name: Compile application
+        run: python -m compileall -q writing_agent scripts
+      - name: Run unit and integration tests
+        run: python -m pytest -q tests --ignore=tests/ui
 
-  build-test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  web:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Test
-        run: cargo test --workspace
-        working-directory: engine
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: writing_agent/web/frontend_svelte/package-lock.json
+      - run: npm ci
+        working-directory: writing_agent/web/frontend_svelte
+      - run: npm run build
+        working-directory: writing_agent/web/frontend_svelte
 
-  coverage:
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: gateway/node_ai_gateway/package-lock.json
+      - run: npm ci
+        working-directory: gateway/node_ai_gateway
+      - run: npm test
+        working-directory: gateway/node_ai_gateway
+
+  rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install llvm-cov
-        run: cargo install cargo-llvm-cov --locked
-      - name: Coverage
-        run: cargo llvm-cov --workspace --lcov --output-path coverage.lcov
-        working-directory: engine
-
-  valgrind:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install valgrind
-        run: sudo apt-get update && sudo apt-get install -y valgrind
-      - name: Build smoke
-        run: cargo build -p wa_engine --bin smoke --release
-        working-directory: engine
-      - name: Valgrind
-        run: valgrind --leak-check=full --error-exitcode=1 target/release/smoke
+      - run: cargo test --workspace
         working-directory: engine

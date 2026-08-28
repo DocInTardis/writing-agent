@@ -8,9 +8,9 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
 
 
 def clamp_plagiarism_threshold(value: object, default: float = 0.35) -> float:
@@ -116,7 +116,7 @@ def safe_plagiarism_report_id(raw: object) -> str:
 
 
 def new_plagiarism_report_id() -> str:
-    stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     return f"{stamp}_{uuid.uuid4().hex[:8]}"
 
 

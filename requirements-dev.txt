@@ -1,4 +1,5 @@
 pytest>=7.4
+httpx2>=2.12
 pip-audit>=2.8
 aiosmtpd>=1.4.5
 ruff>=0.11.0

@@ -32,6 +32,7 @@
     updateDocTitle,
     updateSectionTitle
   } from '../editor/docIrMutations'
+  import { makeId } from '../editor/htmlConversion'
 
   let editor = $state<HTMLDivElement | null>(null)
   let lastMarkdown = $state('')
@@ -1189,6 +1190,7 @@
     if (event.button !== 0) return
     const target = event.target as HTMLElement | null
     if (!target || !editor.contains(target)) return
+    if (!$generating && !lockEditing) editor.dataset.caretActive = '1'
     if (target.closest('a,button,input,textarea,select,[data-wa-no-marquee="1"]')) return
     const block = target.closest('[data-block-id], [data-section-id], [data-doc-title="1"]') as HTMLElement | null
     if (block && editor.contains(block) && (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)) {

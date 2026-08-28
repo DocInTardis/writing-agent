@@ -1,13 +1,13 @@
-# Writing Agent Desktop (Tauri 2.x)
+# Writing Agent Desktop (Tauri 2.x, experimental)
 
-PoC 桌面端应用，基于 Tauri 2.x + Svelte 5 + Rust 引擎。
+实验桌面端应用，基于 Tauri 2.x + Svelte 5 + Rust 引擎。当前可用于开发验证，正式打包仍缺少 Python sidecar 构建步骤；日常使用请优先运行仓库根目录的 `scripts/start_desktop.ps1`。
 
 ## 架构
 
 - **Frontend**: Svelte 5 (复用现有 `frontend_svelte` 代码)
 - **Backend**: Tauri 2.x Rust 运行时
 - **Engine**: `wa_core` + `wa_engine` (路径引用)
-- **Python Sidecar**: 启动时拉起 Python FastAPI 后端
+- **Python Sidecar**: 开发时从项目 `.venv` 拉起 FastAPI；也可通过 `WRITING_AGENT_PYTHON_BACKEND` 指定可执行文件
 
 ## 目录结构
 
@@ -33,12 +33,14 @@ desktop-tauri/
 # 安装前端依赖
 npm install
 
-# 开发模式（自动启动 Python 后端 sidecar）
+# 开发模式（需要仓库根目录已有 .venv）
 npm run tauri dev
 
-# 构建
+# 仅构建实验桌面壳；发布前仍需提供 python-backend.exe
 npm run tauri build
 ```
+
+开发服务器会把 `/api`、`/download` 和工作区路由代理到 `http://127.0.0.1:8000`。退出桌面程序时，由它启动的 Python 子进程会一并关闭。
 
 ## Commands
 

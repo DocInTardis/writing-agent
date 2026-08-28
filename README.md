@@ -6,7 +6,7 @@
 - document export pipelines (Markdown and DOCX)
 - web workbench with streaming editing
 - persistent workspace dashboard and lifecycle management
-- productization docs and regression tests for quality, release, and operations
+- local workspace management and regression tests for the maintained product paths
 
 ## Project Layout
 
@@ -21,7 +21,7 @@
 |- gateway/                             # Node AI gateway
 |- tests/                               # Unit / integration / e2e / ui tests
 |  `- fixtures/                         # Versioned sample inputs and golden fixtures
-|- scripts/                             # Guardrails, release, and ops scripts
+|- scripts/                             # Launchers, data tools, and maintained utilities
 |- docs/                                # Architecture and runbooks
 |- security/                            # Policy-as-code configs
 |- templates/                           # Prompt and few-shot assets
@@ -46,6 +46,8 @@ python -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
 .\.venv\Scripts\pip install -r requirements-dev.txt
 ```
+
+For the same dependency versions used by CI, install `requirements-pinned.txt` instead.
 
 ### LLM defaults
 
@@ -75,8 +77,10 @@ Default product entrypoints:
 ### 3) Run tests
 
 ```powershell
-python -m pytest -q tests
+python -m pytest -q tests --ignore=tests/ui
 ```
+
+Playwright UI tests are optional and require the `tools` extra plus a Chromium install.
 
 ## Productization Baseline
 
@@ -125,15 +129,18 @@ If you have `make` installed:
 ```bash
 make test
 make build-frontend
-make guards
-make preflight
+make test-gateway
+make test-engine
+make check
 ```
 
 Equivalent direct commands for the maintained local path:
 
 ```powershell
-python -m pytest -q tests
+python -m pytest -q tests --ignore=tests/ui
 npm --prefix writing_agent/web/frontend_svelte run build
+npm --prefix gateway/node_ai_gateway test
+cargo test --workspace --manifest-path engine/Cargo.toml
 ```
 
 ## Idempotency Cache Settings
@@ -167,12 +174,12 @@ Parser metrics are local silent logs only and are not exposed in user-facing UI/
 ## Documentation
 
 - Documentation index: `docs/INDEX.md`
+- Feature and implementation map: `docs/FEATURES_AND_IMPLEMENTATION.md`
 - Code reading guide: `docs/READING_GUIDE.md`
 - Getting started: `docs/START_HERE.md`
 - Structure guide: `docs/PROJECT_STRUCTURE.md`
 - Development guide: `docs/DEVELOPMENT.md`
-- Operations runbook: `docs/OPERATIONS_RUNBOOK.md`
-- Release and rollback: `docs/RELEASE_AND_ROLLBACK.md`
+- Historical operations and release notes remain under `docs/` and `docs/archive/`; they are not part of the current personal-project workflow.
 - API versioning: `docs/API_VERSIONING.md`
 - Prompt registry: `docs/PROMPT_REGISTRY.md`
 - RAG trust guard: `docs/RAG_TRUST_GUARD.md`
