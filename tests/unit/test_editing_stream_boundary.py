@@ -10,9 +10,12 @@ from writing_agent.web.api import editing_flow
 from writing_agent.workflows.editing_request_workflow import (
     BlockEditDeps,
     BlockEditRequest,
+    DiagramGenerateRequest,
+    DocIRRequest,
     InlineAIDeps,
     InlineAIRequest,
     InlineAIStreamEvent,
+    RenderFigureRequest,
     run_inline_ai_stream_workflow,
 )
 
@@ -72,6 +75,15 @@ def test_block_edit_request_contains_input_not_web_services() -> None:
     assert set(BlockEditRequest.__dataclass_fields__) == {"session", "data"}
     assert "exception_factory" in BlockEditDeps.__dataclass_fields__
     assert "persist_session" in BlockEditDeps.__dataclass_fields__
+
+
+def test_remaining_editing_requests_contain_no_web_service_locator() -> None:
+    assert set(DocIRRequest.__dataclass_fields__) == {"session", "data"}
+    assert set(RenderFigureRequest.__dataclass_fields__) == {"data"}
+    assert set(DiagramGenerateRequest.__dataclass_fields__) == {"data"}
+
+    path = Path(__file__).parents[2] / "writing_agent" / "workflows" / "editing_request_workflow.py"
+    assert "app_v2" not in path.read_text(encoding="utf-8")
 
 
 def test_stream_is_closed_when_consumer_stops_early() -> None:

@@ -59,22 +59,42 @@ class BlockEditDeps:
 
 @dataclass(frozen=True)
 class DocIRRequest:
-    app_v2: Any
     session: Any
     data: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class DocIRDeps:
+    exception_factory: Callable[..., Exception]
+    parse_operation: Callable[..., Any]
+    doc_ir_from_dict: Callable[..., Any]
+    doc_ir_apply_ops: Callable[..., Any]
+    doc_ir_to_dict: Callable[..., dict[str, Any]]
+    doc_ir_to_text: Callable[..., str]
+    doc_ir_diff: Callable[..., dict[str, Any]]
+    persist_session: Callable[..., None]
 
 
 @dataclass(frozen=True)
 class RenderFigureRequest:
-    app_v2: Any
     data: dict[str, Any]
 
 
 @dataclass(frozen=True)
+class RenderFigureDeps:
+    exception_factory: Callable[..., Exception]
+    render_figure_svg: Callable[..., tuple[str, str]]
+    sanitize_html: Callable[..., str]
+
+
+@dataclass(frozen=True)
 class DiagramGenerateRequest:
-    app_v2: Any
-    session: Any
     data: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class DiagramGenerateDeps:
+    exception_factory: Callable[..., Exception]
     diagram_spec_from_prompt_fn: Callable[[str, str], dict[str, Any]]
 
 
@@ -230,8 +250,7 @@ async def run_block_edit_preview_workflow(*, request: BlockEditRequest, deps: Bl
     return {"ok": 1, "before": before_text, "candidates": candidates}
 
 
-def run_doc_ir_ops_workflow(*, request: DocIRRequest) -> dict[str, Any]:
-    app_v2 = request.app_v2
+def run_doc_ir_ops_workflow(*, request: DocIRRequest, deps: DocIRDeps) -> dict[str, Any]:
     session = request.session
     ops_raw = request.data.get("ops") or []
     ops: list[Any] = []
@@ -239,50 +258,49 @@ def run_doc_ir_ops_workflow(*, request: DocIRRequest) -> dict[str, Any]:
         if not isinstance(item, dict):
             continue
         try:
-            ops.append(app_v2.DocIROperation.parse_obj(item))
+            ops.append(deps.parse_operation(item))
         except Exception:
             continue
 
     if not ops:
-        raise app_v2.HTTPException(status_code=400, detail="ops required")
+        raise deps.exception_factory(status_code=400, detail="ops required")
 
-    doc_ir = app_v2.doc_ir_from_dict(session.doc_ir or {})
-    doc_ir = app_v2.doc_ir_apply_ops(doc_ir, ops)
-    session.doc_ir = app_v2.doc_ir_to_dict(doc_ir)
-    session.doc_text = app_v2.doc_ir_to_text(doc_ir)
-    app_v2.store.put(session)
+    doc_ir = deps.doc_ir_from_dict(session.doc_ir or {})
+    doc_ir = deps.doc_ir_apply_ops(doc_ir, ops)
+    session.doc_ir = deps.doc_ir_to_dict(doc_ir)
+    session.doc_text = deps.doc_ir_to_text(doc_ir)
+    deps.persist_session(session)
     return {"ok": 1, "doc_ir": session.doc_ir, "text": session.doc_text}
 
 
-def run_doc_ir_diff_workflow(*, request: DocIRRequest) -> dict[str, Any]:
-    app_v2 = request.app_v2
+def run_doc_ir_diff_workflow(*, request: DocIRRequest, deps: DocIRDeps) -> dict[str, Any]:
     other = request.data.get("doc_ir")
     if not isinstance(other, dict):
-        raise app_v2.HTTPException(status_code=400, detail="doc_ir must be object")
+        raise deps.exception_factory(status_code=400, detail="doc_ir must be object")
 
-    cur = app_v2.doc_ir_from_dict(request.session.doc_ir or {})
-    nxt = app_v2.doc_ir_from_dict(other)
-    diff = app_v2.doc_ir_diff(cur, nxt)
+    cur = deps.doc_ir_from_dict(request.session.doc_ir or {})
+    nxt = deps.doc_ir_from_dict(other)
+    diff = deps.doc_ir_diff(cur, nxt)
     return {"ok": 1, "diff": diff}
 
 
-def run_render_figure_workflow(*, request: RenderFigureRequest) -> dict[str, Any]:
+def run_render_figure_workflow(*, request: RenderFigureRequest, deps: RenderFigureDeps) -> dict[str, Any]:
     spec = request.data.get("spec") if isinstance(request.data, dict) else {}
     if not isinstance(spec, dict):
-        raise request.app_v2.HTTPException(status_code=400, detail="spec must be object")
+        raise deps.exception_factory(status_code=400, detail="spec must be object")
 
-    svg, caption = request.app_v2.render_figure_svg(spec)
-    safe_svg = request.app_v2.sanitize_html(svg)
+    svg, caption = deps.render_figure_svg(spec)
+    safe_svg = deps.sanitize_html(svg)
     return {"svg": safe_svg, "caption": caption}
 
 
-def run_diagram_generate_workflow(*, request: DiagramGenerateRequest) -> dict[str, Any]:
+def run_diagram_generate_workflow(*, request: DiagramGenerateRequest, deps: DiagramGenerateDeps) -> dict[str, Any]:
     prompt = str(request.data.get("prompt") or "").strip()
     kind = str(request.data.get("kind") or "flow").strip().lower()
     if not prompt:
-        raise request.app_v2.HTTPException(status_code=400, detail="prompt required")
+        raise deps.exception_factory(status_code=400, detail="prompt required")
 
-    spec = request.diagram_spec_from_prompt_fn(prompt, kind)
+    spec = deps.diagram_spec_from_prompt_fn(prompt, kind)
     return {"ok": 1, "spec": spec}
 
 

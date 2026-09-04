@@ -8,10 +8,13 @@ from types import SimpleNamespace
 from writing_agent.workflows.editing_request_workflow import (
     BlockEditDeps,
     BlockEditRequest,
+    DiagramGenerateDeps,
     DiagramGenerateRequest,
+    DocIRDeps,
     DocIRRequest,
     InlineAIDeps,
     InlineAIRequest,
+    RenderFigureDeps,
     RenderFigureRequest,
     run_block_edit_preview_workflow,
     run_block_edit_workflow,
@@ -350,12 +353,19 @@ def test_doc_ir_ops_workflow_applies_parsed_ops() -> None:
         def doc_ir_to_text(value):
             return f"ops:{value['ops_applied']}"
 
+    deps = DocIRDeps(
+        exception_factory=_FakeApp.HTTPException,
+        parse_operation=_FakeApp.DocIROperation.parse_obj,
+        doc_ir_from_dict=_FakeApp.doc_ir_from_dict,
+        doc_ir_apply_ops=_FakeApp.doc_ir_apply_ops,
+        doc_ir_to_dict=_FakeApp.doc_ir_to_dict,
+        doc_ir_to_text=_FakeApp.doc_ir_to_text,
+        doc_ir_diff=lambda _before, _after: {},
+        persist_session=_FakeApp.store.put,
+    )
     out = run_doc_ir_ops_workflow(
-        request=DocIRRequest(
-            app_v2=_FakeApp(),
-            session=session,
-            data={"ops": [{"kind": "valid"}, {"kind": "bad"}]},
-        )
+        request=DocIRRequest(session=session, data={"ops": [{"kind": "valid"}, {"kind": "bad"}]}),
+        deps=deps,
     )
 
     assert out == {"ok": 1, "doc_ir": {"ops_applied": 1}, "text": "ops:1"}
@@ -376,12 +386,19 @@ def test_doc_ir_diff_workflow_returns_diff() -> None:
         def doc_ir_diff(before, after):
             return {"before": before["value"], "after": after["value"]}
 
+    deps = DocIRDeps(
+        exception_factory=_FakeApp.HTTPException,
+        parse_operation=lambda item: item,
+        doc_ir_from_dict=_FakeApp.doc_ir_from_dict,
+        doc_ir_apply_ops=lambda value, _ops: value,
+        doc_ir_to_dict=lambda value: value,
+        doc_ir_to_text=lambda _value: "",
+        doc_ir_diff=_FakeApp.doc_ir_diff,
+        persist_session=lambda _session: None,
+    )
     out = run_doc_ir_diff_workflow(
-        request=DocIRRequest(
-            app_v2=_FakeApp(),
-            session=session,
-            data={"doc_ir": {"value": "new"}},
-        )
+        request=DocIRRequest(session=session, data={"doc_ir": {"value": "new"}}),
+        deps=deps,
     )
 
     assert out == {"ok": 1, "diff": {"before": "old", "after": "new"}}
@@ -400,7 +417,12 @@ def test_render_figure_workflow_sanitizes_svg() -> None:
             return svg.replace("<", "[").replace(">", "]")
 
     out = run_render_figure_workflow(
-        request=RenderFigureRequest(app_v2=_FakeApp(), data={"spec": {"name": "demo"}})
+        request=RenderFigureRequest(data={"spec": {"name": "demo"}}),
+        deps=RenderFigureDeps(
+            exception_factory=_FakeApp.HTTPException,
+            render_figure_svg=_FakeApp.render_figure_svg,
+            sanitize_html=_FakeApp.sanitize_html,
+        ),
     )
 
     assert out == {"svg": "[svg]demo[/svg]", "caption": "caption"}
@@ -411,12 +433,11 @@ def test_diagram_generate_workflow_calls_builder() -> None:
         HTTPException = _HTTPException
 
     out = run_diagram_generate_workflow(
-        request=DiagramGenerateRequest(
-            app_v2=_FakeApp(),
-            session=_Session(doc_text=""),
-            data={"prompt": "show trend", "kind": "line"},
+        request=DiagramGenerateRequest(data={"prompt": "show trend", "kind": "line"}),
+        deps=DiagramGenerateDeps(
+            exception_factory=_FakeApp.HTTPException,
             diagram_spec_from_prompt_fn=lambda prompt, kind: {"prompt": prompt, "kind": kind},
-        )
+        ),
     )
 
     assert out == {"ok": 1, "spec": {"prompt": "show trend", "kind": "line"}}

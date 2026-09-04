@@ -21,10 +21,13 @@ from writing_agent.web.domains import context_policy_domain
 from writing_agent.workflows import (
     BlockEditDeps,
     BlockEditRequest,
+    DiagramGenerateDeps,
     DiagramGenerateRequest,
+    DocIRDeps,
     DocIRRequest,
     InlineAIDeps,
     InlineAIRequest,
+    RenderFigureDeps,
     RenderFigureRequest,
     run_block_edit_preview_workflow,
     run_block_edit_workflow,
@@ -88,6 +91,19 @@ def _block_edit_deps(app_v2) -> BlockEditDeps:
     )
 
 
+def _doc_ir_deps(app_v2) -> DocIRDeps:
+    return DocIRDeps(
+        exception_factory=app_v2.HTTPException,
+        parse_operation=app_v2.DocIROperation.parse_obj,
+        doc_ir_from_dict=app_v2.doc_ir_from_dict,
+        doc_ir_apply_ops=app_v2.doc_ir_apply_ops,
+        doc_ir_to_dict=app_v2.doc_ir_to_dict,
+        doc_ir_to_text=app_v2.doc_ir_to_text,
+        doc_ir_diff=app_v2.doc_ir_diff,
+        persist_session=app_v2.store.put,
+    )
+
+
 async def doc_ir_ops(doc_id: str, request: Request) -> dict:
     app_v2 = _app_v2()
     session = app_v2.store.get(doc_id)
@@ -95,7 +111,10 @@ async def doc_ir_ops(doc_id: str, request: Request) -> dict:
         raise app_v2.HTTPException(status_code=404, detail="document not found")
 
     data = await request.json()
-    return run_doc_ir_ops_workflow(request=DocIRRequest(app_v2=app_v2, session=session, data=data))
+    return run_doc_ir_ops_workflow(
+        request=DocIRRequest(session=session, data=data),
+        deps=_doc_ir_deps(app_v2),
+    )
 
 
 async def doc_ir_diff(doc_id: str, request: Request) -> dict:
@@ -105,13 +124,23 @@ async def doc_ir_diff(doc_id: str, request: Request) -> dict:
         raise app_v2.HTTPException(status_code=404, detail="document not found")
 
     data = await request.json()
-    return run_doc_ir_diff_workflow(request=DocIRRequest(app_v2=app_v2, session=session, data=data))
+    return run_doc_ir_diff_workflow(
+        request=DocIRRequest(session=session, data=data),
+        deps=_doc_ir_deps(app_v2),
+    )
 
 
 async def render_figure(request: Request) -> dict:
     app_v2 = _app_v2()
     data = await request.json()
-    return run_render_figure_workflow(request=RenderFigureRequest(app_v2=app_v2, data=data))
+    return run_render_figure_workflow(
+        request=RenderFigureRequest(data=data),
+        deps=RenderFigureDeps(
+            exception_factory=app_v2.HTTPException,
+            render_figure_svg=app_v2.render_figure_svg,
+            sanitize_html=app_v2.sanitize_html,
+        ),
+    )
 
 
 def _diagram_spec_from_prompt(prompt: str, kind: str) -> dict:
@@ -126,12 +155,11 @@ async def diagram_generate(doc_id: str, request: Request) -> dict:
 
     data = await request.json()
     return run_diagram_generate_workflow(
-        request=DiagramGenerateRequest(
-            app_v2=app_v2,
-            session=session,
-            data=data,
+        request=DiagramGenerateRequest(data=data),
+        deps=DiagramGenerateDeps(
+            exception_factory=app_v2.HTTPException,
             diagram_spec_from_prompt_fn=_diagram_spec_from_prompt,
-        )
+        ),
     )
 
 
