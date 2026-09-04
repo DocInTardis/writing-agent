@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -58,6 +59,8 @@ def run_revision_workflow(*, request: RevisionRequest, deps: RevisionDeps) -> di
     validate_revision_candidate_fn = deps.validate_revision_candidate_fn
 
     instruction = str(data.get("instruction") or "").strip()
+    if not instruction:
+        raise deps.exception_factory(status_code=400, detail="instruction required")
     raw_selection = data.get("selection")
     selection_text = (
         str(raw_selection.get("text") or "") if isinstance(raw_selection, dict) else str(raw_selection or "")
@@ -72,12 +75,15 @@ def run_revision_workflow(*, request: RevisionRequest, deps: RevisionDeps) -> di
     context_policy = data.get("context_policy")
     allow_unscoped_fallback = bool(data.get("allow_unscoped_fallback") is True)
     incoming_ir = data.get("doc_ir")
-    if isinstance(incoming_ir, dict) and incoming_ir.get("sections") is not None:
+    input_doc_ir = None
+    if incoming_ir is not None:
+        if not isinstance(incoming_ir, dict) or not isinstance(incoming_ir.get("sections"), list):
+            raise deps.exception_factory(status_code=400, detail="invalid document structure")
         try:
-            session.doc_ir = incoming_ir
-            text = deps.doc_ir_to_text(deps.doc_ir_from_dict(session.doc_ir))
-        except Exception:
-            text = str(data.get("text") or session.doc_text or "")
+            input_doc_ir = deepcopy(incoming_ir)
+            text = deps.doc_ir_to_text(deps.doc_ir_from_dict(deepcopy(input_doc_ir)))
+        except Exception as exc:
+            raise deps.exception_factory(status_code=400, detail="invalid document structure") from exc
     else:
         text = str(data.get("text") or session.doc_text or "")
 
@@ -95,8 +101,6 @@ def run_revision_workflow(*, request: RevisionRequest, deps: RevisionDeps) -> di
             raise deps.exception_factory(status_code=400, detail=f"target section not found: {target_section}")
 
     base_text = text
-    if not instruction:
-        raise deps.exception_factory(status_code=400, detail="instruction required")
     if not text.strip():
         raise deps.exception_factory(status_code=400, detail="empty document")
 
@@ -153,6 +157,8 @@ def run_revision_workflow(*, request: RevisionRequest, deps: RevisionDeps) -> di
                 current_text=base_text,
                 base_text=base_text,
             )
+            if not text.strip():
+                raise deps.exception_factory(status_code=500, detail="revision produced empty text")
             deps.set_doc_text(session, text)
             deps.persist_session(session)
             out = {"ok": 1, "text": text, "doc_ir": session.doc_ir or {}, "note": note}
@@ -160,7 +166,11 @@ def run_revision_workflow(*, request: RevisionRequest, deps: RevisionDeps) -> di
                 out["revision_meta"] = revision_status
             return out
         if not allow_unscoped_fallback:
-            out = {"ok": 1, "text": text, "doc_ir": session.doc_ir or {}, "applied": False}
+            out = {
+                "ok": 1, "text": text,
+                "doc_ir": input_doc_ir if input_doc_ir is not None else deps.safe_doc_ir_payload(text),
+                "applied": False,
+            }
             if revision_status:
                 out["revision_meta"] = revision_status
             return out
@@ -204,6 +214,8 @@ def run_revision_workflow(*, request: RevisionRequest, deps: RevisionDeps) -> di
         current_text=base_text,
         base_text=base_text,
     )
+    if not text.strip():
+        raise deps.exception_factory(status_code=500, detail="revision produced empty text")
     validation = validate_revision_candidate_fn(
         candidate_text=text,
         base_text=base_text,

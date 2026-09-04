@@ -2,6 +2,7 @@
 import ast
 import inspect
 import unittest
+from copy import deepcopy
 from dataclasses import fields, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -92,6 +93,55 @@ class RevisionDependencyTests(unittest.TestCase):
                     self.assertEqual(self.run_revision()['text'], 'revised')
                     self.persist.assert_called_once()
                 self.assertEqual(closed, [True])
+
+    def test_invalid_structure_is_rejected_without_mutating_session(self):
+        original = deepcopy(vars(self.session))
+        for value in [{}, {'sections': 'invalid'}, [], 'bad']:
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'invalid document structure'):
+                self.run_revision(doc_ir=value)
+            self.assertEqual(vars(self.session), original)
+        self.persist.assert_not_called()
+
+    def test_mutating_converter_failure_cannot_touch_request_or_session(self):
+        incoming = {'sections': [], 'text': 'unsaved text'}
+        original = deepcopy(incoming)
+
+        def broken(value):
+            value['sections'].append({'text': 'unwanted mutation'})
+            raise RuntimeError('bad structure')
+
+        self.deps = replace(self.deps, doc_ir_from_dict=broken)
+        with self.assertRaisesRegex(ValueError, 'invalid document structure'):
+            self.run_revision(doc_ir=incoming)
+        self.assertEqual(incoming, original)
+        self.assertEqual(self.session.doc_ir, {'text': 'original'})
+        self.persist.assert_not_called()
+
+    def test_model_unavailable_leaves_incoming_structure_uncommitted(self):
+        self.client.is_running = lambda: False
+        with self.assertRaisesRegex(ValueError, 'not running'):
+            self.run_revision(doc_ir={'sections': [], 'text': 'unsaved text'})
+        self.assertEqual(self.session.doc_ir, {'text': 'original'})
+        self.assertEqual(self.session.doc_text, 'original')
+        self.persist.assert_not_called()
+
+    def test_declined_selection_returns_matching_structure_without_saving(self):
+        incoming = {'sections': [], 'text': 'unsaved text'}
+        result = self.run_revision(doc_ir=incoming, selection='unsaved')
+        self.assertEqual(result['text'], result['doc_ir']['text'])
+        result['doc_ir']['sections'].append({'text': 'changed response'})
+        self.assertEqual(incoming['sections'], [])
+        self.assertEqual(self.session.doc_text, 'original')
+        self.persist.assert_not_called()
+
+    def test_empty_postprocessing_never_commits(self):
+        self.deps = replace(self.deps, postprocess_output=lambda *a, **kw: '   ')
+        for selected in [False, True]:
+            self.selected.return_value = ('candidate', 'note')
+            with self.subTest(selected=selected), self.assertRaisesRegex(ValueError, 'empty text'):
+                self.run_revision(**({'selection': 'original'} if selected else {}))
+        self.assertEqual(self.session.doc_text, 'original')
+        self.persist.assert_not_called()
 
 
 if __name__ == '__main__':
