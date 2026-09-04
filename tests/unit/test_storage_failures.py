@@ -78,6 +78,47 @@ class StorageFailureTests(unittest.TestCase):
         self.assertIsNone(self.store.get(self.original.id))
         self.assertFalse(self.file.exists())
 
+    def test_failed_touch_preserves_timestamp_and_cache_order(self):
+        self.store._max_sessions = 2
+        self.store.create()
+        before_order = [key for key, _ in self.store.items()]
+        before = deepcopy(vars(self.original))
+        disk = self.file.read_bytes()
+        with patch.object(self.store, '_persist_session', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                self.store.touch(self.original.id)
+        self.assertEqual(vars(self.original), before)
+        self.assertEqual([key for key, _ in self.store.items()], before_order)
+        self.assertEqual(self.file.read_bytes(), disk)
+
+    def test_successful_touch_preserves_identity_and_updated_time(self):
+        updated = self.original.updated_at
+        with patch('writing_agent.storage.time.time', return_value=updated + 10):
+            touched = self.store.touch(self.original.id)
+        self.assertIs(touched, self.original)
+        self.assertEqual(touched.updated_at, updated)
+        self.assertEqual(touched.last_opened_at, updated + 10)
+        self.assertEqual(json.loads(self.file.read_text(encoding='utf-8'))['last_opened_at'], updated + 10)
+
+    def test_failed_put_does_not_normalize_caller_metadata(self):
+        candidate = deepcopy(self.original)
+        candidate.owner = '  unchanged until saved  '
+        candidate.labels = ['a', 'a']
+        before = deepcopy(vars(candidate))
+        with patch.object(self.store, '_persist_session', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                self.store.put(candidate)
+        self.assertEqual(vars(candidate), before)
+
+    def test_successful_put_still_normalizes_and_keeps_identity(self):
+        candidate = deepcopy(self.original)
+        candidate.owner = '  owner  '
+        candidate.labels = ['a', 'a']
+        self.store.put(candidate)
+        self.assertIs(self.store.get(candidate.id), candidate)
+        self.assertEqual(candidate.owner, 'owner')
+        self.assertEqual(candidate.labels, ['a'])
+
 
 if __name__ == '__main__':
     unittest.main()

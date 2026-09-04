@@ -14,6 +14,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
+from copy import copy
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 
@@ -523,12 +524,14 @@ class InMemoryStore:
             session = self._sessions.get(session_id)
             if session is None:
                 return None
-            session.last_opened_at = time.time()
-            session = self._normalize_session(session, touch_updated=False)
+            candidate = copy(session)
+            candidate.last_opened_at = time.time()
+            candidate = self._normalize_session(candidate, touch_updated=False)
+            self._persist_session(candidate)
+            session.__dict__.update(candidate.__dict__)
             # Move to end to mark as most-recently-used
             self._sessions.move_to_end(session_id)
             self._sessions[session_id] = session
-            self._persist_session(session)
             return session
 
     def create(self) -> DocSession:
@@ -550,8 +553,9 @@ class InMemoryStore:
 
     def put(self, session: DocSession) -> None:
         with self._lock:
-            session = self._normalize_session(session, touch_updated=True)
-            self._persist_session(session)
+            candidate = self._normalize_session(copy(session), touch_updated=True)
+            self._persist_session(candidate)
+            session.__dict__.update(candidate.__dict__)
             self._sessions[session.id] = session
             self._sessions.move_to_end(session.id)
             self._evict_if_needed()
