@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import threading
 import time
 import uuid
@@ -443,12 +444,22 @@ class InMemoryStore:
         payload = asdict(session)
         payload["schema_version"] = 1
         path = self._session_path(session.id)
-        temp_path = path.with_suffix(".tmp")
-        temp_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, default=self._json_default),
-            encoding="utf-8",
-        )
-        self._replace_session_file(temp_path, path)
+        serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=self._json_default)
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=path.parent,
+                prefix=path.name + ".", suffix=".tmp", delete=False,
+            ) as stream:
+                temp_path = Path(stream.name)
+                stream.write(serialized)
+            self._replace_session_file(temp_path, path)
+        finally:
+            if temp_path is not None:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("Could not remove session temporary file %s", temp_path)
 
     @staticmethod
     def _replace_session_file(temp_path: Path, path: Path) -> None:
@@ -525,9 +536,9 @@ class InMemoryStore:
         session = DocSession(id=session_id)
         with self._lock:
             session = self._normalize_session(session, touch_updated=True)
+            self._persist_session(session)
             self._sessions[session_id] = session
             self._evict_if_needed()
-            self._persist_session(session)
         return session
 
     def get(self, session_id: str) -> DocSession | None:
@@ -540,19 +551,21 @@ class InMemoryStore:
     def put(self, session: DocSession) -> None:
         with self._lock:
             session = self._normalize_session(session, touch_updated=True)
+            self._persist_session(session)
             self._sessions[session.id] = session
             self._sessions.move_to_end(session.id)
             self._evict_if_needed()
-            self._persist_session(session)
 
     def delete(self, session_id: str) -> bool:
         with self._lock:
-            deleted = self._sessions.pop(session_id, None) is not None
+            deleted = session_id in self._sessions
             if deleted and self._persistence_dir is not None:
                 try:
                     self._session_path(session_id).unlink()
                 except FileNotFoundError:
                     pass
+            if deleted:
+                self._sessions.pop(session_id)
             return deleted
 
     def items(self) -> list[tuple[str, DocSession]]:
