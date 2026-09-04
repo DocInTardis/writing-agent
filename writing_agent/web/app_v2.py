@@ -52,6 +52,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from writing_agent.document import ExportPrefs, V2ReportDocxExporter
+from writing_agent.diagnostics import diagnostic_path, enabled, write_compact_json
 from writing_agent.llm import OllamaClient, get_ollama_settings
 from writing_agent.observability import get_bridge
 from writing_agent.storage import InMemoryStore
@@ -166,7 +167,7 @@ def _run_with_timeout(fn, timeout_s: float, fallback):
     if kind == "ok":
         return payload
     return fallback
-_STREAM_METRICS_PATH = Path(".data/metrics/stream_timing.json")
+_STREAM_METRICS_PATH = diagnostic_path("WRITING_AGENT_STREAM_TIMING_PATH", "stream_timing.json")
 _MCP_CITATIONS_CACHE: dict = {"ts": 0.0, "items": {}}
 _DOC_GENERATION_STATE = DocGenerationState()
 
@@ -224,8 +225,7 @@ def _load_stream_metrics() -> dict:
         logger.warning("_load_stream_metrics: failed to read %s: %s", _STREAM_METRICS_PATH, exc)
     return {"runs": []}
 def _save_stream_metrics(data: dict) -> None:
-    _STREAM_METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _STREAM_METRICS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_compact_json(_STREAM_METRICS_PATH, data)
 def _percentile(values: list[float], q: float) -> float:
     if not values:
         return 0.0
@@ -235,6 +235,8 @@ def _percentile(values: list[float], q: float) -> float:
     idx = max(0, min(len(vals) - 1, int(round((len(vals) - 1) * q))))
     return float(vals[idx])
 def _record_stream_timing(*, total_s: float, max_gap_s: float) -> None:
+    if not enabled("WRITING_AGENT_STREAM_TIMING_ENABLE"):
+        return
     data = _load_stream_metrics()
     runs = data.get("runs") if isinstance(data.get("runs"), list) else []
     runs.append({"total_s": float(total_s), "max_gap_s": float(max_gap_s), "ts": time.time()})

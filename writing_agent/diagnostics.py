@@ -79,3 +79,31 @@ write diagnostics must not turn a successful application operation into a failur
                 temporary.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def write_compact_json(path: Path, value: Any) -> bool:
+    """Atomically write optional diagnostic state without leaving temp files."""
+    temporary = None
+    try:
+        payload = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+        with _LOCK:
+            if path.is_symlink() or any(p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()) for p in path.parents):
+                return False
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=path.parent,
+                prefix=path.name + '.', suffix='.tmp', delete=False,
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(payload)
+            os.replace(temporary, path)
+            temporary = None
+            return True
+    except (OSError, TypeError, ValueError):
+        return False
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass

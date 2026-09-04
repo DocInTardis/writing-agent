@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from writing_agent.diagnostics import append_diagnostic, diagnostic_path, enabled
+from writing_agent.diagnostics import append_diagnostic, diagnostic_path, enabled, write_compact_json
 from writing_agent.llm.providers.node_ai_gateway_provider import NodeAIGatewayProvider
 from writing_agent.web.domains import revision_edit_common_domain as revision
 from writing_agent.web.domains import route_graph_metrics_domain as route
@@ -104,6 +104,23 @@ class DiagnosticPolicyTests(unittest.TestCase):
             self.assertTrue(all(results))
             self.assertLessEqual(path.stat().st_size, 256)
             self.assertTrue(all(isinstance(json.loads(line), dict) for line in path.read_text().splitlines()))
+
+    def test_compact_json_write_is_atomic_and_cleans_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'state.json'
+            self.assertTrue(write_compact_json(path, {'中文': [1, 2]}))
+            self.assertNotIn('\n', path.read_text(encoding='utf-8'))
+            original = path.read_bytes()
+            with patch('writing_agent.diagnostics.os.replace', side_effect=PermissionError('busy')):
+                self.assertFalse(write_compact_json(path, {'changed': True}))
+            self.assertEqual(path.read_bytes(), original)
+            self.assertFalse(list(Path(folder).glob('*.tmp')))
+
+    def test_unserializable_json_state_does_not_create_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'state.json'
+            self.assertFalse(write_compact_json(path, object()))
+            self.assertFalse(path.exists())
 
 
 if __name__ == '__main__':
