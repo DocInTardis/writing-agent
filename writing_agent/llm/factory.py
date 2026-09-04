@@ -45,7 +45,7 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 def _openai_quota_fallback_enabled() -> bool:
-    return _bool_env("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", True)
+    return _bool_env("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", False)
 
 
 def _provider_cache_key(*, provider_name: str, backend_name: str, model: str | None, timeout_s: float | None) -> tuple:
@@ -277,17 +277,6 @@ def get_default_provider(
     provider_name = get_provider_name()
     use_node_backend = _should_use_node_backend(route_key=route_key)
     backend_name = "node" if use_node_backend else "python"
-    cache_key = _provider_cache_key(
-        provider_name=provider_name,
-        backend_name=backend_name,
-        model=model,
-        timeout_s=timeout_s,
-    )
-    if _provider_cache_enabled():
-        cached = _provider_cache_get(cache_key)
-        if cached is not None:
-            return cached
-
     # 1. Try user-configured provider first (not cached; config may change anytime)
     user_provider = _build_user_configured_provider(model=model, timeout_s=timeout_s)
     if user_provider is not None:
@@ -311,6 +300,16 @@ def get_default_provider(
             raise
 
     # 2. Fallback to environment-based provider
+    cache_key = _provider_cache_key(
+        provider_name=provider_name,
+        backend_name=backend_name,
+        model=model,
+        timeout_s=timeout_s,
+    )
+    if _provider_cache_enabled():
+        cached = _provider_cache_get(cache_key)
+        if cached is not None:
+            return cached
     python_provider = _build_python_provider(model=model, timeout_s=timeout_s)
     if not use_node_backend:
         return _provider_cache_put(cache_key, python_provider) if _provider_cache_enabled() else python_provider

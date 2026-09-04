@@ -19,6 +19,37 @@ def test_get_provider_name_defaults_to_openai(monkeypatch) -> None:
     assert get_provider_name() == "openai"
 
 
+def test_quota_fallback_is_opt_in(monkeypatch):
+    from writing_agent.llm import factory
+
+    monkeypatch.delenv("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", raising=False)
+    primary = SimpleNamespace(model="chosen-model")
+    monkeypatch.setattr(factory, "openai_providers_from_env", lambda **_: [primary])
+
+    def unexpected_ollama():
+        raise AssertionError("default API path must not inspect or initialize Ollama")
+
+    monkeypatch.setattr(factory, "get_ollama_settings", unexpected_ollama)
+    assert factory._build_openai_provider() is primary
+
+
+def test_user_model_selection_takes_precedence_over_environment_cache(monkeypatch):
+    from writing_agent.llm import factory
+
+    monkeypatch.setenv("WRITING_AGENT_LLM_BACKEND", "python")
+    monkeypatch.setenv("WRITING_AGENT_PROVIDER_CACHE_ENABLED", "1")
+    current = [SimpleNamespace(model="first-user-model")]
+    monkeypatch.setattr(factory, "_build_user_configured_provider", lambda **_: current[0])
+
+    def unexpected_environment_resolution(**_):
+        raise AssertionError("user selection must not be shadowed by an environment cache")
+
+    monkeypatch.setattr(factory, "_provider_cache_key", unexpected_environment_resolution)
+    assert get_default_provider() is current[0]
+    current[0] = SimpleNamespace(model="second-user-model")
+    assert get_default_provider() is current[0]
+
+
 def test_get_default_provider_returns_ollama_provider(monkeypatch) -> None:
     monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "ollama")
     monkeypatch.setattr(

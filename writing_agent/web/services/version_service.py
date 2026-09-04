@@ -6,6 +6,7 @@ This module belongs to `writing_agent.web.services` in the writing-agent codebas
 from __future__ import annotations
 
 import difflib
+from copy import deepcopy
 
 from fastapi import Request
 
@@ -58,7 +59,7 @@ class VersionService:
             message=message,
             author=author,
             doc_text=session.doc_text,
-            doc_ir=session.doc_ir.copy() if session.doc_ir else {},
+            doc_ir=deepcopy(session.doc_ir) if session.doc_ir else {},
             tags=tags,
             branch_name=app_v2._get_current_branch(session),
         )
@@ -167,7 +168,7 @@ class VersionService:
             raise app_v2.HTTPException(404, "version not found")
 
         session.doc_text = version.doc_text
-        session.doc_ir = version.doc_ir.copy() if version.doc_ir else {}
+        session.doc_ir = deepcopy(version.doc_ir) if version.doc_ir else {}
         session.current_version_id = version_id
         app_v2.store.put(session)
         return {"ok": 1, "version_id": version_id, "message": version.message, "doc_text": version.doc_text}
@@ -239,4 +240,3 @@ class VersionService:
             version.tags.append(tag)
             app_v2.store.put(session)
         return {"ok": 1, "version_id": version_id, "tag": tag}
-

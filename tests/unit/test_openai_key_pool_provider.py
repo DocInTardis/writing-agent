@@ -62,6 +62,8 @@ def test_openai_key_pool_provider_stops_on_non_retryable_error() -> None:
 
 
 def test_factory_builds_openai_key_pool_when_multiple_candidates_exist(monkeypatch) -> None:
+    # Fake providers must not leak through the process-wide cache into other tests.
+    monkeypatch.setattr("writing_agent.llm.factory._PROVIDER_CACHE", {})
     monkeypatch.setenv("WRITING_AGENT_LLM_PROVIDER", "openai")
     monkeypatch.setenv("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", "0")
 

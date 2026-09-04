@@ -57,7 +57,7 @@ class AppConfig:
     openai_api_key: str = field(default_factory=lambda: _str_env("WRITING_AGENT_OPENAI_API_KEY", ""))
     openai_model: str = field(default_factory=lambda: _str_env("WRITING_AGENT_OPENAI_MODEL", "gpt-4o-mini"))
     openai_timeout_s: float = field(default_factory=lambda: _float_env("WRITING_AGENT_OPENAI_TIMEOUT_S", 60.0))
-    openai_quota_fallback: bool = field(default_factory=lambda: _bool_env("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", True))
+    openai_quota_fallback: bool = field(default_factory=lambda: _bool_env("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", False))
 
     # ---- Concurrency ----
     workers: int = field(default_factory=lambda: _int_env("WRITING_AGENT_WORKERS", 12))

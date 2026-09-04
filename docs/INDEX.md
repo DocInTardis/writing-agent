@@ -1,6 +1,8 @@
 # Documentation Index
 
 ## Start Here
+
+- `DESKTOP_CONVERGENCE_ROADMAP.md` — 精简进度与后续取舍原则。
 - `START_HERE.md`
 - `FEATURES_AND_IMPLEMENTATION.md`
 - `READING_GUIDE.md`
@@ -13,9 +15,6 @@
 - `FRONTEND_WORKBENCH_ARCHITECTURE.md`
 - `PROMPT_REGISTRY.md`
 - `RAG_TRUST_GUARD.md`
-- `archive/EDIT_INTENT_PARSING_BEST_PRACTICES_AND_PLAN_20260228_CN.md`
-- `archive/ROUTE_DRIVEN_BRANCHING_IMPLEMENTATION_20260303_CN.md`
-- `archive/SELECTED_TEXT_EDIT_OPTIMIZATION_STRATEGY_20260301_CN.md`
 
 ## API and Backend
 - `API_VERSIONING.md`
@@ -32,9 +31,6 @@ The documents below are retained as design history; they are not required for lo
 - `PUBLIC_RELEASE_PIPELINE.md`
 - `CONTAINER_IAC.md`
 - `DISASTER_RECOVERY_DRILL.md`
-- `archive/NODE_AI_GATEWAY_PROTOCOL_20260227_CN.md`
-- `archive/NODE_AI_GATEWAY_RUNBOOK_20260227_CN.md`
-- `archive/NODE_AI_GATEWAY_ROLLOUT_EVIDENCE_20260227_CN.md`
 - `RELEASE_CHANNELS.md`
 - `RELEASE_TRAFFIC_ADAPTERS.md`
 - `MIGRATION_ASSISTANT.md`
@@ -61,8 +57,6 @@ The documents below are retained as design history; they are not required for lo
 - `SECURITY_ALERT_WEBHOOK.md`
 - `ai_rate_algorithm_notes.md`
 - `plagiarism_algorithm_notes.md`
-- `archive/ORIGINALITY_AND_SIMILARITY_PLAYBOOK_20260327_CN.md`
-- `archive/PLAGIARISM_RISK_REDUCTION_EXECUTION_PROGRAM_20260327_CN.md`
 
 ## ADR
 - `adr/ADR-2026-02-26-architecture-guards-and-decoupling.md`

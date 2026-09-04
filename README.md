@@ -63,7 +63,7 @@ $env:WRITING_AGENT_OPENAI_API_KEY="<your-openai-api-key>"
 $env:WRITING_AGENT_OPENAI_MODEL="gpt-4o-mini"
 ```
 
-If OpenAI returns quota or billing-limit errors and local Ollama is enabled, the Python provider automatically falls back to Ollama. Disable that behavior with `WRITING_AGENT_OPENAI_QUOTA_FALLBACK=0`.
+Quota or billing errors do not switch to local Ollama by default. The legacy fallback is opt-in via `WRITING_AGENT_OPENAI_QUOTA_FALLBACK=1`; otherwise the selected API's error is reported.
 
 ### 2) Run application
 
@@ -184,12 +184,11 @@ Parser metrics are local silent logs only and are not exposed in user-facing UI/
 - Getting started: `docs/START_HERE.md`
 - Structure guide: `docs/PROJECT_STRUCTURE.md`
 - Development guide: `docs/DEVELOPMENT.md`
-- Historical operations and release notes remain under `docs/` and `docs/archive/`; they are not part of the current personal-project workflow.
+- Obsolete archived plans have been removed; their history remains available in Git.
 - API versioning: `docs/API_VERSIONING.md`
 - Prompt registry: `docs/PROMPT_REGISTRY.md`
 - RAG trust guard: `docs/RAG_TRUST_GUARD.md`
-- Node gateway protocol: `docs/archive/NODE_AI_GATEWAY_PROTOCOL_20260227_CN.md`
-- Node gateway runbook: `docs/archive/NODE_AI_GATEWAY_RUNBOOK_20260227_CN.md`
+- Optional Node gateway: `gateway/node_ai_gateway/README.md`
 
 ## Community and Governance
 

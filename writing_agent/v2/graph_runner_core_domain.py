@@ -29,7 +29,7 @@ from writing_agent.llm import OllamaClient, OllamaError, get_ollama_settings  # 
 from writing_agent.llm.factory import get_default_provider
 from writing_agent.sections_catalog import find_section_description, section_catalog_text
 from writing_agent.v2.doc_format import DocBlock, ParsedDoc, parse_report_text
-from writing_agent.v2.cache import LocalCache, AcademicPhraseCache  # cache backends
+from writing_agent.v2.cache import LocalCache
 from writing_agent.v2 import (
     draft_model_domain,
     graph_aggregate_domain,

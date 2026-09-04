@@ -68,4 +68,4 @@ cargo test --workspace --manifest-path engine/Cargo.toml
 - 阅读顺序：`READING_GUIDE.md`
 - 常见问题：`TROUBLESHOOTING_DECISION_TREE.md`
 
-`docs/archive/` 和旧发布工程文档只记录历史方案，不是当前操作说明。
+旧归档计划已删除，可从 Git 历史查阅；仍保留的旧发布工程文档不是当前操作说明。

@@ -5,7 +5,9 @@ This module belongs to `writing_agent.web.domains` in the writing-agent codebase
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from copy import deepcopy
+from typing import Any
 
 
 def version_kind_from_tags(tags: Any) -> str:
@@ -62,7 +64,7 @@ def auto_commit_version(
     text = str(getattr(session, "doc_text", "") or "").strip()
     if not text:
         return None
-    doc_ir = session.doc_ir.copy() if getattr(session, "doc_ir", None) else {}
+    doc_ir = getattr(session, "doc_ir", None) or {}
     tag_list = list(tags or [])
     if "minor" not in tag_list:
         tag_list.append("minor")
@@ -72,7 +74,11 @@ def auto_commit_version(
     versions = getattr(session, "versions", None) or {}
     if cur_id and cur_id in versions:
         cur = versions.get(cur_id)
-        if cur and str(getattr(cur, "doc_text", "") or "").strip() == text and (getattr(cur, "doc_ir", None) or {}) == (doc_ir or {}):
+        if (
+            cur
+            and str(getattr(cur, "doc_text", "") or "").strip() == text
+            and (getattr(cur, "doc_ir", None) or {}) == (doc_ir or {})
+        ):
             return None
     version_id = version_id_factory()
     branch = get_current_branch_fn(session)
@@ -83,7 +89,7 @@ def auto_commit_version(
         message=message or "auto commit",
         author=author,
         doc_text=session.doc_text,
-        doc_ir=session.doc_ir.copy() if session.doc_ir else {},
+        doc_ir=deepcopy(doc_ir),
         tags=tag_list,
         branch_name=branch,
     )
