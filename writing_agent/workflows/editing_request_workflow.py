@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
-
-from fastapi.responses import StreamingResponse
 
 from writing_agent.capabilities.editing import (
     build_block_edit_variants,
@@ -27,6 +25,12 @@ class InlineAIRequest:
     normalize_inline_context_policy_fn: ContextPolicyNormalizer
     trim_inline_context_fn: InlineContextTrimmer
     inline_ai_module: Any
+
+
+@dataclass(frozen=True)
+class InlineAIStreamEvent:
+    event: str
+    payload: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -85,27 +89,24 @@ async def run_inline_ai_workflow(*, request: InlineAIRequest) -> dict[str, Any]:
     }
 
 
-async def run_inline_ai_stream_workflow(*, request: InlineAIRequest) -> StreamingResponse:
+async def run_inline_ai_stream_workflow(*, request: InlineAIRequest) -> AsyncIterator[InlineAIStreamEvent]:
     prepared = _prepare_inline_request(request)
     engine = request.inline_ai_module.InlineAIEngine()
 
-    def emit(event: str, payload: dict[str, Any]) -> str:
-        return f"event: {event}\ndata: {request.app_v2.json.dumps(payload, ensure_ascii=False)}\n\n"
-
-    async def event_generator():
-        yield emit("context_meta", prepared.context_meta)
+    async def event_generator() -> AsyncIterator[InlineAIStreamEvent]:
+        yield InlineAIStreamEvent(event="context_meta", payload=prepared.context_meta)
+        stream = engine.execute_operation_stream(prepared.operation, prepared.context, **prepared.kwargs)
         try:
-            async for event in engine.execute_operation_stream(prepared.operation, prepared.context, **prepared.kwargs):
-                yield emit(str(event.get("type", "message")), event)
+            async for event in stream:
+                yield InlineAIStreamEvent(event=str(event.get("type", "message")), payload=event)
         except Exception as exc:
-            request.app_v2.logger.error(f"Streaming inline AI failed: {exc}", exc_info=True)
-            yield emit("error", {"error": str(exc)})
+            yield InlineAIStreamEvent(event="error", payload={"error": str(exc)})
+        finally:
+            close = getattr(stream, "aclose", None)
+            if callable(close):
+                await close()
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    return event_generator()
 
 
 def _require_block_edit_input(request: BlockEditRequest) -> tuple[str, str]:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import dataclass
 from enum import Enum
 from types import SimpleNamespace
@@ -134,14 +133,8 @@ def test_inline_ai_stream_workflow_emits_context_meta_then_events() -> None:
         ToneStyle=_ToneStyle,
     )
 
-    class _Logger:
-        def error(self, *_args, **_kwargs):
-            return None
-
     class _FakeApp:
         HTTPException = _HTTPException
-        json = json
-        logger = _Logger()
 
     response = asyncio.run(
         run_inline_ai_stream_workflow(
@@ -156,17 +149,16 @@ def test_inline_ai_stream_workflow_emits_context_meta_then_events() -> None:
         )
     )
 
-    async def _collect() -> list[str]:
-        chunks: list[str] = []
-        async for item in response.body_iterator:
-            chunks.append(item.decode("utf-8") if isinstance(item, bytes) else str(item))
+    async def _collect() -> list[tuple[str, dict]]:
+        chunks: list[tuple[str, dict]] = []
+        async for item in response:
+            chunks.append((item.event, item.payload))
         return chunks
 
-    body = "".join(asyncio.run(_collect()))
-    assert "event: context_meta" in body
-    assert '"policy_version": "test_v1"' in body
-    assert "event: start" in body
-    assert body.index("event: context_meta") < body.index("event: start")
+    events = asyncio.run(_collect())
+    assert events[0] == ("context_meta", {"policy_version": "test_v1"})
+    assert events[1] == ("start", {"type": "start", "operation": "improve"})
+    assert events[2][0] == "delta"
 
 
 def test_block_edit_workflow_commits_and_persists_updated_doc() -> None:

@@ -10,6 +10,8 @@ This module belongs to `writing_agent.web.api` in the writing-agent codebase.
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
@@ -137,7 +139,7 @@ async def inline_ai_stream(doc_id: str, request: Request) -> StreamingResponse:
     data = await request.json()
     from writing_agent.v2 import inline_ai as inline_ai_module
 
-    return await run_inline_ai_stream_workflow(
+    events = await run_inline_ai_stream_workflow(
         request=InlineAIRequest(
             app_v2=app_v2,
             session=session,
@@ -147,6 +149,21 @@ async def inline_ai_stream(doc_id: str, request: Request) -> StreamingResponse:
             inline_ai_module=inline_ai_module,
         )
     )
+
+    async def event_generator():
+        async for item in events:
+            if item.event == "error":
+                app_v2.logger.error("Streaming inline AI failed: %s", item.payload.get("error"))
+            payload = json.dumps(item.payload, ensure_ascii=False)
+            yield f"event: {item.event}\ndata: {payload}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+
+
 async def block_edit(doc_id: str, request: Request) -> dict:
     app_v2 = _app_v2()
     session = app_v2.store.get(doc_id)
