@@ -12,6 +12,8 @@ from writing_agent.workflows import (
     run_revision_workflow,
 )
 
+from .generation_dependencies import build_generate_section_deps
+
 SectionResolver = Callable[..., dict[str, object] | None]
 HeadingNormalizer = Callable[[object], str]
 RevisionPromptBuilder = Callable[..., tuple[str, str]]
@@ -30,9 +32,8 @@ def run_section_generation_request(*, app_v2: Any, session: Any, data: dict[str,
 
     try:
         final_text, graph_meta = run_generate_section_graph(
+            deps=build_generate_section_deps(app_v2),
             request=GenerateSectionRequest(
-                app_v2=app_v2,
-                session=session,
                 section=section,
                 instruction=instruction,
                 current_text=current_text,

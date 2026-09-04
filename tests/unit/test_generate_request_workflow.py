@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from writing_agent.web.domains import route_graph_metrics_domain
+from writing_agent.web.services.generation_dependencies import build_generate_graph_deps
 from writing_agent.workflows.generate_request_workflow import GenerateGraphRequest, run_generate_graph_with_fallback
 
 
@@ -32,10 +34,9 @@ def _make_generate_deps(**overrides):
 
 
 def test_generate_request_workflow_uses_route_graph(monkeypatch) -> None:
-    from writing_agent.workflows import generate_request_workflow as workflow
 
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "record_route_graph_metric", lambda *_a, **_k: None)
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
+    monkeypatch.setattr(route_graph_metrics_domain, "record_route_graph_metric", lambda *_a, **_k: None)
+    monkeypatch.setattr(route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
 
     class _FakeOS:
         environ = {"WRITING_AGENT_USE_ROUTE_GRAPH": "1"}
@@ -57,8 +58,8 @@ def test_generate_request_workflow_uses_route_graph(monkeypatch) -> None:
 
     session = _Session(template_required_h2=["Intro"], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
+        deps=build_generate_graph_deps(_FakeApp()),
         request=GenerateGraphRequest(
-            app_v2=_FakeApp(),
             session=session,
             instruction="continue intro",
             raw_instruction="continue intro",
@@ -82,11 +83,10 @@ def test_generate_request_workflow_uses_route_graph(monkeypatch) -> None:
 
 
 def test_generate_request_workflow_insufficient_output_recovers_via_single_pass(monkeypatch) -> None:
-    from writing_agent.workflows import generate_request_workflow as workflow
 
     metric_rows: list[tuple[str, dict]] = []
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
+    monkeypatch.setattr(route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
+    monkeypatch.setattr(route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
 
     class _FakeOS:
         environ = {"WRITING_AGENT_USE_ROUTE_GRAPH": "1"}
@@ -112,8 +112,8 @@ def test_generate_request_workflow_insufficient_output_recovers_via_single_pass(
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
+        deps=build_generate_graph_deps(_FakeApp()),
         request=GenerateGraphRequest(
-            app_v2=_FakeApp(),
             session=session,
             instruction="write short",
             raw_instruction="write short",
@@ -137,10 +137,9 @@ def test_generate_request_workflow_insufficient_output_recovers_via_single_pass(
 
 
 def test_generate_request_workflow_semantic_failure_skips_single_pass(monkeypatch) -> None:
-    from writing_agent.workflows import generate_request_workflow as workflow
 
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "record_route_graph_metric", lambda *_a, **_k: None)
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
+    monkeypatch.setattr(route_graph_metrics_domain, "record_route_graph_metric", lambda *_a, **_k: None)
+    monkeypatch.setattr(route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
 
     called = {"single_pass": 0}
 
@@ -170,8 +169,8 @@ def test_generate_request_workflow_semantic_failure_skips_single_pass(monkeypatc
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
+        deps=build_generate_graph_deps(_FakeApp()),
         request=GenerateGraphRequest(
-            app_v2=_FakeApp(),
             session=session,
             instruction="write paper",
             raw_instruction="write paper",
@@ -194,11 +193,10 @@ def test_generate_request_workflow_semantic_failure_skips_single_pass(monkeypatc
 
 
 def test_generate_request_workflow_legacy_branch_skips_dual_engine_when_route_graph_disabled(monkeypatch) -> None:
-    from writing_agent.workflows import generate_request_workflow as workflow
 
     metric_rows: list[tuple[str, dict]] = []
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
+    monkeypatch.setattr(route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
+    monkeypatch.setattr(route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
 
     class _FakeOS:
         environ = {"WRITING_AGENT_USE_ROUTE_GRAPH": "0"}
@@ -225,8 +223,8 @@ def test_generate_request_workflow_legacy_branch_skips_dual_engine_when_route_gr
 
     session = _Session(template_required_h2=["Intro"], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
+        deps=build_generate_graph_deps(_FakeApp()),
         request=GenerateGraphRequest(
-            app_v2=_FakeApp(),
             session=session,
             instruction="continue intro",
             raw_instruction="continue intro",
@@ -283,7 +281,6 @@ def test_generate_request_workflow_supports_injected_deps() -> None:
     session = _Session(template_required_h2=["Intro"], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
         request=GenerateGraphRequest(
-            app_v2=object(),
             session=session,
             instruction="continue intro",
             raw_instruction="continue intro",
@@ -309,11 +306,10 @@ def test_generate_request_workflow_supports_injected_deps() -> None:
 
 
 def test_generate_request_workflow_legacy_insufficient_output_recovers_via_single_pass(monkeypatch) -> None:
-    from writing_agent.workflows import generate_request_workflow as workflow
 
     metric_rows: list[tuple[str, dict]] = []
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
+    monkeypatch.setattr(route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
+    monkeypatch.setattr(route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
 
     class _FakeOS:
         environ = {"WRITING_AGENT_USE_ROUTE_GRAPH": "0"}
@@ -344,8 +340,8 @@ def test_generate_request_workflow_legacy_insufficient_output_recovers_via_singl
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
+        deps=build_generate_graph_deps(_FakeApp()),
         request=GenerateGraphRequest(
-            app_v2=_FakeApp(),
             session=session,
             instruction="write short",
             raw_instruction="write short",
@@ -370,11 +366,10 @@ def test_generate_request_workflow_legacy_insufficient_output_recovers_via_singl
 
 
 def test_generate_request_workflow_graph_failed_recovers_via_single_pass(monkeypatch) -> None:
-    from writing_agent.workflows import generate_request_workflow as workflow
 
     metric_rows: list[tuple[str, dict]] = []
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
+    monkeypatch.setattr(route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
+    monkeypatch.setattr(route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
 
     class _FakeOS:
         environ = {"WRITING_AGENT_USE_ROUTE_GRAPH": "1"}
@@ -392,8 +387,8 @@ def test_generate_request_workflow_graph_failed_recovers_via_single_pass(monkeyp
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
+        deps=build_generate_graph_deps(_FakeApp()),
         request=GenerateGraphRequest(
-            app_v2=_FakeApp(),
             session=session,
             instruction="write",
             raw_instruction="write",
@@ -417,12 +412,11 @@ def test_generate_request_workflow_graph_failed_recovers_via_single_pass(monkeyp
 
 
 def test_generate_request_workflow_graph_failed_metric_uses_extracted_error_code(monkeypatch) -> None:
-    from writing_agent.workflows import generate_request_workflow as workflow
 
     metric_rows: list[tuple[str, dict]] = []
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "extract_error_code", lambda _exc, default="": "E_ROUTE_GRAPH_BOOM")
+    monkeypatch.setattr(route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
+    monkeypatch.setattr(route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
+    monkeypatch.setattr(route_graph_metrics_domain, "extract_error_code", lambda _exc, default="": "E_ROUTE_GRAPH_BOOM")
 
     class _FakeOS:
         environ = {"WRITING_AGENT_USE_ROUTE_GRAPH": "1"}
@@ -440,8 +434,8 @@ def test_generate_request_workflow_graph_failed_metric_uses_extracted_error_code
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
+        deps=build_generate_graph_deps(_FakeApp()),
         request=GenerateGraphRequest(
-            app_v2=_FakeApp(),
             session=session,
             instruction="write",
             raw_instruction="write",
@@ -464,12 +458,11 @@ def test_generate_request_workflow_graph_failed_metric_uses_extracted_error_code
 
 
 def test_generate_request_workflow_legacy_graph_failed_metric_uses_legacy_path(monkeypatch) -> None:
-    from writing_agent.workflows import generate_request_workflow as workflow
 
     metric_rows: list[tuple[str, dict]] = []
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
-    monkeypatch.setattr(workflow.route_graph_metrics_domain, "extract_error_code", lambda _exc, default="": "E_LEGACY_GRAPH_BOOM")
+    monkeypatch.setattr(route_graph_metrics_domain, "record_route_graph_metric", lambda event, **kwargs: metric_rows.append((event, dict(kwargs))))
+    monkeypatch.setattr(route_graph_metrics_domain, "should_inject_route_graph_failure", lambda **_k: False)
+    monkeypatch.setattr(route_graph_metrics_domain, "extract_error_code", lambda _exc, default="": "E_LEGACY_GRAPH_BOOM")
 
     class _FakeOS:
         environ = {"WRITING_AGENT_USE_ROUTE_GRAPH": "0"}
@@ -491,8 +484,8 @@ def test_generate_request_workflow_legacy_graph_failed_metric_uses_legacy_path(m
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
+        deps=build_generate_graph_deps(_FakeApp()),
         request=GenerateGraphRequest(
-            app_v2=_FakeApp(),
             session=session,
             instruction="write",
             raw_instruction="write",
@@ -540,7 +533,6 @@ def test_generate_request_workflow_supports_injected_deps_legacy_failure_recover
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
         request=GenerateGraphRequest(
-            app_v2=object(),
             session=session,
             instruction="write",
             raw_instruction="write",
@@ -591,7 +583,6 @@ def test_generate_request_workflow_supports_injected_deps_route_graph_failure_re
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     final_text, problems, graph_meta = run_generate_graph_with_fallback(
         request=GenerateGraphRequest(
-            app_v2=object(),
             session=session,
             instruction="write",
             raw_instruction="write",
@@ -626,7 +617,6 @@ def test_build_generate_resolved_inputs_prefers_resume_sections() -> None:
     )
     inputs = workflow.build_generate_resolved_inputs(
         GenerateGraphRequest(
-            app_v2=object(),
             session=session,
             instruction="continue intro",
             raw_instruction="continue intro",
@@ -654,7 +644,6 @@ def test_build_generate_execution_context_preserves_state_and_inputs() -> None:
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction="write",
         raw_instruction="write",
@@ -753,7 +742,6 @@ def test_build_generate_graph_failed_failover_request_preserves_error_context() 
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction="write",
         raw_instruction="write",
@@ -790,7 +778,6 @@ def test_build_generate_finalization_plan_requests_failover_for_insufficient_out
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction="write",
         raw_instruction="write",
@@ -826,7 +813,6 @@ def test_build_generate_finalization_plan_skips_semantic_failover() -> None:
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction="write",
         raw_instruction="write",
@@ -868,7 +854,6 @@ def test_build_generate_route_graph_run_request_captures_inputs() -> None:
         generation_prefs={'expand_outline': True},
     )
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='continue intro',
         raw_instruction='continue intro',
@@ -909,7 +894,6 @@ def test_build_generate_legacy_graph_run_request_includes_timeout_policy() -> No
         generation_prefs={'expand_outline': False},
     )
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write article',
         raw_instruction='write article',
@@ -950,7 +934,6 @@ def test_build_generate_single_pass_request_preserves_text_and_target() -> None:
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='rewrite',
         raw_instruction='rewrite',
@@ -1087,7 +1070,6 @@ def test_apply_generate_primary_state_plan_updates_state_and_records_metric() ->
     metric_rows: list[tuple[str, dict]] = []
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',
@@ -1154,7 +1136,6 @@ def test_apply_generate_failover_state_plan_updates_runtime_state() -> None:
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',
@@ -1211,7 +1192,6 @@ def test_build_generate_failover_failed_metric_plan_uses_extracted_error_code() 
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',
@@ -1249,7 +1229,6 @@ def test_build_generate_graph_meta_finalization_request_preserves_state_fields()
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',
@@ -1316,7 +1295,6 @@ def test_build_generate_failover_trigger_metric_plan_uses_request_and_extractor(
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',
@@ -1362,7 +1340,6 @@ def test_build_generate_failover_execution_plan_preserves_metric_and_reason() ->
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',
@@ -1409,7 +1386,6 @@ def test_build_generate_driver_run_request_preserves_state_and_builds_driver_dep
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',
@@ -1445,7 +1421,6 @@ def test_build_generate_workflow_bootstrap_supports_injected_deps() -> None:
 
     session = _Session(template_required_h2=['Intro'], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='continue intro',
         raw_instruction='continue intro',
@@ -1489,7 +1464,6 @@ def test_build_generate_route_graph_branch_execution_plan_collects_injection_and
 
     session = _Session(template_required_h2=['Intro'], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='continue intro',
         raw_instruction='continue intro',
@@ -1523,7 +1497,6 @@ def test_build_generate_legacy_event_loop_request_preserves_generator_timeout_an
     generator = iter(())
     session = _Session(template_required_h2=['Intro'], template_outline=[{'title': 'Outline'}], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write article',
         raw_instruction='write article',
@@ -1568,7 +1541,6 @@ def test_drive_generate_legacy_event_loop_returns_final_observation_and_prompt_t
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',
@@ -1616,7 +1588,6 @@ def test_build_generate_legacy_branch_execution_plan_bundles_run_and_loop_reques
     generator = iter(())
     session = _Session(template_required_h2=['Intro'], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write article',
         raw_instruction='write article',
@@ -1656,7 +1627,6 @@ def test_build_generate_primary_branch_execution_plan_selects_path() -> None:
 
     session = _Session(template_required_h2=[], template_outline=[], generation_prefs={})
     request = GenerateGraphRequest(
-        app_v2=object(),
         session=session,
         instruction='write',
         raw_instruction='write',

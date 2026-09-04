@@ -7,8 +7,6 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from writing_agent.web.domains import route_graph_metrics_domain
-
 from .generate_request_metrics import (
     GenerateFailoverExecutionPlan,
     GenerateMetricPlan,
@@ -34,7 +32,6 @@ from .orchestration_backend import (
 
 @dataclass(frozen=True)
 class GenerateGraphRequest:
-    app_v2: Any
     session: Any
     instruction: str
     raw_instruction: str
@@ -254,38 +251,6 @@ class GenerateWorkflowBootstrap:
     inputs: GenerateResolvedInputs
     context: GenerateExecutionContext
     driver_run_request: GenerateDriverRunRequest
-
-
-
-def _missing_generate_dependency(name: str) -> Callable[..., Any]:
-    def _missing(*_args: Any, **_kwargs: Any) -> Any:
-        raise AttributeError(f"Generate workflow dependency '{name}' is unavailable")
-
-    return _missing
-
-
-
-def _default_http_exception_factory(app_v2: Any) -> Callable[..., Exception]:
-    factory = getattr(app_v2, 'HTTPException', None)
-    if callable(factory):
-        return factory
-    return lambda **kwargs: RuntimeError(str(kwargs.get('detail') or 'generation failed'))
-
-
-
-def build_generate_graph_deps(app_v2: Any) -> GenerateGraphDeps:
-    return GenerateGraphDeps(
-        environ=getattr(getattr(app_v2, 'os', None), 'environ', {}),
-        record_route_metric=route_graph_metrics_domain.record_route_graph_metric,
-        should_inject_route_graph_failure=route_graph_metrics_domain.should_inject_route_graph_failure,
-        run_generate_graph_dual_engine=getattr(app_v2, 'run_generate_graph_dual_engine', None),
-        run_generate_graph=getattr(app_v2, 'run_generate_graph', _missing_generate_dependency('run_generate_graph')),
-        iter_with_timeout=getattr(app_v2, '_iter_with_timeout', _missing_generate_dependency('_iter_with_timeout')),
-        single_pass_generate=getattr(app_v2, '_single_pass_generate', _missing_generate_dependency('_single_pass_generate')),
-        extract_error_code=route_graph_metrics_domain.extract_error_code,
-        http_exception_factory=_default_http_exception_factory(app_v2),
-    )
-
 
 
 def build_generate_resolved_inputs(request: GenerateGraphRequest) -> GenerateResolvedInputs:
@@ -856,17 +821,16 @@ def _finalize_generate_workflow_result(*, context: GenerateExecutionContext) -> 
 def build_generate_workflow_bootstrap(
     *,
     request: GenerateGraphRequest,
-    deps: GenerateGraphDeps | None = None,
+    deps: GenerateGraphDeps,
 ) -> GenerateWorkflowBootstrap:
-    resolved_deps = deps or build_generate_graph_deps(request.app_v2)
     inputs = build_generate_resolved_inputs(request)
     context = build_generate_execution_context(
         request=request,
-        deps=resolved_deps,
+        deps=deps,
         inputs=inputs,
     )
     return GenerateWorkflowBootstrap(
-        deps=resolved_deps,
+        deps=deps,
         inputs=inputs,
         context=context,
         driver_run_request=build_generate_driver_run_request(context=context),
@@ -885,7 +849,7 @@ def build_generate_workflow_response(
 def run_generate_graph_with_fallback(
     *,
     request: GenerateGraphRequest,
-    deps: GenerateGraphDeps | None = None,
+    deps: GenerateGraphDeps,
 ) -> tuple[str, list[str], dict | None]:
     """Run graph generation with single-pass fallback on failure or insufficient output."""
     bootstrap = build_generate_workflow_bootstrap(request=request, deps=deps)

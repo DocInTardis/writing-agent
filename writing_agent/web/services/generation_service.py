@@ -27,6 +27,7 @@ from writing_agent.web.idempotency import IdempotencyStore
 from writing_agent.workflows import GenerateGraphRequest, run_generate_graph_with_fallback
 
 from .base import app_v2_module
+from .generation_dependencies import build_generate_graph_deps
 from .generation_service_runtime import (
     run_revision_request as _run_revision_request_impl,
     run_section_generation_request as _run_section_generation_request_impl,
@@ -661,8 +662,8 @@ class GenerationService:
         plan_confirm: dict,
     ) -> tuple[str, list[str], dict | None]:
         return run_generate_graph_with_fallback(
+            deps=build_generate_graph_deps(app_v2),
             request=GenerateGraphRequest(
-                app_v2=app_v2,
                 session=session,
                 instruction=instruction,
                 raw_instruction=raw_instruction,

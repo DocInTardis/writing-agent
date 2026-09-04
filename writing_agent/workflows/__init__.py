@@ -15,8 +15,8 @@ from .editing_request_workflow import (
     run_inline_ai_workflow,
     run_render_figure_workflow,
 )
-from .generate_request_workflow import GenerateGraphRequest, run_generate_graph_with_fallback
-from .generate_section_request_workflow import GenerateSectionRequest, run_generate_section_graph
+from .generate_request_workflow import GenerateGraphDeps, GenerateGraphRequest, run_generate_graph_with_fallback
+from .generate_section_request_workflow import GenerateSectionDeps, GenerateSectionRequest, run_generate_section_graph
 from .generate_stream_request_workflow import (
     GenerateStreamDeps,
     GenerateStreamRequest,
@@ -30,6 +30,8 @@ __all__ = [
     "DiagramGenerateRequest",
     "DocIRRequest",
     "GenerateGraphRequest",
+    "GenerateGraphDeps",
+    "GenerateSectionDeps",
     "GenerateSectionRequest",
     "GenerateStreamDeps",
     "GenerateStreamRequest",

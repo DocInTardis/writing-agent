@@ -1,13 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from writing_agent.web.services.generation_dependencies import build_generate_section_deps
 from writing_agent.workflows.generate_section_request_workflow import GenerateSectionRequest, run_generate_section_graph
-
-
-@dataclass
-class _Session:
-    generation_prefs: dict
 
 
 def test_generate_section_request_workflow_uses_route_graph() -> None:
@@ -28,9 +22,8 @@ def test_generate_section_request_workflow_uses_route_graph() -> None:
             }
 
     final_text, graph_meta = run_generate_section_graph(
+        deps=build_generate_section_deps(_FakeApp()),
         request=GenerateSectionRequest(
-            app_v2=_FakeApp(),
-            session=_Session(generation_prefs={}),
             section="Intro",
             instruction="continue intro",
             current_text="# Title\n\n## Intro\nold",
@@ -57,9 +50,8 @@ def test_generate_section_request_workflow_uses_legacy_graph_when_disabled() -> 
             yield {"event": "final", "text": "# Title\n\n## Intro\nlegacy section text"}
 
     final_text, graph_meta = run_generate_section_graph(
+        deps=build_generate_section_deps(_FakeApp()),
         request=GenerateSectionRequest(
-            app_v2=_FakeApp(),
-            session=_Session(generation_prefs={}),
             section="Intro",
             instruction="continue intro",
             current_text="# Title\n\n## Intro\nold",
