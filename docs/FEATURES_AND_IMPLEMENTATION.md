@@ -80,12 +80,12 @@
 
 ## 8. 桌面端
 
-- 稳定本地桌面入口：`python -m writing_agent.desktop_app`，使用 PySide6 内嵌 Web 工作台。
+- 默认桌面入口：`python -m writing_agent.launch`，使用 PySide6 内嵌本地工作台；完整桌面交互验收尚未完成。
 - `desktop-tauri/` 是 Tauri 2 实验实现，包含 Rust 编辑命令，但 Python sidecar 的发布打包仍未完成，不作为当前稳定入口。
 
 ## 9. 运行与验证
 
-Web：
+开发用本地服务（不是默认产品入口）：
 
 ```powershell
 .\scripts\start.ps1
@@ -112,5 +112,5 @@ cargo test --workspace --manifest-path engine/Cargo.toml
 
 - 应用面向单机个人使用，没有多人账号、权限和远程数据库。
 - AI 生成依赖用户配置的模型服务。
-- Tauri 是实验入口；PySide/Web 是当前可用入口。
+- PySide 是默认桌面入口；HTTP 服务保留用于内部界面及开发调试。Tauri 历史实验尚待退役。
 - 已删除的历史设计记录可从 Git 历史查阅，不代表当前功能或操作方式。

@@ -2,18 +2,18 @@
 
 ## 1. 准备环境
 
-需要 Python 3.10+。Web 启动脚本会自动创建 `.venv` 并安装运行依赖：
+需要 Python 3.10+。桌面启动脚本会自动创建 `.venv` 并安装桌面依赖：
 
 ```powershell
-.\scripts\start.ps1
+.\scripts\start_desktop.ps1
 ```
 
-打开 `http://127.0.0.1:8000`。
+也可以双击 `start.bat` 打开桌面窗口。启动不下载模型；当前桌面仍内嵌本地界面。
 
 已有虚拟环境时默认复用，不会每次启动都运行 pip。依赖有变更或需要修复时显式执行：
 
 ```powershell
-.\scripts\start.ps1 -InstallDependencies
+.\scripts\start_desktop.ps1 -InstallDependencies
 ```
 
 ## 2. 配置模型
@@ -53,7 +53,7 @@ cargo test --workspace --manifest-path engine/Cargo.toml
 
 ## 4. 桌面端
 
-当前稳定桌面入口使用 PySide6：
+当前默认桌面入口使用 PySide6，交互验收仍在进行：
 
 ```powershell
 .\scripts\start_desktop.ps1

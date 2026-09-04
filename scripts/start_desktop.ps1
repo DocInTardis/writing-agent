@@ -43,3 +43,4 @@ if (-not (Test-Path $python)) {
 $env:WRITING_AGENT_HOST = $HostAddress
 $env:WRITING_AGENT_PORT = [string]$Port
 & $python -B -m writing_agent.desktop_app
+exit $LASTEXITCODE

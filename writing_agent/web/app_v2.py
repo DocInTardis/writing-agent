@@ -300,7 +300,6 @@ async def _app_lifespan(_: FastAPI):
         WorkspaceService().cleanup_expired_trash()
     except Exception as exc:
         logger.warning("startup: cleanup_expired_trash failed: %s", exc, exc_info=True)
-    await _startup_warm_models()
     yield
 
 app = FastAPI(title="Writing Agent Studio (v2)", lifespan=_app_lifespan)
@@ -1385,23 +1384,6 @@ def _persist_plagiarism_report(doc_id: str, payload: dict) -> dict:
         payload,
         report_root=PLAGIARISM_REPORT_DIR,
     )
-
-def _warm_ollama_model(model: str) -> None:
-    settings = get_ollama_settings()
-    if not settings.enabled:
-        return
-    client = OllamaClient(base_url=settings.base_url, model=model, timeout_s=12.0)
-    if not client.is_running():
-        return
-    try:
-        client.chat(system="Reply with OK only.", user="OK", temperature=0.0)
-    except Exception:
-        return
-async def _startup_warm_models() -> None:
-    """Warm a selected model during startup to reduce first-token latency."""
-    model = os.environ.get("WRITING_AGENT_EXTRACT_MODEL", "").strip() or get_ollama_settings().model
-    thread = threading.Thread(target=_warm_ollama_model, args=(model,), daemon=True)
-    thread.start()
 
 def _initialize_new_session(session) -> None:
     _set_doc_text(session, "")

@@ -4,7 +4,7 @@
 - structured generation flows (`planner` / `writer` / `reviewer` / `qa`)
 - citation-aware RAG retrieval and trust checks
 - document export pipelines (Markdown and DOCX)
-- web workbench with streaming editing
+- desktop workbench with streaming editing (currently an embedded local interface)
 - persistent workspace dashboard and lifecycle management
 - local workspace management and regression tests for the maintained product paths
 
@@ -19,7 +19,7 @@
 |  |- state_engine/                     # State/route/replay runtime modules
 |- engine/                              # Rust editor/render core workspace
 |- gateway/                             # Node AI gateway
-|- tests/                               # Unit / integration / e2e / ui tests
+|- tests/                               # Unit / integration / export tests
 |  `- fixtures/                         # Versioned sample inputs and golden fixtures
 |- scripts/                             # Launchers, data tools, and maintained utilities
 |- docs/                                # Architecture and runbooks
@@ -41,7 +41,7 @@ Local hygiene rules:
 
 ### 1) Install dependencies
 
-For everyday use, run `scripts/start.ps1`. It creates one `.venv` on first use;
+For everyday use, run `scripts/start_desktop.ps1` (or double-click `start.bat`). It creates one `.venv` on first use;
 later launches reuse it without invoking pip. The product direction is a lightweight
 desktop app; the current desktop shell still reuses the local service and frontend.
 Node and Rust are only needed when building or testing their respective components.
@@ -72,7 +72,12 @@ Quota or billing errors do not switch to local Ollama by default. The legacy fal
 .\.venv\Scripts\python -m writing_agent.launch
 ```
 
-Default URL: `http://127.0.0.1:8000`
+This opens the desktop window. First install desktop dependencies using
+`scripts/start_desktop.ps1`. Missing desktop dependencies produce an error, not a
+browser fallback. Startup does not launch Ollama or download a model.
+
+Developer-only local HTTP service: `python -m writing_agent.launch --web`
+(or `scripts/start.ps1`), at `http://127.0.0.1:8000` by default.
 
 Default product entrypoints:
 - `/` -> product home with recent workspaces and system status
@@ -90,6 +95,8 @@ The browser automation test chain has been retired; no separate test browser dow
 is required. Desktop interaction testing still needs to be rebuilt during consolidation.
 
 ## Productization Baseline
+
+Current execution checklist: [lightweight desktop refactor](docs/REFACTOR_CHECKLIST.md).
 
 - Product target: `docs/PRODUCTIZATION_TARGET.md`
 - Local workspace persistence: `.data/workspaces/`

@@ -5,17 +5,13 @@ This module belongs to `writing_agent` in the writing-agent codebase.
 
 from __future__ import annotations
 
-import logging
-logger = logging.getLogger(__name__)
-
 import argparse
+import logging
 import os
 import socket
-import subprocess
 import sys
 import threading
 import time
-import urllib.request
 from contextlib import closing
 from pathlib import Path
 
@@ -25,8 +21,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 
 import uvicorn
 
-from writing_agent.llm import OllamaClient, get_default_provider, get_ollama_settings
-
+logger = logging.getLogger(__name__)
 
 APP_TITLE = "写作助手"
 LOADING_HTML = """<!doctype html>
@@ -61,63 +56,10 @@ def _pick_port(host: str, base: int, tries: int = 20) -> int:
         port = base + offset
         if _port_available(host, port):
             return port
-    return base
-
-
-def _start_ollama_serve() -> None:
-    creationflags = 0
-    if os.name == "nt":
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
-    subprocess.Popen(
-        ["ollama", "serve"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        creationflags=creationflags,
-    )
-
-
-def _wait_until(predicate, timeout_s: float, interval_s: float = 0.2) -> bool:
-    start = time.time()
-    while time.time() - start < timeout_s:
-        if predicate():
-            return True
-        time.sleep(interval_s)
-    return False
-
-
-def ensure_ollama_ready() -> None:
-    provider = get_default_provider()
-    if not isinstance(provider, OllamaClient):
-        return
-    settings = get_ollama_settings()
-    if not settings.enabled:
-        return
-    client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-    if not client.is_running():
-        try:
-            _start_ollama_serve()
-        except FileNotFoundError:
-            return
-        _wait_until(client.is_running, timeout_s=10)
-    if client.is_running() and not client.has_model():
-        client.pull_model()
-
-
-def _wait_for_http(url: str, timeout_s: float = 15.0) -> bool:
-    start = time.time()
-    while time.time() - start < timeout_s:
-        try:
-            with urllib.request.urlopen(url, timeout=2) as resp:
-                if resp.status < 500:
-                    return True
-        except Exception:
-            time.sleep(0.3)
-    return False
+    raise RuntimeError(f"No available local port in range {base}..{base + tries - 1}")
 
 
 def _configure_webengine_env() -> None:
-    os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
     base_flags = [
         "--disable-gpu",
         "--disable-gpu-compositing",
@@ -164,6 +106,9 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self._server = server
         self._base_url = url
+        self._closing = False
+        self._load_started = False
+        self._startup_deadline = time.monotonic() + 30.0
         self.setWindowTitle(APP_TITLE)
         self.resize(1440, 900)
 
@@ -171,14 +116,13 @@ class MainWindow(QtWidgets.QMainWindow):
         profile = QWebEngineProfile.defaultProfile()
         profile.setHttpUserAgent(profile.httpUserAgent() + " WritingAgentDesktop/1.0")
         profile.setHttpCacheType(QWebEngineProfile.NoCache)
-        profile.clearHttpCache()
         profile.downloadRequested.connect(self._handle_download)
         settings = self.view.settings()
         settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebGLEnabled, False)
         settings.setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, False)
         settings.setAttribute(QWebEngineSettings.LocalStorageEnabled, True)
-        settings.setAttribute(QWebEngineSettings.PluginsEnabled, True)
+        settings.setAttribute(QWebEngineSettings.PluginsEnabled, False)
         settings.setAttribute(QWebEngineSettings.JavascriptCanAccessClipboard, True)
 
         self._url = url
@@ -229,75 +173,86 @@ class MainWindow(QtWidgets.QMainWindow):
 
         act_reload = QtGui.QAction("Reload", self)
         act_reload.setShortcut(QtGui.QKeySequence.Refresh)
-        act_reload.triggered.connect(self.view.reload)
+        act_reload.triggered.connect(self._reload_workbench)
         view_menu.addAction(act_reload)
 
     def _handle_download(self, download) -> None:
-        default = download.path() or os.path.basename(download.url().path()) or "document.docx"
+        default = download.downloadFileName() or "document.docx"
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save File", default)
         if not path:
             download.cancel()
             return
-        download.setPath(path)
+        destination = Path(path)
+        download.setDownloadDirectory(str(destination.parent))
+        download.setDownloadFileName(destination.name)
         download.accept()
 
     def _on_load_finished(self, ok: bool) -> None:
+        if self._closing or not self._load_started:
+            return
         if not ok:
-            QtCore.QTimer.singleShot(800, self.view.reload)
-            return
-        try:
-            self.view.page().runJavaScript("Boolean(window.__wa_ready)", self._handle_ready_check)
-        except Exception:
-            QtCore.QTimer.singleShot(800, self.view.reload)
+            self._show_startup_error("界面加载失败。请检查本地服务后使用 View → Reload 重试。")
 
-    def _handle_ready_check(self, ready: bool) -> None:
-        if ready:
-            return
-        QtCore.QTimer.singleShot(600, self.view.reload)
+    def _reload_workbench(self) -> None:
+        if not self._closing:
+            self._load_started = True
+            self.view.setUrl(QtCore.QUrl(self._url))
+
+    def _show_startup_error(self, message: str) -> None:
+        self._load_started = False
+        self.view.setHtml(f"<html><body><h2>写作助手启动失败</h2><p>{message}</p></body></html>")
 
     def _schedule_ready_check(self) -> None:
-        def _check():
-            if _wait_for_http(self._url, timeout_s=8):
-                QtCore.QTimer.singleShot(200, self.view.reload)
-            else:
-                QtCore.QTimer.singleShot(800, self._schedule_ready_check)
-
-        QtCore.QTimer.singleShot(200, _check)
+        if self._closing or self._load_started:
+            return
+        if self._server.server.started:
+            self._load_started = True
+            self.view.setUrl(QtCore.QUrl(self._url))
+        elif not self._server.is_alive():
+            self._show_startup_error("本地服务未能启动，请查看启动窗口中的错误信息。")
+        elif time.monotonic() >= self._startup_deadline:
+            self._server.stop()
+            self._show_startup_error("本地服务启动超过 30 秒，请关闭窗口后重试。")
+        else:
+            QtCore.QTimer.singleShot(200, self._schedule_ready_check)
 
     def closeEvent(self, event) -> None:
+        self._closing = True
         if self._server:
             self._server.stop()
         super().closeEvent(event)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    sys.dont_write_bytecode = True
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     _configure_webengine_env()
     parser = argparse.ArgumentParser(description="Writing Agent Desktop")
     parser.add_argument("--host", default=os.environ.get("WRITING_AGENT_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("WRITING_AGENT_PORT", "8000")))
-    parser.add_argument("--no-ollama", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     host = args.host
     port = _pick_port(host, args.port)
     os.environ["WRITING_AGENT_HOST"] = host
     os.environ["WRITING_AGENT_PORT"] = str(port)
-    os.environ.setdefault("WRITING_AGENT_USE_OLLAMA", "1")
     os.environ.setdefault("WRITING_AGENT_DESKTOP", "1")
     os.environ.setdefault("WRITING_AGENT_PERF_MODE", "1")
 
-    if not args.no_ollama:
-        ensure_ollama_ready()
-
+    app = QtWidgets.QApplication(sys.argv)
     server = UvicornWorker(host, port)
     server.start()
-
-    app = QtWidgets.QApplication(sys.argv)
     url = f"http://{host}:{port}/"
-    window = MainWindow(url, server)
-    window.show()
-    QtCore.QTimer.singleShot(300, lambda: window.view.setUrl(QtCore.QUrl(url)))
-    return app.exec()
+    try:
+        window = MainWindow(url, server)
+        window.show()
+        app.aboutToQuit.connect(server.stop)
+        return app.exec()
+    finally:
+        server.stop()
+        server.join(timeout=5)
+        if server.is_alive():
+            logger.warning("Local service did not stop within 5 seconds")
 
 
 if __name__ == "__main__":

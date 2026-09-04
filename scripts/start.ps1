@@ -51,4 +51,5 @@ if ($NoWeb) {
   exit 0
 }
 
-& $python -B -m writing_agent.launch
+& $python -B -m writing_agent.launch --web
+exit $LASTEXITCODE

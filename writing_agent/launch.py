@@ -2,42 +2,16 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import socket
-import subprocess
 import sys
-import time
 
 from writing_agent.config import cfg
-from writing_agent.llm import OllamaClient, get_default_provider, get_ollama_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
-
-
-def _start_ollama_serve() -> None:
-    """Start a detached local Ollama process if the binary is available."""
-    creationflags = 0
-    if os.name == "nt":
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
-    subprocess.Popen(
-        ["ollama", "serve"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        creationflags=creationflags,
-    )
-
-
-def _wait_until(predicate, timeout_s: float, interval_s: float = 0.2) -> bool:
-    """Poll `predicate` until it returns True or timeout is reached."""
-    start = time.time()
-    while time.time() - start < timeout_s:
-        if predicate():
-            return True
-        time.sleep(interval_s)
-    return False
 
 
 def _pick_available_port(host: str, base_port: int, tries: int = 20) -> int:
@@ -51,38 +25,31 @@ def _pick_available_port(host: str, base_port: int, tries: int = 20) -> int:
                 return port
             except OSError:
                 continue
-    return base_port
+    raise RuntimeError(f"No available local port in range {base_port}..{base_port + tries - 1}")
 
 
-def main() -> int:
-    """Launch the web application and bootstrap Ollama when enabled."""
+def main(argv: list[str] | None = None) -> int:
+    """Open the desktop product; the HTTP-only host is an explicit developer mode."""
+    parser = argparse.ArgumentParser(description="Writing Agent Desktop")
+    parser.add_argument("--web", action="store_true", help="Run the local service only (development)")
+    args = parser.parse_args(argv)
+    sys.dont_write_bytecode = True
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+    if not args.web:
+        try:
+            from writing_agent.desktop_app import main as desktop_main
+        except ModuleNotFoundError as exc:
+            if not (exc.name or "").startswith(("PySide6", "shiboken6")):
+                raise
+            print("Desktop dependencies are missing. Run scripts/start_desktop.ps1 to install them.", file=sys.stderr)
+            return 2
+        return desktop_main([])
+
     errors = cfg.validate()
     if errors:
         for err in errors:
             logger.warning("Config warning: %s", err)
     cfg.log_summary()
-
-    try:
-        provider = get_default_provider()
-    except Exception as exc:
-        logger.warning("Default provider unavailable at startup (%s); continuing so user can configure via UI.", exc)
-        provider = None
-    if isinstance(provider, OllamaClient):
-        settings = get_ollama_settings()
-        if settings.enabled:
-            client = OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-            if not client.is_running():
-                try:
-                    _start_ollama_serve()
-                except FileNotFoundError:
-                    print("ollama executable not found; install Ollama and add it to PATH.", file=sys.stderr)
-                    return 2
-                if not _wait_until(client.is_running, timeout_s=10):
-                    print(f"Ollama is not reachable at {settings.base_url}.", file=sys.stderr)
-                    return 3
-            if not client.has_model():
-                print(f"Pulling model for first use: {settings.model} ...")
-                client.pull_model()
 
     host = os.environ.get("WRITING_AGENT_HOST", "127.0.0.1")
     port = int(os.environ.get("WRITING_AGENT_PORT", "8000"))

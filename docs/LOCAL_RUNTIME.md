@@ -2,8 +2,10 @@
 
 ## 日常只用一条路径
 
-运行 `scripts/start.ps1`，使用浏览器访问本地 Web 工作台。首次创建 `.venv` 并安装运行依赖；后续启动直接复用，不调用 pip。
-依赖文件变更或环境需要修复时运行 `scripts/start.ps1 -InstallDependencies`。安装过程不保留 pip 下载缓存。
+双击 `start.bat` 或运行 `scripts/start_desktop.ps1` 打开桌面窗口。首次创建 `.venv` 并安装桌面依赖；后续复用。当前仍使用 PySide + 内嵌 Svelte 界面，并不是无浏览器内核的原生编辑器。
+依赖文件变更或环境需要修复时运行 `scripts/start_desktop.ps1 -InstallDependencies`。安装过程不保留 pip 下载缓存。
+`scripts/start.ps1` / `python -m writing_agent.launch --web` 仅用于显式开发调试。普通 CLI `python -m writing_agent.launch` 默认打开桌面。
+启动不探测模型、不启动 Ollama、不下载模型；用户可以先打开界面再配置 API。任务执行中的旧模型路径仍在收敛中，不能视为已全部迁移。
 
 默认只保留一个 `.venv`。运行环境和开发环境不是两份产品：需要开发时，把 `requirements-dev.txt` 安装到同一个环境即可。
 
@@ -12,11 +14,14 @@
 - Svelte / Node：修改前端时才需要，日常使用已构建的静态文件。
 - Node AI 网关：只在选择该接入方式时运行。
 - Rust 引擎：只在修改或验证原生引擎时编译。
-- PySide 桌面壳：可选；首次使用桌面启动脚本会额外安装 PySide6。
+- PySide 桌面壳：当前桌面入口依赖；首次使用桌面启动脚本安装 PySide6。
 - Tauri：实验入口，暂不作为默认运行方式。
 - 浏览器自动测试链路已移除，不再安装 Playwright 或下载专用测试浏览器。
 
 ## 哪些空间可以清理
+
+只读盘点：`.\.venv\Scripts\python -B -m writing_agent.storage_report`。
+输出分类大小、顶层目录和读取错误，不读取文件内容，不跟随链接，不执行删除。分类不等于删除许可；`.data` 始终按受保护数据处理。
 
 | 类别 | 位置 | 规则 |
 |---|---|---|
