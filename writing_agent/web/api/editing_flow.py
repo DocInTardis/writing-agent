@@ -19,6 +19,7 @@ from writing_agent.capabilities.diagramming import build_diagram_spec_from_promp
 from writing_agent.capabilities.editing import trim_inline_context
 from writing_agent.web.domains import context_policy_domain
 from writing_agent.workflows import (
+    BlockEditDeps,
     BlockEditRequest,
     DiagramGenerateRequest,
     DocIRRequest,
@@ -69,6 +70,21 @@ def _inline_ai_deps(app_v2, inline_ai_module) -> InlineAIDeps:
         normalize_inline_context_policy_fn=_normalize_inline_context_policy,
         trim_inline_context_fn=_trim_inline_context,
         inline_ai_module=inline_ai_module,
+    )
+
+
+def _block_edit_deps(app_v2) -> BlockEditDeps:
+    return BlockEditDeps(
+        exception_factory=app_v2.HTTPException,
+        doc_ir_from_dict=app_v2.doc_ir_from_dict,
+        doc_ir_to_dict=app_v2.doc_ir_to_dict,
+        doc_ir_to_text=app_v2.doc_ir_to_text,
+        doc_ir_build_index=app_v2.doc_ir_build_index,
+        doc_ir_render_block_text=app_v2.doc_ir_render_block_text,
+        doc_ir_diff=app_v2.doc_ir_diff,
+        apply_block_edit=app_v2.apply_block_edit,
+        auto_commit_version=app_v2._auto_commit_version,
+        persist_session=app_v2.store.put,
     )
 
 
@@ -175,7 +191,10 @@ async def block_edit(doc_id: str, request: Request) -> dict:
         raise app_v2.HTTPException(status_code=404, detail="document not found")
 
     data = await request.json()
-    return await run_block_edit_workflow(request=BlockEditRequest(app_v2=app_v2, session=session, data=data))
+    return await run_block_edit_workflow(
+        request=BlockEditRequest(session=session, data=data),
+        deps=_block_edit_deps(app_v2),
+    )
 
 
 async def block_edit_preview(doc_id: str, request: Request) -> dict:
@@ -186,7 +205,8 @@ async def block_edit_preview(doc_id: str, request: Request) -> dict:
 
     data = await request.json()
     return await run_block_edit_preview_workflow(
-        request=BlockEditRequest(app_v2=app_v2, session=session, data=data)
+        request=BlockEditRequest(session=session, data=data),
+        deps=_block_edit_deps(app_v2),
     )
 
 

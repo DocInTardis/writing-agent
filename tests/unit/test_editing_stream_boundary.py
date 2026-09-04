@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 from writing_agent.web.api import editing_flow
 from writing_agent.workflows.editing_request_workflow import (
+    BlockEditDeps,
+    BlockEditRequest,
     InlineAIDeps,
     InlineAIRequest,
     InlineAIStreamEvent,
@@ -64,6 +66,12 @@ def test_inline_request_contains_input_not_web_services() -> None:
         "trim_inline_context_fn",
         "inline_ai_module",
     }
+
+
+def test_block_edit_request_contains_input_not_web_services() -> None:
+    assert set(BlockEditRequest.__dataclass_fields__) == {"session", "data"}
+    assert "exception_factory" in BlockEditDeps.__dataclass_fields__
+    assert "persist_session" in BlockEditDeps.__dataclass_fields__
 
 
 def test_stream_is_closed_when_consumer_stops_early() -> None:

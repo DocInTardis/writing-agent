@@ -6,6 +6,7 @@ from enum import Enum
 from types import SimpleNamespace
 
 from writing_agent.workflows.editing_request_workflow import (
+    BlockEditDeps,
     BlockEditRequest,
     DiagramGenerateRequest,
     DocIRRequest,
@@ -200,13 +201,22 @@ def test_block_edit_workflow_commits_and_persists_updated_doc() -> None:
             _ = doc_ir, block_id, instruction
             return ({"sections": [{"id": "b1", "text": "after"}], "text": "after"}, {"mode": "rewrite"})
 
+    deps = BlockEditDeps(
+        exception_factory=_FakeApp.HTTPException,
+        doc_ir_from_dict=_FakeApp.doc_ir_from_dict,
+        doc_ir_to_dict=_FakeApp.doc_ir_to_dict,
+        doc_ir_to_text=_FakeApp.doc_ir_to_text,
+        doc_ir_build_index=lambda _value: None,
+        doc_ir_render_block_text=lambda _value: "",
+        doc_ir_diff=lambda _before, _after: {},
+        apply_block_edit=_FakeApp.apply_block_edit,
+        auto_commit_version=_FakeApp._auto_commit_version,
+        persist_session=_FakeApp.store.put,
+    )
     out = asyncio.run(
         run_block_edit_workflow(
-            request=BlockEditRequest(
-                app_v2=_FakeApp(),
-                session=session,
-                data={"block_id": "b1", "instruction": "rewrite"},
-            )
+            request=BlockEditRequest(session=session, data={"block_id": "b1", "instruction": "rewrite"}),
+            deps=deps,
         )
     )
 
@@ -270,10 +280,21 @@ def test_block_edit_preview_workflow_returns_candidates_and_errors() -> None:
             next_ir["text"] = f"after:{instruction}"
             return next_ir, {"instruction": instruction, "block_id": block_id}
 
+    deps = BlockEditDeps(
+        exception_factory=_FakeApp.HTTPException,
+        doc_ir_from_dict=_FakeApp.doc_ir_from_dict,
+        doc_ir_to_dict=_FakeApp.doc_ir_to_dict,
+        doc_ir_to_text=_FakeApp.doc_ir_to_text,
+        doc_ir_build_index=_FakeApp.doc_ir_build_index,
+        doc_ir_render_block_text=_FakeApp.doc_ir_render_block_text,
+        doc_ir_diff=_FakeApp.doc_ir_diff,
+        apply_block_edit=_FakeApp.apply_block_edit,
+        auto_commit_version=lambda *_args: None,
+        persist_session=lambda _session: None,
+    )
     out = asyncio.run(
         run_block_edit_preview_workflow(
             request=BlockEditRequest(
-                app_v2=_FakeApp(),
                 session=session,
                 data={
                     "block_id": "b1",
@@ -283,7 +304,8 @@ def test_block_edit_preview_workflow_returns_candidates_and_errors() -> None:
                         {"label": "Bad", "instruction": "bad"},
                     ],
                 },
-            )
+            ),
+            deps=deps,
         )
     )
 

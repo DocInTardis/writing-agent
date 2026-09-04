@@ -39,9 +39,22 @@ class InlineAIStreamEvent:
 
 @dataclass(frozen=True)
 class BlockEditRequest:
-    app_v2: Any
     session: Any
     data: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class BlockEditDeps:
+    exception_factory: Callable[..., Exception]
+    doc_ir_from_dict: Callable[..., Any]
+    doc_ir_to_dict: Callable[..., dict[str, Any]]
+    doc_ir_to_text: Callable[..., str]
+    doc_ir_build_index: Callable[..., Any]
+    doc_ir_render_block_text: Callable[..., str]
+    doc_ir_diff: Callable[..., dict[str, Any]]
+    apply_block_edit: Callable[..., Any]
+    auto_commit_version: Callable[..., None]
+    persist_session: Callable[..., None]
 
 
 @dataclass(frozen=True)
@@ -115,68 +128,66 @@ async def run_inline_ai_stream_workflow(
     return event_generator()
 
 
-def _require_block_edit_input(request: BlockEditRequest) -> tuple[str, str]:
+def _require_block_edit_input(request: BlockEditRequest, deps: BlockEditDeps) -> tuple[str, str]:
     data = request.data
     if not isinstance(data, dict):
-        raise request.app_v2.HTTPException(status_code=400, detail="body must be object")
+        raise deps.exception_factory(status_code=400, detail="body must be object")
     block_id = str(data.get("block_id") or "").strip()
     instruction = str(data.get("instruction") or "").strip()
     if not block_id or not instruction:
-        raise request.app_v2.HTTPException(status_code=400, detail="block_id and instruction required")
+        raise deps.exception_factory(status_code=400, detail="block_id and instruction required")
     return block_id, instruction
 
 
-def _resolve_base_ir(*, app_v2: Any, session: Any, data: dict[str, Any]):
+def _resolve_base_ir(*, deps: Any, session: Any, data: dict[str, Any]):
     incoming_ir = data.get("doc_ir")
     if isinstance(incoming_ir, dict) and incoming_ir.get("sections") is not None:
-        return app_v2.doc_ir_from_dict(incoming_ir)
-    return app_v2.doc_ir_from_dict(session.doc_ir or {})
+        return deps.doc_ir_from_dict(incoming_ir)
+    return deps.doc_ir_from_dict(session.doc_ir or {})
 
 
-def _extract_block_text(*, app_v2: Any, doc_ir_obj: Any, block_id: str) -> str:
+def _extract_block_text(*, deps: BlockEditDeps, doc_ir_obj: Any, block_id: str) -> str:
     return extract_block_text_from_ir(
         doc_ir_obj=doc_ir_obj,
         block_id=block_id,
-        doc_ir_build_index_fn=app_v2.doc_ir_build_index,
-        doc_ir_render_block_text_fn=app_v2.doc_ir_render_block_text,
+        doc_ir_build_index_fn=deps.doc_ir_build_index,
+        doc_ir_render_block_text_fn=deps.doc_ir_render_block_text,
     )
 
 
-async def run_block_edit_workflow(*, request: BlockEditRequest) -> dict[str, Any]:
-    app_v2 = request.app_v2
+async def run_block_edit_workflow(*, request: BlockEditRequest, deps: BlockEditDeps) -> dict[str, Any]:
     session = request.session
-    block_id, instruction = _require_block_edit_input(request)
-    doc_ir = _resolve_base_ir(app_v2=app_v2, session=session, data=request.data)
+    block_id, instruction = _require_block_edit_input(request, deps)
+    doc_ir = _resolve_base_ir(deps=deps, session=session, data=request.data)
 
     try:
-        base_text = app_v2.doc_ir_to_text(doc_ir)
+        base_text = deps.doc_ir_to_text(doc_ir)
     except Exception:
         base_text = ""
     if base_text.strip():
         session.doc_text = base_text
-        session.doc_ir = app_v2.doc_ir_to_dict(doc_ir)
-        app_v2._auto_commit_version(session, "auto: before update")
+        session.doc_ir = deps.doc_ir_to_dict(doc_ir)
+        deps.auto_commit_version(session, "auto: before update")
 
     try:
-        updated_ir, meta = await app_v2.apply_block_edit(doc_ir, block_id, instruction)
+        updated_ir, meta = await deps.apply_block_edit(doc_ir, block_id, instruction)
     except Exception as exc:
-        raise app_v2.HTTPException(status_code=500, detail=str(exc)) from exc
+        raise deps.exception_factory(status_code=500, detail=str(exc)) from exc
 
-    session.doc_ir = app_v2.doc_ir_to_dict(updated_ir)
-    session.doc_text = app_v2.doc_ir_to_text(updated_ir)
-    app_v2._auto_commit_version(session, "auto: after update")
-    app_v2.store.put(session)
+    session.doc_ir = deps.doc_ir_to_dict(updated_ir)
+    session.doc_text = deps.doc_ir_to_text(updated_ir)
+    deps.auto_commit_version(session, "auto: after update")
+    deps.persist_session(session)
     return {"ok": 1, "doc_ir": session.doc_ir, "text": session.doc_text, "meta": meta}
 
 
-async def run_block_edit_preview_workflow(*, request: BlockEditRequest) -> dict[str, Any]:
-    app_v2 = request.app_v2
-    block_id, instruction = _require_block_edit_input(request)
-    base_ir = _resolve_base_ir(app_v2=app_v2, session=request.session, data=request.data)
+async def run_block_edit_preview_workflow(*, request: BlockEditRequest, deps: BlockEditDeps) -> dict[str, Any]:
+    block_id, instruction = _require_block_edit_input(request, deps)
+    base_ir = _resolve_base_ir(deps=deps, session=request.session, data=request.data)
 
-    before_text = _extract_block_text(app_v2=app_v2, doc_ir_obj=base_ir, block_id=block_id)
+    before_text = _extract_block_text(deps=deps, doc_ir_obj=base_ir, block_id=block_id)
     if not before_text:
-        raise app_v2.HTTPException(status_code=404, detail="block not found")
+        raise deps.exception_factory(status_code=404, detail="block not found")
 
     variants = build_block_edit_variants(instruction=instruction, variants_raw=request.data.get("variants"))
 
@@ -189,20 +200,20 @@ async def run_block_edit_preview_workflow(*, request: BlockEditRequest) -> dict[
         try:
             working_ir = clone_doc_ir(
                 doc_ir_obj=base_ir,
-                doc_ir_to_dict_fn=app_v2.doc_ir_to_dict,
-                doc_ir_from_dict_fn=app_v2.doc_ir_from_dict,
+                doc_ir_to_dict_fn=deps.doc_ir_to_dict,
+                doc_ir_from_dict_fn=deps.doc_ir_from_dict,
             )
-            updated_ir, meta = await app_v2.apply_block_edit(working_ir, block_id, candidate_instruction)
-            candidate_after = _extract_block_text(app_v2=app_v2, doc_ir_obj=updated_ir, block_id=block_id)
+            updated_ir, meta = await deps.apply_block_edit(working_ir, block_id, candidate_instruction)
+            candidate_after = _extract_block_text(deps=deps, doc_ir_obj=updated_ir, block_id=block_id)
             candidates.append(
                 {
                     "label": candidate_label,
                     "instruction": candidate_instruction,
-                    "doc_ir": app_v2.doc_ir_to_dict(updated_ir),
-                    "text": app_v2.doc_ir_to_text(updated_ir),
+                    "doc_ir": deps.doc_ir_to_dict(updated_ir),
+                    "text": deps.doc_ir_to_text(updated_ir),
                     "selected_before": before_text,
                     "selected_after": candidate_after,
-                    "diff": app_v2.doc_ir_diff(base_ir, updated_ir),
+                    "diff": deps.doc_ir_diff(base_ir, updated_ir),
                     "meta": meta,
                 }
             )

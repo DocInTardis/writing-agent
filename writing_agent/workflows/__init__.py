@@ -1,6 +1,7 @@
 """Workflow assembly layer."""
 
 from .editing_request_workflow import (
+    BlockEditDeps,
     BlockEditRequest,
     DiagramGenerateRequest,
     DocIRRequest,
@@ -27,6 +28,7 @@ from .generate_workflow import run_generate_workflow
 from .revision_request_workflow import RevisionRequest, run_revision_workflow
 
 __all__ = [
+    "BlockEditDeps",
     "BlockEditRequest",
     "DiagramGenerateRequest",
     "DocIRRequest",
