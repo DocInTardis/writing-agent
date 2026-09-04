@@ -13,6 +13,7 @@ from writing_agent.workflows import (
 )
 
 from .generation_dependencies import build_generate_section_deps
+from .revision_dependencies import build_revision_deps
 
 SectionResolver = Callable[..., dict[str, object] | None]
 HeadingNormalizer = Callable[[object], str]
@@ -78,10 +79,9 @@ def run_revision_request(
     validate_revision_candidate_fn: RevisionValidator,
 ) -> dict[str, Any]:
     return run_revision_workflow(
-        request=RevisionRequest(
-            app_v2=app_v2,
-            session=session,
-            data=data,
+        request=RevisionRequest(session=session, data=data),
+        deps=build_revision_deps(
+            app_v2,
             fallback_normalize_heading_text_fn=fallback_normalize_heading_text_fn,
             resolve_target_section_selection_fn=resolve_target_section_selection_fn,
             build_revision_fallback_prompt_fn=build_revision_fallback_prompt_fn,

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 from writing_agent.workflows.revision_request_workflow import RevisionRequest, run_revision_workflow
+from writing_agent.web.services.revision_dependencies import build_revision_deps
 
 
 @dataclass
@@ -64,10 +65,9 @@ def test_revision_workflow_returns_selected_revision_when_available() -> None:
             session.doc_text = text
 
     out = run_revision_workflow(
-        request=RevisionRequest(
-            app_v2=_FakeApp(),
-            session=session,
-            data={"instruction": "please revise", "text": session.doc_text, "selection": {"text": "old sentence"}},
+        request=RevisionRequest(session=session, data={"instruction": "please revise", "text": session.doc_text, "selection": {"text": "old sentence"}}),
+        deps=build_revision_deps(
+            _FakeApp(),
             fallback_normalize_heading_text_fn=lambda value: str(value),
             resolve_target_section_selection_fn=lambda **_kwargs: None,
             build_revision_fallback_prompt_fn=lambda **_kwargs: ("", ""),
@@ -144,10 +144,9 @@ def test_revision_workflow_hard_gate_reject_keeps_base_text() -> None:
             session.doc_text = text
 
     out = run_revision_workflow(
-        request=RevisionRequest(
-            app_v2=_FakeApp(),
-            session=session,
-            data={"instruction": "please revise", "text": session.doc_text, "allow_unscoped_fallback": True},
+        request=RevisionRequest(session=session, data={"instruction": "please revise", "text": session.doc_text, "allow_unscoped_fallback": True}),
+        deps=build_revision_deps(
+            _FakeApp(),
             fallback_normalize_heading_text_fn=lambda value: str(value),
             resolve_target_section_selection_fn=lambda **_kwargs: None,
             build_revision_fallback_prompt_fn=lambda **_kwargs: ("system", "user"),
