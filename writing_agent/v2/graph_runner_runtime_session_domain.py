@@ -9,6 +9,7 @@ import os
 import queue
 import threading
 import time
+import uuid
 from pathlib import Path
 from writing_agent.v2.global_config import FAILURE_API_PROVIDER_UNREACHABLE, FAILURE_PROVIDER_DISABLED, classify_provider_error
 from writing_agent.v2.graph_runner import *  # noqa: F401,F403
@@ -31,6 +32,12 @@ from writing_agent.v2 import graph_runner_runtime_plan_domain as plan_domain
 
 def _env_flag(name: str, default: str = "0") -> bool:
     return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _create_text_store(runtime_api, data_dir: Path):
+    if not _env_flag("WRITING_AGENT_PERSIST_TEXT_BLOCKS"):
+        return None
+    return runtime_api.TextStore(data_dir / "text_store")
 
 
 def _flush_trace(rows: list[dict]):
@@ -65,10 +72,27 @@ def run_generate_graph_impl(
     expand_outline: bool = False,
     config: GenerateConfig,
 ):
+    from writing_agent.v2.graph_runner_policy_domain import _flush_phase_timing
+
+    run_id = f"run_{uuid.uuid4().hex}"
+    try:
+        yield from _run_generate_graph_impl(
+            runtime_api, instruction=instruction, current_text=current_text,
+            required_h2=required_h2, required_outline=required_outline,
+            expand_outline=expand_outline, config=config, run_id=run_id,
+        )
+    finally:
+        _flush_phase_timing(run_id)
+
+
+def _run_generate_graph_impl(
+    runtime_api, *, instruction: str, current_text: str, required_h2: list[str] | None,
+    required_outline: list[tuple[int, str]] | None, expand_outline: bool,
+    config: GenerateConfig, run_id: str,
+):
     provider_name = runtime_api.get_provider_name()
     provider_snapshot = runtime_api.get_provider_snapshot()
     strict_json = _env_flag("WRITING_AGENT_STRICT_JSON", "1")
-    run_id = f"run_{int(time.time() * 1000)}"
     run_start_ts = time.time()
     prompt_trace: list[dict] = []
     prompt_events: list[dict] = []
@@ -130,7 +154,7 @@ def run_generate_graph_impl(
 
     data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(Path(__file__).resolve().parents[2] / ".data"))).resolve()
     local_cache = runtime_api.LocalCache(data_dir / "cache")
-    text_store = runtime_api.TextStore(data_dir / "text_store")
+    text_store = _create_text_store(runtime_api, data_dir)
     cache_io_lock = threading.Lock()
 
     runtime_api._record_phase_timing(run_id, {"phase": "PLAN", "event": "start"})

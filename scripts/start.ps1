@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
+$env:PYTHONDONTWRITEBYTECODE = "1"
 
 # A stale custom PYTHON_HOME can make venv/pip use a removed interpreter.
 Remove-Item Env:PYTHON_HOME -ErrorAction SilentlyContinue
@@ -50,4 +51,4 @@ if ($NoWeb) {
   exit 0
 }
 
-& $python -m writing_agent.launch
+& $python -B -m writing_agent.launch

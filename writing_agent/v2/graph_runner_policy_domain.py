@@ -10,6 +10,7 @@ import os
 import re
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 from writing_agent.v2.paradigm_lock import ParadigmLock
@@ -42,8 +43,9 @@ _PARADIGM_LOCK = ParadigmLock()
 _SECTION_CONTRACT = SectionContract()
 _META_FIREWALL = MetaFirewall()
 
-_PHASE_METRICS_PATH = Path(".data/metrics/phase_timing.json")
+_PHASE_METRICS_PATH = Path(os.environ.get("WRITING_AGENT_DATA_DIR", ".data")) / "metrics/phase_timing.json"
 _PHASE_METRICS_LOCK = threading.Lock()
+_PHASE_METRICS_PENDING: deque[dict] = deque(maxlen=200)
 
 
 def _load_phase_metrics() -> dict:
@@ -61,18 +63,37 @@ def _load_phase_metrics() -> dict:
 
 def _save_phase_metrics(data: dict) -> None:
     _PHASE_METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _PHASE_METRICS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary = _PHASE_METRICS_PATH.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    temporary.replace(_PHASE_METRICS_PATH)
 
 
 def _record_phase_timing(run_id: str, payload: dict) -> None:
+    # Diagnostics are not user data: normal writing must not produce metric files.
+    if str(os.environ.get("WRITING_AGENT_PERSIST_PHASE_METRICS", "0")).lower() not in {"1", "true", "yes", "on"}:
+        return
     with _PHASE_METRICS_LOCK:
-        data = _load_phase_metrics()
-        runs = data.get("runs") if isinstance(data.get("runs"), list) else []
         entry = {"run_id": run_id, "ts": time.time()}
         entry.update(payload or {})
-        runs.append(entry)
-        data["runs"] = runs[-200:]
-        _save_phase_metrics(data)
+        _PHASE_METRICS_PENDING.append(entry)
+    if payload.get("phase") == "TOTAL" and payload.get("event") == "end":
+        _flush_phase_timing(run_id)
+
+
+def _flush_phase_timing(run_id: str) -> None:
+    with _PHASE_METRICS_LOCK:
+        rows = [row for row in _PHASE_METRICS_PENDING if row.get("run_id") == run_id]
+        if not rows:
+            return
+        remaining = [row for row in _PHASE_METRICS_PENDING if row.get("run_id") != run_id]
+        _PHASE_METRICS_PENDING.clear()
+        _PHASE_METRICS_PENDING.extend(remaining)
+        try:
+            data = _load_phase_metrics()
+            data["runs"] = (data.get("runs", []) + rows)[-200:]
+            _save_phase_metrics(data)
+        except (OSError, TypeError, ValueError):
+            logger.debug("Cannot persist optional phase metrics", exc_info=True)
 
 def _filter_disallowed_sections(items: list[str]) -> list[str]:
     if not items:

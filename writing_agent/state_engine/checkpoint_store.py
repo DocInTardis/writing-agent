@@ -6,6 +6,8 @@ This module belongs to `writing_agent.state_engine` in the writing-agent codebas
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -14,8 +16,8 @@ from typing import Any
 class CheckpointStore:
     """Chapter-level checkpoint persistence for resume/retry/replay."""
 
-    def __init__(self, root: Path | str = ".data/graph_checkpoints") -> None:
-        self.root = Path(root)
+    def __init__(self, root: Path | str | None = None) -> None:
+        self.root = Path(root) if root is not None else Path(os.environ.get("WRITING_AGENT_DATA_DIR", ".data")) / "graph_checkpoints"
 
     def _path(self, run_id: str) -> Path:
         safe = "".join(ch for ch in str(run_id) if ch.isalnum() or ch in {"-", "_"}) or "run"
@@ -31,6 +33,10 @@ class CheckpointStore:
             return None
 
     def save(self, run_id: str, state: dict[str, Any], events: list[dict[str, Any]]) -> Path:
+        path = self._path(run_id)
+        existing = self.load(run_id)
+        if isinstance(existing, dict) and existing.get("state") == state and existing.get("events") == events:
+            return path
         self.root.mkdir(parents=True, exist_ok=True)
         payload = {
             "run_id": str(run_id),
@@ -39,8 +45,14 @@ class CheckpointStore:
             "events": events,
             "schema_version": str((state or {}).get("schema_version") or "1.0"),
         }
-        path = self._path(run_id)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        fd, temporary = tempfile.mkstemp(prefix=".checkpoint-", suffix=".tmp", dir=self.root)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(serialized)
+            os.replace(temporary, path)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
         return path
 
     def append_event(self, run_id: str, event: dict[str, Any]) -> Path:

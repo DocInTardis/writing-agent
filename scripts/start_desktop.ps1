@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
+$env:PYTHONDONTWRITEBYTECODE = "1"
 Remove-Item Env:PYTHON_HOME -ErrorAction SilentlyContinue
 
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
@@ -41,4 +42,4 @@ if (-not (Test-Path $python)) {
 
 $env:WRITING_AGENT_HOST = $HostAddress
 $env:WRITING_AGENT_PORT = [string]$Port
-& $python -m writing_agent.desktop_app
+& $python -B -m writing_agent.desktop_app

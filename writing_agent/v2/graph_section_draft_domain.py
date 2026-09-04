@@ -165,7 +165,7 @@ def _process_block(
         "block_id": block_id,
         "block_type": block_type,
     }
-    if block_type in {"paragraph", "text", "p", "list", "bullets", "bullet", "reference", "ref"}:
+    if not stored_id or block_type in {"paragraph", "text", "p", "list", "bullets", "bullet", "reference", "ref"}:
         payload.pop("block_id", None)
     out_queue.put(payload)
     stop_requested = (stop_threshold > 0 and emitted_chars >= stop_threshold) or repeat_streak >= 8
