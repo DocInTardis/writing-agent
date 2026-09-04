@@ -45,7 +45,7 @@ CI uses `requirements-pinned.txt` for reproducible dependency versions.
 运行维护中的检查：
 
 ```powershell
-.\.venv\Scripts\python -m pytest -q tests --ignore=tests/ui
+.\.venv\Scripts\python -m pytest -q tests
 npm --prefix writing_agent/web/frontend_svelte run build
 npm --prefix gateway/node_ai_gateway test
 cargo test --workspace --manifest-path engine/Cargo.toml

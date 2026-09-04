@@ -95,7 +95,7 @@ Run these checks after structural changes:
 
 ```powershell
 python -m compileall -q writing_agent scripts
-python -m pytest -q tests --ignore=tests/ui
+python -m pytest -q tests
 npm --prefix writing_agent/web/frontend_svelte run build
 npm --prefix gateway/node_ai_gateway test
 cargo test --workspace --manifest-path engine/Cargo.toml

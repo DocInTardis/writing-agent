@@ -42,8 +42,9 @@ Local hygiene rules:
 ### 1) Install dependencies
 
 For everyday use, run `scripts/start.ps1`. It creates one `.venv` on first use;
-later launches reuse it without invoking pip. Node, Rust, Playwright, and desktop
-shells are optional development components, not required for normal Web use.
+later launches reuse it without invoking pip. The product direction is a lightweight
+desktop app; the current desktop shell still reuses the local service and frontend.
+Node and Rust are only needed when building or testing their respective components.
 See [storage and runtime scope](docs/LOCAL_RUNTIME.md).
 
 ```powershell
@@ -82,10 +83,11 @@ Default product entrypoints:
 
 ```powershell
 .\.venv\Scripts\python -m pip install --no-cache-dir -r requirements-dev.txt
-.\.venv\Scripts\python -m pytest -q tests --ignore=tests/ui
+.\.venv\Scripts\python -m pytest -q tests
 ```
 
-Playwright UI tests are optional and require the `tools` extra plus a Chromium install.
+The browser automation test chain has been retired; no separate test browser download
+is required. Desktop interaction testing still needs to be rebuilt during consolidation.
 
 ## Productization Baseline
 
@@ -142,7 +144,7 @@ make check
 Equivalent direct commands for the maintained local path:
 
 ```powershell
-python -m pytest -q tests --ignore=tests/ui
+python -m pytest -q tests
 npm --prefix writing_agent/web/frontend_svelte run build
 npm --prefix gateway/node_ai_gateway test
 cargo test --workspace --manifest-path engine/Cargo.toml

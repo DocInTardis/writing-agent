@@ -22,7 +22,7 @@ jobs:
       - name: Compile application
         run: python -m compileall -q writing_agent scripts
       - name: Run unit and integration tests
-        run: python -m pytest -q tests --ignore=tests/ui
+        run: python -m pytest -q tests
 
   web:
     runs-on: ubuntu-latest

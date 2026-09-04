@@ -467,17 +467,6 @@ Notes: threshold ???? Criterion new/estimates.json?
 - frontend: wasmLoader now loads /wasm/wa_bridge.js and initializes WasmEditor
 - readiness: initWasmEngine returns true when module is present
 
-## 2026-02-07 WASM Engine Page Switch Verification
-- UI: engine toggle sets body data-engine=web/rust
-- Editor swap: rust panel visible when rust, web panel hidden; reversed when web
-- Playwright: initial=web -> toggle=rust -> toggle back=web
-## UI 超时探测（Playwright）
-- 脚本：`scripts/ui_timeout_probe.py`
-- 输出：`.data/out/ui_timeout_probe.json`
-- 轮次：5
-- 最大事件间隔：约 12.0s
-- 单轮耗时：约 32.4s ~ 34.0s（状态到“需求分析完成”）
-- 结论：客户端超时不应低于 90s；动态阈值应基于事件间隔与阶段放大
 
 
 ## ??????????????

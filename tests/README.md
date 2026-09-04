@@ -8,10 +8,10 @@
   - Service and API integration tests.
 - `tests/export/`
   - Export-path verification for Markdown and DOCX behavior.
-- `tests/ui/`
-  - Frontend and workbench flow validation.
-- `tests/e2e/`
-  - End-to-end scenarios that exercise larger product flows.
+
+The browser automation suite and empty E2E placeholder have been retired.
+Desktop interaction acceptance coverage remains to be established; the layers above
+do not validate the complete editor experience.
 
 ## Fixtures
 

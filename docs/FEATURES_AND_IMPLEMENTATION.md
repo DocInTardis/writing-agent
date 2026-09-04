@@ -100,19 +100,13 @@ PySide 桌面端：
 开发检查：
 
 ```powershell
-python -m pytest -q tests --ignore=tests/ui
+python -m pytest -q tests
 npm --prefix writing_agent/web/frontend_svelte run build
 npm --prefix gateway/node_ai_gateway test
 cargo test --workspace --manifest-path engine/Cargo.toml
 ```
 
-UI 测试是可选的，需要安装 Playwright 及浏览器：
-
-```powershell
-python -m pip install -e ".[tools]"
-python -m playwright install chromium
-python -m pytest -q tests/ui
-```
+浏览器自动化测试链路已移除，不再需要下载测试浏览器。桌面交互验收尚待随桌面架构收敛重新建立；现有单元、集成和导出测试不替代这部分验收。
 
 ## 10. 当前边界
 

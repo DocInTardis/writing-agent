@@ -1,14 +1,13 @@
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
 
-.PHONY: help install install-dev test test-ui build-frontend test-gateway test-engine check compile clean-cache
+.PHONY: help install install-dev test build-frontend test-gateway test-engine check compile clean-cache
 
 help:
 	@echo "Targets:"
 	@echo "  install         Install runtime dependencies"
 	@echo "  install-dev     Install runtime + dev dependencies"
 	@echo "  test            Run unit and integration tests"
-	@echo "  test-ui         Run optional Playwright UI tests"
 	@echo "  build-frontend  Build Svelte frontend assets"
 	@echo "  test-gateway    Run Node AI gateway tests"
 	@echo "  test-engine     Run Rust engine tests"
@@ -23,10 +22,7 @@ install-dev: install
 	$(PIP) install -r requirements-dev.txt
 
 test:
-	$(PYTHON) -m pytest -q tests --ignore=tests/ui
-
-test-ui:
-	$(PYTHON) -m pytest -q tests/ui
+	$(PYTHON) -m pytest -q tests
 
 build-frontend:
 	npm --prefix writing_agent/web/frontend_svelte run build
