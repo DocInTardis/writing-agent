@@ -5,29 +5,24 @@ Provides lightweight observability for route-graph execution and fallback behavi
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import threading
 import time
 from pathlib import Path
 from typing import Any
 
+from writing_agent.diagnostics import append_diagnostic, diagnostic_path, enabled
 
-_METRICS_LOCK = threading.Lock()
+
 _BOOL_FALSE = {"0", "false", "no", "off"}
 
 
 def route_graph_metrics_enabled() -> bool:
-    raw = str(os.environ.get("WRITING_AGENT_ROUTE_GRAPH_METRICS_ENABLE", "1")).strip().lower()
-    return raw not in _BOOL_FALSE
+    return enabled("WRITING_AGENT_ROUTE_GRAPH_METRICS_ENABLE")
 
 
 def route_graph_metrics_path() -> Path:
-    raw = str(os.environ.get("WRITING_AGENT_ROUTE_GRAPH_METRICS_PATH", "")).strip()
-    if raw:
-        return Path(raw)
-    return Path(".data/metrics/route_graph_events.jsonl")
+    return diagnostic_path("WRITING_AGENT_ROUTE_GRAPH_METRICS_PATH", "route_graph_events.jsonl")
 
 
 def route_graph_metrics_max_bytes() -> int:
@@ -37,31 +32,6 @@ def route_graph_metrics_max_bytes() -> int:
     except Exception:
         parsed = 2097152
     return max(262144, parsed)
-
-
-def _trim_metrics_file_locked(path: Path, max_bytes: int) -> None:
-    try:
-        if not path.exists():
-            return
-        size = path.stat().st_size
-    except Exception:
-        return
-    if size <= max_bytes:
-        return
-    try:
-        raw = path.read_bytes()
-    except Exception:
-        return
-    if len(raw) <= max_bytes:
-        return
-    tail = raw[-max_bytes:]
-    first_nl = tail.find(b"\n")
-    if first_nl >= 0 and first_nl + 1 < len(tail):
-        tail = tail[first_nl + 1 :]
-    try:
-        path.write_bytes(tail)
-    except Exception:
-        return
 
 
 def extract_error_code(value: object, *, default: str = "E_RUNTIME") -> str:
@@ -133,15 +103,4 @@ def record_route_graph_metric(
     if isinstance(extra, dict) and extra:
         row["extra"] = dict(extra)
 
-    path_obj = route_graph_metrics_path()
-    line = json.dumps(row, ensure_ascii=False) + "\n"
-    with _METRICS_LOCK:
-        try:
-            path_obj.parent.mkdir(parents=True, exist_ok=True)
-            _trim_metrics_file_locked(path_obj, route_graph_metrics_max_bytes())
-            with path_obj.open("a", encoding="utf-8") as f:
-                f.write(line)
-            _trim_metrics_file_locked(path_obj, route_graph_metrics_max_bytes())
-        except Exception:
-            return
-
+    append_diagnostic(route_graph_metrics_path(), row, max_bytes=route_graph_metrics_max_bytes())

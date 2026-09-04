@@ -12,7 +12,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from writing_agent.diagnostics import append_diagnostic, diagnostic_path, enabled
 from typing import Any, Iterable
 
 import requests
@@ -131,18 +131,14 @@ class NodeAIGatewayProvider(LLMProvider):
             raise LLMProviderError(str(exc)) from exc
 
     def _record_fallback_event(self, *, reason: str) -> None:
-        path = Path(str(os.environ.get("WRITING_AGENT_NODE_FALLBACK_LOG", ".data/metrics/node_backend_fallback.jsonl")).strip())
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
+        if not enabled("WRITING_AGENT_NODE_FALLBACK_LOG_ENABLE"):
+            return
+        path = diagnostic_path("WRITING_AGENT_NODE_FALLBACK_LOG", "node_backend_fallback.jsonl")
+        append_diagnostic(path, {
             "ts": time.time(),
             "event": "node_backend_fallback",
             "reason": str(reason or "")[:240],
-        }
-        try:
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        except Exception:
-            return
+        })
 
     def is_running(self) -> bool:
         if not self._base:

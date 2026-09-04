@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import threading
 import time
 from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
+
+from writing_agent.diagnostics import append_diagnostic, diagnostic_path, enabled
 
 
 def _normalize_heading_text(text: str) -> str:
@@ -110,7 +110,6 @@ _CONFIRM_TOKENS_RE = re.compile(
     r"(?:\u786e\u8ba4\u6267\u884c|\u7ee7\u7eed\u6267\u884c|\u7acb\u5373\u6267\u884c|\u5f3a\u5236\u6267\u884c|confirm\s*apply|force\s*apply)",
     flags=re.IGNORECASE,
 )
-_EDIT_PLAN_METRICS_LOCK = threading.Lock()
 
 
 @dataclass
@@ -138,15 +137,11 @@ class EditExecutionResult:
 
 
 def _edit_plan_metrics_enabled() -> bool:
-    raw = os.environ.get("WRITING_AGENT_EDIT_PLAN_METRICS_ENABLE", "1").strip().lower()
-    return raw not in {"0", "false", "no", "off"}
+    return enabled("WRITING_AGENT_EDIT_PLAN_METRICS_ENABLE")
 
 
 def _edit_plan_metrics_path() -> Path:
-    raw = os.environ.get("WRITING_AGENT_EDIT_PLAN_METRICS_PATH", "").strip()
-    if raw:
-        return Path(raw)
-    return Path(".data/metrics/edit_plan_events.jsonl")
+    return diagnostic_path("WRITING_AGENT_EDIT_PLAN_METRICS_PATH", "edit_plan_events.jsonl")
 
 
 def _edit_plan_metrics_max_bytes() -> int:
@@ -156,32 +151,6 @@ def _edit_plan_metrics_max_bytes() -> int:
     except Exception:
         value = 2097152
     return max(262144, value)
-
-
-def _trim_metrics_file_locked(path: Path, max_bytes: int) -> None:
-    try:
-        if not path.exists():
-            return
-        size = path.stat().st_size
-    except Exception:
-        return
-    if size <= max_bytes:
-        return
-    try:
-        raw = path.read_bytes()
-    except Exception:
-        return
-    if len(raw) <= max_bytes:
-        return
-    tail = raw[-max_bytes:]
-    # Keep complete lines to avoid broken JSON rows.
-    first_nl = tail.find(b"\n")
-    if first_nl >= 0 and first_nl + 1 < len(tail):
-        tail = tail[first_nl + 1 :]
-    try:
-        path.write_bytes(tail)
-    except Exception:
-        return
 
 
 def _request_fingerprint(raw: str) -> str:
@@ -230,29 +199,15 @@ def _record_edit_plan_metric(
                 "confidence": round(float(plan.confidence or 0.0), 4),
             }
         )
-    path = _edit_plan_metrics_path()
-    line = json.dumps(row, ensure_ascii=False) + "\n"
-    with _EDIT_PLAN_METRICS_LOCK:
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _trim_metrics_file_locked(path, _edit_plan_metrics_max_bytes())
-            with path.open("a", encoding="utf-8") as f:
-                f.write(line)
-            _trim_metrics_file_locked(path, _edit_plan_metrics_max_bytes())
-        except Exception:
-            return
+    append_diagnostic(_edit_plan_metrics_path(), row, max_bytes=_edit_plan_metrics_max_bytes())
 
 
 def _selected_revision_metrics_enabled() -> bool:
-    raw = os.environ.get("WRITING_AGENT_SELECTED_REVISION_METRICS_ENABLE", "1").strip().lower()
-    return raw not in {"0", "false", "no", "off"}
+    return enabled("WRITING_AGENT_SELECTED_REVISION_METRICS_ENABLE")
 
 
 def _selected_revision_metrics_path() -> Path:
-    raw = os.environ.get("WRITING_AGENT_SELECTED_REVISION_METRICS_PATH", "").strip()
-    if raw:
-        return Path(raw)
-    return Path(".data/metrics/selected_revision_events.jsonl")
+    return diagnostic_path("WRITING_AGENT_SELECTED_REVISION_METRICS_PATH", "selected_revision_events.jsonl")
 
 
 def _selected_revision_metrics_max_bytes() -> int:
@@ -311,17 +266,7 @@ def _record_selected_revision_metric(
         row["left_window_chars"] = int(max(0, left_window_chars))
     if right_window_chars is not None:
         row["right_window_chars"] = int(max(0, right_window_chars))
-    path = _selected_revision_metrics_path()
-    line = json.dumps(row, ensure_ascii=False) + "\n"
-    with _EDIT_PLAN_METRICS_LOCK:
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _trim_metrics_file_locked(path, _selected_revision_metrics_max_bytes())
-            with path.open("a", encoding="utf-8") as f:
-                f.write(line)
-            _trim_metrics_file_locked(path, _selected_revision_metrics_max_bytes())
-        except Exception:
-            return
+    append_diagnostic(_selected_revision_metrics_path(), row, max_bytes=_selected_revision_metrics_max_bytes())
 
 def _extract_json_block(text: str) -> str:
     raw = (text or "").strip()
@@ -411,15 +356,16 @@ __all__ = [
     for name in globals()
     if not name.startswith("__")
     and name not in {
-        "json",
         "os",
         "re",
-        "threading",
         "time",
         "sha256",
         "dataclass",
         "field",
         "Path",
         "Any",
+        "append_diagnostic",
+        "diagnostic_path",
+        "enabled",
     }
 ]
