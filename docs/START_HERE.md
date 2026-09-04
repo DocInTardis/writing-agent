@@ -10,10 +10,10 @@
 
 打开 `http://127.0.0.1:8000`。
 
-如果已有虚拟环境并且已经安装依赖：
+已有虚拟环境时默认复用，不会每次启动都运行 pip。依赖有变更或需要修复时显式执行：
 
 ```powershell
-.\scripts\start.ps1 -SkipInstall
+.\scripts\start.ps1 -InstallDependencies
 ```
 
 ## 2. 配置模型
@@ -34,10 +34,13 @@ $env:WRITING_AGENT_OPENAI_MODEL = "<model name>"
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt -r requirements-dev.txt
 npm --prefix writing_agent/web/frontend_svelte ci
-npm --prefix gateway/node_ai_gateway ci
 ```
 
 CI uses `requirements-pinned.txt` for reproducible dependency versions.
+
+日常使用只需要默认 `.venv` 和已构建的 Web 文件，不需要 Node 网关、Rust、Tauri 或测试浏览器。
+只有修改对应组件时才安装它的开发依赖；不要为每次检查另建一套虚拟环境。
+详见 `LOCAL_RUNTIME.md`。
 
 运行维护中的检查：
 

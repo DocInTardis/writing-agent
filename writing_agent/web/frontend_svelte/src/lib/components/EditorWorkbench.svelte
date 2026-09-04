@@ -32,7 +32,7 @@
     updateDocTitle,
     updateSectionTitle
   } from '../editor/docIrMutations'
-  import { makeId } from '../editor/htmlConversion'
+  import { htmlToDocIr, htmlToMarkdown, makeId } from '../editor/htmlConversion'
 
   let editor = $state<HTMLDivElement | null>(null)
   let lastMarkdown = $state('')

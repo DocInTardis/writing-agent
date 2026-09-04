@@ -1,5 +1,6 @@
 import os
 import socket
+import shutil
 import subprocess
 import sys
 import time
@@ -20,9 +21,11 @@ def _find_free_port() -> int:
 def _wait_for_url(url: str, timeout_s: float = 15.0) -> None:
     start = time.time()
     last_err = None
+    # A developer's HTTP proxy must not intercept this local health check.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     while time.time() - start < timeout_s:
         try:
-            with urllib.request.urlopen(url, timeout=1) as resp:
+            with opener.open(url, timeout=1) as resp:
                 if resp.status < 500:
                     return
         except Exception as exc:  # pragma: no cover - best-effort polling
@@ -40,10 +43,11 @@ def server_url(tmp_path_factory) -> str:
     env["WRITING_AGENT_USE_SVELTE"] = "1"
     env["WRITING_AGENT_HOST"] = "127.0.0.1"
     env["WRITING_AGENT_PORT"] = str(port)
+    env["WRITING_AGENT_DATA_DIR"] = str(tmp_path_factory.mktemp("app-data"))
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
     frontend_dir = Path(__file__).resolve().parents[2] / "writing_agent" / "web" / "frontend_svelte"
     subprocess.run(
-        ["npm.cmd", "run", "build"],
+        [shutil.which("npm") or "npm", "run", "build"],
         cwd=str(frontend_dir),
         check=True,
         stdout=subprocess.DEVNULL,
@@ -155,6 +159,43 @@ def test_workbench_svelte_render_and_screenshot(server_url, tmp_path):
 
         context.close()
         browser.close()
+
+
+def test_editor_control_enter_updates_docir_without_runtime_errors(server_url):
+    """Paragraph splitting must call the extracted HTML converters successfully."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        try:
+            page.goto(server_url, wait_until="domcontentloaded")
+            page.wait_for_function("window.__waGetStore && window.__waGetStore('docId')")
+            page.evaluate("""async () => {
+                const id = window.__waGetStore('docId');
+                const response = await fetch(`/api/doc/${id}/save`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({text: '# Split test\\n\\n## Section\\n\\nAlphaBeta'})
+                });
+                if (!response.ok) throw new Error('Failed to seed editor test');
+            }""")
+            page.reload(wait_until="domcontentloaded")
+            paragraph = page.locator('.editable p[data-block-id]').filter(has_text='AlphaBeta').first
+            paragraph.wait_for()
+            paragraph.click()
+            page.keyboard.press('Home')
+            for _ in range(5):
+                page.keyboard.press('ArrowRight')
+            before = page.evaluate("JSON.stringify(window.__waGetStore('docIr'))")
+            page.keyboard.press('Control+Enter')
+            page.wait_for_function(
+                "before => JSON.stringify(window.__waGetStore('docIr')) !== before", arg=before
+            )
+            assert page.locator('.editable p').filter(has_text='Alpha').count() >= 1
+            assert page.locator('.editable p').filter(has_text='Beta').count() >= 1
+            assert errors == [], f"Editor runtime errors: {errors}"
+        finally:
+            browser.close()
 
 
 def test_workbench_svelte_shortcuts_and_toolbar_state(server_url, tmp_path):

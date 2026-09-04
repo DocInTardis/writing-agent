@@ -41,10 +41,14 @@ Local hygiene rules:
 
 ### 1) Install dependencies
 
+For everyday use, run `scripts/start.ps1`. It creates one `.venv` on first use;
+later launches reuse it without invoking pip. Node, Rust, Playwright, and desktop
+shells are optional development components, not required for normal Web use.
+See [storage and runtime scope](docs/LOCAL_RUNTIME.md).
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
-.\.venv\Scripts\pip install -r requirements-dev.txt
 ```
 
 For the same dependency versions used by CI, install `requirements-pinned.txt` instead.
@@ -77,7 +81,8 @@ Default product entrypoints:
 ### 3) Run tests
 
 ```powershell
-python -m pytest -q tests --ignore=tests/ui
+.\.venv\Scripts\python -m pip install --no-cache-dir -r requirements-dev.txt
+.\.venv\Scripts\python -m pytest -q tests --ignore=tests/ui
 ```
 
 Playwright UI tests are optional and require the `tools` extra plus a Chromium install.

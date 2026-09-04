@@ -3,6 +3,7 @@ param(
   [int]$Port = 8000,
   [string]$IndexUrl = "",
   [switch]$SkipInstall,
+  [switch]$InstallDependencies,
   [switch]$NoWeb
 )
 
@@ -14,12 +15,16 @@ Set-Location $repoRoot
 Remove-Item Env:PYTHON_HOME -ErrorAction SilentlyContinue
 
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
-if (-not $SkipInstall) {
+if ($SkipInstall -and $InstallDependencies) {
+  throw "Use either -SkipInstall or -InstallDependencies, not both."
+}
+if (-not $SkipInstall -and ($InstallDependencies -or -not (Test-Path $python))) {
   if (-not (Test-Path $python)) {
     python -m venv .venv
+    if ($LASTEXITCODE -ne 0) { throw "Virtual environment creation failed." }
   }
 
-  $pipArgs = @("-m", "pip", "install", "-r", "requirements.txt")
+  $pipArgs = @("-m", "pip", "install", "--no-cache-dir", "-r", "requirements.txt")
   if ($IndexUrl.Trim()) {
     $pipArgs += @("--index-url", $IndexUrl.Trim())
   }
@@ -31,6 +36,11 @@ if (-not $SkipInstall) {
 
 if (-not (Test-Path $python)) {
   throw "Virtual environment not found. Run this script without -SkipInstall first."
+}
+
+& $python -B -c "import writing_agent.launch"
+if ($LASTEXITCODE -ne 0) {
+  throw "Runtime dependencies are unavailable. Run scripts/start.ps1 -InstallDependencies to repair them."
 }
 
 $env:WRITING_AGENT_HOST = $HostAddress
