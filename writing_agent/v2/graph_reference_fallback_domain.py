@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -37,7 +38,6 @@ def _reference_cache_dir() -> Path:
     repo_root = Path(__file__).resolve().parents[2]
     data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
     cache_dir = data_dir / "cache" / "reference_fallback"
-    cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 
 
@@ -46,10 +46,17 @@ def _reference_cache_path(query: str) -> Path:
     return _reference_cache_dir() / f"{digest}.json"
 
 
+def _cache_int_env(name: str, default: int, minimum: int) -> int:
+    try:
+        return max(minimum, int(os.environ.get(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
 def _load_cached_reference_sources(query: str) -> list[dict]:
     if not query:
         return []
-    ttl_s = max(300, int(os.environ.get("WRITING_AGENT_REFERENCE_CACHE_TTL_S", str(86400 * 3))))
+    ttl_s = _cache_int_env("WRITING_AGENT_REFERENCE_CACHE_TTL_S", 86400 * 3, 300)
     path = _reference_cache_path(query)
     if not path.exists():
         return []
@@ -68,20 +75,77 @@ def _load_cached_reference_sources(query: str) -> list[dict]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+def _reference_cache_limits() -> tuple[int, int, int]:
+    ttl_s = _cache_int_env("WRITING_AGENT_REFERENCE_CACHE_TTL_S", 86400 * 3, 300)
+    max_entries = _cache_int_env("WRITING_AGENT_REFERENCE_CACHE_MAX_ENTRIES", 128, 8)
+    max_bytes = _cache_int_env("WRITING_AGENT_REFERENCE_CACHE_MAX_BYTES", 16 * 1024 * 1024, 1024 * 1024)
+    return ttl_s, max_entries, max_bytes
+
+
+def _prune_reference_cache(cache_dir: Path) -> None:
+    """Remove only expired/excess files owned by the reference fallback cache."""
+    if not cache_dir.exists() or cache_dir.is_symlink():
+        return
+    ttl_s, max_entries, max_bytes = _reference_cache_limits()
+    now = time.time()
+    rows: list[tuple[Path, float, int]] = []
+    for path in cache_dir.glob("*.json"):
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+            info = path.stat()
+            if now - info.st_mtime > ttl_s:
+                path.unlink()
+            else:
+                rows.append((path, info.st_mtime, info.st_size))
+        except OSError:
+            continue
+    rows.sort(key=lambda row: row[1], reverse=True)
+    kept_bytes = 0
+    for index, (path, _, size) in enumerate(rows):
+        kept_bytes += size
+        if index >= max_entries or kept_bytes > max_bytes:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
 def _save_cached_reference_sources(query: str, rows: list[dict]) -> None:
     clean_rows = [dict(row) for row in (rows or []) if isinstance(row, dict)]
     if not query or not clean_rows:
         return
-    cap = max(8, min(80, int(os.environ.get("WRITING_AGENT_REFERENCE_CACHE_ROWS", "48"))))
+    cap = min(80, _cache_int_env("WRITING_AGENT_REFERENCE_CACHE_ROWS", 48, 8))
     payload = {
         "query": str(query or "").strip(),
         "saved_at": time.time(),
         "rows": clean_rows[:cap],
     }
+    cache_dir = _reference_cache_dir()
+    temporary = None
     try:
-        _reference_cache_path(query).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        return
+        if cache_dir.is_symlink():
+            return
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        path = _reference_cache_path(query)
+        serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=cache_dir,
+            prefix=path.name + ".", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(serialized)
+        os.replace(temporary, path)
+        temporary = None
+        _prune_reference_cache(cache_dir)
+    except (OSError, TypeError, ValueError):
+        pass
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def _fallback_query_seeds(query: str) -> list[str]:

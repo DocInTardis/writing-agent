@@ -12,7 +12,7 @@ from writing_agent.llm.ai_sdk_adapter import (
     TimeoutError,
 )
 from writing_agent.llm.factory import get_default_provider
-from writing_agent.llm.model_router import ModelRouter, RoutePolicy, SemanticCache
+from writing_agent.llm.model_router import ModelRouter, RoutePolicy
 from writing_agent.llm.ollama import OllamaClient, OllamaError
 from writing_agent.llm.provider import LLMProvider, LLMProviderError
 from writing_agent.llm.settings import OllamaSettings, get_ollama_settings
@@ -31,7 +31,6 @@ __all__ = [
     "RateLimitError",
     "RoutePolicy",
     "SchemaValidationError",
-    "SemanticCache",
     "TimeoutError",
     "get_default_provider",
     "OllamaSettings",
