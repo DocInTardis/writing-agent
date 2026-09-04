@@ -26,7 +26,6 @@ export const darkMode = writable(false)
 export const isLoading = writable(false)
 
 export const useRustEngine = writable(false)
-export const rustEngineReady = writable(false)
 let chatSaveTimer: ReturnType<typeof setTimeout> | null = null
 let thoughtsSaveTimer: ReturnType<typeof setTimeout> | null = null
 

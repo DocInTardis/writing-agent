@@ -11,7 +11,6 @@
   import ErrorBoundary from './lib/components/ErrorBoundary.svelte'
   import CitationManager from './lib/components/CitationManager.svelte'
   import PerformanceMetrics from './lib/components/PerformanceMetrics.svelte'
-  import { initWasmEngine, isWasmAvailable } from './lib/engine/wasmLoader'
   import { textToDocIr, docIrToMarkdown } from './lib/utils/markdown'
   import {
     buildGenerateRequestPayload,
@@ -264,27 +263,6 @@
   let assistantBadgeCount = $derived(
     queuedGlobalInstructions.length || recentQueuedBadgeCount || ($generating || typingActive || streamTypingActive ? 1 : 0)
   )
-  let rustEngineReadyLocal = $state(false)
-  let wasmInitPromise = $state<Promise<boolean> | null>(null)
-  if (typeof window !== 'undefined') {
-    document.body.setAttribute('data-engine', 'rust')
-  }
-
-  function startWasmInit() {
-    if (!wasmInitPromise) {
-      wasmInitPromise = initWasmEngine()
-        .then((success) => {
-          rustEngineReadyLocal = success
-          return success
-        })
-        .catch(() => {
-          rustEngineReadyLocal = false
-          return false
-        })
-    }
-    return wasmInitPromise
-  }
-
   function readDocId(): string {
     const w = window as Window & { __DOC_ID__?: string }
     if (w.__DOC_ID__) return String(w.__DOC_ID__)
@@ -3543,7 +3521,6 @@
       const n = Number(storedIdle)
       if (Number.isFinite(n) && n > 0) baseIdleMs = n
     }
-    startWasmInit()
     
     const onMove = (e: MouseEvent) => {
       if (!resizing) return
