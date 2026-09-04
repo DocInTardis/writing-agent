@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from writing_agent.web.api import editing_flow
 from writing_agent.workflows.editing_request_workflow import (
+    InlineAIDeps,
     InlineAIRequest,
     InlineAIStreamEvent,
     run_inline_ai_stream_workflow,
@@ -21,7 +22,7 @@ class _HTTPException(Exception):
         self.detail = detail
 
 
-def _request(engine_type: type) -> InlineAIRequest:
+def _request(engine_type: type) -> tuple[InlineAIRequest, InlineAIDeps]:
     operation = SimpleNamespace(value="improve")
     module = SimpleNamespace(
         InlineAIEngine=engine_type,
@@ -29,13 +30,17 @@ def _request(engine_type: type) -> InlineAIRequest:
         InlineContext=lambda **kwargs: SimpleNamespace(**kwargs),
         ToneStyle=lambda value: value,
     )
-    return InlineAIRequest(
-        app_v2=SimpleNamespace(HTTPException=_HTTPException),
-        session=SimpleNamespace(doc_text=""),
-        data={"operation": "improve", "selected_text": "text"},
-        normalize_inline_context_policy_fn=lambda _raw: {},
-        trim_inline_context_fn=lambda **_kwargs: ("", "", {}),
-        inline_ai_module=module,
+    return (
+        InlineAIRequest(
+            session=SimpleNamespace(doc_text=""),
+            data={"operation": "improve", "selected_text": "text"},
+        ),
+        InlineAIDeps(
+            exception_factory=_HTTPException,
+            normalize_inline_context_policy_fn=lambda _raw: {},
+            trim_inline_context_fn=lambda **_kwargs: ("", "", {}),
+            inline_ai_module=module,
+        ),
     )
 
 
@@ -51,6 +56,16 @@ def test_workflow_module_has_no_http_response_imports() -> None:
     assert not any(name == "starlette" or name.startswith("starlette.") for name in imports)
 
 
+def test_inline_request_contains_input_not_web_services() -> None:
+    assert set(InlineAIRequest.__dataclass_fields__) == {"session", "data"}
+    assert set(InlineAIDeps.__dataclass_fields__) == {
+        "exception_factory",
+        "normalize_inline_context_policy_fn",
+        "trim_inline_context_fn",
+        "inline_ai_module",
+    }
+
+
 def test_stream_is_closed_when_consumer_stops_early() -> None:
     closed = False
 
@@ -64,7 +79,8 @@ def test_stream_is_closed_when_consumer_stops_early() -> None:
                 closed = True
 
     async def exercise() -> None:
-        events = await run_inline_ai_stream_workflow(request=_request(_Engine))
+        request, deps = _request(_Engine)
+        events = await run_inline_ai_stream_workflow(request=request, deps=deps)
         assert (await anext(events)).event == "context_meta"
         assert (await anext(events)).payload["content"] == "one"
         await events.aclose()
@@ -86,7 +102,8 @@ def test_stream_failure_becomes_structured_error_and_closes_source() -> None:
                 closed = True
 
     async def exercise() -> list[tuple[str, dict]]:
-        events = await run_inline_ai_stream_workflow(request=_request(_Engine))
+        request, deps = _request(_Engine)
+        events = await run_inline_ai_stream_workflow(request=request, deps=deps)
         return [(item.event, item.payload) async for item in events]
 
     events = asyncio.run(exercise())
@@ -95,8 +112,8 @@ def test_stream_failure_becomes_structured_error_and_closes_source() -> None:
 
 
 def test_web_adapter_serializes_structured_events_as_sse() -> None:
-    async def fake_workflow(*, request):
-        _ = request
+    async def fake_workflow(*, request, deps):
+        _ = request, deps
 
         async def events():
             yield InlineAIStreamEvent("context_meta", {"language": "中文"})

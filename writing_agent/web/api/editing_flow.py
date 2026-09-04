@@ -22,6 +22,7 @@ from writing_agent.workflows import (
     BlockEditRequest,
     DiagramGenerateRequest,
     DocIRRequest,
+    InlineAIDeps,
     InlineAIRequest,
     RenderFigureRequest,
     run_block_edit_preview_workflow,
@@ -59,6 +60,15 @@ def _trim_inline_context(
         before_text=before_text,
         after_text=after_text,
         policy=policy,
+    )
+
+
+def _inline_ai_deps(app_v2, inline_ai_module) -> InlineAIDeps:
+    return InlineAIDeps(
+        exception_factory=app_v2.HTTPException,
+        normalize_inline_context_policy_fn=_normalize_inline_context_policy,
+        trim_inline_context_fn=_trim_inline_context,
+        inline_ai_module=inline_ai_module,
     )
 
 
@@ -120,13 +130,10 @@ async def inline_ai(doc_id: str, request: Request) -> dict:
 
     return await run_inline_ai_workflow(
         request=InlineAIRequest(
-            app_v2=app_v2,
             session=session,
             data=data,
-            normalize_inline_context_policy_fn=_normalize_inline_context_policy,
-            trim_inline_context_fn=_trim_inline_context,
-            inline_ai_module=inline_ai_module,
-        )
+        ),
+        deps=_inline_ai_deps(app_v2, inline_ai_module),
     )
 
 
@@ -141,13 +148,10 @@ async def inline_ai_stream(doc_id: str, request: Request) -> StreamingResponse:
 
     events = await run_inline_ai_stream_workflow(
         request=InlineAIRequest(
-            app_v2=app_v2,
             session=session,
             data=data,
-            normalize_inline_context_policy_fn=_normalize_inline_context_policy,
-            trim_inline_context_fn=_trim_inline_context,
-            inline_ai_module=inline_ai_module,
-        )
+        ),
+        deps=_inline_ai_deps(app_v2, inline_ai_module),
     )
 
     async def event_generator():

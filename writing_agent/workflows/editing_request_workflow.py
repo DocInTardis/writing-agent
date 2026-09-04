@@ -19,9 +19,13 @@ InlineContextTrimmer = Callable[..., tuple[str, str, dict[str, object]]]
 
 @dataclass(frozen=True)
 class InlineAIRequest:
-    app_v2: Any
     session: Any
     data: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class InlineAIDeps:
+    exception_factory: Callable[..., Exception]
     normalize_inline_context_policy_fn: ContextPolicyNormalizer
     trim_inline_context_fn: InlineContextTrimmer
     inline_ai_module: Any
@@ -61,26 +65,26 @@ class DiagramGenerateRequest:
     diagram_spec_from_prompt_fn: Callable[[str, str], dict[str, Any]]
 
 
-def _prepare_inline_request(request: InlineAIRequest):
+def _prepare_inline_request(request: InlineAIRequest, deps: InlineAIDeps):
     try:
         return prepare_inline_request(
             data=request.data,
-            normalize_inline_context_policy_fn=request.normalize_inline_context_policy_fn,
-            trim_inline_context_fn=request.trim_inline_context_fn,
-            inline_operation_cls=request.inline_ai_module.InlineOperation,
-            inline_context_cls=request.inline_ai_module.InlineContext,
-            tone_style_cls=request.inline_ai_module.ToneStyle,
+            normalize_inline_context_policy_fn=deps.normalize_inline_context_policy_fn,
+            trim_inline_context_fn=deps.trim_inline_context_fn,
+            inline_operation_cls=deps.inline_ai_module.InlineOperation,
+            inline_context_cls=deps.inline_ai_module.InlineContext,
+            tone_style_cls=deps.inline_ai_module.ToneStyle,
         )
     except ValueError as exc:
-        raise request.app_v2.HTTPException(status_code=400, detail=str(exc)) from exc
+        raise deps.exception_factory(status_code=400, detail=str(exc)) from exc
 
 
-async def run_inline_ai_workflow(*, request: InlineAIRequest) -> dict[str, Any]:
-    prepared = _prepare_inline_request(request)
-    engine = request.inline_ai_module.InlineAIEngine()
+async def run_inline_ai_workflow(*, request: InlineAIRequest, deps: InlineAIDeps) -> dict[str, Any]:
+    prepared = _prepare_inline_request(request, deps)
+    engine = deps.inline_ai_module.InlineAIEngine()
     result = await engine.execute_operation(prepared.operation, prepared.context, **prepared.kwargs)
     if not result.success:
-        raise request.app_v2.HTTPException(status_code=500, detail=result.error or "operation failed")
+        raise deps.exception_factory(status_code=500, detail=result.error or "operation failed")
     return {
         "ok": 1,
         "generated_text": result.generated_text,
@@ -89,9 +93,11 @@ async def run_inline_ai_workflow(*, request: InlineAIRequest) -> dict[str, Any]:
     }
 
 
-async def run_inline_ai_stream_workflow(*, request: InlineAIRequest) -> AsyncIterator[InlineAIStreamEvent]:
-    prepared = _prepare_inline_request(request)
-    engine = request.inline_ai_module.InlineAIEngine()
+async def run_inline_ai_stream_workflow(
+    *, request: InlineAIRequest, deps: InlineAIDeps
+) -> AsyncIterator[InlineAIStreamEvent]:
+    prepared = _prepare_inline_request(request, deps)
+    engine = deps.inline_ai_module.InlineAIEngine()
 
     async def event_generator() -> AsyncIterator[InlineAIStreamEvent]:
         yield InlineAIStreamEvent(event="context_meta", payload=prepared.context_meta)

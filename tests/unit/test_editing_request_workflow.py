@@ -9,6 +9,7 @@ from writing_agent.workflows.editing_request_workflow import (
     BlockEditRequest,
     DiagramGenerateRequest,
     DocIRRequest,
+    InlineAIDeps,
     InlineAIRequest,
     RenderFigureRequest,
     run_block_edit_preview_workflow,
@@ -88,7 +89,6 @@ def test_inline_ai_workflow_builds_pretrimmed_context() -> None:
     out = asyncio.run(
         run_inline_ai_workflow(
             request=InlineAIRequest(
-                app_v2=_FakeApp(),
                 session=_Session(doc_text=""),
                 data={
                     "operation": "change_tone",
@@ -98,10 +98,17 @@ def test_inline_ai_workflow_builds_pretrimmed_context() -> None:
                     "target_tone": "casual",
                     "document_title": "Doc",
                 },
+            ),
+            deps=InlineAIDeps(
+                exception_factory=_FakeApp.HTTPException,
                 normalize_inline_context_policy_fn=lambda _raw: {"version": "test_v1"},
-                trim_inline_context_fn=lambda **_kwargs: ("before kept", "after kept", {"policy_version": "test_v1"}),
+                trim_inline_context_fn=lambda **_kwargs: (
+                    "before kept",
+                    "after kept",
+                    {"policy_version": "test_v1"},
+                ),
                 inline_ai_module=inline_ai_module,
-            )
+            ),
         )
     )
 
@@ -139,13 +146,15 @@ def test_inline_ai_stream_workflow_emits_context_meta_then_events() -> None:
     response = asyncio.run(
         run_inline_ai_stream_workflow(
             request=InlineAIRequest(
-                app_v2=_FakeApp(),
                 session=_Session(doc_text=""),
                 data={"operation": "improve", "selected_text": "old", "focus": "style"},
+            ),
+            deps=InlineAIDeps(
+                exception_factory=_FakeApp.HTTPException,
                 normalize_inline_context_policy_fn=lambda _raw: {"version": "test_v1"},
                 trim_inline_context_fn=lambda **_kwargs: ("", "", {"policy_version": "test_v1"}),
                 inline_ai_module=inline_ai_module,
-            )
+            ),
         )
     )
 
