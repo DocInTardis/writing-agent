@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 _META_DB_PATH: Path | None = None
 _LOW_SATISFACTION_PATH: Path | None = None
 _DEFAULT_LOW_SATISFACTION_MAX_BYTES = 4 * 1024 * 1024
+_DEFAULT_LOW_SATISFACTION_RETENTION_S = 90 * 24 * 60 * 60
 
 
 def _low_satisfaction_max_bytes() -> int:
@@ -31,6 +32,14 @@ def _low_satisfaction_max_bytes() -> int:
         return max(64 * 1024, min(32 * 1024 * 1024, int(raw)))
     except (TypeError, ValueError):
         return _DEFAULT_LOW_SATISFACTION_MAX_BYTES
+
+
+def _low_satisfaction_retention_seconds() -> int:
+    raw = os.environ.get("WRITING_AGENT_FEEDBACK_LOG_TTL_S", str(_DEFAULT_LOW_SATISFACTION_RETENTION_S))
+    try:
+        return max(24 * 60 * 60, min(2 * 365 * 24 * 60 * 60, int(raw)))
+    except (TypeError, ValueError):
+        return _DEFAULT_LOW_SATISFACTION_RETENTION_S
 
 
 def init(meta_db_path: Path, low_satisfaction_path: Path) -> None:
@@ -216,6 +225,7 @@ def append_low_satisfaction_event(
         _LOW_SATISFACTION_PATH,
         event,
         max_bytes=_low_satisfaction_max_bytes(),
+        max_age_s=_low_satisfaction_retention_seconds(),
     )
     if not ok:
         logger.warning("append_low_satisfaction_event: record skipped")
@@ -231,4 +241,5 @@ def load_low_satisfaction_events(limit: int = 200) -> list[dict]:
         _LOW_SATISFACTION_PATH,
         max_bytes=_low_satisfaction_max_bytes(),
         limit=cap,
+        max_age_s=_low_satisfaction_retention_seconds(),
     )

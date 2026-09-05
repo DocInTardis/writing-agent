@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from writing_agent.bounded_jsonl import read_recent_jsonl
@@ -68,3 +69,20 @@ def test_audit_signatures_remain_valid_after_rotation() -> None:
         for row in read_recent_jsonl(path, max_bytes=900):
             expected = hmac.new(b"secret", row["hash"].encode("utf-8"), hashlib.sha256).hexdigest()
             assert hmac.compare_digest(row["signature"], expected)
+
+
+def test_expired_audit_window_rotates_with_terminal_anchor() -> None:
+    with tempfile.TemporaryDirectory() as root:
+        path = Path(root) / "audit.ndjson"
+        service = AuditService(path=path, max_bytes=4096, max_age_s=60)
+        first = service.append(actor="owner", action="old", tenant_id="default", payload={})
+        rows = read_recent_jsonl(path, max_bytes=4096)
+        rows[0]["ts"] = time.time() - 1000
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+        current = service.append(actor="owner", action="current", tenant_id="default", payload={})
+
+        rotated = read_recent_jsonl(path, max_bytes=4096)
+        assert [row["action"] for row in rotated] == ["audit_window_rotated", "current"]
+        assert rotated[0]["payload"]["prior_terminal_hash"] == first["hash"]
+        assert current["prev_hash"] == rotated[0]["hash"]

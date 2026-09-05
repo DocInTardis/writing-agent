@@ -20,7 +20,7 @@
 - 启动不探测、启动或下载模型。
 - Python 字节码默认关闭。
 - 路由、编辑、选区、流耗时和 RAG 审计默认不落盘；显式开启后均有容量上限。
-- 集成事件、反馈副本和应用审计链有固定容量窗口。
+- 集成事件和可选 RAG 审计默认保留 30 天；反馈副本和应用审计链默认保留 90 天，同时都有固定容量窗口。可分别用 `WRITING_AGENT_INTEGRATION_EVENT_TTL_S`、`WRITING_AGENT_RAG_AUDIT_TTL_S`、`WRITING_AGENT_FEEDBACK_LOG_TTL_S`、`WRITING_AGENT_AUDIT_TTL_S` 调整秒数；程序会把异常值限制在 1 天至 1/2 年的安全范围内。
 - 生成文本默认直接随事件传递；旧文件块仅在显式开启时写盘。
 - 向量嵌入默认关闭；配置 `WRITING_AGENT_EMBED_MODEL` 后才调用 API。
 

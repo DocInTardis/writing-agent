@@ -13,24 +13,51 @@ from typing import Any
 from writing_agent.bounded_jsonl import append_bounded_jsonl, read_recent_jsonl
 from writing_agent.web.contracts import WebhookEvent
 
+_DEFAULT_RETENTION_S = 30 * 24 * 60 * 60
+
+
+def _retention_seconds() -> int:
+    raw = os.environ.get("WRITING_AGENT_INTEGRATION_EVENT_TTL_S", str(_DEFAULT_RETENTION_S))
+    try:
+        return max(24 * 60 * 60, min(365 * 24 * 60 * 60, int(raw)))
+    except (TypeError, ValueError):
+        return _DEFAULT_RETENTION_S
+
 
 class IntegrationService:
-    def __init__(self, *, event_log: str | Path | None = None, max_bytes: int = 2 * 1024 * 1024) -> None:
+    def __init__(
+        self,
+        *,
+        event_log: str | Path | None = None,
+        max_bytes: int = 2 * 1024 * 1024,
+        max_age_s: int | None = None,
+    ) -> None:
         data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", "").strip() or ".data")
         self._event_log = Path(event_log) if event_log is not None else data_dir / "integration" / "event_bus.jsonl"
         self._max_bytes = max(1, int(max_bytes))
+        self._max_age_s = _retention_seconds() if max_age_s is None else max(1, int(max_age_s))
 
     def publish_event(self, event: WebhookEvent) -> dict[str, Any]:
         payload = event.model_dump()
         payload["published_at"] = time.time()
-        if not append_bounded_jsonl(self._event_log, payload, max_bytes=self._max_bytes):
+        if not append_bounded_jsonl(
+            self._event_log,
+            payload,
+            max_bytes=self._max_bytes,
+            max_age_s=self._max_age_s,
+        ):
             raise OSError("integration event could not be persisted")
         return {"ok": 1, "event": payload}
 
     def list_events(self, *, limit: int = 50, tenant_id: str = "") -> dict[str, Any]:
         lim = max(1, min(500, int(limit)))
         rows: list[dict[str, Any]] = []
-        for item in read_recent_jsonl(self._event_log, max_bytes=self._max_bytes, limit=lim * 4):
+        for item in read_recent_jsonl(
+            self._event_log,
+            max_bytes=self._max_bytes,
+            limit=lim * 4,
+            max_age_s=self._max_age_s,
+        ):
             if tenant_id and str(item.get("tenant_id") or "") != tenant_id:
                 continue
             rows.append(item)

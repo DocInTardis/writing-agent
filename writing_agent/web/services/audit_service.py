@@ -19,6 +19,7 @@ from writing_agent.bounded_jsonl import read_recent_jsonl
 
 _AUDIT_LOCK = threading.Lock()
 _DEFAULT_AUDIT_MAX_BYTES = 8 * 1024 * 1024
+_DEFAULT_AUDIT_RETENTION_S = 90 * 24 * 60 * 60
 
 
 def _audit_max_bytes() -> int:
@@ -27,6 +28,14 @@ def _audit_max_bytes() -> int:
         return max(64 * 1024, min(64 * 1024 * 1024, int(raw)))
     except (TypeError, ValueError):
         return _DEFAULT_AUDIT_MAX_BYTES
+
+
+def _audit_retention_seconds() -> int:
+    raw = os.environ.get("WRITING_AGENT_AUDIT_TTL_S", str(_DEFAULT_AUDIT_RETENTION_S))
+    try:
+        return max(24 * 60 * 60, min(2 * 365 * 24 * 60 * 60, int(raw)))
+    except (TypeError, ValueError):
+        return _DEFAULT_AUDIT_RETENTION_S
 
 
 class AuditService:
@@ -38,11 +47,13 @@ class AuditService:
         path: str | Path | None = None,
         secret: str = "",
         max_bytes: int | None = None,
+        max_age_s: int | None = None,
     ) -> None:
         data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", "").strip() or ".data")
         self.path = Path(path) if path is not None else data_dir / "audit" / "app_audit_chain.ndjson"
         self.secret = str(secret or "")
         self.max_bytes = max(1, int(max_bytes)) if max_bytes is not None else _audit_max_bytes()
+        self.max_age_s = _audit_retention_seconds() if max_age_s is None else max(1, int(max_age_s))
 
     def append(self, *, actor: str, action: str, tenant_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         with _AUDIT_LOCK:
@@ -57,7 +68,8 @@ class AuditService:
             line = self._encode(event)
             size = self.path.stat().st_size if self.path.exists() else 0
             complete = self._ends_with_newline(size)
-            if complete and size + len(line) <= self.max_bytes:
+            expired = self._window_expired()
+            if not expired and complete and size + len(line) <= self.max_bytes:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 with self.path.open("ab") as stream:
                     stream.write(line)
@@ -82,6 +94,14 @@ class AuditService:
                 raise ValueError("audit event exceeds configured storage limit")
             self._replace(replacement)
             return event
+
+    def _window_expired(self) -> bool:
+        cutoff = time.time() - self.max_age_s
+        for row in read_recent_jsonl(self.path, max_bytes=self.max_bytes):
+            timestamp = row.get("ts")
+            if isinstance(timestamp, (int, float)) and not isinstance(timestamp, bool):
+                return float(timestamp) < cutoff
+        return False
 
     def _build_event(
         self,

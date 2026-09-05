@@ -19,6 +19,7 @@ from writing_agent.bounded_jsonl import append_bounded_jsonl, read_recent_jsonl
 
 logger = logging.getLogger(__name__)
 _DEFAULT_MAX_BYTES = 8 * 1024 * 1024
+_DEFAULT_RETENTION_S = 30 * 24 * 60 * 60
 
 
 def _audit_max_bytes() -> int:
@@ -27,6 +28,14 @@ def _audit_max_bytes() -> int:
         return max(64 * 1024, min(64 * 1024 * 1024, int(raw)))
     except (TypeError, ValueError):
         return _DEFAULT_MAX_BYTES
+
+
+def _audit_retention_seconds() -> int:
+    raw = os.environ.get("WRITING_AGENT_RAG_AUDIT_TTL_S", str(_DEFAULT_RETENTION_S))
+    try:
+        return max(24 * 60 * 60, min(365 * 24 * 60 * 60, int(raw)))
+    except (TypeError, ValueError):
+        return _DEFAULT_RETENTION_S
 
 
 @dataclass
@@ -65,20 +74,36 @@ class RetrievalTrail:
 class AuditTrailStore:
     """Bounded JSONL store for opt-in retrieval trails."""
 
-    def __init__(self, base_dir: Path, *, max_bytes: int | None = None) -> None:
+    def __init__(
+        self,
+        base_dir: Path,
+        *,
+        max_bytes: int | None = None,
+        max_age_s: int | None = None,
+    ) -> None:
         self.base_dir = Path(base_dir)
         self.trail_path = self.base_dir / "retrieval_trails.jsonl"
         self.max_bytes = max(1, int(max_bytes)) if max_bytes is not None else _audit_max_bytes()
+        self.max_age_s = _audit_retention_seconds() if max_age_s is None else max(1, int(max_age_s))
 
     def record(self, trail: RetrievalTrail) -> bool:
-        ok = append_bounded_jsonl(self.trail_path, trail.to_dict(), max_bytes=self.max_bytes)
+        ok = append_bounded_jsonl(
+            self.trail_path,
+            trail.to_dict(),
+            max_bytes=self.max_bytes,
+            max_age_s=self.max_age_s,
+        )
         if not ok:
             logger.debug("Retrieval audit write skipped")
         return ok
 
     def load(self, limit: int = 0) -> list[RetrievalTrail]:
         out: list[RetrievalTrail] = []
-        rows = read_recent_jsonl(self.trail_path, max_bytes=self.max_bytes)
+        rows = read_recent_jsonl(
+            self.trail_path,
+            max_bytes=self.max_bytes,
+            max_age_s=self.max_age_s,
+        )
         if limit:
             rows = rows[-limit:]
         for row in rows:
