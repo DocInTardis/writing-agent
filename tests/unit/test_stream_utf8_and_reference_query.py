@@ -5,7 +5,6 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
-from writing_agent.llm.providers.node_ai_gateway_provider import NodeAIGatewayProvider, NodeGatewayConfig
 from writing_agent.llm.providers.openai_compatible_provider import OpenAICompatibleProvider
 from writing_agent.v2 import graph_reference_domain
 from writing_agent.v2 import graph_runner_post_domain
@@ -140,24 +139,6 @@ def test_openai_compatible_provider_responses_chat_repairs_mojibake() -> None:
             wire_api="responses",
         )
         assert provider.chat(system="s", user="u") == CN_BODY
-    finally:
-        server.shutdown()
-        server.server_close()
-
-
-def test_node_gateway_provider_stream_repairs_mojibake() -> None:
-    server, url = _start_server()
-    try:
-        provider = NodeAIGatewayProvider(
-            config=NodeGatewayConfig(
-                gateway_url=url,
-                model="mock-model",
-                timeout_s=3.0,
-                max_retries=1,
-                auto_fallback=False,
-            )
-        )
-        assert "".join(provider.chat_stream(system="s", user="u")) == CN_FLOW
     finally:
         server.shutdown()
         server.server_close()

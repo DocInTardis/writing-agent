@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 from writing_agent.document import ExportPrefs, V2ReportDocxExporter
 from writing_agent.diagnostics import diagnostic_path, enabled, write_compact_json
-from writing_agent.llm import OllamaClient, get_ollama_settings
+from writing_agent.llm import OllamaClient, get_default_provider, get_ollama_settings
 from writing_agent.observability import get_bridge
 from writing_agent.storage import InMemoryStore
 from writing_agent.web.domains import (
@@ -901,15 +901,6 @@ def _build_fallback_prompt(session, *, instruction: str, length_hint: str) -> tu
     from writing_agent.capabilities.fallback_generation import build_fallback_prompt
 
     return build_fallback_prompt(session, instruction=instruction, length_hint=length_hint)
-
-
-def _try_rust_import(path: Path) -> str:
-    try:
-        from writing_agent.v2.rust_bridge import try_rust_import
-
-        return str(try_rust_import(Path(path)) or "")
-    except Exception:
-        return ""
 
 
 def _extract_text(path: Path) -> str:

@@ -14,7 +14,7 @@ def _install_runtime_stubs(monkeypatch, client_cls):
         lambda text: str(text).strip() if str(text).strip().startswith("{") else "",
         raising=False,
     )
-    monkeypatch.setattr(part1, "OllamaClient", client_cls, raising=False)
+    monkeypatch.setattr(part1, "get_default_provider", lambda **_: client_cls(), raising=False)
 
 
 def test_dynamic_questions_prompt_is_tagged_and_escaped(monkeypatch):

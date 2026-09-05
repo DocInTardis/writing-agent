@@ -1,6 +1,4 @@
 import asyncio
-from types import SimpleNamespace
-
 import writing_agent.v2.inline_ai as inline_ai
 
 
@@ -16,12 +14,7 @@ def test_inline_ai_guard_uses_tagged_prompt_and_json_output(monkeypatch):
             captured["user"] = user
             return '{"output_text":"rewritten text"}'
 
-    monkeypatch.setattr(
-        inline_ai,
-        "get_ollama_settings",
-        lambda: SimpleNamespace(base_url="http://test", model="m", timeout_s=3.0),
-    )
-    monkeypatch.setattr(inline_ai, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(inline_ai, "get_default_provider", lambda **_: _FakeClient())
 
     engine = inline_ai.InlineAIEngine()
     context = inline_ai.InlineContext(
@@ -49,12 +42,7 @@ def test_inline_ai_guard_rejects_unbounded_rewrite_output(monkeypatch):
             _ = system, user, temperature, options
             return '{"output_text":"' + ("x" * 10000) + '"}'
 
-    monkeypatch.setattr(
-        inline_ai,
-        "get_ollama_settings",
-        lambda: SimpleNamespace(base_url="http://test", model="m", timeout_s=3.0),
-    )
-    monkeypatch.setattr(inline_ai, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(inline_ai, "get_default_provider", lambda **_: _FakeClient())
 
     engine = inline_ai.InlineAIEngine()
     context = inline_ai.InlineContext(
@@ -80,12 +68,7 @@ def test_inline_ai_guard_applies_to_ask_ai_operation(monkeypatch):
             captured["user"] = user
             return '{"output_text":"answer text"}'
 
-    monkeypatch.setattr(
-        inline_ai,
-        "get_ollama_settings",
-        lambda: SimpleNamespace(base_url="http://test", model="m", timeout_s=3.0),
-    )
-    monkeypatch.setattr(inline_ai, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(inline_ai, "get_default_provider", lambda **_: _FakeClient())
 
     engine = inline_ai.InlineAIEngine()
     context = inline_ai.InlineContext(
@@ -122,12 +105,7 @@ def test_inline_ai_guard_escapes_tag_like_user_content(monkeypatch):
             captured["user"] = user
             return '{"output_text":"ok"}'
 
-    monkeypatch.setattr(
-        inline_ai,
-        "get_ollama_settings",
-        lambda: SimpleNamespace(base_url="http://test", model="m", timeout_s=3.0),
-    )
-    monkeypatch.setattr(inline_ai, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(inline_ai, "get_default_provider", lambda **_: _FakeClient())
 
     engine = inline_ai.InlineAIEngine()
     context = inline_ai.InlineContext(
@@ -157,12 +135,7 @@ def test_inline_ai_guard_retries_once_when_json_is_invalid(monkeypatch):
                 return "not a json payload"
             return '{"output_text":"fixed on retry"}'
 
-    monkeypatch.setattr(
-        inline_ai,
-        "get_ollama_settings",
-        lambda: SimpleNamespace(base_url="http://test", model="m", timeout_s=3.0),
-    )
-    monkeypatch.setattr(inline_ai, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(inline_ai, "get_default_provider", lambda **_: _FakeClient())
 
     engine = inline_ai.InlineAIEngine()
     context = inline_ai.InlineContext(
@@ -189,12 +162,7 @@ def test_inline_ai_guard_respects_pretrimmed_context(monkeypatch):
             captured["user"] = user
             return '{"output_text":"ok"}'
 
-    monkeypatch.setattr(
-        inline_ai,
-        "get_ollama_settings",
-        lambda: SimpleNamespace(base_url="http://test", model="m", timeout_s=3.0),
-    )
-    monkeypatch.setattr(inline_ai, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(inline_ai, "get_default_provider", lambda **_: _FakeClient())
 
     left = "L" * 400
     right = "R" * 400

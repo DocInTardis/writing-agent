@@ -182,8 +182,7 @@ def _try_quick_edit(text: str, instruction: str, confirm_apply: bool = False):
         instruction,
         looks_like_modify_instruction=app_v2._looks_like_modify_instruction,
         confirm_apply=confirm_apply,
-        get_ollama_settings_fn=app_v2.get_ollama_settings,
-        ollama_client_cls=app_v2.OllamaClient,
+        provider_factory=get_default_provider,
     )
 
 
@@ -195,8 +194,7 @@ def _try_ai_intent_edit(text: str, instruction: str, analysis: dict | None = Non
         analysis,
         looks_like_modify_instruction=app_v2._looks_like_modify_instruction,
         confirm_apply=confirm_apply,
-        get_ollama_settings_fn=app_v2.get_ollama_settings,
-        ollama_client_cls=app_v2.OllamaClient,
+        provider_factory=get_default_provider,
     )
 
 
@@ -221,8 +219,7 @@ def _try_revision_edit(
         report_status=report_status,
         sanitize_output_text=app_v2._sanitize_output_text,
         replace_question_headings=app_v2._replace_question_headings,
-        get_ollama_settings_fn=app_v2.get_ollama_settings,
-        ollama_client_cls=app_v2.OllamaClient,
+        provider_factory=get_default_provider,
     )
 
 

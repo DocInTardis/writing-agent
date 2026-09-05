@@ -29,12 +29,11 @@ def test_revision_workflow_returns_selected_revision_when_available() -> None:
         class os:
             environ = {}
 
-        OllamaClient = _FakeClient
         store = SimpleNamespace(put=lambda _session: None)
 
         @staticmethod
-        def get_ollama_settings():
-            return SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0)
+        def get_default_provider(**_kwargs):
+            return _FakeClient()
 
         @staticmethod
         def _run_message_analysis(*_args, **_kwargs):
@@ -100,12 +99,11 @@ def test_revision_workflow_hard_gate_reject_keeps_base_text() -> None:
         class os:
             environ = {}
 
-        OllamaClient = _FakeClient
         store = SimpleNamespace(put=lambda _session: None)
 
         @staticmethod
-        def get_ollama_settings():
-            return SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0)
+        def get_default_provider(**_kwargs):
+            return _FakeClient()
 
         @staticmethod
         def _run_message_analysis(*_args, **_kwargs):

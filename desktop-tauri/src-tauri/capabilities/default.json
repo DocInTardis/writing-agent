@@ -1,8 +1,0 @@
-{
-  "identifier": "default",
-  "description": "Default capabilities for the Writing Agent desktop app",
-  "windows": ["main"],
-  "permissions": [
-    "core:default"
-  ]
-}

@@ -522,7 +522,6 @@ def test_normalize_export_text_only_dedupes_headings_in_strict_mode() -> None:
     assert strict != relaxed
 
 def test_docx_export_footer_uses_default_refs_and_non_empty_page_fields(monkeypatch) -> None:
-    monkeypatch.delenv("WA_USE_RUST_ENGINE", raising=False)
     client = TestClient(app_v2.app)
     doc_id = _create_session(client)
     payload = {
@@ -610,7 +609,6 @@ def test_validate_docx_bytes_flags_nondefault_footer_and_empty_page_field() -> N
 
 def test_docx_export_single_mode_ignores_backend_env_safe(monkeypatch) -> None:
     monkeypatch.setenv("WRITING_AGENT_DOCX_BACKEND_MODE", "safe")
-    monkeypatch.delenv("WA_USE_RUST_ENGINE", raising=False)
     monkeypatch.setattr(app_v2, "_doc_ir_has_styles", lambda _doc_ir: True)
     client = TestClient(app_v2.app)
     doc_id = _create_session(client)

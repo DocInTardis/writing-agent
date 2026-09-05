@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from writing_agent.diagnostics import append_diagnostic, diagnostic_path, enabled, write_compact_json
-from writing_agent.llm.providers.node_ai_gateway_provider import NodeAIGatewayProvider
 from writing_agent.web.domains import revision_edit_common_domain as revision
 from writing_agent.web.domains import route_graph_metrics_domain as route
 
@@ -39,7 +38,6 @@ class DiagnosticPolicyTests(unittest.TestCase):
         route.record_route_graph_metric('done', phase='draft', path='test')
         revision._record_edit_plan_metric('done', raw='rewrite', prefer_model=False, fallback_used=False)
         revision._record_selected_revision_metric('done', instruction='rewrite')
-        NodeAIGatewayProvider._record_fallback_event(None, reason='unavailable')
 
     def test_repeated_default_operations_create_nothing(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -54,7 +52,7 @@ class DiagnosticPolicyTests(unittest.TestCase):
             os.environ['WRITING_AGENT_PERSIST_DIAGNOSTICS'] = '1'
             self.emit_all()
             files = list((Path(folder) / 'metrics').glob('*.jsonl'))
-            self.assertEqual(len(files), 4)
+            self.assertEqual(len(files), 3)
             for file in files:
                 self.assertIsInstance(json.loads(file.read_text(encoding='utf-8')), dict)
 

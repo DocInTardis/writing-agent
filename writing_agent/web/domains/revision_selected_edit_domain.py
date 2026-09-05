@@ -517,8 +517,9 @@ def try_revision_edit(
     report_status: Callable[[dict[str, Any]], None] | None = None,
     sanitize_output_text,
     replace_question_headings,
-    get_ollama_settings_fn,
-    ollama_client_cls,
+    provider_factory=None,
+    get_ollama_settings_fn=None,
+    ollama_client_cls=None,
 ) -> tuple[str, str] | None:
     _ = session
     raw = str(instruction or "").strip()
@@ -526,15 +527,23 @@ def try_revision_edit(
     if not raw or not base_text.strip():
         _emit_revision_status(report_status, {"ok": False, "error_code": "E_EMPTY_INPUT"})
         return None
-    settings = get_ollama_settings_fn()
-    if not settings.enabled:
-        _emit_revision_status(report_status, {"ok": False, "error_code": "E_MODEL_DISABLED"})
-        return None
-    model = os.environ.get("WRITING_AGENT_REVISE_MODEL", "").strip() or settings.model
-    client = ollama_client_cls(base_url=settings.base_url, model=model, timeout_s=settings.timeout_s)
-    if not client.is_running():
-        _emit_revision_status(report_status, {"ok": False, "error_code": "E_MODEL_UNAVAILABLE"})
-        return None
+    requested_model = os.environ.get("WRITING_AGENT_REVISE_MODEL", "").strip() or None
+    if callable(provider_factory):
+        try:
+            client = provider_factory(model=requested_model, route_key="revision.selected")
+        except Exception:
+            _emit_revision_status(report_status, {"ok": False, "error_code": "E_MODEL_NOT_CONFIGURED"})
+            return None
+    else:
+        settings = get_ollama_settings_fn()
+        if not settings.enabled:
+            _emit_revision_status(report_status, {"ok": False, "error_code": "E_MODEL_DISABLED"})
+            return None
+        model = requested_model or settings.model
+        client = ollama_client_cls(base_url=settings.base_url, model=model, timeout_s=settings.timeout_s)
+        if not client.is_running():
+            _emit_revision_status(report_status, {"ok": False, "error_code": "E_MODEL_UNAVAILABLE"})
+            return None
     analysis_instruction = raw
     if isinstance(analysis, dict):
         analysis_instruction = str(analysis.get("rewritten_query") or raw).strip() or raw

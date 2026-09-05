@@ -7,7 +7,7 @@ import math
 import re
 from typing import Any
 
-from writing_agent.llm import OllamaClient
+from writing_agent.llm import get_default_provider
 from writing_agent.web.domains.revision_edit_common_domain import _extract_json_block
 from writing_agent.v2.graph_runner_core_utils_domain import _analysis_timeout_s
 
@@ -89,7 +89,11 @@ def _generate_dynamic_questions_with_model(
     history: str,
     merged: dict,
 ) -> dict:
-    client = OllamaClient(base_url=base_url, model=model, timeout_s=_analysis_timeout_s())
+    _ = base_url
+    try:
+        client = get_default_provider(model=model or None, timeout_s=_analysis_timeout_s(), route_key="clarification")
+    except Exception:
+        return {}
     system = "You generate concise clarification questions. Return JSON only."
     retry_reason = ""
     for attempt in range(2):

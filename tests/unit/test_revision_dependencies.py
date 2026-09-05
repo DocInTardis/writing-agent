@@ -20,8 +20,7 @@ class RevisionDependencyTests(unittest.TestCase):
         self.deps = RevisionDeps(
             environ={}, exception_factory=lambda **kw: ValueError(kw['detail']),
             doc_ir_from_dict=lambda value: value, doc_ir_to_text=lambda value: value['text'],
-            get_model_settings=lambda: SimpleNamespace(enabled=True, base_url='test', model='test', timeout_s=1),
-            create_model_client=lambda **_: self.client,
+            create_provider=lambda **_: self.client,
             analyze_message=lambda *_: {}, hard_constraints=lambda *_: {},
             decide_revision=lambda **_: {'should_apply': True}, try_selected_edit=self.selected,
             replace_question_headings=lambda text: text, postprocess_output=lambda session, text, *a, **kw: text,
@@ -59,7 +58,7 @@ class RevisionDependencyTests(unittest.TestCase):
 
     def test_missing_target_rejected_before_model_probe(self):
         probe = Mock(side_effect=AssertionError('model should not be called'))
-        self.deps = replace(self.deps, create_model_client=probe)
+        self.deps = replace(self.deps, create_provider=probe)
         with self.assertRaisesRegex(ValueError, 'target section not found'):
             self.run_revision(target_section='missing')
         probe.assert_not_called()
@@ -117,9 +116,9 @@ class RevisionDependencyTests(unittest.TestCase):
         self.assertEqual(self.session.doc_ir, {'text': 'original'})
         self.persist.assert_not_called()
 
-    def test_model_unavailable_leaves_incoming_structure_uncommitted(self):
-        self.client.is_running = lambda: False
-        with self.assertRaisesRegex(ValueError, 'not running'):
+    def test_model_configuration_failure_leaves_incoming_structure_uncommitted(self):
+        self.deps = replace(self.deps, create_provider=Mock(side_effect=RuntimeError('missing key')))
+        with self.assertRaisesRegex(ValueError, 'not configured'):
             self.run_revision(doc_ir={'sections': [], 'text': 'unsaved text'})
         self.assertEqual(self.session.doc_ir, {'text': 'original'})
         self.assertEqual(self.session.doc_text, 'original')

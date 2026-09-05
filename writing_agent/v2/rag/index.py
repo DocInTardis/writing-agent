@@ -17,7 +17,7 @@ from array import array
 from dataclasses import dataclass
 from pathlib import Path
 
-from writing_agent.llm import OllamaClient, get_ollama_settings
+from writing_agent.llm import get_default_provider
 from writing_agent.v2.rag.chunking import chunk_text
 from writing_agent.v2.rag.pdf_text import extract_pdf_text
 from writing_agent.v2.rag.store import RagPaperRecord, RagStore, safe_paper_key
@@ -333,7 +333,7 @@ def _make_chunk(
     idx: int,
     text: str,
     embed_text: str,
-    embed_client: OllamaClient | None,
+    embed_client: Any | None,
     embed_model: str,
     embed_codec: str,
 ) -> RagChunk:
@@ -361,35 +361,26 @@ def _make_chunk(
 
 
 def _embed_model_name() -> str:
-    return (os.environ.get("WRITING_AGENT_EMBED_MODEL", "").strip() or "nomic-embed-text:latest").strip()
+    return os.environ.get("WRITING_AGENT_EMBED_MODEL", "").strip()
 
 
-def _make_embed_client(embed_model: str) -> OllamaClient | None:
-    settings = get_ollama_settings()
-    if not settings.enabled:
-        return None
-    client = OllamaClient(base_url=settings.base_url, model=embed_model, timeout_s=max(60.0, settings.timeout_s))
-    if not client.is_running():
+def _make_embed_client(embed_model: str) -> Any | None:
+    if not embed_model:
         return None
     try:
-        if not client.has_model():
-            return None
+        return get_default_provider(model=embed_model, timeout_s=60.0, route_key="rag.embedding")
     except Exception:
         return None
-    return client
 
 
 def _embed_query(query: str, *, embed_model: str) -> list[float]:
-    settings = get_ollama_settings()
-    client = OllamaClient(base_url=settings.base_url, model=embed_model, timeout_s=max(60.0, settings.timeout_s))
-    if not client.is_running():
+    if not embed_model:
         return []
     try:
-        if not client.has_model():
-            return []
+        client = get_default_provider(model=embed_model, timeout_s=60.0, route_key="rag.query_embedding")
+        return client.embeddings(prompt=query, model=embed_model)
     except Exception:
         return []
-    return client.embeddings(prompt=query, model=embed_model)
 
 
 def _encode_vec(vec: list[float], *, codec: str = "f32") -> tuple[str, int, str, float]:

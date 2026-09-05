@@ -20,7 +20,7 @@ import logging
 import json
 import re
 
-from writing_agent.llm import OllamaClient, get_ollama_settings
+from writing_agent.llm import get_default_provider
 from writing_agent.v2.inline_ai_guard_domain import (
     _build_guarded_prompt as _inline_build_guarded_prompt,
     _chat_guarded as _inline_chat_guarded,
@@ -111,12 +111,7 @@ class InlineAIEngine:
     """
 
     def __init__(self):
-        self.settings = get_ollama_settings()
-        self.client = OllamaClient(
-            base_url=self.settings.base_url,
-            model=self.settings.model,
-            timeout_s=self.settings.timeout_s
-        )
+        self.client = get_default_provider(route_key="inline_ai")
         self._raw_chat = self.client.chat
         self._active_operation: InlineOperation | None = None
         self._active_context: InlineContext | None = None

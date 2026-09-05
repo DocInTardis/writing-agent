@@ -1,8 +1,7 @@
 # Support
 
 ## Getting Help
-- Check `docs/START_HERE.md` first.
-- Check `docs/TROUBLESHOOTING_DECISION_TREE.md` for common failures.
+- Check `README.md` and `docs/LOCAL_RUNTIME.md` first.
 - Search existing issues before opening a new one.
 
 ## Bug Reports

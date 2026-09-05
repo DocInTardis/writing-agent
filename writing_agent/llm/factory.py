@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import os
-from pathlib import Path
 import threading
 import time
 
@@ -14,8 +11,7 @@ logger = logging.getLogger(__name__)
 
 from writing_agent.llm.openai_config import resolve_openai_candidates, resolve_openai_primary
 from writing_agent.llm.provider import LLMProvider, LLMProviderError
-from writing_agent.llm.providers.failover_provider import OpenAIKeyPoolProvider, OpenAIQuotaFallbackProvider
-from writing_agent.llm.providers.node_ai_gateway_provider import from_env as node_gateway_from_env
+from writing_agent.llm.providers.failover_provider import OpenAIKeyPoolProvider
 from writing_agent.llm.providers.ollama_provider import OllamaProvider
 from writing_agent.llm.providers.openai_compatible_provider import from_env as openai_from_env
 from writing_agent.llm.providers.openai_compatible_provider import providers_from_env as openai_providers_from_env
@@ -37,18 +33,7 @@ def _provider_cache_enabled() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
-def _bool_env(name: str, default: bool) -> bool:
-    raw = str(os.environ.get(name, "")).strip().lower()
-    if not raw:
-        return bool(default)
-    return raw in {"1", "true", "yes", "on"}
-
-
-def _openai_quota_fallback_enabled() -> bool:
-    return _bool_env("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", False)
-
-
-def _provider_cache_key(*, provider_name: str, backend_name: str, model: str | None, timeout_s: float | None) -> tuple:
+def _provider_cache_key(*, provider_name: str, model: str | None, timeout_s: float | None) -> tuple:
     chosen_model = str(model or "").strip()
     chosen_timeout = float(timeout_s) if timeout_s is not None else None
     if provider_name == "openai":
@@ -65,34 +50,21 @@ def _provider_cache_key(*, provider_name: str, backend_name: str, model: str | N
         )
         cache = (
             provider_name,
-            backend_name,
             candidates,
             chosen_model or (candidates[0][2] if candidates else str(os.environ.get("WRITING_AGENT_OPENAI_MODEL", "gpt-4o-mini")).strip()),
             chosen_timeout if chosen_timeout is not None else float(os.environ.get("WRITING_AGENT_OPENAI_TIMEOUT_S", "60")),
-            _openai_quota_fallback_enabled(),
         )
-        if _openai_quota_fallback_enabled():
-            settings = get_ollama_settings()
-            cache += (
-                bool(settings.enabled),
-                str(settings.base_url or "").strip(),
-                str(settings.model or "").strip(),
-                float(settings.timeout_s),
-            )
         return cache
     if provider_name == "ollama":
         settings = get_ollama_settings()
         return (
             provider_name,
-            backend_name,
             bool(settings.enabled),
             str(settings.base_url or "").strip(),
             chosen_model or str(settings.model or "").strip(),
             chosen_timeout if chosen_timeout is not None else float(settings.timeout_s),
-            str(os.environ.get("WRITING_AGENT_NODE_GATEWAY_URL", "")).strip() if backend_name == "node" else "",
-            str(os.environ.get("WRITING_AGENT_NODE_GATEWAY_AUTO_FALLBACK", "1")).strip(),
         )
-    return (provider_name, backend_name, chosen_model, chosen_timeout)
+    return (provider_name, chosen_model, chosen_timeout)
 
 
 def _provider_cache_ttl() -> float:
@@ -141,10 +113,9 @@ def mask_secret(value: str, *, show_prefix: int = 4, show_suffix: int = 2) -> st
 
 def get_provider_snapshot(*, model: str | None = None) -> dict[str, str]:
     provider = get_provider_name()
-    backend = str(os.environ.get("WRITING_AGENT_LLM_BACKEND", "python") or "python").strip().lower() or "python"
     snapshot: dict[str, str] = {
         "provider": provider,
-        "backend": backend,
+        "backend": "python",
         "model": str(model or "").strip(),
     }
     if provider == "openai":
@@ -158,11 +129,6 @@ def get_provider_snapshot(*, model: str | None = None) -> dict[str, str]:
             snapshot["config_sources"] = "; ".join(sources[:4])
         if primary is not None:
             snapshot["wire_api"] = str(primary.wire_api or "").strip() or "chat_completions"
-        if _openai_quota_fallback_enabled():
-            settings = get_ollama_settings()
-            if settings.enabled:
-                snapshot["fallback_provider"] = "ollama"
-                snapshot["fallback_model"] = str(settings.model or "").strip()
     elif provider == "ollama":
         settings = get_ollama_settings()
         snapshot["base_url"] = str(settings.base_url or "").strip()
@@ -172,13 +138,7 @@ def get_provider_snapshot(*, model: str | None = None) -> dict[str, str]:
 def _build_user_configured_provider(*, model: str | None = None, timeout_s: float | None = None) -> LLMProvider | None:
     """Build provider from user-managed configuration if available."""
     try:
-        from writing_agent.llm.user_config import UserLLMConfig
-        config_path = Path(".data/user_llm_configs.json")
-        if not config_path.exists():
-            return None
-        data = json.loads(config_path.read_text(encoding="utf-8"))
-        config = UserLLMConfig.from_dict(data)
-        active = config.get_active_provider()
+        active = UserConfigStore().get_active_provider()
         if active is None:
             return None
         if not active.enabled or not active.api_key:
@@ -208,16 +168,7 @@ def _build_openai_provider(*, model: str | None = None, timeout_s: float | None 
             providers=tuple(openai_candidates),
             provider_labels=tuple(str(provider.base_url or "").strip() for provider in openai_candidates),
         )
-    if not _openai_quota_fallback_enabled():
-        return primary_provider
-    settings = get_ollama_settings()
-    if not settings.enabled:
-        return primary_provider
-    fallback_provider = OllamaProvider.from_settings(settings)
-    return OpenAIQuotaFallbackProvider(
-        primary_provider=primary_provider,
-        fallback_provider=fallback_provider,
-    )
+    return primary_provider
 
 
 def _build_python_provider(*, model: str | None = None, timeout_s: float | None = None) -> LLMProvider:
@@ -232,77 +183,22 @@ def _build_python_provider(*, model: str | None = None, timeout_s: float | None 
     return OllamaProvider.from_settings(settings, model=model, timeout_s=timeout_s)
 
 
-def _rollout_bucket(route_key: str) -> int:
-    digest = hashlib.sha1(route_key.encode("utf-8", errors="ignore")).hexdigest()
-    return int(digest[:8], 16) % 100
-
-
-def _should_use_node_backend(route_key: str = "") -> bool:
-    backend = str(os.environ.get("WRITING_AGENT_LLM_BACKEND", "python")).strip().lower()
-    if backend != "node":
-        return False
-    raw_percent = str(os.environ.get("WRITING_AGENT_LLM_BACKEND_ROLLOUT_PERCENT", "100")).strip()
-    try:
-        percent = int(raw_percent)
-    except Exception:
-        percent = 100
-    percent = max(0, min(100, percent))
-    if percent <= 0:
-        return False
-    if percent >= 100:
-        return True
-    key = str(route_key or os.environ.get("WRITING_AGENT_LLM_ROUTE_KEY", "default")).strip() or "default"
-    return _rollout_bucket(key) < percent
-
-
 def get_default_provider(
     *,
     model: str | None = None,
     timeout_s: float | None = None,
     route_key: str = "",
 ) -> LLMProvider:
-    """
-    Resolve default provider using incremental dual-backend routing.
+    """Resolve the user-selected or environment-configured provider."""
 
-    Priority:
-    1. User-configured provider (if set and valid)
-    2. Environment-based provider (legacy)
-    3. Node gateway (if enabled)
-
-    Backend decision:
-    - `WRITING_AGENT_LLM_BACKEND=python` -> python native provider
-    - `WRITING_AGENT_LLM_BACKEND=node` -> node gateway provider (with rollout support)
-    """
-
+    _ = route_key
     provider_name = get_provider_name()
-    use_node_backend = _should_use_node_backend(route_key=route_key)
-    backend_name = "node" if use_node_backend else "python"
-    # 1. Try user-configured provider first (not cached; config may change anytime)
     user_provider = _build_user_configured_provider(model=model, timeout_s=timeout_s)
     if user_provider is not None:
-        if not use_node_backend:
-            return user_provider
-        try:
-            provider = node_gateway_from_env(
-                model=model,
-                timeout_s=timeout_s,
-                fallback_provider=user_provider if _bool_env("WRITING_AGENT_NODE_GATEWAY_AUTO_FALLBACK", True) else None,
-            )
-            return provider
-        except Exception as exc:
-            if _bool_env("WRITING_AGENT_NODE_GATEWAY_AUTO_FALLBACK", True):
-                logger.warning(
-                    "Node gateway provider init failed, falling back to user-configured provider: %s",
-                    exc,
-                    exc_info=True,
-                )
-                return user_provider
-            raise
+        return user_provider
 
-    # 2. Fallback to environment-based provider
     cache_key = _provider_cache_key(
         provider_name=provider_name,
-        backend_name=backend_name,
         model=model,
         timeout_s=timeout_s,
     )
@@ -311,22 +207,4 @@ def get_default_provider(
         if cached is not None:
             return cached
     python_provider = _build_python_provider(model=model, timeout_s=timeout_s)
-    if not use_node_backend:
-        return _provider_cache_put(cache_key, python_provider) if _provider_cache_enabled() else python_provider
-
-    try:
-        provider = node_gateway_from_env(
-            model=model,
-            timeout_s=timeout_s,
-            fallback_provider=python_provider if _bool_env("WRITING_AGENT_NODE_GATEWAY_AUTO_FALLBACK", True) else None,
-        )
-        return _provider_cache_put(cache_key, provider) if _provider_cache_enabled() else provider
-    except Exception as exc:
-        if _bool_env("WRITING_AGENT_NODE_GATEWAY_AUTO_FALLBACK", True):
-            logger.warning(
-                "Node gateway provider init failed, falling back to Python provider: %s",
-                exc,
-                exc_info=True,
-            )
-            return _provider_cache_put(cache_key, python_provider) if _provider_cache_enabled() else python_provider
-        raise
+    return _provider_cache_put(cache_key, python_provider) if _provider_cache_enabled() else python_provider

@@ -164,15 +164,7 @@ async def extract_prefs(doc_id: str, request: Request) -> dict:
     if not text:
         raise app_v2.HTTPException(status_code=400, detail="text required")
 
-    settings = app_v2.get_ollama_settings()
-    if not settings.enabled:
-        raise app_v2.HTTPException(status_code=400, detail="Ollama is not enabled")
-
-    client = app_v2.OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-    if not client.is_running():
-        raise app_v2.HTTPException(status_code=400, detail="Ollama is not running")
-
-    model = app_v2.os.environ.get("WRITING_AGENT_EXTRACT_MODEL", "").strip() or settings.model
+    model = app_v2.os.environ.get("WRITING_AGENT_EXTRACT_MODEL", "").strip()
     analysis = app_v2._run_message_analysis(session, text, quick=False)
     analysis_text = app_v2._compose_analysis_input(text, analysis)
     extract_timeout = app_v2._extract_timeout_s()
@@ -184,7 +176,7 @@ async def extract_prefs(doc_id: str, request: Request) -> dict:
     if force_ai:
         try:
             ai_parsed = app_v2._extract_prefs_with_model(
-                base_url=settings.base_url,
+                base_url="",
                 model=model,
                 text=analysis_text,
                 timeout_s=extract_timeout,
@@ -193,7 +185,7 @@ async def extract_prefs(doc_id: str, request: Request) -> dict:
                 parsed.update(ai_parsed)
             if app_v2.os.environ.get("WRITING_AGENT_EXTRACT_REFINE", "").strip() == "1":
                 refined = app_v2._extract_prefs_refine_with_model(
-                    base_url=settings.base_url,
+                    base_url="",
                     model=model,
                     text=analysis_text,
                     initial=parsed or {},
@@ -222,10 +214,10 @@ async def extract_prefs(doc_id: str, request: Request) -> dict:
     auto_summary = app_v2._build_pref_summary(text, analysis, title, fmt, prefs)
     history = app_v2._analysis_history_context(session)
     dynamic = {}
-    if settings.enabled and client.is_running():
+    if force_ai:
         dynamic = app_v2._generate_dynamic_questions_with_model(
-            base_url=settings.base_url,
-            model=app_v2._analysis_model_name(settings),
+            base_url="",
+            model=model,
             raw=text,
             analysis=analysis,
             history=history,
@@ -310,22 +302,15 @@ async def upload_template(doc_id: str, file: UploadFile = File(...)) -> dict:
     resolved = app_v2.prepare_template_file(path)
     text = app_v2._extract_text(resolved)
 
-    settings = app_v2.get_ollama_settings()
-    if not settings.enabled:
-        raise app_v2.HTTPException(status_code=400, detail="Ollama is not enabled")
-    client = app_v2.OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-    if not client.is_running():
-        raise app_v2.HTTPException(status_code=400, detail="Ollama is not running")
-
     first = app_v2._extract_template_with_model(
-        base_url=settings.base_url,
-        model=settings.model,
+        base_url="",
+        model="",
         filename=file.filename,
         text=text,
     )
     refined = app_v2._extract_template_refine_with_model(
-        base_url=settings.base_url,
-        model=settings.model,
+        base_url="",
+        model="",
         filename=file.filename,
         text=text,
         initial=first or {},
@@ -397,33 +382,27 @@ async def doc_upload(doc_id: str, file: UploadFile = File(...)) -> dict:
         suffix = src_path.suffix.lower()
         text = app_v2.user_library.get_text(rec.doc_id)
         ai_kind = "unknown"
-        settings = app_v2.get_ollama_settings()
-        running = False
-        if settings.enabled:
-            client = app_v2.OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-            running = client.is_running()
-            if running:
-                result = app_v2._classify_upload_with_model(
-                    base_url=settings.base_url,
-                    model=settings.model,
-                    filename=source_name,
-                    text=text,
-                )
-                ai_kind = str(result.get("kind") or "unknown")
+        result = app_v2._classify_upload_with_model(
+            base_url="",
+            model="",
+            filename=source_name,
+            text=text,
+        )
+        ai_kind = str(result.get("kind") or "unknown")
 
         if ai_kind == "template" and suffix in {".doc", ".docx", ".txt", ".md", ".html", ".htm"}:
             resolved = app_v2.prepare_template_file(src_path)
             if resolved.suffix.lower() != ".doc":
                 resolved_path = str(resolved)
                 first = app_v2._extract_template_with_model(
-                    base_url=settings.base_url,
-                    model=settings.model,
+                    base_url="",
+                    model="",
                     filename=source_name,
                     text=text,
                 )
                 refined = app_v2._extract_template_refine_with_model(
-                    base_url=settings.base_url,
-                    model=settings.model,
+                    base_url="",
+                    model="",
                     filename=source_name,
                     text=text,
                     initial=first or {},
@@ -434,29 +413,6 @@ async def doc_upload(doc_id: str, file: UploadFile = File(...)) -> dict:
                 if isinstance(refined, dict):
                     info.update(refined)
                 kind = "template"
-        elif suffix in {".doc", ".docx", ".txt", ".md", ".html", ".htm"} and running and ai_kind in {"unknown", "other", ""}:
-            resolved = app_v2.prepare_template_file(src_path)
-            if resolved.suffix.lower() != ".doc":
-                resolved_path = str(resolved)
-                quick = app_v2._extract_template_titles_with_model(
-                    base_url=settings.base_url,
-                    model=settings.model,
-                    filename=source_name,
-                    text=text,
-                )
-                titles = app_v2._normalize_string_list(quick.get("titles"), ("title", "text", "name"))
-                questions = app_v2._normalize_string_list(quick.get("questions"), ("question", "text", "q"))
-                if len(titles) >= 3:
-                    kind = "template"
-                    info = {
-                        "name": app_v2.Path(source_name).stem,
-                        "outline": [(1, t) for t in titles],
-                        "required_h2": [],
-                        "questions": questions,
-                    }
-                else:
-                    info = None
-                    kind = "library"
         elif ai_kind in {"reference", "other"}:
             kind = "library"
         else:
@@ -518,24 +474,17 @@ async def doc_upload_clarify(doc_id: str, request: Request) -> dict:
     if not path.exists():
         raise app_v2.HTTPException(status_code=404, detail="template file not found")
 
-    settings = app_v2.get_ollama_settings()
-    if not settings.enabled:
-        raise app_v2.HTTPException(status_code=400, detail="Ollama is not enabled")
-    client = app_v2.OllamaClient(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-    if not client.is_running():
-        raise app_v2.HTTPException(status_code=400, detail="Ollama is not running")
-
     raw_text = app_v2._extract_text(path)
     combined = (raw_text + "\n\n用户补充说明:\n" + text).strip()
     first = app_v2._extract_template_with_model(
-        base_url=settings.base_url,
-        model=settings.model,
+        base_url="",
+        model="",
         filename=path.name,
         text=combined,
     )
     refined = app_v2._extract_template_refine_with_model(
-        base_url=settings.base_url,
-        model=settings.model,
+        base_url="",
+        model="",
         filename=path.name,
         text=combined,
         initial=first or {},

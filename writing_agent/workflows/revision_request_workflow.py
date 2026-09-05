@@ -30,8 +30,7 @@ class RevisionDeps:
     exception_factory: Callable[..., Exception]
     doc_ir_from_dict: Callable[..., Any]
     doc_ir_to_text: Callable[..., str]
-    get_model_settings: Callable[..., Any]
-    create_model_client: Callable[..., Any]
+    create_provider: Callable[..., Any]
     analyze_message: Callable[..., Any]
     hard_constraints: Callable[..., Any]
     decide_revision: Callable[..., Any]
@@ -104,20 +103,19 @@ def run_revision_workflow(*, request: RevisionRequest, deps: RevisionDeps) -> di
     if not text.strip():
         raise deps.exception_factory(status_code=400, detail="empty document")
 
-    settings = deps.get_model_settings()
-    if not settings.enabled:
-        raise deps.exception_factory(status_code=400, detail="Ollama is not enabled")
-    client_probe = deps.create_model_client(base_url=settings.base_url, model=settings.model, timeout_s=settings.timeout_s)
-    if not client_probe.is_running():
-        raise deps.exception_factory(status_code=400, detail="Ollama is not running")
+    requested_model = deps.environ.get("WRITING_AGENT_REVISE_MODEL", "").strip() or None
+    try:
+        client = deps.create_provider(model=requested_model, route_key="revision")
+    except Exception as exc:
+        raise deps.exception_factory(status_code=400, detail=f"model provider is not configured: {exc}") from exc
 
     analysis = deps.analyze_message(session, instruction)
     analysis_instruction = str(analysis.get("rewritten_query") or instruction).strip() or instruction
-    model = deps.environ.get("WRITING_AGENT_REVISE_MODEL", "").strip() or settings.model
+    model = str(getattr(client, "model", "") or requested_model or "").strip()
     hard_constraints = dict(deps.hard_constraints(session, analysis_instruction, base_text) or {})
 
     decision = deps.decide_revision(
-        base_url=settings.base_url,
+        base_url=str(getattr(client, "base_url", "") or ""),
         model=model,
         instruction=analysis_instruction,
         selection=selection_text,
@@ -175,7 +173,6 @@ def run_revision_workflow(*, request: RevisionRequest, deps: RevisionDeps) -> di
                 out["revision_meta"] = revision_status
             return out
 
-    client = deps.create_model_client(base_url=settings.base_url, model=model, timeout_s=settings.timeout_s)
     system, user = build_revision_fallback_prompt_fn(
         instruction=analysis_instruction,
         plan_steps=plan_steps,

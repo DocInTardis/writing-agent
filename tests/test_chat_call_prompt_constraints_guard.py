@@ -12,7 +12,6 @@ _ALLOWED_WITHOUT_CONTRACT = {
     # LLM adapters/providers are transport layers, not prompt business logic.
     "writing_agent/llm/ai_sdk_adapter.py",
     "writing_agent/llm/providers/ollama_provider.py",
-    "writing_agent/llm/providers/node_ai_gateway_provider.py",
     "writing_agent/llm/providers/failover_provider.py",
     # Startup warm-up ping only.
     "writing_agent/web/app_v2.py",

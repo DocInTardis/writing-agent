@@ -268,34 +268,42 @@ def _build_model_edit_plan(
     raw: str,
     text: str,
     *,
+    provider_factory: Callable[..., Any] | None = None,
     get_ollama_settings_fn: Callable[[], Any] | None = None,
     ollama_client_cls: Any = None,
 ) -> EditPlanV2 | None:
     enabled = os.environ.get("WRITING_AGENT_EDIT_PLAN_ENABLE", "1").strip().lower() not in {"0", "false", "no", "off"}
     if not enabled:
         return None
-    if not callable(get_ollama_settings_fn) or ollama_client_cls is None:
-        return None
-    try:
-        settings = get_ollama_settings_fn()
-    except Exception:
-        return None
-    if not getattr(settings, "enabled", False):
-        return None
-    timeout_s = float(os.environ.get("WRITING_AGENT_EDIT_PLAN_TIMEOUT_S", str(getattr(settings, "timeout_s", 20.0))))
     model = (
         os.environ.get("WRITING_AGENT_EDIT_PLAN_MODEL", "").strip()
         or os.environ.get("WRITING_AGENT_REVISE_MODEL", "").strip()
-        or str(getattr(settings, "model", "")).strip()
     )
-    if not model:
-        return None
-    try:
-        client = ollama_client_cls(base_url=settings.base_url, model=model, timeout_s=timeout_s)
-        if not client.is_running():
+    if callable(provider_factory):
+        try:
+            timeout_s = float(os.environ.get("WRITING_AGENT_EDIT_PLAN_TIMEOUT_S", "20"))
+            client = provider_factory(model=model or None, timeout_s=timeout_s, route_key="revision.edit_plan")
+        except Exception:
             return None
-    except Exception:
-        return None
+    else:
+        if not callable(get_ollama_settings_fn) or ollama_client_cls is None:
+            return None
+        try:
+            settings = get_ollama_settings_fn()
+        except Exception:
+            return None
+        if not getattr(settings, "enabled", False):
+            return None
+        timeout_s = float(os.environ.get("WRITING_AGENT_EDIT_PLAN_TIMEOUT_S", str(getattr(settings, "timeout_s", 20.0))))
+        model = model or str(getattr(settings, "model", "")).strip()
+        if not model:
+            return None
+        try:
+            client = ollama_client_cls(base_url=settings.base_url, model=model, timeout_s=timeout_s)
+            if not client.is_running():
+                return None
+        except Exception:
+            return None
 
     headings = _collect_section_titles(text)[:20]
     heading_hint = ", ".join(headings) if headings else "<none>"
@@ -369,6 +377,7 @@ def _build_edit_plan_v2(
     text: str,
     *,
     prefer_model: bool,
+    provider_factory: Callable[..., Any] | None = None,
     get_ollama_settings_fn: Callable[[], Any] | None = None,
     ollama_client_cls: Any = None,
 ) -> EditPlanV2 | None:
@@ -377,6 +386,7 @@ def _build_edit_plan_v2(
         plan = _build_model_edit_plan(
             value,
             text,
+            provider_factory=provider_factory,
             get_ollama_settings_fn=get_ollama_settings_fn,
             ollama_client_cls=ollama_client_cls,
         )
@@ -422,12 +432,14 @@ def _parse_edit_ops_with_model(
     raw: str,
     text: str,
     *,
+    provider_factory: Callable[..., Any] | None = None,
     get_ollama_settings_fn: Callable[[], Any] | None = None,
     ollama_client_cls: Any = None,
 ) -> list[EditOp]:
     plan = _build_model_edit_plan(
         raw,
         text,
+        provider_factory=provider_factory,
         get_ollama_settings_fn=get_ollama_settings_fn,
         ollama_client_cls=ollama_client_cls,
     )
@@ -456,6 +468,7 @@ def try_quick_edit(
     *,
     looks_like_modify_instruction,
     confirm_apply: bool = False,
+    provider_factory: Callable[..., Any] | None = None,
     get_ollama_settings_fn: Callable[[], Any] | None = None,
     ollama_client_cls: Any = None,
 ) -> EditExecutionResult | None:
@@ -469,6 +482,7 @@ def try_quick_edit(
         raw,
         text,
         prefer_model=likely_edit,
+        provider_factory=provider_factory,
         get_ollama_settings_fn=get_ollama_settings_fn,
         ollama_client_cls=ollama_client_cls,
     )
@@ -567,6 +581,7 @@ def try_ai_intent_edit(
     *,
     looks_like_modify_instruction,
     confirm_apply: bool = False,
+    provider_factory: Callable[..., Any] | None = None,
     get_ollama_settings_fn: Callable[[], Any] | None = None,
     ollama_client_cls: Any = None,
 ) -> EditExecutionResult | None:
@@ -576,6 +591,7 @@ def try_ai_intent_edit(
         instruction,
         text,
         prefer_model=True,
+        provider_factory=provider_factory,
         get_ollama_settings_fn=get_ollama_settings_fn,
         ollama_client_cls=ollama_client_cls,
     )

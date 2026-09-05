@@ -8,15 +8,12 @@
 - [ ] Backend (`writing_agent/`)
 - [ ] Frontend (`writing_agent/web/frontend_svelte/`)
 - [ ] Scripts / CI (`scripts/`, `.github/workflows/`)
-- [ ] Docs / Governance (`docs/`, `security/`)
+- [ ] Docs / configuration (`docs/`, `security/`)
 
 ## Validation
 
 - [ ] `python -m pytest -q tests`
-- [ ] `python scripts/guard_file_line_limits.py --config security/file_line_limits.json --root .`
-- [ ] `python scripts/guard_function_complexity.py --config security/function_complexity_limits.json --root .`
-- [ ] `python scripts/guard_architecture_boundaries.py --config security/architecture_boundaries.json --root .`
-- [ ] `python scripts/run_quality_suite.py`
+- [ ] `python -m compileall -q writing_agent scripts`
 - [ ] `npm --prefix writing_agent/web/frontend_svelte run build` (if frontend changed)
 
 ## Compatibility

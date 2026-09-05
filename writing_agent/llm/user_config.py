@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import base64
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -16,82 +17,79 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Built-in provider presets for popular LLM services.
-# All use OpenAI-compatible API format (base_url + api_key + model).
+
+def _protect_secret(secret: str) -> str:
+    """Protect a secret with the current Windows user's DPAPI credentials."""
+    value = str(secret or "")
+    if not value or os.name != "nt" or value.startswith("dpapi:"):
+        return value
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _Blob(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+        raw = value.encode("utf-8")
+        buffer = ctypes.create_string_buffer(raw)
+        source = _Blob(len(raw), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_byte)))
+        protected = _Blob()
+        if not ctypes.windll.crypt32.CryptProtectData(
+            ctypes.byref(source), ctypes.c_wchar_p("Writing Agent API key"), None, None, None, 1, ctypes.byref(protected)
+        ):
+            return value
+        try:
+            payload = ctypes.string_at(protected.pbData, protected.cbData)
+        finally:
+            ctypes.windll.kernel32.LocalFree(protected.pbData)
+        return "dpapi:" + base64.b64encode(payload).decode("ascii")
+    except Exception as exc:
+        logger.warning("DPAPI protection unavailable; key was not rewritten: %s", exc)
+        return value
+
+
+def _unprotect_secret(secret: str) -> str:
+    value = str(secret or "")
+    if not value.startswith("dpapi:"):
+        return value
+    if os.name != "nt":
+        return ""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _Blob(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+        raw = base64.b64decode(value[6:].encode("ascii"), validate=True)
+        buffer = ctypes.create_string_buffer(raw)
+        source = _Blob(len(raw), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_byte)))
+        plain = _Blob()
+        if not ctypes.windll.crypt32.CryptUnprotectData(
+            ctypes.byref(source), None, None, None, None, 1, ctypes.byref(plain)
+        ):
+            return ""
+        try:
+            return ctypes.string_at(plain.pbData, plain.cbData).decode("utf-8")
+        finally:
+            ctypes.windll.kernel32.LocalFree(plain.pbData)
+    except Exception as exc:
+        logger.warning("DPAPI key could not be read: %s", exc)
+        return ""
+
+# Keep only stable connection presets. Other compatible services use `custom`.
 PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
     "openai": {
         "name": "OpenAI",
         "base_url": "https://api.openai.com/v1",
-        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
-        "default_model": "gpt-4o-mini",
-    },
-    "anthropic": {
-        "name": "Anthropic",
-        "base_url": "https://api.anthropic.com/v1",
-        "models": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
-        "default_model": "claude-3-5-sonnet-20241022",
-        "requires_adapter": True,
-    },
-    "google": {
-        "name": "Google Gemini",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "models": ["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"],
-        "default_model": "gemini-1.5-pro",
-    },
-    "azure_openai": {
-        "name": "Azure OpenAI",
-        "base_url": "",
-        "models": ["gpt-4o", "gpt-4", "gpt-35-turbo"],
-        "default_model": "gpt-4o",
-        "api_version": "2024-06-01",
+        "models": [],
+        "default_model": "",
     },
     "deepseek": {
         "name": "DeepSeek",
-        "base_url": "https://api.deepseek.com/v1",
-        "models": ["deepseek-chat", "deepseek-reasoner"],
-        "default_model": "deepseek-chat",
-    },
-    "moonshot": {
-        "name": "Moonshot (Kimi)",
-        "base_url": "https://api.moonshot.cn/v1",
-        "models": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
-        "default_model": "moonshot-v1-8k",
-    },
-    "qwen": {
-        "name": "通义千问 (Qwen)",
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "models": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-coder-plus"],
-        "default_model": "qwen-plus",
-    },
-    "zhipu": {
-        "name": "智谱 GLM",
-        "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "models": ["glm-4-plus", "glm-4", "glm-4-air", "glm-4-flash"],
-        "default_model": "glm-4-air",
-    },
-    "doubao": {
-        "name": "豆包 / 火山引擎",
-        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-        "models": ["doubao-pro-128k", "doubao-lite-128k"],
-        "default_model": "doubao-pro-128k",
-    },
-    "baichuan": {
-        "name": "百川智能",
-        "base_url": "https://api.baichuan-ai.com/v1",
-        "models": ["Baichuan4", "Baichuan3-Turbo", "Baichuan3-Turbo-128k"],
-        "default_model": "Baichuan3-Turbo",
-    },
-    "siliconflow": {
-        "name": "SiliconFlow",
-        "base_url": "https://api.siliconflow.cn/v1",
-        "models": ["Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3", "THUDM/glm-4-9b-chat"],
-        "default_model": "Qwen/Qwen2.5-72B-Instruct",
-    },
-    "openrouter": {
-        "name": "OpenRouter",
-        "base_url": "https://openrouter.ai/api/v1",
-        "models": ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro-1.5"],
-        "default_model": "openai/gpt-4o",
+        "base_url": "https://api.deepseek.com",
+        "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+        "default_model": "deepseek-v4-flash",
     },
     "custom": {
         "name": "自定义 (OpenAI-compatible)",
@@ -124,7 +122,7 @@ class UserProviderConfig:
     def from_dict(cls, data: dict[str, Any]) -> UserProviderConfig:
         return cls(
             provider_id=str(data.get("provider_id", "")),
-            api_key=str(data.get("api_key", "")),
+            api_key=_unprotect_secret(str(data.get("api_key", ""))),
             base_url=str(data.get("base_url", "")),
             model=str(data.get("model", "")),
             timeout_s=float(data.get("timeout_s", 120.0)),
@@ -183,15 +181,20 @@ class UserConfigStore:
 
     def _init(self) -> None:
         self._file_lock = threading.Lock()
-        self._config_path = Path(".data/user_llm_configs.json")
-        self._config_path.parent.mkdir(parents=True, exist_ok=True)
+        data_root = Path(str(os.environ.get("WRITING_AGENT_DATA_DIR", "")).strip() or ".data")
+        self._config_path = data_root / "user_llm_configs.json"
         self._cached_config: UserLLMConfig | None = None
         self._cached_at: float = 0.0
 
     def _persist(self, config: UserLLMConfig) -> None:
         with self._file_lock:
+            self._config_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = config.to_dict(mask_keys=False)
+            for provider in payload.get("providers", []):
+                if isinstance(provider, dict):
+                    provider["api_key"] = _protect_secret(str(provider.get("api_key", "")))
             self._config_path.write_text(
-                json.dumps(config.to_dict(mask_keys=False), ensure_ascii=False, indent=2),
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
                 encoding="utf-8",
             )
             self._cached_config = config

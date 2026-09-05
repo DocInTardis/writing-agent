@@ -50,14 +50,10 @@ def _str_env(name: str, default: str) -> str:
 class AppConfig:
     # ---- LLM provider ----
     llm_provider: str = field(default_factory=lambda: _str_env("WRITING_AGENT_LLM_PROVIDER", "openai"))
-    llm_backend: str = field(default_factory=lambda: _str_env("WRITING_AGENT_LLM_BACKEND", "python"))
-    llm_backend_rollout_percent: int = field(default_factory=lambda: _int_env("WRITING_AGENT_LLM_BACKEND_ROLLOUT_PERCENT", 100))
-
     openai_base_url: str = field(default_factory=lambda: _str_env("WRITING_AGENT_OPENAI_BASE_URL", "https://api.openai.com/v1"))
     openai_api_key: str = field(default_factory=lambda: _str_env("WRITING_AGENT_OPENAI_API_KEY", ""))
     openai_model: str = field(default_factory=lambda: _str_env("WRITING_AGENT_OPENAI_MODEL", "gpt-4o-mini"))
     openai_timeout_s: float = field(default_factory=lambda: _float_env("WRITING_AGENT_OPENAI_TIMEOUT_S", 60.0))
-    openai_quota_fallback: bool = field(default_factory=lambda: _bool_env("WRITING_AGENT_OPENAI_QUOTA_FALLBACK", False))
 
     # ---- Concurrency ----
     workers: int = field(default_factory=lambda: _int_env("WRITING_AGENT_WORKERS", 12))
@@ -91,8 +87,6 @@ class AppConfig:
                 )
         if self.workers < 1:
             errors.append("WRITING_AGENT_WORKERS must be >= 1")
-        if self.llm_backend_rollout_percent < 0 or self.llm_backend_rollout_percent > 100:
-            errors.append("WRITING_AGENT_LLM_BACKEND_ROLLOUT_PERCENT must be 0-100")
         return errors
 
     def log_summary(self) -> None:
@@ -100,9 +94,8 @@ class AppConfig:
         key = self.openai_api_key
         masked = f"{key[:4]}***{key[-2:]}" if len(key) > 6 else ("***" if key else "<not set>")
         logger.info(
-            "Config: provider=%s backend=%s model=%s workers=%d store_max=%d cache_ttl=%.0fs",
+            "Config: provider=%s model=%s workers=%d store_max=%d cache_ttl=%.0fs",
             self.llm_provider,
-            self.llm_backend,
             self.openai_model,
             self.workers,
             self.store_max_sessions,

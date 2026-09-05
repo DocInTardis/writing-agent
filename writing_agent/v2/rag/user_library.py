@@ -389,15 +389,6 @@ def _extract_text(path: Path) -> str:
     p = Path(path)
     if not p.exists():
         return ""
-    if os.environ.get("WA_USE_RUST_ENGINE") == "1":
-        try:
-            from writing_agent.v2.rust_bridge import try_rust_import
-            rust_text = try_rust_import(p)
-            if rust_text:
-                return rust_text
-        except Exception as _exc:
-            logger.debug("Ignored error in user_library.py: %s", _exc, exc_info=True)
-
     suffix = p.suffix.lower()
     if suffix in {".doc", ".docx"}:
         p = prepare_template_file(p)

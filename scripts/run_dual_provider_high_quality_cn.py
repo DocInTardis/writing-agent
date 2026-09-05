@@ -213,7 +213,6 @@ def _clear_provider_env() -> None:
     for key in [
         "WRITING_AGENT_USE_OLLAMA",
         "WRITING_AGENT_LLM_PROVIDER",
-        "WRITING_AGENT_LLM_BACKEND",
         "WRITING_AGENT_MODEL",
         "WRITING_AGENT_AGG_MODEL",
         "WRITING_AGENT_WORKER_MODELS",

@@ -23,7 +23,7 @@ from writing_agent.llm.user_config import (
 class TestProviderPresets:
     def test_all_presets_have_required_fields(self):
         presets = get_provider_presets()
-        assert len(presets) >= 10
+        assert len(presets) == 3
         for key, preset in presets.items():
             assert "name" in preset
             assert "base_url" in preset
@@ -32,7 +32,7 @@ class TestProviderPresets:
 
     def test_popular_providers_present(self):
         presets = get_provider_presets()
-        for key in ["openai", "anthropic", "google", "deepseek", "moonshot", "qwen", "zhipu"]:
+        for key in ["openai", "deepseek", "custom"]:
             assert key in presets
 
 
@@ -92,8 +92,8 @@ class TestBuildOpenAICompatibleConfig:
     def test_uses_preset_defaults(self):
         provider = UserProviderConfig(provider_id="deepseek", api_key="sk-test")
         cfg = build_openai_compatible_config(provider)
-        assert cfg["base_url"] == "https://api.deepseek.com/v1"
-        assert cfg["model"] == "deepseek-chat"
+        assert cfg["base_url"] == "https://api.deepseek.com"
+        assert cfg["model"] == "deepseek-v4-flash"
         assert cfg["api_key"] == "sk-test"
 
     def test_uses_user_overrides(self):
@@ -137,6 +137,8 @@ class TestUserConfigStore:
         assert loaded.providers[0].provider_id == "openai"
         assert loaded.providers[0].api_key == "sk-test"
         assert loaded.active_provider_id == "openai"
+        if os.name == "nt":
+            assert "sk-test" not in store._config_path.read_text(encoding="utf-8")
 
     def test_update_overwrites_all_fields(self, tmp_path):
         store = UserConfigStore()
