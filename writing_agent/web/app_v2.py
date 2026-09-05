@@ -903,6 +903,16 @@ def _build_fallback_prompt(session, *, instruction: str, length_hint: str) -> tu
     return build_fallback_prompt(session, instruction=instruction, length_hint=length_hint)
 
 
+def _try_rust_import(path: Path) -> str:
+    """Use the optional compiled Rust importer without building it at runtime."""
+    try:
+        from writing_agent.v2.rust_bridge import try_rust_import
+
+        return str(try_rust_import(Path(path)) or "")
+    except Exception:
+        return ""
+
+
 def _extract_text(path: Path) -> str:
     try:
         from writing_agent.v2.rag.user_library import _extract_text as _library_extract_text

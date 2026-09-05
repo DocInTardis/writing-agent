@@ -1,6 +1,6 @@
 # 本地运行与空间
 
-普通运行只需要 `.venv`、预构建前端、系统 WebView2 和 `.data`。pywebview 默认使用 private mode，不保留浏览器缓存。Node 是前端开发工具，不参与日常启动；Qt、Rust、Tauri、Node 网关和 Playwright 已退役。
+普通运行只需要 `.venv`、预构建前端、编译后的 Rust 文档内核、系统 WebView2 和 `.data`。pywebview 默认使用 private mode，不保留浏览器缓存。Node 与 Cargo 只是构建工具，不参与日常启动；Qt、Tauri、Node 网关和 Playwright 已退役。
 
 ## 目录性质
 
@@ -10,6 +10,7 @@
 | `.venv/` | 当前 Python 运行环境 | 不建议；删后需重装 |
 | `.venv-audit/`、旧 `.venv-*` | 旧测试环境 | 确认未使用后可删 |
 | `writing_agent/web/frontend_svelte/node_modules/` | 前端开发依赖 | 可删；开发时需重装 |
+| `engine/target/`、`engine/bridge/pkg/` | Rust/WASM 构建产物 | 可删；开发构建时再生成，安装包不应携带整个目录 |
 | `__pycache__/`、`.pytest_cache/`、构建目录 | 可重建缓存 | 可删 |
 | C 盘 Playwright 浏览器缓存 | 已退役工具缓存 | 确认无其他项目共用后可删 |
 
