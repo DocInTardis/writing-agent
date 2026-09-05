@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
+import threading
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -15,6 +18,16 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+_AUDIT_LOCK = threading.Lock()
+_DEFAULT_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _audit_max_bytes() -> int:
+    raw = os.environ.get("WRITING_AGENT_RAG_AUDIT_MAX_BYTES", str(_DEFAULT_MAX_BYTES))
+    try:
+        return max(64 * 1024, min(64 * 1024 * 1024, int(raw)))
+    except (TypeError, ValueError):
+        return _DEFAULT_MAX_BYTES
 
 
 @dataclass
@@ -51,16 +64,65 @@ class RetrievalTrail:
 
 
 class AuditTrailStore:
-    """Append-only JSONL store for retrieval trails."""
+    """Bounded JSONL store for opt-in retrieval trails."""
 
-    def __init__(self, base_dir: Path) -> None:
+    def __init__(self, base_dir: Path, *, max_bytes: int | None = None) -> None:
         self.base_dir = Path(base_dir)
         self.trail_path = self.base_dir / "retrieval_trails.jsonl"
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.max_bytes = max(1, int(max_bytes)) if max_bytes is not None else _audit_max_bytes()
 
-    def record(self, trail: RetrievalTrail) -> None:
-        with self.trail_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(trail.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n")
+    def record(self, trail: RetrievalTrail) -> bool:
+        line = (json.dumps(trail.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        if len(line) > self.max_bytes:
+            return False
+
+        temporary: Path | None = None
+        try:
+            with _AUDIT_LOCK:
+                self.base_dir.mkdir(parents=True, exist_ok=True)
+                size = self.trail_path.stat().st_size if self.trail_path.exists() else 0
+                complete = True
+                if size:
+                    with self.trail_path.open("rb") as stream:
+                        stream.seek(-1, os.SEEK_END)
+                        complete = stream.read(1) == b"\n"
+                if complete and size + len(line) <= self.max_bytes:
+                    with self.trail_path.open("ab") as stream:
+                        stream.write(line)
+                    return True
+
+                allowance = self.max_bytes - len(line)
+                with self.trail_path.open("rb") as stream:
+                    offset = max(0, size - allowance)
+                    stream.seek(offset)
+                    tail = stream.read(allowance)
+                if offset:
+                    _, separator, tail = tail.partition(b"\n")
+                    if not separator:
+                        tail = b""
+                if tail and not tail.endswith(b"\n"):
+                    tail = tail[: tail.rfind(b"\n") + 1]
+
+                with tempfile.NamedTemporaryFile(
+                    dir=self.base_dir,
+                    prefix=self.trail_path.name + ".",
+                    suffix=".tmp",
+                    delete=False,
+                ) as stream:
+                    temporary = Path(stream.name)
+                    stream.write(tail + line)
+                os.replace(temporary, self.trail_path)
+                temporary = None
+                return True
+        except (OSError, TypeError, ValueError):
+            logger.debug("Retrieval audit write skipped", exc_info=True)
+            return False
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def load(self, limit: int = 0) -> list[RetrievalTrail]:
         if not self.trail_path.exists():

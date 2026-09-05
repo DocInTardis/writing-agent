@@ -569,7 +569,7 @@ def _record_retrieval_trail(
     paper_hits: list[RagSearchHit] | None = None,
     online_hits: int = 0,
 ) -> str:
-    if not _env_on("WRITING_AGENT_RAG_AUDIT_ENABLED", default=True):
+    if not _env_on("WRITING_AGENT_RAG_AUDIT_ENABLED", default=False):
         return ""
     try:
         from writing_agent.v2.rag.audit_trail import AuditTrailStore, RetrievalTrail
@@ -617,8 +617,9 @@ def _record_retrieval_trail(
             kg_units=len(kg_hits or []),
             papers=len({row.paper_id for row in paper_hits or []}),
         )
-        AuditTrailStore(Path(rag_dir) / "audit").record(trail)
-        return trail.trail_id
+        if AuditTrailStore(Path(rag_dir) / "audit").record(trail):
+            return trail.trail_id
+        return ""
     except Exception as exc:
         logger.debug("Retrieval audit skipped: %s", exc)
         return ""
