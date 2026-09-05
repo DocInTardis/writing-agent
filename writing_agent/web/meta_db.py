@@ -62,7 +62,8 @@ def _preferred_paths(
     meta_db_path: Path | None = None,
     low_satisfaction_path: Path | None = None,
 ) -> tuple[Path, Path]:
-    app_v2 = sys.modules.get("writing_agent.web.app_v2")
+    explicit_data_dir = bool(str(os.environ.get("WRITING_AGENT_DATA_DIR", "") or "").strip())
+    app_v2 = None if explicit_data_dir else sys.modules.get("writing_agent.web.app_v2")
     runtime_meta_path = None
     runtime_low_path = None
     if app_v2 is not None:

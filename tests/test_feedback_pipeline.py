@@ -9,6 +9,7 @@ import writing_agent.web.app_v2 as app_v2
 
 
 def _prepare_paths(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("WRITING_AGENT_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(app_v2, "META_DB_PATH", tmp_path / "session_meta.db")
     monkeypatch.setattr(app_v2, "LOW_SATISFACTION_PATH", tmp_path / "learning" / "low_satisfaction_feedback.jsonl")
 

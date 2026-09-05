@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from writing_agent.desktop_app import main as desktop_main
         except ModuleNotFoundError as exc:
-            if not (exc.name or "").startswith(("PySide6", "shiboken6")):
+            if not (exc.name or "").startswith("webview"):
                 raise
             print("Desktop dependencies are missing. Run scripts/start_desktop.ps1 to install them.", file=sys.stderr)
             return 2

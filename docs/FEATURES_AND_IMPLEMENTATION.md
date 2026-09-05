@@ -14,6 +14,6 @@
 | DOCX/HTML/PDF 导出 | `writing_agent/document/`、`writing_agent/web/api/export_flow.py` |
 | 质量提示 | `writing_agent/quality/`、`writing_agent/capabilities/generation_quality.py` |
 
-当前只有一套 Python 业务实现。Svelte 是桌面窗口内的界面资源，不是独立部署的 Web 产品。OpenAI、DeepSeek、其他 OpenAI-compatible API 和明确选择的 Ollama 共用 Provider 协议；不存在跨服务自动 fallback。
+当前只有一套 Python 业务实现。Svelte 是 pywebview 系统 WebView2 窗口内的界面资源，不是独立部署的 Web 产品。OpenAI、DeepSeek、其他 OpenAI-compatible API 和明确选择的 Ollama 共用 Provider 协议；不存在跨服务自动 fallback。
 
 已知边界：AI 文本率和相似度是本地启发式提示，不等同于正式检测服务；PDF 质量受本机转换能力影响；真实桌面排版与 Word 仍需人工样本文档验收。

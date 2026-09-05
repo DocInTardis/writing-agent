@@ -4,7 +4,7 @@
 
 ## 当前架构
 
-- 桌面壳：PySide6 + 系统内本地 FastAPI 服务。
+- 桌面壳：pywebview + 系统 WebView2 + 本地 FastAPI 服务；不捆绑 Qt/Chromium。
 - 界面：预构建的 Svelte 工作台；普通使用不需要 Node。
 - 核心：单一 Python 实现，不再包含 Tauri、Rust 编辑引擎或 Node AI 网关。
 - 模型：统一走用户选择的 Provider。默认支持 OpenAI-compatible API，DeepSeek 可直接使用；Ollama 仅在明确选择时启用。调用失败会原样报告，不会偷偷切换服务或下载模型。

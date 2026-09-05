@@ -35,7 +35,7 @@ def test_revise_doc_uses_constrained_selected_revision(monkeypatch):
         "get_ollama_settings",
         lambda: SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0),
     )
-    monkeypatch.setattr(app_v2, "OllamaClient", _DummyClient)
+    monkeypatch.setattr(app_v2, "get_default_provider", lambda **_: _DummyClient())
     monkeypatch.setattr(app_v2, "_run_message_analysis", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(app_v2, "_revision_decision_with_model", lambda **_kwargs: {"should_apply": True, "plan": []})
     monkeypatch.setattr(app_v2, "_replace_question_headings", lambda text: text)
@@ -94,7 +94,7 @@ def test_revise_doc_does_not_fallback_to_unscoped_rewrite_by_default(monkeypatch
         "get_ollama_settings",
         lambda: SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0),
     )
-    monkeypatch.setattr(app_v2, "OllamaClient", _DummyClient)
+    monkeypatch.setattr(app_v2, "get_default_provider", lambda **_: _DummyClient())
     monkeypatch.setattr(app_v2, "_run_message_analysis", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(app_v2, "_revision_decision_with_model", lambda **_kwargs: {"should_apply": True, "plan": []})
 
@@ -158,7 +158,7 @@ def test_revise_doc_unscoped_fallback_uses_tagged_prompt_and_extracts_revised_bl
         "get_ollama_settings",
         lambda: SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0),
     )
-    monkeypatch.setattr(app_v2, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(app_v2, "get_default_provider", lambda **_: _FakeClient())
     monkeypatch.setattr(app_v2, "_run_message_analysis", lambda *_args, **_kwargs: {"rewritten_query": "rewrite now"})
     monkeypatch.setattr(app_v2, "_revision_decision_with_model", lambda **_kwargs: {"should_apply": True, "plan": ["fix wording"]})
     monkeypatch.setattr(app_v2, "_replace_question_headings", lambda text: text)
@@ -207,7 +207,7 @@ def test_revise_doc_unscoped_fallback_prompt_echo_fails_closed(monkeypatch):
         "get_ollama_settings",
         lambda: SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0),
     )
-    monkeypatch.setattr(app_v2, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(app_v2, "get_default_provider", lambda **_: _FakeClient())
     monkeypatch.setattr(app_v2, "_run_message_analysis", lambda *_args, **_kwargs: {"rewritten_query": "rewrite now"})
     monkeypatch.setattr(app_v2, "_revision_decision_with_model", lambda **_kwargs: {"should_apply": True, "plan": []})
     monkeypatch.setattr(app_v2, "_replace_question_headings", lambda text: text)
@@ -289,7 +289,7 @@ def test_revise_doc_unscoped_fallback_rejects_candidate_below_hard_gate(monkeypa
         "get_ollama_settings",
         lambda: SimpleNamespace(enabled=True, base_url="http://test", model="m", timeout_s=3.0),
     )
-    monkeypatch.setattr(app_v2, "OllamaClient", _FakeClient)
+    monkeypatch.setattr(app_v2, "get_default_provider", lambda **_: _FakeClient())
     monkeypatch.setattr(app_v2, "_run_message_analysis", lambda *_args, **_kwargs: {"rewritten_query": "rewrite now"})
     monkeypatch.setattr(app_v2, "_revision_decision_with_model", lambda **_kwargs: {"should_apply": True, "plan": []})
     monkeypatch.setattr(app_v2, "_replace_question_headings", lambda text: text)

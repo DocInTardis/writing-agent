@@ -18,7 +18,7 @@ if ($SkipInstall -and $InstallDependencies) {
 }
 $desktopReady = $false
 if (Test-Path $python) {
-  & $python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('PySide6') else 1)"
+  & $python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('webview') else 1)"
   $desktopReady = $LASTEXITCODE -eq 0
 }
 if (-not $SkipInstall -and ($InstallDependencies -or -not $desktopReady)) {

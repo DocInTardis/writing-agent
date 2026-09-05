@@ -1,6 +1,6 @@
 # 本地运行与空间
 
-普通运行只需要 `.venv`、预构建前端和 `.data`。Node 是前端开发工具，不参与日常启动；Rust、Tauri、Node 网关和 Playwright 已退役。
+普通运行只需要 `.venv`、预构建前端、系统 WebView2 和 `.data`。pywebview 默认使用 private mode，不保留浏览器缓存。Node 是前端开发工具，不参与日常启动；Qt、Rust、Tauri、Node 网关和 Playwright 已退役。
 
 ## 目录性质
 
