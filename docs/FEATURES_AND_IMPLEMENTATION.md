@@ -17,3 +17,9 @@
 当前只有一套 Python 业务实现。Svelte 是 pywebview 系统 WebView2 窗口内的界面资源，不是独立部署的 Web 产品。OpenAI、DeepSeek、其他 OpenAI-compatible API 和明确选择的 Ollama 共用 Provider 协议；不存在跨服务自动 fallback。
 
 已知边界：AI 文本率和相似度是本地启发式提示，不等同于正式检测服务；PDF 质量受本机转换能力影响；真实桌面排版与 Word 仍需人工样本文档验收。
+
+## 恢复与追溯
+
+本轮退役的 Tauri、Rust、Node 网关、容器配置和历史文档仍存在于 Git 提交 `0301db0` 及更早历史中；需要参考时应从历史读取单个文件，不要把整套实验架构重新合并进主线。当前架构收敛提交为 `0f13ebb`，系统 WebView2 桌面迁移提交为 `f8446c1`。
+
+用户资料位于 `WRITING_AGENT_DATA_DIR`（默认 `.data`），不随源码回退自动迁移。执行任何 Git 回退前应先单独备份该目录；不要用源码清理命令处理用户数据。
