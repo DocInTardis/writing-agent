@@ -11,17 +11,26 @@ import logging
 import os
 import sqlite3
 import sys
-import threading
 import time
 import uuid
 from pathlib import Path
+
+from writing_agent.bounded_jsonl import append_bounded_jsonl, read_recent_jsonl
 
 logger = logging.getLogger(__name__)
 
 # Populated at import time by init() called from app startup.
 _META_DB_PATH: Path | None = None
 _LOW_SATISFACTION_PATH: Path | None = None
-_LOW_SATISFACTION_LOCK = threading.Lock()
+_DEFAULT_LOW_SATISFACTION_MAX_BYTES = 4 * 1024 * 1024
+
+
+def _low_satisfaction_max_bytes() -> int:
+    raw = os.environ.get("WRITING_AGENT_FEEDBACK_LOG_MAX_BYTES", str(_DEFAULT_LOW_SATISFACTION_MAX_BYTES))
+    try:
+        return max(64 * 1024, min(32 * 1024 * 1024, int(raw)))
+    except (TypeError, ValueError):
+        return _DEFAULT_LOW_SATISFACTION_MAX_BYTES
 
 
 def init(meta_db_path: Path, low_satisfaction_path: Path) -> None:
@@ -202,16 +211,14 @@ def append_low_satisfaction_event(
         "context": dict(context or {}),
         "text_preview": str(doc_text or "").strip()[:1200],
     }
-    try:
-        _LOW_SATISFACTION_PATH.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(event, ensure_ascii=False)
-        with _LOW_SATISFACTION_LOCK:
-            with _LOW_SATISFACTION_PATH.open("a", encoding="utf-8") as f:
-                f.write(line + "\n")
-        return True
-    except OSError as exc:
-        logger.warning("append_low_satisfaction_event: write failed: %s", exc, exc_info=True)
-        return False
+    ok = append_bounded_jsonl(
+        _LOW_SATISFACTION_PATH,
+        event,
+        max_bytes=_low_satisfaction_max_bytes(),
+    )
+    if not ok:
+        logger.warning("append_low_satisfaction_event: record skipped")
+    return ok
 
 
 def load_low_satisfaction_events(limit: int = 200) -> list[dict]:
@@ -219,22 +226,8 @@ def load_low_satisfaction_events(limit: int = 200) -> list[dict]:
     if _LOW_SATISFACTION_PATH is None:
         raise RuntimeError("meta_db.init() has not been called")
     cap = max(1, min(5000, int(limit or 200)))
-    if not _LOW_SATISFACTION_PATH.exists():
-        return []
-    try:
-        lines = _LOW_SATISFACTION_PATH.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        logger.warning("load_low_satisfaction_events: read failed: %s", exc, exc_info=True)
-        return []
-    items: list[dict] = []
-    for raw in lines[-cap:]:
-        row = str(raw or "").strip()
-        if not row:
-            continue
-        try:
-            data = json.loads(row)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict):
-            items.append(data)
-    return items
+    return read_recent_jsonl(
+        _LOW_SATISFACTION_PATH,
+        max_bytes=_low_satisfaction_max_bytes(),
+        limit=cap,
+    )
