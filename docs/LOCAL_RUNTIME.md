@@ -16,6 +16,8 @@
 
 运行 `python -B -m writing_agent.storage_report` 可只读盘点。工具不会自动删除 `.data` 或其他应用的共享缓存。
 
+运行 `python -B -m writing_agent.storage_lifecycle` 可预览超过期限且没有工作区/检查点引用的旧文本块和检查点；默认只输出清单。确认后显式增加 `--apply` 才会删除本次重新扫描确认的候选项。工具只允许删除 `text_store/` 与 `graph_checkpoints/` 的直属普通文件，不处理符号链接、用户工作区或其他目录。
+
 ## 写盘策略
 
 - 启动不探测、启动或下载模型。
