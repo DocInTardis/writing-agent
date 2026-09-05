@@ -122,7 +122,7 @@ ruff==0.15.12
     # via -r requirements-dev.txt
 sortedcontainers==2.4.0
     # via cyclonedx-python-lib
-starlette==1.0.0
+starlette==1.6.0
     # via fastapi
 tinycss2==1.5.1
     # via
