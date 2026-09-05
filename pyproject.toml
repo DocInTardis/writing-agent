@@ -33,7 +33,7 @@ tools = [
   "rapidocr-onnxruntime>=1.4.4",
 ]
 dev = [
-  "pytest>=7.4",
+  "pytest>=9.1.1",
   "httpx2>=2.12",
   "pip-audit>=2.8",
   "aiosmtpd>=1.4.5",
