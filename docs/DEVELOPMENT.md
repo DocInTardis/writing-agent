@@ -19,6 +19,7 @@ python -m venv .venv
 ```powershell
 .\.venv\Scripts\python.exe -B -m compileall -q writing_agent
 .\.venv\Scripts\python.exe -B -m pytest -q tests
+npm --prefix writing_agent/web/frontend_svelte run check
 npm --prefix writing_agent/web/frontend_svelte run build
 cargo test --workspace --manifest-path engine/Cargo.toml
 ```

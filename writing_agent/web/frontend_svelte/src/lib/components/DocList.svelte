@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { pushToast } from '../stores'
 
-  let { visible = false, onSelect = () => {} }: { visible?: boolean, onSelect?: (docId: string) => void } = $props()
+  let { visible = $bindable(false), onSelect = () => {} }: { visible?: boolean, onSelect?: (docId: string) => void } = $props()
 
   interface Doc {
     doc_id: string
@@ -23,7 +23,7 @@
       const data = await resp.json()
       docs = data.docs || []
     } catch (e) {
-      pushToast('加载文档列表失败', 'error')
+      pushToast('加载文档列表失败', 'bad')
     } finally {
       loading = false
     }
@@ -54,7 +54,7 @@
       pushToast('已删除', 'ok')
       await loadDocs()
     } catch {
-      pushToast('删除失败', 'error')
+      pushToast('删除失败', 'bad')
     }
   }
 

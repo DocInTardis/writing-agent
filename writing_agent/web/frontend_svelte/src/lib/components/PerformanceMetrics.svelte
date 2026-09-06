@@ -19,7 +19,7 @@
     type ResolveMetricsView
   } from './performanceMetricsUtils'
 
-  let { visible = false }: { visible?: boolean } = $props()
+  let { visible = $bindable(false) }: { visible?: boolean } = $props()
 
   let metrics = $state<MetricsView | null>(null)
   let resolveMetrics = $state<ResolveMetricsView | null>(null)

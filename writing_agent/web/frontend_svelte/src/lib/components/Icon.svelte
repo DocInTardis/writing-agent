@@ -48,7 +48,7 @@
     clearSelection: 'M5 5l14 14M19 5 5 19'
   } as const
 
-  export type IconName = keyof typeof ICON_PATHS
+  type IconName = keyof typeof ICON_PATHS
 
   let { name = 'spark', size = 16, className = '', decorative = true, label = '' }: { name?: IconName, size?: number, className?: string, decorative?: boolean, label?: string } = $props()
 

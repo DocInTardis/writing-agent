@@ -23,7 +23,7 @@
     return childrenInline(node)
   }
 
-  const childrenInline = (el: HTMLElement): string => {
+  const childrenInline = (el: Element): string => {
     const out: string[] = []
     el.childNodes.forEach((child) => out.push(inlineText(child)))
     return out.join('').replace(/\s+/g, ' ').trim()
@@ -128,7 +128,7 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
     return childrenInline(node)
   }
 
-  const childrenInline = (el: HTMLElement): string => {
+  const childrenInline = (el: Element): string => {
     const out: string[] = []
     el.childNodes.forEach((child) => out.push(inlineText(child)))
     return out.join('').replace(/\s+/g, ' ').trim()

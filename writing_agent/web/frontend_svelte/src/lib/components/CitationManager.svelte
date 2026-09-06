@@ -14,6 +14,7 @@
     averageNumber,
     cacheEvictRate,
     cacheHitRate,
+    cacheLookupCount,
     formatCitation,
     formatRate,
     normalizeItems,
@@ -23,7 +24,7 @@
     toSafeInt
   } from '../citations/citationUtils'
 
-  let { visible = false }: { visible?: boolean } = $props()
+  let { visible = $bindable(false) }: { visible?: boolean } = $props()
 
   const VERIFY_DEBUG_ENABLED = Boolean(import.meta.env.DEV)
   const VERIFY_DEBUG_HISTORY_LIMIT = 8

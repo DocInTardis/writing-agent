@@ -73,8 +73,8 @@ export function buildDocIrOps(baseDoc: any, nextDoc: any): Array<Record<string, 
     const newSec = newSecs[i]
     const oldBlocks = Array.isArray(oldSec?.blocks) ? oldSec.blocks : []
     const newBlocks = Array.isArray(newSec?.blocks) ? newSec.blocks : []
-    const oldIds = oldBlocks.map((b: any) => String(b?.id || '')).filter(Boolean)
-    const newIds = newBlocks.map((b: any) => String(b?.id || '')).filter(Boolean)
+    const oldIds: string[] = oldBlocks.map((b: any) => String(b?.id || '')).filter(Boolean)
+    const newIds: string[] = newBlocks.map((b: any) => String(b?.id || '')).filter(Boolean)
     const oldIdSet = new Set(oldIds)
     const newIdSet = new Set(newIds)
     const oldMap = new Map(oldBlocks.map((b: any) => [String(b?.id || ''), b]))

@@ -135,9 +135,7 @@
     height: 560px;
     padding: 14px;
     border-radius: 22px;
-    background:
-      none, transparent 72%),
-      #faf9f7;
+    background: #faf9f7;
     border: 1px solid rgba(231, 229, 228, 1);
     box-shadow:
       0 24px 54px rgba(0, 0, 0, 0.01),

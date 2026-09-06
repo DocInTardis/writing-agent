@@ -54,7 +54,7 @@
     normalizeScore,
     plagiarismRiskLabel
   } from './lib/workbench/quality'
-  import { buildVersionGroups } from './lib/workbench/versions'
+  import { buildVersionGroups, formatVersionTime } from './lib/workbench/versions'
   import {
     normalizeGraphMeta,
     normalizeOriginalitySummary,
@@ -1020,7 +1020,7 @@
       ? detail.blockIds.map((v: unknown) => String(v || '').trim()).filter(Boolean)
       : []
     const nextBlockId = String(detail.blockId || '')
-    const nextIds = incomingIds.length ? incomingIds : nextBlockId ? [nextBlockId] : []
+    const nextIds: string[] = incomingIds.length ? incomingIds : nextBlockId ? [nextBlockId] : []
     const nextSessionKey = buildBlockSessionKey(nextIds)
     const prevSessionKey = activeBlockSessionKey
     if (!nextIds.length && selectedBlockIds.length) {
@@ -1719,7 +1719,7 @@
       const payload = data.data || {}
       if (kind === 'list') {
         const items = Array.isArray(payload.items) ? payload.items : []
-        return items.map((i) => `- ${String(i).trim()}`).join('\n')
+        return items.map((i: unknown) => `- ${String(i).trim()}`).join('\n')
       }
       if (kind === 'table') return `[[TABLE:${JSON.stringify(payload)}]]`
       if (kind === 'figure') return `[[FIGURE:${JSON.stringify(payload)}]]`
@@ -2012,7 +2012,7 @@
       }
       loadVersionLog().catch(() => {})
     } catch (err) {
-      pushToast(`加载失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error')
+      pushToast(`加载失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
     } finally {
       isLoading.set(false)
     }
@@ -2426,7 +2426,7 @@
       }
       pushToast('已保存', 'ok')
     } catch (err) {
-      pushToast(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error')
+      pushToast(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
     }
   }
 
@@ -2468,7 +2468,7 @@
       await loadVersionLog()
       pushToast('已提交版本', 'ok')
     } catch (err) {
-      pushToast(`提交失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error')
+      pushToast(`提交失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
     }
   }
 
@@ -2488,7 +2488,7 @@
       await loadVersionLog()
       pushToast('已切换版本', 'ok')
     } catch (err) {
-      pushToast(`切换失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error')
+      pushToast(`切换失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
     }
   }
 

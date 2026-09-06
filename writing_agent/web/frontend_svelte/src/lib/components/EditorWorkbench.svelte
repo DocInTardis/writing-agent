@@ -528,7 +528,7 @@
       }
       node.childNodes.forEach((child) => walk(child, next))
     }
-    walk(el, {})
+    walk(el, { text: '' })
     const merged: Run[] = []
     const keyFor = (r: Run) =>
       [
@@ -1547,7 +1547,7 @@
       const sel = window.getSelection()
       if (sel && sel.rangeCount) {
         const range = sel.getRangeAt(0)
-        let node = range.commonAncestorContainer
+        let node: Node | null = range.commonAncestorContainer
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (node instanceof HTMLElement) {
           let block = node.closest('p, div, h1, h2, h3, blockquote')
@@ -1563,7 +1563,7 @@
       const sel = window.getSelection()
       if (sel && sel.rangeCount) {
         const range = sel.getRangeAt(0)
-        let node = range.commonAncestorContainer
+        let node: Node | null = range.commonAncestorContainer
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (node instanceof HTMLElement) {
           let block = node.closest('p, div, h1, h2, h3')
@@ -1578,7 +1578,7 @@
       const sel = window.getSelection()
       if (sel && sel.rangeCount) {
         const range = sel.getRangeAt(0)
-        let node = range.commonAncestorContainer
+        let node: Node | null = range.commonAncestorContainer
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (node instanceof HTMLElement) {
           let block = node.closest('p, div')
@@ -2081,7 +2081,7 @@
     table.querySelectorAll('tr').forEach(row => {
       const newCell = document.createElement(cell.tagName.toLowerCase())
       newCell.textContent = '　'
-      newCell.style.cssText = cell.style.cssText
+      newCell.style.cssText = (cell as HTMLElement).style.cssText
       row.insertBefore(newCell, row.children[cellIndex + 1])
     })
   }
