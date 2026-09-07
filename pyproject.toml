@@ -25,9 +25,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-desktop = [
-  "pywebview==6.2.1",
-]
 tools = [
   "python-dotenv>=1.0.0",
   "rapidocr-onnxruntime>=1.4.4",

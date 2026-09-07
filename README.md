@@ -4,24 +4,24 @@
 
 ## 当前架构
 
-- 桌面壳：pywebview + 系统 WebView2 + 本地 FastAPI 服务；不捆绑 Qt/Chromium。
+- 桌面壳：Tauri 2 + 系统 WebView2 + 内置本地 FastAPI sidecar；不捆绑 Qt/Chromium。
 - 界面：预构建的 Svelte 工作台；普通使用不需要 Node。
-- 核心：Python 负责 Agent、模型、RAG 与持久化；Rust 文档内核负责 AST、增量编辑、撤销重做、分页布局与渲染缓存。Tauri 和 Node AI 网关已退役。
+- 核心：Python 负责 Agent、模型、RAG 与持久化；Rust/WASM 文档内核负责 AST、增量编辑、撤销重做、分页布局、命中测试与渲染缓存。Node AI 网关已退役。
 - 模型：统一走用户选择的 Provider。默认支持 OpenAI-compatible API，DeepSeek 可直接使用；Ollama 仅在明确选择时启用。调用失败会原样报告，不会偷偷切换服务或下载模型。
-- 数据：默认保存在项目 `.data/`；可用 `WRITING_AGENT_DATA_DIR` 指定其他目录。
+- 数据：安装版默认保存在 `%LOCALAPPDATA%\WritingAgent\data`，缓存独立放在 `%LOCALAPPDATA%\WritingAgent\cache`；源码 Web 模式仍默认使用项目 `.data/`。两者均可用环境变量覆盖。
 
 ## 启动
 
-Windows 下运行：
+Windows 安装版直接启动“写作助手”。源码开发运行：
 
 ```powershell
 .\scripts\start_desktop.ps1
 ```
 
-首次安装或依赖变化时：
+发布构建：
 
 ```powershell
-.\scripts\start_desktop.ps1 -InstallDependencies
+.\scripts\build_desktop.ps1
 ```
 
 开发者如只需本地 HTTP 服务：

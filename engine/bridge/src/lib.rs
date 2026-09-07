@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::sync::Arc;
 use wa_core::{Block, Document, Editor, EditorCommand, Inline, Style};
-use wa_engine::{LayoutCache, LayoutConfig, LayoutEngine};
+use wa_engine::{HitTester, LayoutCache, LayoutConfig, LayoutEngine};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -253,7 +253,63 @@ impl WasmEditor {
     pub fn import_markdown(&mut self, md: &str) -> Result<(), JsValue> {
         let doc = wa_core::import_markdown(md);
         self.editor = Editor::new(doc);
+        self.layout_cache = LayoutCache::new();
         Ok(())
+    }
+
+    #[wasm_bindgen(js_name = replaceMarkdown)]
+    pub fn replace_markdown(&mut self, md: &str, checkpoint: bool) {
+        let next = wa_core::import_markdown(md);
+        if checkpoint {
+            self.editor.checkpoint();
+        }
+        self.editor.doc = next;
+        self.layout_cache = LayoutCache::new();
+    }
+
+    #[wasm_bindgen(js_name = layoutMetrics)]
+    pub fn layout_metrics(&mut self, width: f32) -> Result<JsValue, JsValue> {
+        let config = LayoutConfig {
+            page_width: width,
+            ..Default::default()
+        };
+        let tree = self
+            .layout_engine
+            .layout_cached(&self.editor.doc, &config, &mut self.layout_cache);
+        let block_count: usize = tree.pages.iter().map(|page| page.blocks.len()).sum();
+        let content_height: f32 = tree.pages.iter().map(|page| page.height).sum();
+        serde_wasm_bindgen::to_value(&serde_json::json!({
+            "pageCount": tree.pages.len(),
+            "blockCount": block_count,
+            "contentHeight": content_height,
+            "documentVersion": self.editor.doc.version,
+        }))
+        .map_err(|e| JsValue::from_str(&format!("布局指标序列化失败: {}", e)))
+    }
+
+    #[wasm_bindgen(js_name = hitTest)]
+    pub fn hit_test(
+        &mut self,
+        width: f32,
+        x: f32,
+        y: f32,
+        page_gap: f32,
+    ) -> Result<JsValue, JsValue> {
+        let config = LayoutConfig {
+            page_width: width,
+            ..Default::default()
+        };
+        let tree = self
+            .layout_engine
+            .layout_cached(&self.editor.doc, &config, &mut self.layout_cache);
+        let hit = HitTester::new().hit_test(&tree, &config, x, y, page_gap);
+        serde_wasm_bindgen::to_value(&hit.map(|position| {
+            serde_json::json!({
+                "blockId": position.block_id.to_string(),
+                "offset": position.offset,
+            })
+        }))
+        .map_err(|e| JsValue::from_str(&format!("命中测试序列化失败: {}", e)))
     }
 
     #[wasm_bindgen(js_name = find)]

@@ -36,8 +36,12 @@ def _filter_sources_by_topic(rows: list[dict], *, query: str, min_score: int) ->
 
 def _reference_cache_dir() -> Path:
     repo_root = Path(__file__).resolve().parents[2]
-    data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
-    cache_dir = data_dir / "cache" / "reference_fallback"
+    configured_cache = str(os.environ.get("WRITING_AGENT_CACHE_DIR", "") or "").strip()
+    if configured_cache:
+        cache_dir = Path(configured_cache).resolve() / "reference_fallback"
+    else:
+        data_dir = Path(os.environ.get("WRITING_AGENT_DATA_DIR", str(repo_root / ".data"))).resolve()
+        cache_dir = data_dir / "cache" / "reference_fallback"
     return cache_dir
 
 

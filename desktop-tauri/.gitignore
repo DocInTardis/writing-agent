@@ -1,0 +1,10 @@
+/node_modules/
+/src-tauri/target/
+/src-tauri/gen/
+/src-tauri/sidecar/
+!/src-tauri/sidecar/
+/src-tauri/sidecar/*
+!/src-tauri/sidecar/.keep
+/src-tauri/icons/*
+!/src-tauri/icons/icon.ico
+!/src-tauri/icons/icon.png

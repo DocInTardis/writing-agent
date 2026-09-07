@@ -104,6 +104,7 @@
   } from './lib/workbench/types'
 
   let aborter = $state<AbortController | null>(null)
+  let userCancelled = $state(false)
   let writeBuffer = $state('')
   let writeTimer = $state<ReturnType<typeof setTimeout> | null>(null)
   let docIrRefreshTimer = $state<ReturnType<typeof setTimeout> | null>(null)
@@ -2978,6 +2979,7 @@
     sectionOriginalitySummary = null
     pushThought('启动', '开始生成', new Date().toLocaleTimeString())
     aborter = new AbortController()
+    userCancelled = false
 
     isLoading.set(false)
     if (stallTimer) clearInterval(stallTimer)
@@ -2997,7 +2999,7 @@
       if (preparing) thresholdMs = Math.max(thresholdMs, 180000)
       if (idleMs > thresholdMs && !fallbackTriggered) {
         fallbackTriggered = true
-        aborter?.abort(`客户端超时：${Math.round(idleMs / 1000)}秒无事件，切换非流式生成`)
+        aborter?.abort(`客户端超时：${Math.round(idleMs / 1000)}秒无事件`)
       }
     }, 1000)
 
@@ -3257,30 +3259,10 @@
               (aborter?.signal as any)?.reason ||
               e?.message ||
               '用户中止'
-        if (String(reason).includes('切换非流式生成')) {
-          pushThought('中止', String(reason), formatElapsed())
-          pushToast(String(reason), 'info')
-          try {
-            const status = await runNonStreamGenerate(generatePayload, {
-              completionMsg: '已完成生成（非流式兜底）。',
-              fromStream: true
-            })
-            if (status === 'applied' || status === 'pending') {
-              sawFinal = true
-            }
-          } catch (err: any) {
-            const msg = err?.message || '非流式生成失败'
-            docStatus.set(`生成失败: ${msg}`)
-            appendChat('system', msg)
-            pushThought('错误', String(msg), formatElapsed())
-            pushToast(String(msg), 'bad')
-          }
-        } else {
-          docStatus.set(`已中止: ${reason}`)
-          appendChat('system', `已中止生成：${reason}`)
-          pushThought('中止', String(reason), formatElapsed())
-          pushToast(String(reason), 'info')
-        }
+        docStatus.set(`已中止: ${reason}`)
+        appendChat('system', `已中止生成：${reason}`)
+        pushThought('中止', String(reason), formatElapsed())
+        pushToast(String(reason), 'info')
       } else {
         const msg = e?.message || '生成失败，请检查模型是否运行。'
         docStatus.set(`生成失败: ${msg}`)
@@ -3289,7 +3271,7 @@
         pushToast(String(msg), 'bad')
       }
     } finally {
-      if (!sawFinal) {
+      if (!sawFinal && !userCancelled) {
         const preview = String($sourceText || '').trim()
         const prev = resumeState
         const planSections = normalizeStringArray(prev?.plan_sections?.length ? prev.plan_sections : observedPlanSections)
@@ -3472,6 +3454,13 @@
   }
 
   function handleStop() {
+    userCancelled = true
+    if ($docId) {
+      void fetch(`/api/doc/${$docId}/generate/cancel`, {
+        method: 'POST',
+        keepalive: true
+      }).catch(() => {})
+    }
     if (aborter) aborter.abort('用户点击停止')
   }
 

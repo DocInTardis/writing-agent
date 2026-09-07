@@ -207,6 +207,15 @@ def _finish_doc_generation(doc_id: str, token: str | None) -> None:
 def _touch_doc_generation(doc_id: str, token: str | None = None) -> bool:
     return _DOC_GENERATION_STATE.touch(doc_id, token)
 
+def _cancel_doc_generation(doc_id: str, token: str | None = None) -> bool:
+    return _DOC_GENERATION_STATE.cancel(doc_id, token)
+
+def _doc_generation_cancelled(doc_id: str, token: str | None = None) -> bool:
+    return _DOC_GENERATION_STATE.is_cancelled(doc_id, token)
+
+def _doc_generation_snapshot(doc_id: str) -> dict:
+    return _DOC_GENERATION_STATE.snapshot(doc_id)
+
 def _generation_busy_message(doc_id: str) -> str:
     return _DOC_GENERATION_STATE.busy_message(doc_id)
 
@@ -1638,6 +1647,9 @@ def _register_flow_routers() -> None:
     global _FLOW_ROUTERS_REGISTERED
     if _FLOW_ROUTERS_REGISTERED:
         return
+    from writing_agent.web.services.base import bind_service_runtime
+
+    bind_service_runtime(globals())
     from writing_agent.web.api.citation_flow import router as citation_router
     from writing_agent.web.api.document_flow import router as document_router
     from writing_agent.web.api.editing_flow import router as editing_router

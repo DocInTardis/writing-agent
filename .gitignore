@@ -38,6 +38,7 @@ writing_agent/web/static/v2_svelte/
 # WASM artifacts (rebuild from engine/bridge when needed)
 **/wa_bridge_bg.wasm
 **/chunk-wa_bridge.js
+!writing_agent/web/frontend_svelte/public/wasm/wa_bridge_bg.wasm
 writing_agent/web/frontend_svelte/dist/
 .idea/
 .vscode/

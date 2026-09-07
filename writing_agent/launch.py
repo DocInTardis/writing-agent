@@ -6,7 +6,9 @@ import argparse
 import logging
 import os
 import socket
+import subprocess
 import sys
+from pathlib import Path
 
 from writing_agent.config import cfg
 
@@ -36,14 +38,16 @@ def main(argv: list[str] | None = None) -> int:
     sys.dont_write_bytecode = True
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     if not args.web:
-        try:
-            from writing_agent.desktop_app import main as desktop_main
-        except ModuleNotFoundError as exc:
-            if not (exc.name or "").startswith("webview"):
-                raise
-            print("Desktop dependencies are missing. Run scripts/start_desktop.ps1 to install them.", file=sys.stderr)
+        root = Path(__file__).resolve().parents[1]
+        candidates = [
+            root / "desktop-tauri" / "src-tauri" / "target" / "release" / "writing-agent-desktop.exe",
+            root / "desktop-tauri" / "src-tauri" / "target" / "debug" / "writing-agent-desktop.exe",
+        ]
+        executable = next((path for path in candidates if path.is_file()), None)
+        if executable is None:
+            print("桌面壳尚未构建。开发运行请执行 scripts/start_desktop.ps1，发布版请安装 Tauri 安装包。", file=sys.stderr)
             return 2
-        return desktop_main([])
+        return int(subprocess.call([str(executable)], cwd=str(root)))
 
     errors = cfg.validate()
     if errors:

@@ -163,6 +163,14 @@ async def api_generate_stream(doc_id: str, request) -> StreamingResponse:
 
     def _iter():
         final_text = ""
+        stream = None
+
+        def _cancelled() -> bool:
+            return bool(app_v2._doc_generation_cancelled(doc_id, token))
+
+        def _cancel_event():
+            return _sse("error", {"code": "task_cancelled", "message": "生成任务已取消"})
+
         try:
             compose_instruction = service._build_generation_instruction(
                 app_v2=app_v2,
@@ -267,6 +275,9 @@ async def api_generate_stream(doc_id: str, request) -> StreamingResponse:
                         current_text=base_text,
                         base_text=base_text,
                     )
+                    if _cancelled():
+                        yield _cancel_event()
+                        return
                     app_v2._set_doc_text(session, updated_text)
                     app_v2._auto_commit_version(session, "auto: after update")
                     app_v2.store.put(session)
@@ -306,6 +317,9 @@ async def api_generate_stream(doc_id: str, request) -> StreamingResponse:
                 )
                 if provider_mode is not None:
                     final_text, payload = provider_mode
+                    if _cancelled():
+                        yield _cancel_event()
+                        return
                     app_v2._set_doc_text(session, final_text)
                     app_v2._auto_commit_version(session, "auto: after update")
                     app_v2.store.put(session)
@@ -383,15 +397,32 @@ async def api_generate_stream(doc_id: str, request) -> StreamingResponse:
             )
             try:
                 while True:
-                    yield next(stream)
+                    if _cancelled():
+                        stream.close()
+                        yield _cancel_event()
+                        return
+                    event = next(stream)
+                    if _cancelled():
+                        stream.close()
+                        yield _cancel_event()
+                        return
+                    yield event
             except StopIteration as exc:
                 result = exc.value if isinstance(exc.value, dict) else {}
                 final_text = str(result.get("final_text") or "")
             if final_text:
+                if _cancelled():
+                    yield _cancel_event()
+                    return
                 app_v2._set_doc_text(session, final_text)
                 app_v2._auto_commit_version(session, "auto: after update")
                 app_v2.store.put(session)
         finally:
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
             app_v2._finish_doc_generation(doc_id, token)
 
     return StreamingResponse(_iter(), media_type="text/event-stream")

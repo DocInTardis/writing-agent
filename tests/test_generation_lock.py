@@ -84,3 +84,17 @@ def test_begin_with_wait_returns_none_on_timeout():
     assert token
     token2 = lock.begin_with_wait("doc-5", mode="generate", wait_s=0.05, poll_s=0.01)
     assert token2 is None
+
+
+def test_cancel_is_token_scoped_and_keeps_write_lock_until_finish():
+    lock = DocGenerationState(stale_after_s=60, max_age_s=120)
+    token = lock.try_begin("doc-6", mode="stream")
+    assert token
+    assert lock.cancel("doc-6", "wrong-token") is False
+    assert lock.cancel("doc-6", token) is True
+    assert lock.is_cancelled("doc-6", token) is True
+    assert lock.touch("doc-6", token) is False
+    assert lock.try_begin("doc-6", mode="generate") is None
+    assert lock.snapshot("doc-6")["status"] == "cancelled"
+    lock.finish("doc-6", token)
+    assert lock.snapshot("doc-6")["status"] == "idle"

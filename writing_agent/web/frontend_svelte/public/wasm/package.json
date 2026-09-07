@@ -1,0 +1,15 @@
+{
+  "name": "wa_bridge",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "wa_bridge_bg.wasm",
+    "wa_bridge.js",
+    "wa_bridge.d.ts"
+  ],
+  "main": "wa_bridge.js",
+  "types": "wa_bridge.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

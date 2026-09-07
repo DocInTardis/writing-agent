@@ -28,6 +28,16 @@ async def generate(doc_id: str, request: Request) -> dict:
     return await service.generate(doc_id, request)
 
 
+@router.post("/api/doc/{doc_id}/generate/cancel")
+async def cancel_generation_flow(doc_id: str) -> dict:
+    return service.cancel(doc_id)
+
+
+@router.get("/api/doc/{doc_id}/generate/status")
+async def generation_status_flow(doc_id: str) -> dict:
+    return service.status(doc_id)
+
+
 async def generate_section(doc_id: str, request: Request) -> dict:
     return await service.generate_section(doc_id, request)
 

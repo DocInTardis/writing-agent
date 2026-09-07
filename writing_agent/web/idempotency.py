@@ -27,12 +27,15 @@ class IdempotencyStore:
 
     def __init__(
         self,
-        root: str | Path = ".data/idempotency",
+        root: str | Path | None = None,
         *,
         ttl_s: float | None = None,
         max_entries: int | None = None,
         sweep_interval_s: float | None = None,
     ) -> None:
+        if root is None:
+            cache_root = str(os.environ.get("WRITING_AGENT_CACHE_DIR", "") or "").strip()
+            root = Path(cache_root) / "idempotency" if cache_root else Path(".data/idempotency")
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         # <=0 means disabled.

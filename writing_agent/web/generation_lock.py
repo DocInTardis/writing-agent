@@ -108,8 +108,47 @@ class DocGenerationState:
                 return False
             if token and str(cur.get("token") or "") != str(token):
                 return False
+            if bool(cur.get("cancelled")):
+                return False
             cur["last_touch_at"] = now
             return True
+
+    def cancel(self, doc_id: str, token: str | None = None) -> bool:
+        """Cooperatively cancel the active task without releasing its write lock."""
+        with self._lock:
+            cur = self._state.get(doc_id)
+            if not isinstance(cur, dict):
+                return False
+            if token and str(cur.get("token") or "") != str(token):
+                return False
+            cur["cancelled"] = True
+            cur["cancelled_at"] = self._now()
+            return True
+
+    def is_cancelled(self, doc_id: str, token: str | None = None) -> bool:
+        with self._lock:
+            cur = self._state.get(doc_id)
+            if not isinstance(cur, dict):
+                return False
+            if token and str(cur.get("token") or "") != str(token):
+                return True
+            return bool(cur.get("cancelled"))
+
+    def snapshot(self, doc_id: str) -> dict:
+        now = self._now()
+        with self._lock:
+            cur = self._state.get(doc_id)
+            if not isinstance(cur, dict):
+                return {"status": "idle", "doc_id": doc_id}
+            return {
+                "status": "cancelled" if cur.get("cancelled") else "running",
+                "doc_id": doc_id,
+                "mode": str(cur.get("mode") or "generate"),
+                "started_at": float(cur.get("started_at") or 0.0),
+                "last_touch_at": float(cur.get("last_touch_at") or 0.0),
+                "elapsed_s": max(0.0, now - float(cur.get("started_at") or now)),
+                "target_ids": list(cur.get("target_ids") or []),
+            }
 
     def finish(self, doc_id: str, token: str | None) -> None:
         if not token:

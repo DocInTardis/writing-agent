@@ -174,10 +174,15 @@ def test_checkpoint_atomic_failure_preserves_prior_resume_state(tmp_path, monkey
 
 def test_supported_launchers_disable_bytecode():
     root = Path(__file__).resolve().parents[2]
-    for filename, module in [("start.ps1", "launch"), ("start_desktop.ps1", "desktop_app")]:
-        script = (root / "scripts" / filename).read_text(encoding="utf-8")
-        assert f"& $python -B -m writing_agent.{module}" in script
-        assert '$env:PYTHONDONTWRITEBYTECODE = "1"' in script
+    script = (root / "scripts" / "start.ps1").read_text(encoding="utf-8")
+    assert "& $python -B -m writing_agent.launch" in script
+    assert '$env:PYTHONDONTWRITEBYTECODE = "1"' in script
+
+    desktop = (root / "desktop-tauri" / "src-tauri" / "src" / "main.rs").read_text(
+        encoding="utf-8"
+    )
+    assert '.env("PYTHONDONTWRITEBYTECODE", "1")' in desktop
+    assert '"-B"' in desktop
 
 
 def test_normal_generation_does_not_construct_disk_block_store(tmp_path, monkeypatch):

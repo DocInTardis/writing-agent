@@ -1,5 +1,14 @@
 ﻿<script lang="ts">
   import './EditorWorkbench.css'
+  import 'katex/dist/katex.min.css'
+  import 'prismjs/themes/prism-tomorrow.css'
+  import renderMathInElement from 'katex/contrib/auto-render'
+  import Prism from 'prismjs'
+  import 'prismjs/components/prism-c'
+  import 'prismjs/components/prism-cpp'
+  import 'prismjs/components/prism-java'
+  import 'prismjs/components/prism-python'
+  import 'prismjs/components/prism-sql'
   import { onMount } from 'svelte'
   import {
     editorCommand,
@@ -33,6 +42,14 @@
     updateSectionTitle
   } from '../editor/docIrMutations'
   import { htmlToDocIr, htmlToMarkdown, makeId } from '../editor/htmlConversion'
+  import {
+    documentEngineReady,
+    initDocumentEngine,
+    measureDocument,
+    mirrorMarkdown,
+    redoMarkdown,
+    undoMarkdown
+  } from '../engine/documentEngine'
 
   let editor = $state<HTMLDivElement | null>(null)
   let lastMarkdown = $state('')
@@ -600,6 +617,12 @@
     if (docTextTimer) clearTimeout(docTextTimer)
     docTextTimer = setTimeout(() => {
       const text = docIrToMarkdown(nextDoc) || ''
+      mirrorMarkdown(text, true)
+      const metrics = measureDocument(editor?.clientWidth || 794)
+      if (editor && metrics) {
+        editor.dataset.enginePages = String(metrics.pageCount)
+        editor.dataset.engineBlocks = String(metrics.blockCount)
+      }
       sourceText.set(text)
       lastMarkdown = text
       setEmptyFlag(text)
@@ -1474,6 +1497,22 @@
     }
   }
 
+  function runRustUndoRedo(kind: 'undo' | 'redo') {
+    if (!documentEngineReady()) return false
+    const markdown = kind === 'undo' ? undoMarkdown() : redoMarkdown()
+    if (markdown == null) return false
+    const nextDoc = textToDocIr(markdown)
+    if (nextDoc) {
+      docIr.set(nextDoc)
+      docIrDirty.set(false)
+    }
+    sourceText.set(markdown)
+    pushHistory(markdown)
+    lastRenderSig = ''
+    syncFromStore()
+    return true
+  }
+
   function applyCommand(cmd: string) {
     const readonly = $generating || lockEditing
     const lower = String(cmd || '').toLowerCase()
@@ -1497,7 +1536,7 @@
         emitToolbarState()
         return
       }
-      if (!runNativeUndoRedo('undo')) undoHistory()
+      if (!runNativeUndoRedo('undo') && !runRustUndoRedo('undo')) undoHistory()
       nativeRedoHint = true
       refreshToolbarStateSoon()
       return
@@ -1507,7 +1546,7 @@
         emitToolbarState()
         return
       }
-      if (!runNativeUndoRedo('redo')) redoHistory()
+      if (!runNativeUndoRedo('redo') && !runRustUndoRedo('redo')) redoHistory()
       nativeRedoHint = false
       refreshToolbarStateSoon()
       return
@@ -2165,9 +2204,9 @@
   }
 
   function renderMathInEditor() {
-    if (!editor || !(window as any).renderMathInElement) return
+    if (!editor) return
     try {
-      (window as any).renderMathInElement(editor, {
+      renderMathInElement(editor, {
         delimiters: [
           {left: '$$', right: '$$', display: true},
           {left: '$', right: '$', display: false}
@@ -2180,9 +2219,9 @@
   }
 
   function highlightCodeBlocks() {
-    if (!editor || !(window as any).Prism) return
+    if (!editor) return
     editor.querySelectorAll('pre code').forEach((block) => {
-      (window as any).Prism.highlightElement(block)
+      Prism.highlightElement(block)
     })
   }
 
@@ -2283,62 +2322,23 @@
     }
     sourceUnsub = sourceText.subscribe(() => syncFromStore())
     docIrUnsub = docIr.subscribe(() => syncFromStore())
-    
-    // 加载KaTeX样式
-    const katexCSS = document.createElement('link')
-    katexCSS.rel = 'stylesheet'
-    katexCSS.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css'
-    document.head.appendChild(katexCSS)
-    
-    // 加载KaTeX脚本
-    const katexScript = document.createElement('script')
-    katexScript.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js'
-    katexScript.onload = () => {
-      const autoRenderScript = document.createElement('script')
-      autoRenderScript.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js'
-      autoRenderScript.onload = () => {
-        renderMathInEditor()
-      }
-      document.head.appendChild(autoRenderScript)
-    }
-    document.head.appendChild(katexScript)
-    
-    // 加载Prism样式
-    const prismCSS = document.createElement('link')
-    prismCSS.rel = 'stylesheet'
-    prismCSS.href = 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css'
-    document.head.appendChild(prismCSS)
-    
-    // 加载Prism脚本
-    const prismScript = document.createElement('script')
-    prismScript.src = 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js'
-    prismScript.onload = () => {
-      const langScripts = [
-        'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js',
-        'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-c.min.js',
-        'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-cpp.min.js',
-        'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js',
-        'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js',
-        'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js',
-        'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js'
-      ]
-      const loadScript = (src: string) =>
-        new Promise<void>((resolve) => {
-          const script = document.createElement('script')
-          script.src = src
-          script.async = false
-          script.onload = () => resolve()
-          script.onerror = () => resolve()
-          document.head.appendChild(script)
-        })
-      void (async () => {
-        for (const src of langScripts) {
-          await loadScript(src)
+    const initialMarkdown = docIrHasRenderableContent($docIr)
+      ? docIrToMarkdown($docIr as Record<string, unknown>) || ''
+      : String($sourceText || '')
+    void initDocumentEngine(initialMarkdown).then((ready) => {
+      if (!editor) return
+      editor.dataset.engine = ready ? 'rust-wasm' : 'typescript-fallback'
+      if (ready) {
+        const metrics = measureDocument(editor.clientWidth || 794)
+        if (metrics) {
+          editor.dataset.enginePages = String(metrics.pageCount)
+          editor.dataset.engineBlocks = String(metrics.blockCount)
         }
-        setTimeout(() => highlightCodeBlocks(), 500)
-      })()
-    }
-    document.head.appendChild(prismScript)
+      }
+    })
+    
+    renderMathInEditor()
+    highlightCodeBlocks()
     
     // 图片懒加载
     const imgObserver = new IntersectionObserver((entries) => {

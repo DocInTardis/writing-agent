@@ -1,6 +1,6 @@
 # 本地运行与空间
 
-普通运行只需要 `.venv`、预构建前端、编译后的 Rust 文档内核、系统 WebView2 和 `.data`。pywebview 默认使用 private mode，不保留浏览器缓存。Node 与 Cargo 只是构建工具，不参与日常启动；Qt、Tauri、Node 网关和 Playwright 已退役。
+安装版普通运行只需要安装目录、系统 WebView2 和用户数据目录。Tauri 2 窗口使用 private mode；WebView 数据即使产生也被限定在应用缓存目录。Python sidecar 使用 onedir 打包，不会像 onefile 那样每次启动向临时目录解压。Node、Cargo 和 PyInstaller 只参与构建；Qt、Node 网关和 Playwright 已退役。
 
 ## 目录性质
 
@@ -11,6 +11,9 @@
 | `.venv-audit/`、旧 `.venv-*` | 旧测试环境 | 确认未使用后可删 |
 | `writing_agent/web/frontend_svelte/node_modules/` | 前端开发依赖 | 可删；开发时需重装 |
 | `engine/target/`、`engine/bridge/pkg/` | Rust/WASM 构建产物 | 可删；开发构建时再生成，安装包不应携带整个目录 |
+| `desktop-tauri/node_modules/`、`desktop-tauri/src-tauri/target/` | Tauri 开发依赖和构建产物 | 可删；重建安装包时再生成 |
+| `%LOCALAPPDATA%\WritingAgent\data` | 安装版用户文档与配置 | 否 |
+| `%LOCALAPPDATA%\WritingAgent\cache` | 安装版幂等、引用与 WebView 缓存 | 关闭应用后可删；会失去缓存但不删文档 |
 | `__pycache__/`、`.pytest_cache/`、构建目录 | 可重建缓存 | 可删 |
 | C 盘 Playwright 浏览器缓存 | 已退役工具缓存 | 确认无其他项目共用后可删 |
 

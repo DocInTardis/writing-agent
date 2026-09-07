@@ -7,14 +7,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class OptionalEngineInventoryTests(unittest.TestCase):
-    def test_frontend_does_not_probe_missing_wasm_on_startup(self):
-        frontend = ROOT / "writing_agent/web/frontend_svelte/src"
-        sources = "\n".join(path.read_text(encoding="utf-8") for path in frontend.rglob("*") if path.suffix in {".ts", ".svelte"})
-        self.assertNotIn("initWasmEngine", sources)
-        self.assertNotIn("isWasmAvailable", sources)
-        self.assertNotIn("data-engine", sources)
-        self.assertNotIn("rustEngineReady", sources)
-        self.assertFalse((frontend / "lib/engine/wasmLoader.ts").exists())
+    def test_frontend_has_real_wasm_document_engine_integration(self):
+        frontend = ROOT / "writing_agent/web/frontend_svelte"
+        bridge = frontend / "src/lib/engine/documentEngine.ts"
+        component = frontend / "src/lib/components/EditorWorkbench.svelte"
+        self.assertTrue(bridge.exists())
+        source = bridge.read_text(encoding="utf-8")
+        editor = component.read_text(encoding="utf-8")
+        self.assertIn("new wasm.WasmEditor()", source)
+        self.assertIn("replaceMarkdown", source)
+        self.assertIn("layoutMetrics", source)
+        self.assertIn("initDocumentEngine", editor)
+        self.assertIn("editor.dataset.engine", editor)
 
     def test_rust_engine_is_available_without_runtime_build(self):
         bridge_path = ROOT / "writing_agent/v2/rust_bridge.py"

@@ -702,3 +702,11 @@ class GenerationService:
             extract_revision_fallback_text_fn=self._extract_revision_fallback_text,
             validate_revision_candidate_fn=self.validate_revision_candidate,
         )
+    def cancel(self, doc_id: str) -> dict:
+        app_v2 = app_v2_module()
+        cancelled = app_v2._cancel_doc_generation(doc_id)
+        return {"ok": 1, "cancelled": cancelled, "task": app_v2._doc_generation_snapshot(doc_id)}
+
+    def status(self, doc_id: str) -> dict:
+        app_v2 = app_v2_module()
+        return {"ok": 1, "task": app_v2._doc_generation_snapshot(doc_id)}
