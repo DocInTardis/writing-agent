@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "katex": "^0.16.22",
+    "katex": "^0.18.7",
     "prismjs": "^1.30.0",
     "svelte": "^5.51.5"
   },
