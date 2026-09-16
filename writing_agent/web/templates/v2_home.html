@@ -955,6 +955,165 @@
     .wa-ws-actions button,
     .wa-ws-actions select { font-size: 11px; padding: 5px 8px; }
   }
+
+  /* Lightweight desktop library: one purpose per screen. */
+  html,
+  html.dark {
+    color-scheme: light;
+  }
+  body,
+  html.dark body,
+  .wa-home {
+    background: #f6f7f9 !important;
+    color: #202124 !important;
+    font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  }
+  .wa-home { padding-bottom: 48px; }
+  .wa-shell { max-width: 1040px; padding: 0 32px; }
+  .wa-hero { padding: 34px 0 26px; overflow: visible; }
+  .wa-hero::before,
+  .wa-hero-badge,
+  .wa-hero p,
+  .wa-stats,
+  .wa-starters-wrap,
+  .wa-sidebar,
+  .wa-main-head p,
+  .wa-pills,
+  .wa-batch,
+  .wa-badges,
+  .wa-ws-preview,
+  .wa-ws-actions,
+  .wa-inline-note {
+    display: none !important;
+  }
+  .wa-hero-grid { display: block; }
+  .wa-hero h1 {
+    margin: 0 0 20px;
+    color: #202124;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+  }
+  .wa-hero-actions { gap: 8px; }
+  .wa-btn {
+    min-height: 38px;
+    padding: 8px 15px;
+    border-radius: 6px;
+    font-size: 13px;
+    transition: background .12s ease, border-color .12s ease;
+  }
+  .wa-btn:hover { transform: none; box-shadow: none; }
+  .wa-btn-primary {
+    background: #185abd;
+    border-color: #185abd;
+    box-shadow: none;
+  }
+  .wa-btn-primary:hover { background: #0f4fa8; }
+  .wa-btn-secondary {
+    background: #fff;
+    border-color: #d5d8dc;
+    color: #303134;
+  }
+  .wa-btn-ghost { display: none; }
+  .wa-panels { display: block; }
+  .wa-main {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .wa-main-head { margin: 0 0 12px; }
+  .wa-main-head h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .wa-filters {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .wa-filters input,
+  .wa-filters select,
+  .wa-filters button,
+  .wa-filters a {
+    height: 36px;
+    border: 1px solid #d5d8dc;
+    border-radius: 5px;
+    background: #fff;
+    color: #3c4043;
+    font-size: 13px;
+  }
+  .wa-filters input[name="q"] { flex: 1 1 auto; max-width: none; }
+  .wa-filters input[name="label"],
+  .wa-filters input[name="owner"],
+  .wa-filters select[name="priority"],
+  .wa-filters .wa-filter-check { display: none; }
+  .wa-filters button { background: #185abd; color: #fff; border-color: #185abd; }
+  .wa-list {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid #dde0e4;
+    border-radius: 8px;
+    background: #dde0e4;
+  }
+  .wa-ws {
+    margin: 0;
+    padding: 16px 18px;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+    transition: background .12s ease;
+  }
+  .wa-ws:hover { transform: none; background: #f7f9fc; }
+  .wa-ws-top { align-items: center; }
+  .wa-ws-title-row { min-width: 0; }
+  .wa-ws-check { display: none; }
+  .wa-ws-title {
+    color: #202124;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .wa-ws-status {
+    padding: 3px 8px;
+    border: 0;
+    border-radius: 4px;
+    background: #eef3fb !important;
+    color: #315b91 !important;
+    font-size: 11px;
+  }
+  .wa-ws-meta {
+    margin: 7px 0 0;
+    color: #777b82;
+    font-size: 12px;
+  }
+  .wa-ws-meta span:nth-child(n+2) { display: none; }
+  .wa-page {
+    margin-top: 14px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #6f747b;
+  }
+  .wa-page-nav a,
+  .wa-page-nav span {
+    border-radius: 4px;
+    background: #fff;
+    border-color: #d5d8dc;
+  }
+  @media (max-width: 720px) {
+    .wa-shell { padding: 0 16px; }
+    .wa-filters select[name="status"],
+    .wa-filters select[name="sort"],
+    .wa-filters a { display: none; }
+  }
 </style>
 
 <div class="wa-home">
@@ -986,16 +1145,16 @@
       <div class="wa-hero-grid">
         <div>
           <div class="wa-hero-badge">系统运行中</div>
-          <h1>写作智能工作台</h1>
+          <h1>我的文档</h1>
           <p>结构化生成、引用感知检索、版本管理与团队协作的持久化写作空间。支持回收站恢复与重启后本地恢复。</p>
           <div class="wa-hero-actions">
             <a class="wa-btn wa-btn-primary" href="/new">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              新建工作区
+              新建文档
             </a>
             <a class="wa-btn wa-btn-secondary" href="/latest">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-              继续最近
+              打开最近文档
             </a>
             <a class="wa-btn wa-btn-ghost" href="/healthz" target="_blank" rel="noreferrer">健康检查</a>
           </div>
@@ -1067,7 +1226,7 @@
       <div class="wa-main">
         <div class="wa-main-head">
           <div>
-            <h2>工作区</h2>
+            <h2>最近使用</h2>
             <p>搜索、筛选、排序、分配所有者、管理优先级和截止日期、打标签、重命名、复制、归档、恢复和删除。</p>
           </div>
         </div>

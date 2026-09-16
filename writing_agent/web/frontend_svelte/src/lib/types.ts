@@ -36,3 +36,15 @@ export type EditorCommand =
   | 'redo'
   | 'clear-format'
   | 'commit'
+  | 'strikethrough'
+  | 'align-left'
+  | 'align-center'
+  | 'align-right'
+  | 'align-justify'
+  | 'indent-first'
+  | `font:${string}`
+  | `size:${string}`
+  | `color:${string}`
+  | `bgcolor:${string}`
+  | `line-height:${string}`
+  | `margin:${string}`

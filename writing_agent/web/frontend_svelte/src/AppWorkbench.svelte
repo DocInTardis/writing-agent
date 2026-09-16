@@ -3636,6 +3636,7 @@
         {reviseRiskSection}
       />
 
+      {#if showAiRatePanel || showPlagiarismPanel || showFeedbackPanel}
       <QualityPanels
         {qualityAdviceItems}
         {qualityOverview}
@@ -3669,6 +3670,7 @@
         {submitSatisfaction}
         {formatFeedbackTime}
       />
+      {/if}
 
       <div class="doc-stage">
         {#if $isLoading}

@@ -3,11 +3,15 @@
   import type { EditorCommand } from '../types'
   import type { ResumeState } from './types'
 
+  type RibbonTab = 'home' | 'insert' | 'layout' | 'review' | 'assistant'
   type EditorToolbarState = {
     bold: boolean
+    italic: boolean
+    underline: boolean
     readonly: boolean
     focused: boolean
     canUndo: boolean
+    canRedo: boolean
     canCopy: boolean
     canCut: boolean
     canPaste: boolean
@@ -62,182 +66,120 @@
     onStop: () => void
     onResume: () => void | Promise<void>
   } = $props()
+
+  let activeTab = $state<RibbonTab>('home')
+  const tabs: Array<{ id: RibbonTab; label: string }> = [
+    { id: 'home', label: '开始' },
+    { id: 'insert', label: '插入' },
+    { id: 'layout', label: '布局' },
+    { id: 'review', label: '审阅' },
+    { id: 'assistant', label: '助手' }
+  ]
+
+  function command(value: string) {
+    onRunEditorCommand(value as EditorCommand)
+  }
 </script>
 
-<div class="library-command-bar">
-  <div class="library-view-switch">
-    <button
-      class={`view-btn ${libraryViewMode === 'grid' ? 'active' : ''}`}
-      onclick={() => (libraryViewMode = 'grid')}
-      title="网格视图"
-    >
-      <Icon name="grid" className="ui-icon" />
-    </button>
-    <button
-      class={`view-btn ${libraryViewMode === 'masonry' ? 'active' : ''}`}
-      onclick={() => (libraryViewMode = 'masonry')}
-      title="瀑布视图"
-    >
-      <Icon name="masonry" className="ui-icon" />
-    </button>
-    <button
-      class={`view-btn ${libraryViewMode === 'list' ? 'active' : ''}`}
-      onclick={() => (libraryViewMode = 'list')}
-      title="列表视图"
-    >
-      <Icon name="list" className="ui-icon" />
-    </button>
-  </div>
-  <div class="library-counter">{librarySearch ? `搜索：${librarySearch}` : '实时文档工作区'}</div>
-  <div class="library-actions">
-    <button class="btn ghost icon-btn-text" onclick={() => (librarySelectAll = !librarySelectAll)}>
-      <Icon name="select" className="ui-icon" />
-      <span>{librarySelectAll ? '取消全选' : '全选资料'}</span>
-    </button>
-    <button class="btn ghost icon-btn-text">
-      <Icon name="batch" className="ui-icon" />
-      <span>批处理 ({librarySelectAll ? filteredCount : 1})</span>
-    </button>
-    <button class="btn ghost icon-btn-text" onclick={onOpenInfoDrawer}>
-      <Icon name="doc" className="ui-icon" />
-      <span>文档信息</span>
-    </button>
-  </div>
-</div>
-
-<div class="doc-toolbar">
-  <div class="toolbar-line primary">
-    <div class="toolbar-cluster core">
-      <span class="cluster-label">创作核心</span>
-      <button class="tool-btn" onclick={() => onRunEditorCommand('heading1')} aria-label="一级标题">
-        <Icon name="h1" size={14} className="ui-icon sm" />
-      </button>
-      <button class="tool-btn" onclick={() => onRunEditorCommand('heading2')} aria-label="二级标题">
-        <Icon name="h2" size={14} className="ui-icon sm" />
-      </button>
+<div class="doc-toolbar word-ribbon">
+  <div class="ribbon-tabs" role="tablist" aria-label="编辑功能区">
+    {#each tabs as tab}
       <button
-        class={`tool-btn ${editorToolbarState.bold ? 'active' : ''}`}
-        title="加粗 Ctrl/Cmd+B"
-        aria-label="加粗"
-        onclick={() => onRunEditorCommand('bold')}
-        disabled={editorToolbarState.readonly || !editorToolbarState.focused}
-      >
-        <Icon name="bold" size={14} className="ui-icon sm" />
-      </button>
-      <button class="tool-btn" onclick={() => onRunEditorCommand('list-bullet')} aria-label="无序列表">
-        <Icon name="listBullet" size={14} className="ui-icon sm" />
-      </button>
-      <button class="tool-btn" onclick={() => onRunEditorCommand('list-number')} aria-label="有序列表">
-        <Icon name="listNumber" size={14} className="ui-icon sm" />
-      </button>
-      <span class="tool-sep"></span>
-      <button class="tool-btn" onclick={onOpenCanvas} aria-label="图形画布">
-        <Icon name="diagram" size={14} className="ui-icon sm" />
-      </button>
-      <button class="tool-btn" onclick={onOpenCitations} aria-label="引用管理">
-        <Icon name="cite" size={14} className="ui-icon sm" />
-      </button>
-    </div>
-    <button class="btn ghost btn-sm toolbar-advanced-toggle" onclick={() => (showAdvancedToolbar = !showAdvancedToolbar)}>
-      {showAdvancedToolbar ? '收起高级' : '高级操作'}
-    </button>
-    <button class="btn primary icon-btn-text toolbar-generate-btn" onclick={() => onGenerate(instruction)} disabled={generating}>
-      <Icon name="play" className="ui-icon" />
-      <span>{generating ? '生成中...' : '生成'}</span>
-    </button>
+        class:active={activeTab === tab.id}
+        role="tab"
+        aria-selected={activeTab === tab.id}
+        onclick={() => (activeTab = tab.id)}
+      >{tab.label}</button>
+    {/each}
   </div>
-  {#if showAdvancedToolbar}
-    <div class="toolbar-line secondary">
-      <div class="toolbar-cluster">
-        <span class="cluster-label">结构与编辑</span>
-        <button class="tool-btn" title="撤销 Ctrl/Cmd+Z" aria-label="撤销" onclick={() => onRunEditorCommand('undo')} disabled={!editorToolbarState.canUndo}>
-          <Icon name="undo" size={14} className="ui-icon sm" />
-        </button>
-        <button class="tool-btn" title="重做 Ctrl/Cmd+Y" aria-label="重做" onclick={() => onRunEditorCommand('redo')} disabled={editorToolbarState.readonly}>
-          <Icon name="redo" size={14} className="ui-icon sm" />
-        </button>
-        <button class="tool-btn" title="复制 Ctrl/Cmd+C" aria-label="复制" onclick={() => onRunEditorCommand('copy')} disabled={!editorToolbarState.canCopy}>
-          <Icon name="copy" size={14} className="ui-icon sm" />
-        </button>
-        <button class="tool-btn" title="剪切 Ctrl/Cmd+X" aria-label="剪切" onclick={() => onRunEditorCommand('cut')} disabled={!editorToolbarState.canCut}>
-          <Icon name="cut" size={14} className="ui-icon sm" />
-        </button>
-        <button class="tool-btn" title="粘贴 Ctrl/Cmd+V" aria-label="粘贴" onclick={() => onRunEditorCommand('paste')} disabled={!editorToolbarState.canPaste}>
-          <Icon name="paste" size={14} className="ui-icon sm" />
-        </button>
-        <button class="tool-btn" title="清除格式" aria-label="清除格式" onclick={() => onRunEditorCommand('clear-format')} disabled={editorToolbarState.readonly || !editorToolbarState.focused}>
-          <Icon name="clear" size={14} className="ui-icon sm" />
-        </button>
-        <button class="tool-btn" onclick={() => onRunEditorCommand('quote')} aria-label="引用块">
-          <Icon name="quote" size={14} className="ui-icon sm" />
-        </button>
-        <button class="tool-btn" onclick={() => onRunEditorCommand('code')} aria-label="代码块">
-          <Icon name="code" size={14} className="ui-icon sm" />
-        </button>
+
+  <div class="ribbon-content">
+    {#if activeTab === 'home'}
+      <div class="ribbon-group compact" aria-label="剪贴板">
+        <button class="tool-btn" title="撤销 Ctrl+Z" onclick={() => command('undo')} disabled={!editorToolbarState.canUndo}><Icon name="undo" size={15} /></button>
+        <button class="tool-btn" title="重做 Ctrl+Y" onclick={() => command('redo')} disabled={!editorToolbarState.canRedo}><Icon name="redo" size={15} /></button>
+        <button class="tool-btn" title="粘贴 Ctrl+V" onclick={() => command('paste')} disabled={!editorToolbarState.canPaste}><Icon name="paste" size={15} /></button>
+        <span class="ribbon-label">剪贴板</span>
       </div>
-      <div class="toolbar-cluster compact">
-        <span class="cluster-label">高级操作</span>
-        <button class="btn ghost icon-btn-text" onclick={onRunBatch}>
-          <Icon name="batch" className="ui-icon" />
-          <span>批处理</span>
-        </button>
-        <button
-          class="btn ghost icon-btn-text"
-          data-testid="ai-rate-toggle"
-          onclick={() => (showAiRatePanel = !showAiRatePanel)}
-        >
-          <Icon name="ai" className="ui-icon" />
-          <span>{showAiRatePanel ? '收起 AI 率' : 'AI 率检测'}</span>
-        </button>
-        <button
-          class="btn ghost icon-btn-text"
-          data-testid="plagiarism-toggle"
-          onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}
-        >
-          <Icon name="shield" className="ui-icon" />
-          <span>{showPlagiarismPanel ? '收起查重' : '查重检测'}</span>
-        </button>
-        <button
-          class="btn ghost icon-btn-text"
-          data-testid="feedback-toggle"
-          onclick={() => (showFeedbackPanel = !showFeedbackPanel)}
-        >
-          <Icon name="star" className="ui-icon" />
-          <span>{showFeedbackPanel ? '收起评分' : '满意度评分'}</span>
-        </button>
-        <div class="plan-confirm-inline">
-          <span class="plan-confirm-label">计划确认</span>
-          <select
-            class="plan-confirm-select"
-            bind:value={planConfirmDecision}
-            onchange={() => void onPersistPlanConfirmPreference()}
-          >
-            <option value="approved">通过</option>
-            <option value="interrupted">终止</option>
+      <div class="ribbon-group wide" aria-label="字体与样式">
+        <div class="ribbon-row">
+          <select aria-label="段落样式" onchange={(event) => command(event.currentTarget.value)}>
+            <option value="clear-format">正文</option>
+            <option value="heading1">标题 1</option>
+            <option value="heading2">标题 2</option>
+            <option value="quote">引用</option>
+            <option value="code">代码</option>
           </select>
-          <label class="plan-confirm-score">
-            <span>评分</span>
-            <input
-              type="number"
-              min="0"
-              max="5"
-              step="1"
-              bind:value={planConfirmScore}
-              onchange={() => void onPersistPlanConfirmPreference()}
-            />
-          </label>
+          <select aria-label="字体" onchange={(event) => command(`font:${event.currentTarget.value}`)}>
+            <option value="Microsoft YaHei">微软雅黑</option>
+            <option value="SimSun">宋体</option>
+            <option value="SimHei">黑体</option>
+            <option value="KaiTi">楷体</option>
+            <option value="Arial">Arial</option>
+            <option value="Times New Roman">Times New Roman</option>
+          </select>
+          <select class="size-select" aria-label="字号" onchange={(event) => command(`size:${event.currentTarget.value}`)}>
+            <option value="10px">10</option><option value="12px">12</option><option value="14px" selected>14</option>
+            <option value="16px">16</option><option value="18px">18</option><option value="22px">22</option>
+            <option value="28px">28</option><option value="36px">36</option>
+          </select>
         </div>
-        <button class="btn ghost icon-btn-text" onclick={onStop} disabled={!generating}>
-          <Icon name="stop" className="ui-icon" />
-          <span>停止</span>
-        </button>
+        <div class="ribbon-row">
+          <button class:active={editorToolbarState.bold} class="tool-btn glyph" title="加粗 Ctrl+B" onclick={() => command('bold')}><strong>B</strong></button>
+          <button class:active={editorToolbarState.italic} class="tool-btn glyph" title="斜体 Ctrl+I" onclick={() => command('italic')}><em>I</em></button>
+          <button class:active={editorToolbarState.underline} class="tool-btn glyph underline" title="下划线 Ctrl+U" onclick={() => command('underline')}>U</button>
+          <button class="tool-btn glyph strike" title="删除线" onclick={() => command('strikethrough')}>ab</button>
+          <button class="tool-btn color-tool" title="文字颜色" onclick={() => command('color:#c00000')}>A<span class="color-line red"></span></button>
+          <button class="tool-btn color-tool" title="突出显示" onclick={() => command('bgcolor:#fff2cc')}>A<span class="color-line yellow"></span></button>
+          <button class="tool-btn" title="清除格式" onclick={() => command('clear-format')}><Icon name="clear" size={15} /></button>
+        </div>
+        <span class="ribbon-label">字体</span>
+      </div>
+      <div class="ribbon-group wide" aria-label="段落">
+        <div class="ribbon-row">
+          <button class="tool-btn" title="项目符号" onclick={() => command('list-bullet')}><Icon name="listBullet" size={15} /></button>
+          <button class="tool-btn" title="编号" onclick={() => command('list-number')}><Icon name="listNumber" size={15} /></button>
+          <button class="tool-btn align-glyph" title="左对齐" onclick={() => command('align-left')}>≡</button>
+          <button class="tool-btn align-glyph center" title="居中" onclick={() => command('align-center')}>≡</button>
+          <button class="tool-btn align-glyph right" title="右对齐" onclick={() => command('align-right')}>≡</button>
+          <button class="tool-btn align-glyph justify" title="两端对齐" onclick={() => command('align-justify')}>≡</button>
+        </div>
+        <span class="ribbon-label">段落</span>
+      </div>
+    {:else if activeTab === 'insert'}
+      <div class="ribbon-group action-group">
+        <button class="ribbon-action" onclick={() => command('table')}><span>▦</span>表格</button>
+        <button class="ribbon-action" onclick={() => command('image')}><span>▧</span>图片</button>
+        <button class="ribbon-action" onclick={() => command('quote')}><Icon name="quote" size={17} />引用</button>
+        <button class="ribbon-action" onclick={() => command('code')}><Icon name="code" size={17} />代码</button>
+        <button class="ribbon-action" onclick={onOpenCanvas}><Icon name="diagram" size={17} />图形</button>
+        <button class="ribbon-action" onclick={onOpenCitations}><Icon name="cite" size={17} />引文</button>
+      </div>
+    {:else if activeTab === 'layout'}
+      <div class="ribbon-group action-group">
+        <button class="ribbon-action" onclick={() => command('line-height:1')}>单倍行距</button>
+        <button class="ribbon-action" onclick={() => command('line-height:1.5')}>1.5 倍</button>
+        <button class="ribbon-action" onclick={() => command('line-height:2')}>双倍行距</button>
+        <button class="ribbon-action" onclick={() => command('indent-first')}>首行缩进</button>
+        <button class="ribbon-action" onclick={() => command('margin:10px 0')}>段落间距</button>
+        <button class="ribbon-action" onclick={onOpenInfoDrawer}>页面信息</button>
+      </div>
+    {:else if activeTab === 'review'}
+      <div class="ribbon-group action-group">
+        <button class:active={showPlagiarismPanel} class="ribbon-action" onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}><Icon name="shield" size={17} />查重</button>
+        <button class:active={showAiRatePanel} class="ribbon-action" onclick={() => (showAiRatePanel = !showAiRatePanel)}><Icon name="ai" size={17} />AI 痕迹</button>
+        <button class:active={showFeedbackPanel} class="ribbon-action" onclick={() => (showFeedbackPanel = !showFeedbackPanel)}><Icon name="star" size={17} />评分</button>
+        <button class="ribbon-action" onclick={onRunBatch}><Icon name="batch" size={17} />批量处理</button>
+      </div>
+    {:else}
+      <div class="ribbon-group assistant-group">
+        <span class="assistant-hint">生成和润色只在需要时使用，不影响普通编辑。</span>
+        <button class="btn primary icon-btn-text" onclick={() => onGenerate(instruction)} disabled={generating}><Icon name="play" className="ui-icon" /><span>{generating ? '处理中…' : '开始生成'}</span></button>
+        <button class="btn ghost icon-btn-text" onclick={onStop} disabled={!generating}><Icon name="stop" className="ui-icon" /><span>停止</span></button>
         {#if resumeState && !generating}
-          <button class="btn ghost icon-btn-text" onclick={onResume}>
-            <Icon name="resume" className="ui-icon" />
-            <span>续跑</span>
-          </button>
+          <button class="btn ghost icon-btn-text" onclick={onResume}><Icon name="resume" className="ui-icon" /><span>继续</span></button>
         {/if}
       </div>
-    </div>
-  {/if}
+    {/if}
+  </div>
 </div>
