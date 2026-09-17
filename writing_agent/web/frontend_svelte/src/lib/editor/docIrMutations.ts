@@ -23,15 +23,9 @@ function updateSectionsDeep(
 export function updateDocTitle(doc: Record<string, unknown>, text: string): Record<string, unknown> | null {
   const nextTitle = String(text || '').trim() || '自动生成文档'
   const curTitle = String(doc.title || '').trim()
-  let changed = nextTitle !== curTitle
-  const sections = Array.isArray(doc.sections) ? (doc.sections as Array<Record<string, unknown>>) : []
-  const nextSections = updateSectionsDeep(sections, (sec) => {
-    if (String(sec.title || '').trim() !== curTitle) return sec
-    changed = true
-    return { ...sec, title: nextTitle }
-  })
-  if (!changed) return null
-  return { ...doc, title: nextTitle, sections: nextSections }
+  if (nextTitle === curTitle) return null
+  // File metadata and visible headings are independent, just as in Word.
+  return { ...doc, title: nextTitle }
 }
 
 export function updateSectionTitle(

@@ -162,8 +162,6 @@
   function docIrHasRenderableContent(value: unknown) {
     if (!value || typeof value !== 'object') return false
     const obj = value as Record<string, unknown>
-    const title = String(obj.title || '').trim()
-    if (title) return true
     const hasSectionContent = (items: Array<unknown>): boolean => {
       for (const item of items) {
         if (!item || typeof item !== 'object') continue
@@ -182,9 +180,9 @@
     return blocks.length > 0
   }
 
-  function createSeedDoc() {
+  function createSeedDoc(title = '') {
     return {
-      title: '',
+      title: String(title || '').trim(),
       sections: [
         {
           id: makeId(),
@@ -197,13 +195,15 @@
     }
   }
 
-  function syncFromStore() {
+  function syncFromStore(immediate = false) {
     if (!editor) return
     const next = String($sourceText || '')
     const doc = $docIr
     const hasDocIr = docIrHasRenderableContent(doc)
     if (!hasDocIr && !next.trim()) {
-      const seed = createSeedDoc()
+      const seed = createSeedDoc(
+        doc && typeof doc === 'object' ? String((doc as Record<string, unknown>).title || '') : ''
+      )
       docIr.set(seed)
       docIrDirty.set(false)
       return
@@ -216,7 +216,7 @@
     }
     if (sig !== lastRenderSig) {
       if (syncTimer) clearTimeout(syncTimer)
-      syncTimer = setTimeout(() => {
+      const renderNow = () => {
         editor!.innerHTML = renderDocument(next, doc, preferText)
         renderMode = preferText ? 'text' : 'doc'
         lastMarkdown = next
@@ -231,7 +231,7 @@
             `[data-block-id="${CSS.escape(pendingFocusBlockId)}"]`
           ) as HTMLElement | null
           pendingFocusBlockId = ''
-          if (target) target.focus()
+          if (target) focusEditableAtStart(target)
         }
         renderMathInEditor()
         highlightCodeBlocks()
@@ -239,7 +239,9 @@
         applyPageSettingsToEditor()
         setEditorZoom(editorZoom)
         refreshDocumentMeta()
-      }, 100)
+      }
+      if (immediate) renderNow()
+      else syncTimer = setTimeout(renderNow, 100)
     }
   }
 
@@ -282,6 +284,18 @@
     })
   }
 
+  function focusEditableAtStart(el: HTMLElement) {
+    el.focus()
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    range.collapse(true)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    editingEl = el
+    editingKey = String(el.dataset.blockId || el.dataset.sectionId || el.dataset.docTitle || '')
+  }
+
   function refreshDocumentMeta() {
     if (!editor) return
     const headings = Array.from(editor.querySelectorAll('h1, h2, h3, h4, h5, h6')) as HTMLElement[]
@@ -295,8 +309,10 @@
         }
       })
       .filter((item) => Boolean(item.text))
-    const paragraphs = editor.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').length
-    const chars = String(editor.innerText || '').replace(/\s/g, '').length
+    const body = editor.querySelector('.wa-body') as HTMLElement | null
+    const countRoot = body || editor
+    const paragraphs = countRoot.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').length
+    const chars = String(countRoot.innerText || '').replace(/\s/g, '').length
     const enginePages = Number(editor.dataset.enginePages || 0)
     const usableHeight = Math.max(1, editor.clientWidth * 1.414 - 160)
     const measuredPages = enginePages > 0 ? enginePages : Math.max(1, Math.ceil(editor.scrollHeight / usableHeight))
@@ -714,11 +730,22 @@
     }, delayMs)
   }
 
-  function applyDocIrUpdate(nextDoc: Record<string, unknown>, opts?: { immediate?: boolean }) {
+  function applyDocIrUpdate(nextDoc: Record<string, unknown>, opts?: { immediate?: boolean; render?: boolean }) {
+    const needsRender = opts?.render !== false
+    if (needsRender) {
+      if (editCommitTimer) {
+        clearTimeout(editCommitTimer)
+        editCommitTimer = null
+      }
+      editingEl = null
+      editingKey = ''
+      lastRenderSig = ''
+    }
     docIr.set(nextDoc)
     docIrDirty.set(false)
-    lastRenderSig = `doc:${docIrSignature(nextDoc)}`
+    if (!needsRender) lastRenderSig = `doc:${docIrSignature(nextDoc)}`
     scheduleDocTextSync(nextDoc, opts?.immediate ? 0 : 180)
+    if (needsRender) queueMicrotask(() => syncFromStore(true))
   }
 
   function scheduleCommit(el: HTMLElement, delayMs = 160) {
@@ -742,7 +769,7 @@
       nextDoc = updateBlock(doc, String(payload.id || ''), payload.payload || {})
     }
     if (!nextDoc) return
-    applyDocIrUpdate(nextDoc, opts)
+    applyDocIrUpdate(nextDoc, { ...opts, render: false })
   }
 
   function flushPendingEditableState() {
@@ -1636,6 +1663,158 @@
     queueMicrotask(() => emitToolbarState())
   }
 
+  function mountParagraphBeside(
+    reference: HTMLElement,
+    block: Record<string, unknown>,
+    position: 'before' | 'after'
+  ) {
+    const paragraph = document.createElement('p')
+    paragraph.dataset.blockId = String(block.id || '')
+    if (reference.tagName.toLowerCase() === 'p') paragraph.style.cssText = reference.style.cssText
+    const text = String(block.text || '')
+    if (text) paragraph.textContent = text
+    else paragraph.appendChild(document.createElement('br'))
+    setEditableAttrs(paragraph)
+    if (position === 'before') reference.before(paragraph)
+    else reference.after(paragraph)
+    focusEditableAtStart(paragraph)
+    refreshDocumentMeta()
+  }
+
+  function placeCaretAtTextOffset(el: HTMLElement, offset: number) {
+    el.focus()
+    const range = document.createRange()
+    let remaining = Math.max(0, offset)
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    while (node) {
+      const length = (node.textContent || '').length
+      if (remaining <= length) {
+        range.setStart(node, remaining)
+        range.collapse(true)
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        editingEl = el
+        editingKey = String(el.dataset.blockId || '')
+        return
+      }
+      remaining -= length
+      node = walker.nextNode()
+    }
+    placeCaretAtBlockEnd(el)
+    editingEl = el
+    editingKey = String(el.dataset.blockId || '')
+  }
+
+  function splitTextBlockAtCaret(el: HTMLElement): boolean {
+    const tag = el.tagName.toLowerCase()
+    if (!el.dataset.blockId || (tag !== 'p' && !/^h[1-6]$/.test(tag))) return false
+    const doc = $docIr
+    if (!doc || typeof doc !== 'object') return false
+    const blockId = String(el.dataset.blockId)
+    const rawText = plainTextFromElement(el)
+    const caret = getCaretOffset(el)
+    const offset = caret == null ? rawText.length : Math.max(0, Math.min(rawText.length, caret))
+    const beforeText = normalizeInlineText(rawText.slice(0, offset))
+    const afterText = normalizeInlineText(rawText.slice(offset))
+    const blockStyle = extractBlockStyle(el)
+    const isHeading = /^h[1-6]$/.test(tag)
+
+    if (offset === 0) {
+      const newBlock: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: '' }
+      if (blockStyle && tag === 'p') newBlock.style = blockStyle
+      const nextDoc = insertBlockBefore(doc, blockId, newBlock)
+      if (!nextDoc) return false
+      mountParagraphBeside(el, newBlock, 'before')
+      applyDocIrUpdate(nextDoc, { render: false })
+      return true
+    }
+
+    if (offset >= rawText.length) {
+      const payload: Record<string, unknown> = isHeading
+        ? { type: 'heading', level: Number(tag.slice(1)), text: beforeText.replace(/\n+/g, ' ').trim() }
+        : { type: 'paragraph', text: beforeText }
+      if (blockStyle) payload.style = blockStyle
+      const committedDoc = updateBlock(doc, blockId, payload) || doc
+      const newBlock: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: '' }
+      if (blockStyle && tag === 'p') newBlock.style = blockStyle
+      const nextDoc = insertBlockAfter(committedDoc, blockId, newBlock)
+      if (!nextDoc) return false
+      mountParagraphBeside(el, newBlock, 'after')
+      applyDocIrUpdate(nextDoc, { render: false })
+      return true
+    }
+
+    const payload: Record<string, unknown> = isHeading
+      ? { type: 'heading', level: Number(tag.slice(1)), text: beforeText.replace(/\n+/g, ' ').trim() }
+      : { type: 'paragraph', text: beforeText }
+    if (blockStyle) payload.style = blockStyle
+    const updated = updateBlock(doc, blockId, payload)
+    const newBlock: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: afterText }
+    if (!isHeading && blockStyle) newBlock.style = blockStyle
+    const nextDoc = insertBlockAfter(updated || doc, blockId, newBlock)
+    if (!nextDoc) return false
+    el.textContent = beforeText
+    mountParagraphBeside(el, newBlock, 'after')
+    applyDocIrUpdate(nextDoc, { render: false })
+    return true
+  }
+
+  function mergeTextBlockWithPrevious(el: HTMLElement): boolean {
+    const selection = window.getSelection()
+    if (!selection || !selection.isCollapsed || getCaretOffset(el) !== 0) return false
+    const tag = el.tagName.toLowerCase()
+    if (!el.dataset.blockId || (tag !== 'p' && !/^h[1-6]$/.test(tag))) return false
+    const blocks = Array.from(editor?.querySelectorAll('[data-block-id]') || []) as HTMLElement[]
+    const index = blocks.indexOf(el)
+    if (index <= 0) return false
+    const previous = blocks[index - 1]
+    const previousTag = previous.tagName.toLowerCase()
+    if (!previous.dataset.blockId || (previousTag !== 'p' && !/^h[1-6]$/.test(previousTag))) return false
+    const doc = $docIr
+    if (!doc || typeof doc !== 'object') return false
+
+    const previousInline = extractRunsFromElement(previous)
+    const currentInline = extractRunsFromElement(el)
+    const boundary = previousInline.text.length
+    const payload: Record<string, unknown> = /^h[1-6]$/.test(previousTag)
+      ? { type: 'heading', level: Number(previousTag.slice(1)), text: previousInline.text + currentInline.text }
+      : { type: 'paragraph', text: previousInline.text + currentInline.text }
+    if (previousInline.runs || currentInline.runs) {
+      payload.runs = [
+        ...(previousInline.runs || [{ text: previousInline.text }]),
+        ...(currentInline.runs || [{ text: currentInline.text }])
+      ].filter((run) => String(run.text || ''))
+    }
+    const updated = updateBlock(doc, String(previous.dataset.blockId), payload)
+    if (!updated) return false
+    const nextDoc = deleteBlocksByIds(updated, [String(el.dataset.blockId)])
+    if (!nextDoc) return false
+
+    if (previous.querySelector(':scope > br') && !previousInline.text) previous.innerHTML = ''
+    while (el.firstChild) previous.appendChild(el.firstChild)
+    el.remove()
+    placeCaretAtTextOffset(previous, boundary)
+    refreshDocumentMeta()
+    applyDocIrUpdate(nextDoc, { render: false })
+    return true
+  }
+
+  function handleBeforeInput(event: InputEvent) {
+    if ($generating || lockEditing || composing) return
+    if (event.inputType !== 'insertParagraph') return
+    const el =
+      resolveEditableElement(event.target) ||
+      resolveEditableFromSelection() ||
+      resolveEditableAtCaret()
+    if (!el) return
+    // IME and embedded webviews do not always deliver a useful keydown target.
+    // Intercept before the browser mutates the DOM so Enter is always a DocIR
+    // block operation and never a whole-document reparse.
+    if (splitTextBlockAtCaret(el)) event.preventDefault()
+  }
+
   function handleEditableFocus(event: FocusEvent) {
     if (editor) editor.dataset.caretActive = '1'
     if ($generating || lockEditing) {
@@ -1696,6 +1875,7 @@
     editingEl = el
     editingKey = String(el.dataset.blockId || el.dataset.sectionId || el.dataset.docTitle || '')
     scheduleCommit(el)
+    queueMicrotask(() => refreshDocumentMeta())
     if (!historyNavigation) queueMicrotask(() => emitToolbarState())
   }
 
@@ -1769,8 +1949,8 @@
     const header = editor.querySelector('.wa-header') as HTMLElement | null
     const footer = editor.querySelector('.wa-footer') as HTMLElement | null
     if (header) {
-      header.style.display = settings.showHeader ? 'block' : 'none'
-      header.textContent = settings.headerText || String(($docIr as any)?.title || '')
+      header.style.display = settings.showHeader && settings.headerText.trim() ? 'block' : 'none'
+      header.textContent = settings.headerText || ''
     }
     if (footer) {
       footer.style.display = settings.showFooter || settings.pageNumbers ? 'block' : 'none'
@@ -1820,7 +2000,11 @@
     if (!documentEngineReady()) return false
     const markdown = kind === 'undo' ? undoMarkdown() : redoMarkdown()
     if (markdown == null) return false
-    const nextDoc = textToDocIr(markdown)
+    const currentTitle =
+      $docIr && typeof $docIr === 'object'
+        ? String(($docIr as Record<string, unknown>).title || '')
+        : ''
+    const nextDoc = textToDocIr(markdown, currentTitle)
     if (nextDoc) {
       docIr.set(nextDoc)
       docIrDirty.set(false)
@@ -2309,6 +2493,12 @@
         return
       }
     }
+    if (!ctrl && !e.altKey && key === 'backspace' && activeEditable) {
+      if (mergeTextBlockWithPrevious(activeEditable)) {
+        e.preventDefault()
+        return
+      }
+    }
     if (e.key === 'Enter' && e.shiftKey && !ctrl) {
       const el = activeEditable
       if (el && el.dataset.blockId) {
@@ -2400,61 +2590,8 @@
         }
         if (tag === 'p' || /^h[1-6]$/.test(tag)) {
           e.preventDefault()
-          const doc = $docIr
-          if (!doc || typeof doc !== 'object') return
-          const blockId = String(el.dataset.blockId)
-          const rawText = plainTextFromElement(el)
-          const caret = getCaretOffset(el)
-          const offset = caret == null ? rawText.length : Math.max(0, Math.min(rawText.length, caret))
-          const beforeRaw = rawText.slice(0, offset)
-          const afterRaw = rawText.slice(offset)
-          const beforeText = normalizeInlineText(beforeRaw)
-          const afterText = normalizeInlineText(afterRaw)
-          const blockStyle = extractBlockStyle(el)
-          const isHeading = /^h[1-6]$/.test(tag)
-
-          if (offset === 0) {
-            const newBlock: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: '' }
-            if (blockStyle && tag === 'p') newBlock.style = blockStyle
-            const nextDoc = insertBlockBefore(doc, blockId, newBlock)
-            if (nextDoc) {
-              pendingFocusBlockId = String(newBlock.id || '')
-              applyDocIrUpdate(nextDoc)
-            }
-            return
-          }
-
-          if (offset >= rawText.length) {
-            const newBlock: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: '' }
-            if (blockStyle && tag === 'p') newBlock.style = blockStyle
-            const nextDoc = insertBlockAfter(doc, blockId, newBlock)
-            if (nextDoc) {
-              pendingFocusBlockId = String(newBlock.id || '')
-              applyDocIrUpdate(nextDoc)
-            }
-            return
-          }
-
-          let nextDoc: Record<string, unknown> | null = null
-          if (isHeading) {
-            const level = Number(tag.slice(1))
-            const payload: Record<string, unknown> = { type: 'heading', level, text: beforeText.replace(/\n+/g, ' ').trim() }
-            if (blockStyle) payload.style = blockStyle
-            nextDoc = updateBlock(doc, blockId, payload)
-          } else {
-            const payload: Record<string, unknown> = { type: 'paragraph', text: beforeText }
-            if (blockStyle) payload.style = blockStyle
-            nextDoc = updateBlock(doc, blockId, payload)
-          }
-
-          const newBlock: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: afterText }
-          if (!isHeading && blockStyle) newBlock.style = blockStyle
-          const baseDoc = nextDoc || doc
-          const finalDoc = insertBlockAfter(baseDoc, blockId, newBlock)
-          if (finalDoc) {
-            pendingFocusBlockId = String(newBlock.id || '')
-            applyDocIrUpdate(finalDoc)
-          }
+          splitTextBlockAtCaret(el)
+          return
         }
       }
     }
@@ -2706,7 +2843,11 @@
     lastMarkdown = markdown
     if (historyTimer) clearTimeout(historyTimer)
     historyTimer = setTimeout(() => {
-      const doc = htmlToDocIr(html)
+      const currentTitle =
+        $docIr && typeof $docIr === 'object'
+          ? String(($docIr as Record<string, unknown>).title || '')
+          : ''
+      const doc = htmlToDocIr(html, currentTitle)
       if (doc) {
         docIr.set(doc)
         docIrDirty.set(false)
@@ -2746,12 +2887,16 @@
     syncFromStore()
     if (!docIrHasRenderableContent($docIr)) {
       const fromText = String($sourceText || '').trim()
-      const doc = fromText ? textToDocIr(fromText) : null
+      const currentTitle =
+        $docIr && typeof $docIr === 'object'
+          ? String(($docIr as Record<string, unknown>).title || '')
+          : ''
+      const doc = fromText ? textToDocIr(fromText, currentTitle) : null
       if (doc) {
         docIr.set(doc)
         docIrDirty.set(false)
       } else {
-        docIr.set(createSeedDoc())
+        docIr.set(createSeedDoc(currentTitle))
         docIrDirty.set(false)
       }
     }
@@ -3057,10 +3202,11 @@
         class="editable"
         data-render-mode={renderMode}
         bind:this={editor}
-        contenteditable={$generating || lockEditing ? 'false' : 'true'}
+        contenteditable="false"
         role="region"
         aria-label="文档编辑区"
         onmousedown={handleEditorMouseDown}
+        onbeforeinput={handleBeforeInput}
         oninput={handleEditableInput}
         onfocusin={handleEditableFocus}
         onfocusout={handleEditableBlur}

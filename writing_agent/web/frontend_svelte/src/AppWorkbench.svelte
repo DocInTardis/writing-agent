@@ -627,7 +627,11 @@
     if (docIrRefreshTimer) clearTimeout(docIrRefreshTimer)
     docIrRefreshTimer = setTimeout(() => {
       if (!force && !streamingLive && !typingActive) return
-      const doc = textToDocIr(snapshot)
+      const currentTitle =
+        $docIr && typeof $docIr === 'object'
+          ? String(($docIr as Record<string, unknown>).title || '')
+          : ''
+      const doc = textToDocIr(snapshot, currentTitle)
       if (doc) {
         const normalized = normalizeDocIrParagraphBlocks(doc)
         docIr.set(normalized)
@@ -731,7 +735,11 @@
       docIr.set(normalized)
       docIrDirty.set(false)
     } else {
-      const doc = textToDocIr(txt)
+      const currentTitle =
+        $docIr && typeof $docIr === 'object'
+          ? String(($docIr as Record<string, unknown>).title || '')
+          : ''
+      const doc = textToDocIr(txt, currentTitle)
       if (doc) {
         const normalized = normalizeDocIrParagraphBlocks(doc)
         docIr.set(normalized)

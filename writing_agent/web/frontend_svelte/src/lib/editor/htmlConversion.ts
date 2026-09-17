@@ -102,7 +102,7 @@
   return blocks.join('\n\n').trim()
 }
 
-export function htmlToDocIr(html: string): Record<string, unknown> | null {
+export function htmlToDocIr(html: string, currentTitle = ''): Record<string, unknown> | null {
   const container = document.createElement('div')
   container.innerHTML = html
   const blocks: Array<Record<string, unknown>> = []
@@ -134,118 +134,15 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
     return out.join('').replace(/\s+/g, ' ').trim()
   }
 
-  const pushParagraph = (text: string, id?: string) => {
+  const pushParagraph = (text: string, id?: string, preserveEmpty = false) => {
     const t = text.replace(/\s+$/g, '').trim()
-    if (t) blocks.push({ type: 'paragraph', text: t, id: id || undefined })
-  }
-
-  const HEADING_HINTS = [
-    '摘要',
-    '引言',
-    '绪论',
-    '前言',
-    '背景',
-    '相关技术概述',
-    '关键技术',
-    '研究方法',
-    '实验',
-    '结果',
-    '讨论',
-    '结论',
-    '总结',
-    '展望',
-    '参考文献',
-    '附录',
-    '致谢',
-    'Abstract'
-  ]
-
-  const NUM_HEADING_RE = /^(\d+(?:\.\d+){0,2})\s*[\.、:：-]?\s*([^\s].{0,24})$/
-  const CN_NUM_HEADING_RE = /^([一二三四五六七八九十]+)\s*[、.．:：-]?\s*([^\s].{0,24})$/
-
-  const looksLikeBodySentence = (text: string) => {
-    const s = String(text || '').trim()
-    if (!s) return false
-    if (s.length >= 24) return true
-    if (/[。！？!?；;，,]/.test(s)) return true
-    const starters = ['本文', '本研究', '随着', '通过', '由于', '因此', '此外', '同时', '首先', '其次', '最后']
-    const hit = starters.some((starter) => {
-      const idx = s.indexOf(starter)
-      return idx >= 1 && idx <= 18
-    })
-    if (hit) return true
-    if (s.length >= 14 && /(是|为|通过|随着|由于|因此|并且|能够|可以|实现|提升|优化)/.test(s)) {
-      return true
-    }
-    return false
+    if (t || preserveEmpty) blocks.push({ type: 'paragraph', text: t, id: id || undefined })
   }
 
   const splitTitleAndRest = (text: string) => {
     const s = String(text || '').trim()
     if (!s) return { title: '', rest: '' }
-    const repeated = /^(.{2,18})\s*\1(.+)$/.exec(s)
-    if (repeated) {
-      return { title: String(repeated[1] || '').trim(), rest: String(repeated[2] || '').trim() }
-    }
-    for (const kw of HEADING_HINTS) {
-      const idx = s.indexOf(kw)
-      if (idx > 1 && idx <= 20) {
-        const left = s.slice(0, idx).trim()
-        const right = s.slice(idx).trim()
-        if (left.length >= 2 && right.length >= 2) {
-          return { title: left, rest: right }
-        }
-      }
-    }
-    const numIdx = s.search(/\b\d+(?:\.\d+){0,2}\b/)
-    if (numIdx > 1 && numIdx <= 20) {
-      return { title: s.slice(0, numIdx).trim(), rest: s.slice(numIdx).trim() }
-    }
     return { title: s, rest: '' }
-  }
-
-  const detectHeadingFromText = (text: string) => {
-    const s = String(text || '').trim()
-    if (!s) return null
-    if (s.length <= 12 && HEADING_HINTS.includes(s)) {
-      return { level: 2, heading: s, rest: '' }
-    }
-    const mNum = NUM_HEADING_RE.exec(s)
-    if (mNum) {
-      const num = String(mNum[1] || '').trim()
-      const name = String(mNum[2] || '').trim()
-      if (looksLikeBodySentence(name)) return null
-      const dots = num.split('.').length - 1
-      const level = Math.min(4, 2 + Math.max(0, dots))
-      return { level, heading: `${num} ${name}`.trim(), rest: '' }
-    }
-    const mCn = CN_NUM_HEADING_RE.exec(s)
-    if (mCn) {
-      const num = String(mCn[1] || '').trim()
-      const name = String(mCn[2] || '').trim()
-      if (looksLikeBodySentence(name)) return null
-      return { level: 2, heading: `${num} ${name}`.trim(), rest: '' }
-    }
-    if (s.length > 20) {
-      for (const kw of HEADING_HINTS) {
-        if (s.startsWith(kw) && s.length > kw.length + 8) {
-          return { level: 2, heading: kw, rest: s.slice(kw.length).trim() }
-        }
-      }
-    }
-    return null
-  }
-
-  const emitTextAsBlocks = (text: string, id?: string) => {
-    const s = String(text || '').trim()
-    if (!s) return
-    const heading = detectHeadingFromText(s)
-    if (heading) {
-      blocks.push({ type: 'heading', level: heading.level, text: heading.heading })
-      if (heading.rest) pushParagraph(heading.rest, id)
-      return
-    }
-    pushParagraph(s, id)
   }
 
   const extractTable = (node: HTMLElement): Record<string, unknown> | null => {
@@ -320,7 +217,7 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
       const split = splitTitleAndRest(t)
       if (split.title && !title) title = split.title
       if (split.rest) {
-        emitTextAsBlocks(split.rest)
+        pushParagraph(split.rest)
       }
       return
     }
@@ -338,10 +235,6 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
       const level = Number(tag.slice(1))
       const text = childrenInline(node)
       if (text) {
-        if (level === 1 && !title) {
-          title = text
-          return
-        }
         blocks.push({ type: 'heading', level, text })
       }
       return
@@ -365,28 +258,18 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
     }
     if (tag === 'p' || tag === 'div') {
       const text = childrenInline(node)
-      emitTextAsBlocks(text, node.dataset.blockId || undefined)
+      // Formatting comes from the element type selected by the user. Never
+      // infer a heading merely from words such as "摘要" or "1 绪论".
+      pushParagraph(text, node.dataset.blockId || undefined, true)
       return
     }
     node.childNodes.forEach((child) => walkBlock(child))
   }
 
   container.childNodes.forEach((node) => walkBlock(node))
-  const docTitle = title || deriveTitleFromBlocks(blocks) || '自动生成文档'
+  // The document title is file metadata, not an implicit copy of body text.
+  const docTitle = String(currentTitle || title || '未命名文档').trim()
   return buildDocIrFromBlocks(blocks, docTitle)
-}
-
-function deriveTitleFromBlocks(blocks: Array<Record<string, unknown>>): string {
-  for (const b of blocks) {
-    if (String(b.type || '') === 'heading' && Number(b.level || 0) === 1 && b.text) {
-      return String(b.text || '').trim()
-    }
-    if (String(b.type || '') === 'paragraph' && b.text) {
-      const raw = String(b.text || '').trim()
-      if (raw) return raw.slice(0, 24)
-    }
-  }
-  return ''
 }
 
 function buildDocIrFromBlocks(blocks: Array<Record<string, unknown>>, title: string): Record<string, unknown> {
@@ -399,7 +282,7 @@ function buildDocIrFromBlocks(blocks: Array<Record<string, unknown>>, title: str
     if (!orphan.length) return
     const implicit = {
       id: makeId(),
-      title: docTitle,
+      title: '',
       level: 1,
       blocks: orphan,
       children: []
@@ -435,7 +318,7 @@ function buildDocIrFromBlocks(blocks: Array<Record<string, unknown>>, title: str
   }
 
   if (orphan.length && !sections.length) {
-    sections.push({ id: makeId(), title: docTitle, level: 1, blocks: orphan, children: [] })
+    sections.push({ id: makeId(), title: '', level: 1, blocks: orphan, children: [] })
   }
   return { title: docTitle, sections }
 }
@@ -446,7 +329,6 @@ function toDocIrBlock(block: Record<string, unknown>): Record<string, unknown> |
   const id = rawId || makeId()
   if (t === 'paragraph') {
     const text = String(block.text || '').trim()
-    if (!text) return null
     return { id, type: 'paragraph', text }
   }
   if (t === 'list') {

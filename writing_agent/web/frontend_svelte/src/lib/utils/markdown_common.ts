@@ -20,45 +20,11 @@ export function formatInline(text: string): string {
   return safe
 }
 
-export function normalizeTitle(text: string): string {
-  return String(text || '').trim().toLowerCase()
-}
-
 export function normalizeLines(lines: string[]): string[] {
-  const out: string[] = []
-  let run: string[] = []
-  let blankSeen = false
-  const flush = () => {
-    if (!run.length) return
-    if (run.length >= 4) {
-      out.push(run.join(''))
-    } else {
-      out.push(...run)
-    }
-    run = []
-  }
-  for (const raw of lines) {
-    const line = raw.trim()
-    if (!line) {
-      flush()
-      if (!blankSeen) {
-        out.push('')
-        blankSeen = true
-      }
-      continue
-    }
-    blankSeen = false
-    const single = line.length <= 1
-    const looksLikeChar = /[\u4e00-\u9fa5A-Za-z0-9\.\-\u3000-\u303F]/.test(line)
-    if (single && looksLikeChar) {
-      run.push(line)
-      continue
-    }
-    flush()
-    out.push(raw)
-  }
-  flush()
-  return out
+  // Editing must preserve the line boundaries the user entered. OCR repair
+  // and single-character line joining belong to an explicit import command,
+  // never to the normal render/save path.
+  return lines.map((line) => String(line || '').replace(/\r/g, ''))
 }
 
 export function renderHeadingHtml(level: number, text: string, attrs = ''): string {

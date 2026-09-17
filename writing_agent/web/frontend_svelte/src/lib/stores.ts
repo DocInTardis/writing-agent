@@ -41,9 +41,9 @@ export const pageSettings = writable<PageSettings>({
   marginBottom: 2.54,
   marginLeft: 3.18,
   marginRight: 3.18,
-  showHeader: true,
+  showHeader: false,
   headerText: '',
-  showFooter: true,
+  showFooter: false,
   footerText: '',
   pageNumbers: true,
   pageNumberPosition: 'center'

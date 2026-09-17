@@ -1,12 +1,5 @@
-import { blocksToHtml, blocksToMarkdown, inferTitleFromBlocks } from './markdown_blocks'
+import { blocksToHtml, blocksToMarkdown } from './markdown_blocks'
 import { buildDocIrFromBlocks } from './markdown_builder'
-import {
-  HEADING_GLUE_PREFIXES,
-  HEADING_GLUE_PUNCT,
-  looksLikeBodySentence,
-  splitHeadingGlue,
-  splitParagraphForBlocks
-} from './markdown_heading_glue'
 import { docIrToHtml, docIrToMarkdown, simpleSectionsToMarkdown } from './markdown_docir'
 import { normalizeLines, type UnknownRecord } from './markdown_common'
 
@@ -150,7 +143,7 @@ export function renderDocument(text: string, docIr?: unknown, preferText?: boole
   return ''
 }
 
-export function textToDocIr(text: string): UnknownRecord | null {
+export function textToDocIr(text: string, currentTitle = ''): UnknownRecord | null {
   let src = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   if (!src.endsWith('\n')) {
     const lastBreak = src.lastIndexOf('\n')
@@ -164,17 +157,13 @@ export function textToDocIr(text: string): UnknownRecord | null {
 
   const lines = normalizeLines(src.split('\n'))
   const blocks: UnknownRecord[] = []
-  let title = ''
   let para: string[] = []
   let listItems: string[] = []
   let listOrdered: boolean | null = null
 
   const pushParagraphBlocks = (inputText: string) => {
-    const pieces = splitParagraphForBlocks(String(inputText || ''))
-    for (const piece of pieces) {
-      const clean = String(piece || '').trim()
-      if (clean) blocks.push({ type: 'paragraph', text: clean })
-    }
+    const clean = String(inputText || '').trim()
+    if (clean) blocks.push({ type: 'paragraph', text: clean })
   }
 
   const flushPara = () => {
@@ -191,14 +180,12 @@ export function textToDocIr(text: string): UnknownRecord | null {
     listOrdered = null
   }
 
-  let prevBlank = true
   for (const raw of lines) {
     const line = String(raw || '')
     const trimmed = line.trim()
     if (!trimmed) {
       flushPara()
       flushList()
-      prevBlank = true
       continue
     }
     if (/^#{1,6}$/.test(trimmed)) continue
@@ -208,45 +195,9 @@ export function textToDocIr(text: string): UnknownRecord | null {
       flushPara()
       flushList()
       const level = Math.min(3, Math.max(1, headingMatch[1].length))
-      let headingText = String(headingMatch[2] || '').trim()
-      let rest = ''
-      const split = splitHeadingGlue(headingText)
-      if (split) {
-        headingText = split.heading
-        rest = split.rest
-      }
-      if (level === 1 && !title && headingText) title = headingText
+      const headingText = String(headingMatch[2] || '').trim()
       blocks.push({ type: 'heading', level, text: headingText || '章节' })
-      if (rest) pushParagraphBlocks(rest)
-      prevBlank = false
       continue
-    }
-
-    const numMatch = /^(\d+(?:\.\d+){0,3})[\.、\)]?\s+(.+)$/.exec(trimmed)
-    if (numMatch) {
-      const num = String(numMatch[1] || '')
-      let headingText = String(numMatch[2] || '').trim()
-      const dotCount = (num.match(/\./g) || []).length
-      const level = Math.min(6, 2 + dotCount)
-      const split = splitHeadingGlue(headingText)
-      const shortHeading = headingText.length <= 16 && !HEADING_GLUE_PUNCT.test(headingText)
-      const prefixMatch = HEADING_GLUE_PREFIXES.some((p) => headingText.startsWith(p))
-      const bodyLike = looksLikeBodySentence(headingText)
-      const canHeading = split || shortHeading || prefixMatch || ((prevBlank || (!para.length && !listItems.length)) && !bodyLike)
-      if (headingText && canHeading) {
-        flushPara()
-        flushList()
-        let rest = ''
-        if (split) {
-          headingText = split.heading
-          rest = split.rest
-        }
-        if (level === 1 && !title && headingText) title = headingText
-        blocks.push({ type: 'heading', level, text: headingText || '章节' })
-        if (rest) pushParagraphBlocks(rest)
-        prevBlank = false
-        continue
-      }
     }
 
     const marker = trimmed.match(/^\[\[(FIGURE|TABLE)\s*:\s*(\{[\s\S]*\})\s*\]\]$/i)
@@ -275,18 +226,16 @@ export function textToDocIr(text: string): UnknownRecord | null {
       }
       const item = String(orderedMatch?.[1] || bulletMatch?.[1] || '').trim()
       if (item) listItems.push(item)
-      prevBlank = false
       continue
     }
 
     flushList()
     para.push(trimmed)
-    prevBlank = false
   }
 
   flushPara()
   flushList()
 
-  const docTitle = title || inferTitleFromBlocks(blocks) || '自动生成文档'
+  const docTitle = String(currentTitle || '').trim() || '未命名文档'
   return buildDocIrFromBlocks(blocks, docTitle)
 }

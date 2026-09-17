@@ -4,7 +4,6 @@ import {
   formatInline,
   normalizeFigurePayload,
   normalizeTablePayload,
-  normalizeTitle,
   renderHeadingHtml,
   renderParagraphHtml,
   renderRuns,
@@ -190,23 +189,6 @@ export function blockToHtml(block: UnknownRecord): string {
   return fallback ? renderParagraphHtml(fallback) : ''
 }
 
-export function inferTitleFromBlocks(blocks: UnknownRecord[]): string {
-  for (const b of blocks) {
-    const t = String(b.type || '').toLowerCase()
-    if (t === 'heading' && Number(b.level || 0) === 1) {
-      const text = String(b.text || '').trim()
-      if (text) return text
-    }
-  }
-  for (const b of blocks) {
-    if (String(b.type || '') === 'paragraph') {
-      const raw = String(b.text || '').trim()
-      if (raw) return raw.slice(0, 24)
-    }
-  }
-  return ''
-}
-
 export function blocksToMarkdown(blocks: UnknownRecord[]): string | null {
   const lines: string[] = []
   let lastSection = ''
@@ -224,30 +206,17 @@ export function blocksToMarkdown(blocks: UnknownRecord[]): string | null {
 
 export function blocksToHtml(blocks: UnknownRecord[], title?: string): string | null {
   const parts: string[] = ['<div class="wa-doc">']
-  const docTitle = String(title || '').trim() || inferTitleFromBlocks(blocks)
-  parts.push(`<div class="wa-header" contenteditable="false">${escapeHtml(docTitle)}</div>`)
+  void title
+  parts.push('<div class="wa-header" contenteditable="false"></div>')
   parts.push('<div class="wa-body">')
-  if (docTitle) {
-    parts.push(`<div class="wa-title">${formatInline(docTitle)}</div>`)
-  }
 
   let lastSection = ''
-  let skippedTitle = false
   for (const block of blocks) {
     const sec = String(block.section_id || block.section_title || '').trim()
     if (sec && sec !== lastSection) {
       const heading = headingFromSectionIdHtml(sec)
       if (heading) parts.push(heading)
       lastSection = sec
-    }
-
-    const t = String(block.type || '').toLowerCase()
-    if (!skippedTitle && docTitle && t === 'heading' && Number(block.level || 0) === 1) {
-      const text = String(block.text || '').trim()
-      if (normalizeTitle(text) === normalizeTitle(docTitle)) {
-        skippedTitle = true
-        continue
-      }
     }
 
     const html = blockToHtml(block)
