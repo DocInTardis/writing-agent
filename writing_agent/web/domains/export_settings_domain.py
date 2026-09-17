@@ -127,6 +127,7 @@ def export_prefs_from_session(
         include_toc=bool(prefs.get("include_toc", True)),
         toc_levels=int(prefs.get("toc_levels") or 3),
         include_header=bool(prefs.get("include_header", True)),
+        include_footer=bool(prefs.get("include_footer", True)),
         page_numbers=bool(prefs.get("page_numbers", True)),
         header_text=str(prefs.get("header_text") or ""),
         footer_text=str(prefs.get("footer_text") or ""),
@@ -136,4 +137,6 @@ def export_prefs_from_session(
         page_margin_left_cm=float(prefs.get("page_margin_left_cm") or 2.8),
         page_margin_right_cm=float(prefs.get("page_margin_right_cm") or 2.6),
         page_size=str(prefs.get("page_size") or "A4"),
+        page_orientation=str(prefs.get("page_orientation") or "portrait"),
+        page_number_position=str(prefs.get("page_number_position") or "center"),
     )

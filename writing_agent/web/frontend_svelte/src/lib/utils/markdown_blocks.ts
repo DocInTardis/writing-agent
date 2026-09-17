@@ -69,6 +69,8 @@ export function blockToLines(block: UnknownRecord): string[] {
     return [`[[${marker}:${JSON.stringify(payload)}]]`]
   }
 
+  if (t === 'page_break') return ['[[PAGE_BREAK]]']
+
   if (t === 'reference' || t === 'ref') {
     const text = String(block.text || '').trim()
     if (text) return [text]
@@ -165,9 +167,18 @@ export function blockToHtml(block: UnknownRecord): string {
     const payload = normalizeFigurePayload(block)
     const caption = payload.caption || '图示'
     const attrs = `${idAttr}${styleAttr}`
+    const src = String(payload.spec.src || '').trim()
+    if (src && (/^data:image\//i.test(src) || /^https?:\/\//i.test(src) || src.startsWith('/'))) {
+      return `<figure class="wa-figure wa-image"${attrs} data-image-src="${escapeHtml(src)}"><img src="${escapeHtml(src)}" alt="${escapeHtml(caption)}" /><figcaption>${escapeHtml(caption)}</figcaption></figure>`
+    }
     const encoded = payload.spec && typeof payload.spec === 'object' ? encodeURIComponent(JSON.stringify(payload.spec)) : ''
     const dataAttr = encoded ? ` data-figure-spec="${escapeHtml(encoded)}"` : ''
     return `<figure class="wa-figure"${attrs}${dataAttr}><div class="wa-figure-box">图</div><figcaption>${escapeHtml(caption)}</figcaption></figure>`
+  }
+
+
+  if (t === 'page_break') {
+    return `<div class="wa-page-break"${idAttr} contenteditable="false"><span>分页符</span></div>`
   }
 
   if (t === 'quote') {

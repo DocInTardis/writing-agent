@@ -1,9 +1,10 @@
 <script lang="ts">
   import Icon from '../components/Icon.svelte'
+  import PageSetupPanel from './PageSetupPanel.svelte'
   import type { EditorCommand } from '../types'
   import type { ResumeState } from './types'
 
-  type RibbonTab = 'home' | 'insert' | 'layout' | 'review' | 'assistant'
+  type RibbonTab = 'home' | 'insert' | 'layout' | 'references' | 'review' | 'assistant'
   type EditorToolbarState = {
     bold: boolean
     italic: boolean
@@ -72,6 +73,7 @@
     { id: 'home', label: '开始' },
     { id: 'insert', label: '插入' },
     { id: 'layout', label: '布局' },
+    { id: 'references', label: '引用' },
     { id: 'review', label: '审阅' },
     { id: 'assistant', label: '助手' }
   ]
@@ -104,9 +106,10 @@
       <div class="ribbon-group wide" aria-label="字体与样式">
         <div class="ribbon-row">
           <select aria-label="段落样式" onchange={(event) => command(event.currentTarget.value)}>
-            <option value="clear-format">正文</option>
+            <option value="paragraph">正文</option>
             <option value="heading1">标题 1</option>
             <option value="heading2">标题 2</option>
+            <option value="heading3">标题 3</option>
             <option value="quote">引用</option>
             <option value="code">代码</option>
           </select>
@@ -143,6 +146,11 @@
           <button class="tool-btn align-glyph center" title="居中" onclick={() => command('align-center')}>≡</button>
           <button class="tool-btn align-glyph right" title="右对齐" onclick={() => command('align-right')}>≡</button>
           <button class="tool-btn align-glyph justify" title="两端对齐" onclick={() => command('align-justify')}>≡</button>
+          <button class="tool-btn" title="减少缩进" onclick={() => command('outdent')}>←</button>
+          <button class="tool-btn" title="增加缩进" onclick={() => command('indent')}>→</button>
+          <select class="line-select" aria-label="行距" onchange={(event) => command(`line-height:${event.currentTarget.value}`)}>
+            <option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5" selected>1.5</option><option value="2">2.0</option><option value="2.5">2.5</option>
+          </select>
         </div>
         <span class="ribbon-label">段落</span>
       </div>
@@ -150,10 +158,12 @@
       <div class="ribbon-group action-group">
         <button class="ribbon-action" onclick={() => command('table')}><span>▦</span>表格</button>
         <button class="ribbon-action" onclick={() => command('image')}><span>▧</span>图片</button>
+        <button class="ribbon-action" onclick={() => command('link')}><span>↗</span>链接</button>
         <button class="ribbon-action" onclick={() => command('quote')}><Icon name="quote" size={17} />引用</button>
         <button class="ribbon-action" onclick={() => command('code')}><Icon name="code" size={17} />代码</button>
+        <button class="ribbon-action" onclick={() => command('hr')}><span>—</span>分隔线</button>
+        <button class="ribbon-action" onclick={() => command('page-break')}><span>↵</span>分页符</button>
         <button class="ribbon-action" onclick={onOpenCanvas}><Icon name="diagram" size={17} />图形</button>
-        <button class="ribbon-action" onclick={onOpenCitations}><Icon name="cite" size={17} />引文</button>
       </div>
     {:else if activeTab === 'layout'}
       <div class="ribbon-group action-group">
@@ -162,10 +172,21 @@
         <button class="ribbon-action" onclick={() => command('line-height:2')}>双倍行距</button>
         <button class="ribbon-action" onclick={() => command('indent-first')}>首行缩进</button>
         <button class="ribbon-action" onclick={() => command('margin:10px 0')}>段落间距</button>
+        <button class="ribbon-action" onclick={() => command('page-break')}>分页符</button>
+        <PageSetupPanel />
         <button class="ribbon-action" onclick={onOpenInfoDrawer}>页面信息</button>
+      </div>
+    {:else if activeTab === 'references'}
+      <div class="ribbon-group action-group">
+        <button class="ribbon-action" onclick={() => command('toc')}><span>☷</span>目录</button>
+        <button class="ribbon-action" onclick={() => command('footnote')}><span>¹</span>脚注</button>
+        <button class="ribbon-action" onclick={() => command('math-inline')}><span>π</span>行内公式</button>
+        <button class="ribbon-action" onclick={() => command('math-block')}><span>∫</span>公式块</button>
+        <button class="ribbon-action" onclick={onOpenCitations}><Icon name="cite" size={17} />引文管理</button>
       </div>
     {:else if activeTab === 'review'}
       <div class="ribbon-group action-group">
+        <button class="ribbon-action" onclick={() => command('find-replace')}><span>⌕</span>查找替换</button>
         <button class:active={showPlagiarismPanel} class="ribbon-action" onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}><Icon name="shield" size={17} />查重</button>
         <button class:active={showAiRatePanel} class="ribbon-action" onclick={() => (showAiRatePanel = !showAiRatePanel)}><Icon name="ai" size={17} />AI 痕迹</button>
         <button class:active={showFeedbackPanel} class="ribbon-action" onclick={() => (showFeedbackPanel = !showFeedbackPanel)}><Icon name="star" size={17} />评分</button>

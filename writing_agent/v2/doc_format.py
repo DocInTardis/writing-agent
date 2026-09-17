@@ -81,6 +81,11 @@ def parse_report_text(text: str) -> ParsedDoc:
 
     prev_blank = True
     for line in lines:
+        if line.strip() == "[[PAGE_BREAK]]":
+            flush_paragraph(para_buf)
+            blocks.append(DocBlock(type="page_break"))
+            prev_blank = False
+            continue
         m = _HEADING_RE.match(line)
         if m:
             flush_paragraph(para_buf)

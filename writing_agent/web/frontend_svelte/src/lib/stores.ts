@@ -19,6 +19,68 @@ export const editorCommand = writable<EditorCommand | null>(null)
 export const history = writable<string[]>([])
 export const historyIndex = writable(-1)
 
+export type PageSettings = {
+  pageSize: 'A4' | 'A5' | 'LETTER'
+  orientation: 'portrait' | 'landscape'
+  marginTop: number
+  marginBottom: number
+  marginLeft: number
+  marginRight: number
+  showHeader: boolean
+  headerText: string
+  showFooter: boolean
+  footerText: string
+  pageNumbers: boolean
+  pageNumberPosition: 'left' | 'center' | 'right'
+}
+
+export const pageSettings = writable<PageSettings>({
+  pageSize: 'A4',
+  orientation: 'portrait',
+  marginTop: 2.54,
+  marginBottom: 2.54,
+  marginLeft: 3.18,
+  marginRight: 3.18,
+  showHeader: true,
+  headerText: '',
+  showFooter: true,
+  footerText: '',
+  pageNumbers: true,
+  pageNumberPosition: 'center'
+})
+
+export async function loadPageSettings() {
+  const id = get(docId)
+  if (!id) return
+  const response = await fetch(`/api/doc/${id}`)
+  if (!response.ok) return
+  const data = await response.json()
+  const prefs = data.generation_prefs || {}
+  const current = get(pageSettings)
+  const numeric = (value: unknown, fallback: number) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+  }
+  pageSettings.set({
+    pageSize: ['A4', 'A5', 'LETTER'].includes(String(prefs.page_size || '').toUpperCase())
+      ? String(prefs.page_size).toUpperCase() as PageSettings['pageSize']
+      : current.pageSize,
+    orientation: prefs.page_orientation === 'landscape' ? 'landscape' : 'portrait',
+    marginTop: numeric(prefs.page_margin_top_cm, current.marginTop),
+    marginBottom: numeric(prefs.page_margin_bottom_cm, current.marginBottom),
+    marginLeft: numeric(prefs.page_margin_left_cm, current.marginLeft),
+    marginRight: numeric(prefs.page_margin_right_cm, current.marginRight),
+    showHeader: Boolean(prefs.include_header ?? current.showHeader),
+    headerText: String(prefs.header_text || ''),
+    showFooter: Boolean(prefs.include_footer ?? current.showFooter),
+    footerText: String(prefs.footer_text || ''),
+    pageNumbers: Boolean(prefs.page_numbers ?? current.pageNumbers),
+    pageNumberPosition: ['left', 'center', 'right'].includes(String(prefs.page_number_position || ''))
+      ? prefs.page_number_position
+      : current.pageNumberPosition
+  })
+}
+
 export const wordCount = derived(sourceText, ($text) => String($text || '').replace(/\s/g, '').length)
 
 export const toasts = writable<ToastItem[]>([])

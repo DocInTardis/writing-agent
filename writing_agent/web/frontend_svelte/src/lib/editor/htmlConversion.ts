@@ -282,6 +282,9 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
     const caption = capEl ? (capEl.textContent || '').trim() : ''
     const rawSpec = fig?.dataset.figureSpec || ''
     let spec: Record<string, unknown> = {}
+    const image = fig?.querySelector('img') as HTMLImageElement | null
+    const imageSrc = image?.getAttribute('src') || fig?.dataset.imageSrc || ''
+    if (imageSrc) spec = { type: 'image', src: imageSrc }
     if (rawSpec) {
       try {
         const parsed = JSON.parse(decodeURIComponent(rawSpec))
@@ -302,6 +305,10 @@ export function htmlToDocIr(html: string): Record<string, unknown> | null {
       return
     }
     if (node.classList.contains('wa-header') || node.classList.contains('wa-footer')) {
+      return
+    }
+    if (node.classList.contains('wa-page-break')) {
+      blocks.push({ type: 'page_break', id: node.dataset.blockId || undefined })
       return
     }
     if (node.classList.contains('wa-body')) {

@@ -746,3 +746,40 @@ def test_docx_export_preserves_misplaced_figure_after_references_heading() -> No
     assert any("[1] Doe. Sample Study. Journal, 2024." in p for p in paragraphs)
     if figure_png_renderer_available():
         assert len(doc.inline_shapes) >= 2
+
+
+def test_docx_export_applies_landscape_footer_alignment_and_manual_page_break() -> None:
+    client = TestClient(app_v2.app)
+    doc_id = _create_session(client)
+    payload = {
+        "text": "# Layout Test\n\nBefore break.\n\n[[PAGE_BREAK]]\n\nAfter break.",
+        "generation_prefs": {
+            "export_gate_policy": "off",
+            "strict_doc_format": False,
+            "strict_citation_verify": False,
+            "include_cover": False,
+            "include_toc": False,
+            "include_header": False,
+            "include_footer": True,
+            "footer_text": "Confidential",
+            "page_numbers": False,
+            "page_number_position": "right",
+            "page_orientation": "landscape",
+            "page_size": "A4",
+        },
+    }
+    save = client.post(f"/api/doc/{doc_id}/save", json=payload)
+    assert save.status_code == 200
+
+    resp = _download_docx(client, doc_id)
+    doc = Document(io.BytesIO(resp.content))
+    section = doc.sections[-1]
+    assert section.page_width > section.page_height
+    assert any(paragraph.text == "Confidential" for paragraph in section.footer.paragraphs)
+    footer_paragraph = next(paragraph for paragraph in section.footer.paragraphs if paragraph.text == "Confidential")
+    assert footer_paragraph.alignment == WD_ALIGN_PARAGRAPH.RIGHT
+
+    document_xml = _extract_xml(resp.content, "word/document.xml")
+    footer_xml = "\n".join(_extract_xml_parts(resp.content, "word/footer"))
+    assert 'w:type="page"' in document_xml
+    assert "PAGE" not in footer_xml

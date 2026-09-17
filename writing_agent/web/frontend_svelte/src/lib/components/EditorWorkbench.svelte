@@ -22,7 +22,9 @@
     wordCount,
     docId,
     history,
-    historyIndex
+    historyIndex,
+    pageSettings,
+    loadPageSettings
   } from '../stores'
   import { renderDocument, docIrToMarkdown, textToDocIr } from '../utils/markdown'
   import {
@@ -91,6 +93,12 @@
   let nativeRedoHint = $state(false)
   let lastToolbarStateSig = $state('')
   let blockClipboard = $state<Array<Record<string, unknown>>>([])
+  let savedTextRange: Range | null = null
+  let selectionToolbar = $state({ visible: false, left: 0, top: 0, text: '', words: 0 })
+  let objectToolbar = $state({ visible: false, left: 0, top: 0, kind: '', blockId: '' })
+  let figureEditorOpen = $state(false)
+  let figureDraftCaption = $state('')
+  let figureDraftJson = $state('')
   type SlashCommandItem = {
     id: string
     label: string
@@ -216,6 +224,7 @@
         renderMathInEditor()
         highlightCodeBlocks()
         renderFiguresInEditor()
+        applyPageSettingsToEditor()
       }, 100)
     }
   }
@@ -250,7 +259,7 @@
     editor.querySelectorAll('[data-block-id]').forEach((node) => {
       const el = node as HTMLElement
       const tag = el.tagName.toLowerCase()
-      if (tag === 'figure' || tag === 'table') {
+      if (tag === 'figure' || tag === 'table' || el.classList.contains('wa-page-break')) {
         el.setAttribute('contenteditable', 'false')
         delete el.dataset.waEdit
         return
@@ -802,7 +811,78 @@
       selectedAnchorId = ''
     }
     dispatchBlockSelection()
+    if (!selectedBlockIds.length) objectToolbar.visible = false
     queueMicrotask(() => emitToolbarState())
+  }
+
+  function selectObjectBlock(block: HTMLElement) {
+    const id = blockIdOf(block)
+    if (!id) return
+    window.getSelection()?.removeAllRanges()
+    setSelectedBlocksByIds([id], id)
+    const rect = block.getBoundingClientRect()
+    const kind = block.classList.contains('wa-image') ? 'image' : block.classList.contains('wa-figure') ? 'figure' : block.classList.contains('wa-table') ? 'table' : 'object'
+    objectToolbar = {
+      visible: true,
+      left: Math.max(10, Math.min(window.innerWidth - 430, rect.left)),
+      top: Math.max(62, rect.top - 42),
+      kind,
+      blockId: id
+    }
+  }
+
+  function insertParagraphBesideObject(position: 'before' | 'after') {
+    const doc = $docIr
+    const blockId = objectToolbar.blockId
+    if (!doc || typeof doc !== 'object' || !blockId) return
+    const paragraph: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: '' }
+    const next = position === 'before'
+      ? insertBlockBefore(doc as Record<string, unknown>, blockId, paragraph)
+      : insertBlockAfter(doc as Record<string, unknown>, blockId, paragraph)
+    if (!next) return
+    pendingFocusBlockId = String(paragraph.id)
+    objectToolbar.visible = false
+    applyDocIrUpdate(next, { immediate: true })
+  }
+
+  function deleteSelectedObject() {
+    const doc = $docIr
+    if (!doc || typeof doc !== 'object' || !objectToolbar.blockId) return
+    const next = deleteBlocksByIds(doc as Record<string, unknown>, [objectToolbar.blockId])
+    if (!next) return
+    objectToolbar.visible = false
+    applyDocIrUpdate(next, { immediate: true })
+    clearSelectedBlock()
+  }
+
+  function openFigureEditor() {
+    const doc = $docIr
+    if (!doc || typeof doc !== 'object' || !objectToolbar.blockId) return
+    const block = collectBlocksByIds(doc as Record<string, unknown>, [objectToolbar.blockId])[0]
+    const figure = block?.figure && typeof block.figure === 'object' ? block.figure as Record<string, unknown> : {}
+    figureDraftCaption = String(figure.caption || '')
+    figureDraftJson = JSON.stringify(figure, null, 2)
+    figureEditorOpen = true
+  }
+
+  function saveFigureEditor() {
+    const doc = $docIr
+    if (!doc || typeof doc !== 'object' || !objectToolbar.blockId) return
+    let figure: Record<string, unknown>
+    try {
+      figure = figureDraftJson.trim() ? JSON.parse(figureDraftJson) : {}
+    } catch {
+      alert('图表数据不是有效的 JSON')
+      return
+    }
+    figure.caption = figureDraftCaption.trim() || String(figure.caption || '图示')
+    const next = updateBlock(doc as Record<string, unknown>, objectToolbar.blockId, { type: 'figure', figure })
+    if (!next) return
+    figureCache.clear()
+    figureEditorOpen = false
+    objectToolbar.visible = false
+    lastRenderSig = ''
+    applyDocIrUpdate(next, { immediate: true })
   }
 
   function clearSelectedBlock() {
@@ -1289,6 +1369,12 @@
     }
     const target = event.target as HTMLElement | null
     if (!target || !editor) return
+    const object = target.closest('figure[data-block-id], .wa-table[data-block-id], .wa-page-break[data-block-id]') as HTMLElement | null
+    if (object && editor.contains(object)) {
+      event.preventDefault()
+      selectObjectBlock(object)
+      return
+    }
     const block = target.closest('[data-block-id], [data-section-id], [data-doc-title="1"]') as HTMLElement | null
     if (!block || !editor.contains(block)) {
       clearSelectedBlock()
@@ -1463,6 +1549,10 @@
 
   function ensureEditableFocus(): HTMLElement | null {
     if (!editor) return null
+    if (selectionInsideEditor()) {
+      const selectedRoot = resolveEditableFromSelection()
+      if (selectedRoot) return selectedRoot
+    }
     const active = document.activeElement as HTMLElement | null
     if (active && editor.contains(active) && active.isContentEditable) return active
     const selected = selectedBlockEls[0] || null
@@ -1495,6 +1585,66 @@
     } catch {
       return false
     }
+  }
+
+  function applyPageSettingsToEditor() {
+    if (!editor) return
+    const settings = $pageSettings
+    const landscape = settings.orientation === 'landscape'
+    const sizes: Record<string, [number, number]> = {
+      A4: [21, 29.7], A5: [14.8, 21], LETTER: [21.59, 27.94]
+    }
+    let [width, height] = sizes[settings.pageSize] || sizes.A4
+    if (landscape) [width, height] = [height, width]
+    editor.style.width = `min(100%, ${width}cm)`
+    editor.style.minHeight = `${height}cm`
+    editor.style.padding = `${settings.marginTop}cm ${settings.marginRight}cm ${settings.marginBottom}cm ${settings.marginLeft}cm`
+    const header = editor.querySelector('.wa-header') as HTMLElement | null
+    const footer = editor.querySelector('.wa-footer') as HTMLElement | null
+    if (header) {
+      header.style.display = settings.showHeader ? 'block' : 'none'
+      header.textContent = settings.headerText || String(($docIr as any)?.title || '')
+    }
+    if (footer) {
+      footer.style.display = settings.showFooter || settings.pageNumbers ? 'block' : 'none'
+      footer.style.textAlign = settings.pageNumberPosition
+      const parts = [settings.showFooter ? settings.footerText : '', settings.pageNumbers ? '第 1 页' : ''].filter(Boolean)
+      footer.textContent = parts.join('　')
+    }
+  }
+
+  function updateSelectionContext() {
+    const sel = window.getSelection()
+    if (!editor || !sel || sel.rangeCount === 0 || sel.isCollapsed || !selectionInsideEditor()) {
+      selectionToolbar.visible = false
+      return
+    }
+    const range = sel.getRangeAt(0)
+    savedTextRange = range.cloneRange()
+    const text = sel.toString()
+    const rect = range.getBoundingClientRect()
+    if (!text.trim() || (!rect.width && !rect.height)) {
+      selectionToolbar.visible = false
+      return
+    }
+    const width = 342
+    selectionToolbar = {
+      visible: true,
+      left: Math.max(10, Math.min(window.innerWidth - width - 10, rect.left + rect.width / 2 - width / 2)),
+      top: Math.max(58, rect.top - 43),
+      text,
+      words: text.replace(/\s/g, '').length
+    }
+  }
+
+  function restoreSavedTextRange() {
+    if (!savedTextRange || !editor) return false
+    const container = savedTextRange.commonAncestorContainer
+    if (!editor.contains(container)) return false
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(savedTextRange.cloneRange())
+    return true
   }
 
   function runRustUndoRedo(kind: 'undo' | 'redo') {
@@ -1531,6 +1681,10 @@
       emitToolbarState()
       return
     }
+    if (lower === 'find-replace') {
+      showFindReplace = true
+      return
+    }
     if (lower === 'undo') {
       if (readonly) {
         emitToolbarState()
@@ -1551,34 +1705,45 @@
       refreshToolbarStateSoon()
       return
     }
-    if (!ensureEditableFocus()) return
+    restoreSavedTextRange()
+    const commandTarget = ensureEditableFocus()
+    if (!commandTarget) return
+
+    const exec = (name: string, value?: string) => {
+      restoreSavedTextRange()
+      const ok = document.execCommand(name, false, value)
+      savedTextRange = window.getSelection()?.rangeCount ? window.getSelection()!.getRangeAt(0).cloneRange() : savedTextRange
+      scheduleCommit(commandTarget, 0)
+      refreshToolbarStateSoon()
+      return ok
+    }
     
     // 基础格式
-    if (cmd === 'bold') return document.execCommand('bold')
-    if (cmd === 'italic') return document.execCommand('italic')
-    if (cmd === 'underline') return document.execCommand('underline')
-    if (cmd === 'strikethrough') return document.execCommand('strikeThrough')
-    if (cmd === 'superscript') return document.execCommand('superscript')
-    if (cmd === 'subscript') return document.execCommand('subscript')
+    if (cmd === 'bold') return exec('bold')
+    if (cmd === 'italic') return exec('italic')
+    if (cmd === 'underline') return exec('underline')
+    if (cmd === 'strikethrough') return exec('strikeThrough')
+    if (cmd === 'superscript') return exec('superscript')
+    if (cmd === 'subscript') return exec('subscript')
     
     // 标题
-    if (cmd === 'heading1') return document.execCommand('formatBlock', false, 'H1')
-    if (cmd === 'heading2') return document.execCommand('formatBlock', false, 'H2')
-    if (cmd === 'heading3') return document.execCommand('formatBlock', false, 'H3')
-    if (cmd === 'paragraph') return document.execCommand('formatBlock', false, 'P')
+    if (cmd === 'heading1') return exec('formatBlock', 'H1')
+    if (cmd === 'heading2') return exec('formatBlock', 'H2')
+    if (cmd === 'heading3') return exec('formatBlock', 'H3')
+    if (cmd === 'paragraph') return exec('formatBlock', 'P')
     
     // 列表与缩进
-    if (cmd === 'list-bullet') return document.execCommand('insertUnorderedList')
-    if (cmd === 'list-number') return document.execCommand('insertOrderedList')
-    if (cmd === 'indent') return document.execCommand('indent')
-    if (cmd === 'outdent') return document.execCommand('outdent')
-    if (cmd === 'quote') return document.execCommand('formatBlock', false, 'BLOCKQUOTE')
+    if (cmd === 'list-bullet') return exec('insertUnorderedList')
+    if (cmd === 'list-number') return exec('insertOrderedList')
+    if (cmd === 'indent') return exec('indent')
+    if (cmd === 'outdent') return exec('outdent')
+    if (cmd === 'quote') return exec('formatBlock', 'BLOCKQUOTE')
     
     // 对齐
-    if (cmd === 'align-left') return document.execCommand('justifyLeft')
-    if (cmd === 'align-center') return document.execCommand('justifyCenter')
-    if (cmd === 'align-right') return document.execCommand('justifyRight')
-    if (cmd === 'align-justify') return document.execCommand('justifyFull')
+    if (cmd === 'align-left') return exec('justifyLeft')
+    if (cmd === 'align-center') return exec('justifyCenter')
+    if (cmd === 'align-right') return exec('justifyRight')
+    if (cmd === 'align-justify') return exec('justifyFull')
     
     // 行距
     if (cmd.startsWith('line-height:')) {
@@ -1590,7 +1755,10 @@
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (node instanceof HTMLElement) {
           let block = node.closest('p, div, h1, h2, h3, blockquote')
-          if (block instanceof HTMLElement) block.style.lineHeight = height
+          if (block instanceof HTMLElement) {
+            block.style.lineHeight = height
+            scheduleCommit(block, 0)
+          }
         }
       }
       return
@@ -1606,7 +1774,10 @@
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (node instanceof HTMLElement) {
           let block = node.closest('p, div, h1, h2, h3')
-          if (block instanceof HTMLElement) block.style.margin = margin
+          if (block instanceof HTMLElement) {
+            block.style.margin = margin
+            scheduleCommit(block, 0)
+          }
         }
       }
       return
@@ -1621,7 +1792,10 @@
         if (node.nodeType === Node.TEXT_NODE) node = node.parentElement
         if (node instanceof HTMLElement) {
           let block = node.closest('p, div')
-          if (block instanceof HTMLElement) block.style.textIndent = '2em'
+          if (block instanceof HTMLElement) {
+            block.style.textIndent = '2em'
+            scheduleCommit(block, 0)
+          }
         }
       }
       return
@@ -1630,29 +1804,33 @@
     // 颜色
     if (cmd.startsWith('color:')) {
       const color = cmd.slice(6)
-      return document.execCommand('foreColor', false, color)
+      return exec('foreColor', color)
     }
     if (cmd.startsWith('bgcolor:')) {
       const color = cmd.slice(8)
-      return document.execCommand('hiliteColor', false, color)
+      return exec('hiliteColor', color)
     }
     
     // 字体
     if (cmd.startsWith('font:')) {
       const font = cmd.slice(5)
-      return document.execCommand('fontName', false, font)
+      return exec('fontName', font)
     }
     
     // 字号
     if (cmd.startsWith('size:')) {
-      const size = cmd.slice(5)
-      const sel = window.getSelection()
-      if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0)
+      const raw = cmd.slice(5).trim()
+      const size = /^\d+(\.\d+)?$/.test(raw) ? `${raw}px` : raw
+      restoreSavedTextRange()
+      document.execCommand('fontSize', false, '7')
+      commandTarget.querySelectorAll('font[size="7"]').forEach((node) => {
         const span = document.createElement('span')
-        span.style.fontSize = size + 'px'
-        range.surroundContents(span)
-      }
+        span.style.fontSize = size
+        while (node.firstChild) span.appendChild(node.firstChild)
+        node.replaceWith(span)
+      })
+      scheduleCommit(commandTarget, 0)
+      refreshToolbarStateSoon()
       return
     }
     
@@ -1665,6 +1843,7 @@
     
     // 图片
     if (cmd === 'image') {
+      const anchorId = String(commandTarget.dataset.blockId || '')
       const input = document.createElement('input')
       input.type = 'file'
       input.accept = 'image/*'
@@ -1674,11 +1853,41 @@
         const reader = new FileReader()
         reader.onload = (ev) => {
           const dataUrl = ev.target?.result as string
-          document.execCommand('insertHTML', false, `<img src="${dataUrl}" alt="图片" style="max-width:100%;height:auto;" />`)
+          const doc = $docIr
+          if (!doc || typeof doc !== 'object') return
+          const imageBlock: Record<string, unknown> = {
+            id: makeId(),
+            type: 'figure',
+            figure: { type: 'image', src: dataUrl, caption: file.name.replace(/\.[^.]+$/, '') || '图片' }
+          }
+          const paragraph: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: '' }
+          const next = anchorId
+            ? insertBlocksAfter(doc as Record<string, unknown>, anchorId, [imageBlock, paragraph])
+            : appendBlocksToDoc(doc as Record<string, unknown>, [imageBlock, paragraph])
+          if (next) {
+            pendingFocusBlockId = String(paragraph.id)
+            applyDocIrUpdate(next, { immediate: true })
+          }
         }
         reader.readAsDataURL(file)
       }
       input.click()
+      return
+    }
+
+    if (cmd === 'page-break') {
+      const doc = $docIr
+      if (!doc || typeof doc !== 'object') return
+      const anchorId = String(commandTarget.dataset.blockId || '')
+      const breakBlock: Record<string, unknown> = { id: makeId(), type: 'page_break' }
+      const paragraph: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: '' }
+      const next = anchorId
+        ? insertBlocksAfter(doc as Record<string, unknown>, anchorId, [breakBlock, paragraph])
+        : appendBlocksToDoc(doc as Record<string, unknown>, [breakBlock, paragraph])
+      if (next) {
+        pendingFocusBlockId = String(paragraph.id)
+        applyDocIrUpdate(next, { immediate: true })
+      }
       return
     }
     
@@ -1747,7 +1956,7 @@
     }
     
     // 撤销重做
-    if (cmd === 'clear-format') return document.execCommand('removeFormat')
+    if (cmd === 'clear-format') return exec('removeFormat')
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -2308,6 +2517,7 @@
   })
 
   onMount(() => {
+    void loadPageSettings().then(() => applyPageSettingsToEditor())
     syncFromStore()
     if (!docIrHasRenderableContent($docIr)) {
       const fromText = String($sourceText || '').trim()
@@ -2358,9 +2568,16 @@
     })
     
     if (editor) observer.observe(editor, { childList: true, subtree: true })
-    const onSelectionChange = () => emitToolbarState()
-    const onEditorMouseUp = () => emitToolbarState()
+    const onSelectionChange = () => {
+      updateSelectionContext()
+      emitToolbarState()
+    }
+    const onEditorMouseUp = () => {
+      updateSelectionContext()
+      emitToolbarState()
+    }
     const onEditorKeyUp = () => emitToolbarState()
+    const onPageSettingsChanged = () => applyPageSettingsToEditor()
     const onWindowKeydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       const ctrl = event.ctrlKey || event.metaKey
@@ -2413,6 +2630,7 @@
     editor?.addEventListener('mouseup', onEditorMouseUp)
     editor?.addEventListener('keyup', onEditorKeyUp)
     window.addEventListener('keydown', onWindowKeydown)
+    window.addEventListener('wa-page-settings-changed', onPageSettingsChanged)
     emitToolbarState(true)
     
     return () => {
@@ -2425,6 +2643,7 @@
       editor?.removeEventListener('mouseup', onEditorMouseUp)
       editor?.removeEventListener('keyup', onEditorKeyUp)
       window.removeEventListener('keydown', onWindowKeydown)
+      window.removeEventListener('wa-page-settings-changed', onPageSettingsChanged)
       if (syncTimer) clearTimeout(syncTimer)
       if (historyTimer) clearTimeout(historyTimer)
       if (docTextTimer) clearTimeout(docTextTimer)
@@ -2444,6 +2663,11 @@
       }
       emitToolbarState()
     }
+  })
+
+  $effect(() => {
+    $pageSettings
+    queueMicrotask(() => applyPageSettingsToEditor())
   })
 </script>
 
@@ -2599,6 +2823,56 @@
     onclick={handleEditorClick}
     onkeydown={handleKeydown}
   ></div>
+
+  {#if selectionToolbar.visible}
+    <div
+      class="selection-toolbar"
+      style={`left:${selectionToolbar.left}px;top:${selectionToolbar.top}px;`}
+      role="toolbar"
+      tabindex="0"
+      aria-label="选中文字工具栏"
+      onmousedown={(event) => event.preventDefault()}
+    >
+      <button onclick={() => applyCommand('bold')} title="加粗"><strong>B</strong></button>
+      <button onclick={() => applyCommand('italic')} title="斜体"><em>I</em></button>
+      <button onclick={() => applyCommand('underline')} title="下划线"><u>U</u></button>
+      <button onclick={() => applyCommand('strikethrough')} title="删除线"><s>ab</s></button>
+      <span></span>
+      <button onclick={() => applyCommand('align-left')} title="左对齐">≡</button>
+      <button onclick={() => applyCommand('list-bullet')} title="项目符号">•≡</button>
+      <button onclick={() => applyCommand('color:#c00000')} title="红色文字" class="text-red">A</button>
+      <button onclick={() => applyCommand('bgcolor:#fff2cc')} title="高亮" class="highlight">A</button>
+      <small>{selectionToolbar.words} 字</small>
+    </div>
+  {/if}
+
+  {#if objectToolbar.visible}
+    <div
+      class="object-toolbar"
+      style={`left:${objectToolbar.left}px;top:${objectToolbar.top}px;`}
+      role="toolbar"
+      tabindex="0"
+      aria-label="对象工具栏"
+      onmousedown={(event) => event.preventDefault()}
+    >
+      <strong>{objectToolbar.kind === 'image' ? '图片' : objectToolbar.kind === 'figure' ? '图表' : objectToolbar.kind === 'table' ? '表格' : '对象'}</strong>
+      <button onclick={() => insertParagraphBesideObject('before')}>上方插入段落</button>
+      <button onclick={() => insertParagraphBesideObject('after')}>下方插入段落</button>
+      {#if objectToolbar.kind === 'figure' || objectToolbar.kind === 'image'}<button onclick={openFigureEditor}>编辑</button>{/if}
+      <button class="danger" onclick={deleteSelectedObject}>删除</button>
+    </div>
+  {/if}
+
+  {#if figureEditorOpen}
+    <div class="figure-editor-backdrop" onclick={() => (figureEditorOpen = false)} role="presentation"></div>
+    <div class="figure-editor-dialog" role="dialog" aria-modal="true" aria-label="编辑图表" tabindex="-1">
+      <header><strong>编辑图表或图片</strong><button onclick={() => (figureEditorOpen = false)}>×</button></header>
+      <label>标题<input bind:value={figureDraftCaption} /></label>
+      <label>图表数据<textarea rows="14" bind:value={figureDraftJson}></textarea></label>
+      <p>修改类型、节点、连接、标签或图片信息后，图表会立即重新渲染。</p>
+      <footer><button onclick={() => (figureEditorOpen = false)}>取消</button><button class="primary" onclick={saveFigureEditor}>应用并重新渲染</button></footer>
+    </div>
+  {/if}
 
   {#if slashMenuOpen}
     <div

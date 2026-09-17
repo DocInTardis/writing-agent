@@ -140,6 +140,8 @@ def to_text(doc) -> str:
             out.append(f"[[TABLE:{base._safe_json(block.table or {})}]]")
         elif block.type == "figure":
             out.append(f"[[FIGURE:{base._safe_json(block.figure or {})}]]")
+        elif block.type == "page_break":
+            out.append("[[PAGE_BREAK]]")
         elif block.type == "list":
             items = block.items if isinstance(block.items, list) else []
             cleaned = [str(it).strip() for it in items if str(it).strip()]
@@ -190,6 +192,8 @@ def render_block_text(block, cache: Optional[object] = None) -> str:
         out = f"[[TABLE:{base._safe_json(block.table)}]]"
     elif isinstance(block, base.FigureBlock):
         out = f"[[FIGURE:{base._safe_json(block.figure)}]]"
+    elif isinstance(block, base.PageBreakBlock):
+        out = "[[PAGE_BREAK]]"
     else:
         out = ""
     if cache:
@@ -382,6 +386,8 @@ def _block_from_docblock(block):
         return base.TableBlock(table=block.table or {})
     if block.type == "figure":
         return base.FigureBlock(figure=block.figure or {})
+    if block.type == "page_break":
+        return base.PageBreakBlock()
     if block.type == "list":
         items, ordered = _extract_list_items_from_text(block.text or "")
         return base.ListBlock(items=items, ordered=ordered)
@@ -408,6 +414,8 @@ def _docblock_from_block(block):
         return base.DocBlock(type="table", table=block.table)
     if isinstance(block, base.FigureBlock):
         return base.DocBlock(type="figure", figure=block.figure)
+    if isinstance(block, base.PageBreakBlock):
+        return base.DocBlock(type="page_break")
     return base.DocBlock(type="paragraph", text=getattr(block, "text", ""))
 
 
@@ -432,6 +440,8 @@ def block_from_dict(data: dict):
         return base.TableBlock(table=dict(data.get("table") or {}), **id_kw, **style_kw)
     if t == "figure":
         return base.FigureBlock(figure=dict(data.get("figure") or {}), **id_kw, **style_kw)
+    if t == "page_break":
+        return base.PageBreakBlock(**id_kw, **style_kw)
     return base.ParagraphBlock(text=str(data.get("text") or ""), **id_kw, **style_kw)
 
 

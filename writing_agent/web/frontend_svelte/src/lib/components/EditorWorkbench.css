@@ -144,7 +144,7 @@
     font-family: "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", sans-serif;
     font-size: 16px;
     line-height: 1.8;
-    color: #f5f3f0;
+    color: #202124;
     font-weight: 400;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -283,7 +283,7 @@
     font-family: "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", sans-serif;
     font-size: 16px;
     line-height: 1.8;
-    color: #f5f3f0;
+    color: #202124;
   }
 
   .editor.paper .editable[data-render-mode='doc'] {
@@ -388,8 +388,8 @@
 
   .editor.paper .editable p {
     margin: 0 0 12pt;
-    text-indent: 0;
-    text-align: justify;
+    text-indent: 2em;
+    text-align: left;
   }
 
   .editable ul,
@@ -456,6 +456,201 @@
     font-size: 12px;
     color: rgba(250, 249, 247, 0.6);
   }
+
+  /* Word-compatible editing surface */
+  .editor.paper .editable,
+  .editor.paper .editable[data-render-mode='doc'],
+  .editable[data-render-mode='doc'] {
+    color: #202124;
+    caret-color: #111827;
+    font-family: SimSun, "宋体", serif;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  .editable[data-render-mode='doc'] .wa-doc { color: #202124; }
+
+  .editable[data-render-mode='doc'] .wa-doc .wa-header,
+  .editable[data-render-mode='doc'] .wa-doc .wa-footer {
+    display: block;
+    min-height: 20px;
+    color: #646b75;
+    font: 9pt/1.4 "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  }
+
+  .editable[data-render-mode='doc'] .wa-doc .wa-header {
+    margin: -8mm 0 10mm;
+    padding: 0 0 4mm;
+    border-bottom: 1px solid #d9dde4;
+    text-align: center;
+  }
+
+  .editable[data-render-mode='doc'] .wa-doc .wa-footer {
+    margin: 12mm 0 -10mm;
+    padding: 4mm 0 0;
+    border-top: 1px solid #d9dde4;
+  }
+
+  .editable[data-render-mode='doc'] .wa-doc .wa-title {
+    margin: 0 0 28pt;
+    color: #111827;
+    font-family: SimHei, "黑体", sans-serif;
+    font-size: 24pt;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: 0;
+    text-align: center;
+  }
+
+  .editor.paper .editable h1,
+  .editable[data-render-mode='doc'] .wa-doc h1 {
+    margin: 22pt 0 12pt;
+    padding-bottom: 5pt;
+    border-bottom: 1px solid #cfd5df;
+    color: #17365d;
+    font-family: SimHei, "黑体", sans-serif;
+    font-size: 18pt;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: 0;
+    text-align: left;
+  }
+
+  .editor.paper .editable h2,
+  .editable[data-render-mode='doc'] .wa-doc h2 {
+    margin: 18pt 0 9pt;
+    color: #1f4e79;
+    font-family: SimHei, "黑体", sans-serif;
+    font-size: 15pt;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: 0;
+    text-align: left;
+  }
+
+  .editor.paper .editable h3,
+  .editable[data-render-mode='doc'] .wa-doc h3 {
+    margin: 14pt 0 7pt;
+    color: #202124;
+    font-family: "Microsoft YaHei", sans-serif;
+    font-size: 12pt;
+    font-weight: 700;
+    line-height: 1.45;
+    text-align: left;
+  }
+
+  .editor.paper .editable p,
+  .editable[data-render-mode='doc'] .wa-doc p {
+    margin: 0 0 8pt;
+    color: #202124;
+    font-family: SimSun, "宋体", serif;
+    font-size: 12pt;
+    font-weight: 400;
+    line-height: 1.5;
+    text-align: left;
+    text-indent: 2em;
+  }
+
+  .editable [data-block-id],
+  .editable [data-section-id],
+  .editable [data-doc-title='1'] { position: relative; }
+
+  .editable [data-block-id]:hover::before,
+  .editable [data-section-id]:hover::before {
+    content: '⋮⋮';
+    position: absolute;
+    left: -28px;
+    top: 2px;
+    width: 20px;
+    color: #8b95a3;
+    font: 12px/20px "Segoe UI", sans-serif;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .editable .wa-block-selected {
+    outline: 2px solid #2b73c8;
+    outline-offset: 4px;
+    background-color: rgba(43, 115, 200, .07);
+  }
+
+  .editable .wa-figure,
+  .editable .wa-table {
+    cursor: default;
+    user-select: none;
+  }
+
+  .editable .wa-image img {
+    display: block;
+    max-width: 100%;
+    max-height: 620px;
+    margin: 0 auto;
+    object-fit: contain;
+  }
+
+  .editable .wa-page-break {
+    position: relative;
+    height: 28px;
+    margin: 18px -12mm;
+    border-top: 1px dashed #9aa2ad;
+    border-bottom: 1px dashed #9aa2ad;
+    color: #68707c;
+    background: #f3f5f8;
+    text-align: center;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .editable .wa-page-break span { position: relative; top: 3px; padding: 0 8px; background: #f3f5f8; font: 11px/20px "Segoe UI", sans-serif; }
+
+  .selection-toolbar,
+  .object-toolbar {
+    position: fixed;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-height: 34px;
+    padding: 4px 6px;
+    border: 1px solid #c9d0da;
+    border-radius: 5px;
+    color: #202124;
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(15, 23, 42, .18);
+  }
+
+  .selection-toolbar button,
+  .object-toolbar button {
+    min-width: 28px;
+    height: 28px;
+    padding: 3px 7px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: #303640;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .selection-toolbar button:hover,
+  .object-toolbar button:hover { border-color: #b8c7da; background: #eaf2fb; }
+  .selection-toolbar > span { width: 1px; height: 20px; margin: 0 2px; background: #d7dce3; }
+  .selection-toolbar small { padding: 0 5px; color: #68707c; white-space: nowrap; }
+  .selection-toolbar .text-red { color: #c00000; }
+  .selection-toolbar .highlight { background: #fff2cc; }
+  .object-toolbar strong { padding: 0 7px 0 4px; font-size: 12px; }
+  .object-toolbar .danger { color: #b42318; }
+
+  .figure-editor-backdrop { position: fixed; inset: 0; z-index: 490; background: rgba(15,23,42,.28); }
+  .figure-editor-dialog { position: fixed; z-index: 491; top: 50%; left: 50%; display: grid; gap: 12px; width: min(620px, calc(100vw - 32px)); padding: 0 16px 16px; transform: translate(-50%,-50%); border: 1px solid #cbd2dc; border-radius: 8px; color: #202124; background: #fff; box-shadow: 0 20px 60px rgba(15,23,42,.24); }
+  .figure-editor-dialog header { display: flex; align-items: center; justify-content: space-between; margin: 0 -16px; padding: 12px 16px; border-bottom: 1px solid #e1e5eb; }
+  .figure-editor-dialog header button { border: 0; background: transparent; font-size: 22px; cursor: pointer; }
+  .figure-editor-dialog label { display: grid; gap: 5px; font-size: 12px; color: #535b66; }
+  .figure-editor-dialog input, .figure-editor-dialog textarea { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid #c8ced7; border-radius: 4px; color: #202124; background: #fff; font: inherit; }
+  .figure-editor-dialog textarea { font-family: Consolas, monospace; font-size: 12px; resize: vertical; }
+  .figure-editor-dialog p { margin: 0; color: #68707c; font-size: 11px; }
+  .figure-editor-dialog footer { display: flex; justify-content: flex-end; gap: 8px; }
+  .figure-editor-dialog footer button { padding: 7px 12px; border: 1px solid #cbd1da; border-radius: 4px; background: #fff; cursor: pointer; }
+  .figure-editor-dialog footer .primary { border-color: #185abd; color: #fff; background: #185abd; }
 
   .editable figcaption,
   .editable .wa-table-caption {

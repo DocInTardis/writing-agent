@@ -3007,6 +3007,11 @@ body {
     }
   }
 
+  body:has(.figure-editor-dialog) .inline-selection-bar,
+  body:has(.page-setup-panel) .inline-selection-bar {
+    display: none;
+  }
+
 /* 2026 desktop editor: quiet shell, document-first canvas and Word-like ribbon. */
 body {
   background: #eef1f5;

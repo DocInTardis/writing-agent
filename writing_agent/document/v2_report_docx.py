@@ -43,6 +43,7 @@ class ExportPrefs:
     include_toc: bool = True
     toc_levels: int = 3
     include_header: bool = True
+    include_footer: bool = True
     page_numbers: bool = True
     header_text: str = ""
     footer_text: str = ""
@@ -52,6 +53,8 @@ class ExportPrefs:
     page_margin_left_cm: float | None = None
     page_margin_right_cm: float | None = None
     page_size: str = "A4"
+    page_orientation: str = "portrait"
+    page_number_position: str = "center"
 
 
 @dataclass(frozen=True)
@@ -242,14 +245,27 @@ class V2ReportDocxExporter:
                 main_section = cover_section
                 docx_helpers._set_section_page_numbering(main_section, start_at=1, numbering_format="decimal")
 
-        if prefs.page_numbers:
+        if prefs.page_numbers or prefs.include_footer:
             docx_helpers._clear_header_footer(cover_section)
-            docx_helpers._remove_section_page_numbering(cover_section)
+            if prefs.page_numbers:
+                docx_helpers._remove_section_page_numbering(cover_section)
             if toc_section is not None:
                 docx_helpers._clear_header_footer(toc_section)
-                self._set_footer_page_numbers(toc_section, "", page_format="ROMAN")
+                self._set_footer_page_numbers(
+                    toc_section,
+                    "" if prefs.page_numbers else footer_text,
+                    page_format="ROMAN" if prefs.page_numbers else None,
+                    include_page_number=prefs.page_numbers,
+                    alignment=prefs.page_number_position,
+                )
             docx_helpers._clear_header_footer(main_section)
-            self._set_footer_page_numbers(main_section, footer_text, page_format=None)
+            self._set_footer_page_numbers(
+                main_section,
+                footer_text if prefs.include_footer else "",
+                page_format=None,
+                include_page_number=prefs.page_numbers,
+                alignment=prefs.page_number_position,
+            )
         if prefs.include_header:
             self._set_header(main_section, header_text)
 
@@ -278,6 +294,8 @@ class V2ReportDocxExporter:
             "LETTER": (21.59, 27.94),
         }
         width_cm, height_cm = sizes.get(size, sizes["A4"])
+        if str(prefs.page_orientation or "portrait").lower() == "landscape":
+            width_cm, height_cm = height_cm, width_cm
         sec.page_width = Cm(width_cm)
         sec.page_height = Cm(height_cm)
         m = float(prefs.page_margins_cm or 2.5)
@@ -473,7 +491,15 @@ class V2ReportDocxExporter:
 
         docx_helpers._add_bottom_border(p)
 
-    def _set_footer_page_numbers(self, sec, footer_text: str = "", *, page_format: str | None = None) -> None:
+    def _set_footer_page_numbers(
+        self,
+        sec,
+        footer_text: str = "",
+        *,
+        page_format: str | None = None,
+        include_page_number: bool = True,
+        alignment: str = "center",
+    ) -> None:
         def _write_footer(footer) -> None:
             if footer is None:
                 return
@@ -484,7 +510,12 @@ class V2ReportDocxExporter:
                     logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
 
             p = footer.add_paragraph()
-            docx_helpers._force_paragraph_center(p)
+            alignment_map = {
+                "left": WD_ALIGN_PARAGRAPH.LEFT,
+                "center": WD_ALIGN_PARAGRAPH.CENTER,
+                "right": WD_ALIGN_PARAGRAPH.RIGHT,
+            }
+            p.alignment = alignment_map.get(str(alignment or "center").lower(), WD_ALIGN_PARAGRAPH.CENTER)
             try:
                 p.paragraph_format.left_indent = Cm(0)
                 p.paragraph_format.first_line_indent = Cm(0)
@@ -493,9 +524,9 @@ class V2ReportDocxExporter:
 
             if footer_text:
                 p.add_run(footer_text)
-            if page_format:
+            if include_page_number and page_format:
                 docx_helpers._add_field_simple(p, f"PAGE \\\\* {page_format}", "", lock=_page_field_lock_enabled())
-            else:
+            elif include_page_number:
                 docx_helpers._add_field_simple(p, "PAGE", "", lock=_page_field_lock_enabled())
 
         _write_footer(getattr(sec, "footer", None))
@@ -674,6 +705,11 @@ class V2ReportDocxExporter:
                 docx_helpers._add_inline_runs(p, t)
 
         for b in blocks:
+            if b.type == "page_break":
+                flush_reference_buffer()
+                doc.add_page_break()
+                continue
+
             if b.type == "heading":
                 lvl = int(b.level or 1)
                 raw_text = docx_helpers._sanitize_heading_text((b.text or "").strip())

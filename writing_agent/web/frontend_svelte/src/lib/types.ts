@@ -26,6 +26,8 @@ export type EditorCommand =
   | 'paste'
   | 'heading1'
   | 'heading2'
+  | 'heading3'
+  | 'paragraph'
   | 'list-bullet'
   | 'list-number'
   | 'quote'
@@ -42,6 +44,18 @@ export type EditorCommand =
   | 'align-right'
   | 'align-justify'
   | 'indent-first'
+  | 'indent'
+  | 'outdent'
+  | 'page-break'
+  | 'link'
+  | 'hr'
+  | 'superscript'
+  | 'subscript'
+  | 'math-inline'
+  | 'math-block'
+  | 'footnote'
+  | 'toc'
+  | 'find-replace'
   | `font:${string}`
   | `size:${string}`
   | `color:${string}`

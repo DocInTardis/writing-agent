@@ -83,7 +83,11 @@ class FigureBlock(BlockBase):
     figure: dict[str, Any] = Field(default_factory=dict)
 
 
-DocIRBlock = HeadingBlock | ParagraphBlock | ListBlock | TableBlock | FigureBlock
+class PageBreakBlock(BlockBase):
+    type: Literal["page_break"] = "page_break"
+
+
+DocIRBlock = HeadingBlock | ParagraphBlock | ListBlock | TableBlock | FigureBlock | PageBreakBlock
 
 
 class SectionNode(BaseModel):
