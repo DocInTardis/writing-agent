@@ -3,6 +3,125 @@
     gap: 12px;
   }
 
+  .editor-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    background: #e9edf2;
+  }
+
+  .editor-workspace.with-navigation {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .navigation-pane {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: calc(100vh - 210px);
+    min-height: 520px;
+    overflow: hidden;
+    border-right: 1px solid #d5dae2;
+    color: #252a31;
+    background: #fff;
+  }
+
+  .navigation-pane header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 14px 8px;
+  }
+
+  .navigation-pane header button {
+    border: 0;
+    color: #5f6874;
+    background: transparent;
+    font-size: 19px;
+    cursor: pointer;
+  }
+
+  .navigation-tabs {
+    display: flex;
+    gap: 18px;
+    padding: 0 14px 8px;
+    border-bottom: 1px solid #e3e6eb;
+    color: #69717c;
+    font-size: 12px;
+  }
+
+  .navigation-tabs .active {
+    padding-bottom: 6px;
+    border-bottom: 2px solid #185abd;
+    color: #185abd;
+  }
+
+  .navigation-pane nav {
+    display: grid;
+    max-height: calc(100% - 84px);
+    overflow: auto;
+    padding: 8px 0 18px;
+  }
+
+  .navigation-pane nav button {
+    overflow: hidden;
+    padding: 7px 12px 7px calc(12px + var(--outline-level) * 14px);
+    border: 0;
+    color: #303640;
+    background: transparent;
+    font: 12px/1.35 "Microsoft YaHei UI", sans-serif;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .navigation-pane nav button:hover { background: #eef4fc; color: #185abd; }
+  .navigation-pane > p { margin: 16px 14px; color: #777f89; font-size: 12px; line-height: 1.65; }
+
+  .paper-stage {
+    min-width: 0;
+    overflow: auto;
+    padding: 0 32px 34px;
+  }
+
+  .ruler {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    justify-content: space-between;
+    width: min(100%, 210mm);
+    box-sizing: border-box;
+    height: 24px;
+    margin: 0 auto 10px;
+    padding: 3px 20mm 0 30mm;
+    border-bottom: 1px solid #c9ced6;
+    color: #777f89;
+    background: #f7f8fa;
+    font: 9px/18px "Segoe UI", sans-serif;
+  }
+
+  .word-status-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    min-height: 28px;
+    padding: 0 12px;
+    border-top: 1px solid #d2d7df;
+    color: #40464f;
+    background: #f8f9fb;
+    font: 11px/1 "Microsoft YaHei UI", sans-serif;
+  }
+
+  .word-status-bar .status-spacer { flex: 1; }
+  .word-status-bar button { border: 0; background: transparent; color: #444b55; cursor: pointer; }
+  .word-status-bar input[type='range'] { width: 110px; accent-color: #185abd; }
+  .word-status-bar .zoom-value { min-width: 44px; }
+
   .block-marquee {
     position: fixed;
     z-index: 22;
@@ -505,21 +624,21 @@
   .editor.paper .editable h1,
   .editable[data-render-mode='doc'] .wa-doc h1 {
     margin: 22pt 0 12pt;
-    padding-bottom: 5pt;
-    border-bottom: 1px solid #cfd5df;
-    color: #17365d;
+    padding-bottom: 0;
+    border-bottom: 0;
+    color: #111827;
     font-family: SimHei, "黑体", sans-serif;
     font-size: 18pt;
     font-weight: 700;
     line-height: 1.35;
     letter-spacing: 0;
-    text-align: left;
+    text-align: center;
   }
 
   .editor.paper .editable h2,
   .editable[data-render-mode='doc'] .wa-doc h2 {
     margin: 18pt 0 9pt;
-    color: #1f4e79;
+    color: #111827;
     font-family: SimHei, "黑体", sans-serif;
     font-size: 15pt;
     font-weight: 700;
@@ -557,15 +676,15 @@
 
   .editable [data-block-id]:hover::before,
   .editable [data-section-id]:hover::before {
-    content: '⋮⋮';
+    content: '➤';
     position: absolute;
     left: -28px;
     top: 2px;
     width: 20px;
-    color: #8b95a3;
+    color: #7a8696;
     font: 12px/20px "Segoe UI", sans-serif;
     text-align: center;
-    cursor: pointer;
+    cursor: default;
   }
 
   .editable .wa-block-selected {
@@ -647,6 +766,9 @@
   .figure-editor-dialog label { display: grid; gap: 5px; font-size: 12px; color: #535b66; }
   .figure-editor-dialog input, .figure-editor-dialog textarea { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid #c8ced7; border-radius: 4px; color: #202124; background: #fff; font: inherit; }
   .figure-editor-dialog textarea { font-family: Consolas, monospace; font-size: 12px; resize: vertical; }
+  .figure-editor-dialog.compact-dialog { width: min(430px, calc(100vw - 32px)); }
+  .table-size-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .table-data-editor { white-space: pre; tab-size: 4; }
   .figure-editor-dialog p { margin: 0; color: #68707c; font-size: 11px; }
   .figure-editor-dialog footer { display: flex; justify-content: flex-end; gap: 8px; }
   .figure-editor-dialog footer button { padding: 7px 12px; border: 1px solid #cbd1da; border-radius: 4px; background: #fff; cursor: pointer; }

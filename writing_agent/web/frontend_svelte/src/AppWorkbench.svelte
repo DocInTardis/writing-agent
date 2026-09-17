@@ -1808,41 +1808,10 @@
     const sections = Array.isArray((docObj as any).sections) ? (docObj as any).sections : []
     if (!sections.length) return docObj
     let changed = false
-    const tryMergeHeadingTail = (titleRaw: string, firstParagraphRaw: string) => {
-      const title = String(titleRaw || '').trim()
-      const para = String(firstParagraphRaw || '').trim()
-      if (!title || !para) return null
-      const pureTitle = title.replace(/^\d+(?:\.\d+){0,3}\s*/, '').trim()
-      if (!pureTitle || pureTitle.length > 4) return null
-      const m = /^([\u4e00-\u9fa5]{1,4})(自|是|在|由|通过|随着|并|可|将|会)([\s\S]*)$/.exec(para)
-      if (!m) return null
-      const tail = String(m[1] || '').trim()
-      if (!tail || tail.length > 3) return null
-      if (pureTitle.endsWith(tail)) return null
-      const nextTitle = `${title}${tail}`.trim()
-      const rest = `${String(m[2] || '')}${String(m[3] || '')}`.trim()
-      if (!rest) return null
-      return { title: nextTitle, rest }
-    }
     const walk = (sec: any): any => {
       let touched = false
       let nextSec = sec
       const blocks = Array.isArray(sec?.blocks) ? sec.blocks : []
-      if (blocks.length) {
-        const first = blocks[0]
-        const firstKind = String(first?.type || '').toLowerCase()
-        if (firstKind === 'paragraph' || firstKind === 'text' || firstKind === 'p') {
-          const merged = tryMergeHeadingTail(String(sec?.title || ''), String(first?.text || ''))
-          if (merged) {
-            const nextFirst = { ...first, text: merged.rest }
-            const fixedBlocks = blocks.slice()
-            fixedBlocks[0] = nextFirst
-            nextSec = { ...nextSec, title: merged.title, blocks: fixedBlocks }
-            touched = true
-            changed = true
-          }
-        }
-      }
       const currentBlocks = Array.isArray(nextSec?.blocks) ? nextSec.blocks : blocks
       const nextBlocks: any[] = []
       for (const block of currentBlocks) {

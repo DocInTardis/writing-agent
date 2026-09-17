@@ -99,6 +99,18 @@
   let figureEditorOpen = $state(false)
   let figureDraftCaption = $state('')
   let figureDraftJson = $state('')
+  let tableEditorOpen = $state(false)
+  let tableDraftCaption = $state('')
+  let tableDraftTsv = $state('')
+  let tableInsertOpen = $state(false)
+  let tableInsertRows = $state(4)
+  let tableInsertCols = $state(3)
+  let tableInsertCaption = $state('表格标题')
+  let showNavigationPane = $state(true)
+  let editorZoom = $state(100)
+  let gutterAnchor: HTMLElement | null = null
+  let outlineItems = $state<Array<{ id: string; text: string; level: number }>>([])
+  let documentMeta = $state({ pages: 1, paragraphs: 0, chars: 0, selected: 0 })
   type SlashCommandItem = {
     id: string
     label: string
@@ -225,6 +237,8 @@
         highlightCodeBlocks()
         renderFiguresInEditor()
         applyPageSettingsToEditor()
+        setEditorZoom(editorZoom)
+        refreshDocumentMeta()
       }, 100)
     }
   }
@@ -266,6 +280,67 @@
       }
       setEditableAttrs(el)
     })
+  }
+
+  function refreshDocumentMeta() {
+    if (!editor) return
+    const headings = Array.from(editor.querySelectorAll('h1, h2, h3, h4, h5, h6')) as HTMLElement[]
+    outlineItems = headings
+      .map((heading, index) => {
+        if (!heading.id) heading.id = `wa-heading-${index + 1}`
+        return {
+          id: heading.id,
+          text: String(heading.textContent || '').trim(),
+          level: Number(heading.tagName.slice(1)) || 1
+        }
+      })
+      .filter((item) => Boolean(item.text))
+    const paragraphs = editor.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').length
+    const chars = String(editor.innerText || '').replace(/\s/g, '').length
+    const enginePages = Number(editor.dataset.enginePages || 0)
+    const usableHeight = Math.max(1, editor.clientWidth * 1.414 - 160)
+    const measuredPages = enginePages > 0 ? enginePages : Math.max(1, Math.ceil(editor.scrollHeight / usableHeight))
+    const manualPages = editor.querySelectorAll('.wa-page-break').length + 1
+    const pages = Math.max(manualPages, measuredPages)
+    documentMeta = { ...documentMeta, pages, paragraphs, chars }
+  }
+
+  function setEditorZoom(value: number) {
+    editorZoom = Math.max(60, Math.min(180, Math.round(value / 10) * 10))
+    if (editor) editor.style.zoom = `${editorZoom}%`
+  }
+
+  function jumpToOutline(id: string) {
+    const target = editor?.querySelector(`#${CSS.escape(id)}`) as HTMLElement | null
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    target?.focus()
+  }
+
+  function selectParagraphText(block: HTMLElement, extend = false) {
+    if (!editor || !editor.contains(block)) return
+    const range = document.createRange()
+    if (extend && gutterAnchor && editor.contains(gutterAnchor)) {
+      const blocks = Array.from(editor.querySelectorAll('[data-block-id], [data-section-id], [data-doc-title="1"]')) as HTMLElement[]
+      const from = blocks.indexOf(gutterAnchor)
+      const to = blocks.indexOf(block)
+      if (from >= 0 && to >= 0) {
+        const first = blocks[Math.min(from, to)]
+        const last = blocks[Math.max(from, to)]
+        range.setStartBefore(first)
+        range.setEndAfter(last)
+      } else {
+        range.selectNodeContents(block)
+      }
+    } else {
+      range.selectNodeContents(block)
+      gutterAnchor = block
+    }
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    savedTextRange = range.cloneRange()
+    clearSelectedBlock()
+    queueMicrotask(() => updateSelectionContext())
   }
 
   function findEditableRoot(target: EventTarget | null): HTMLElement | null {
@@ -885,6 +960,72 @@
     applyDocIrUpdate(next, { immediate: true })
   }
 
+  function tableToTsv(table: Record<string, unknown>) {
+    const columns = Array.isArray(table.columns) ? table.columns.map((value) => String(value ?? '')) : []
+    const rows = Array.isArray(table.rows)
+      ? table.rows.map((row) => Array.isArray(row) ? row.map((value) => String(value ?? '')) : [])
+      : []
+    return [columns, ...rows].filter((row) => row.length).map((row) => row.join('\t')).join('\n')
+  }
+
+  function tsvToTable(tsv: string, caption: string) {
+    const lines = String(tsv || '')
+      .split(/\r?\n/)
+      .map((line) => line.split('\t').map((cell) => cell.trim()))
+      .filter((row) => row.some(Boolean))
+    const columns = lines.shift() || ['列 1']
+    const rows = lines.length ? lines : [columns.map(() => '')]
+    return { caption: caption.trim() || '表格', columns, rows }
+  }
+
+  function openTableEditor() {
+    const doc = $docIr
+    if (!doc || typeof doc !== 'object' || !objectToolbar.blockId) return
+    const block = collectBlocksByIds(doc as Record<string, unknown>, [objectToolbar.blockId])[0]
+    const table = block?.table && typeof block.table === 'object' ? block.table as Record<string, unknown> : {}
+    tableDraftCaption = String(table.caption || '表格')
+    tableDraftTsv = tableToTsv(table)
+    tableEditorOpen = true
+  }
+
+  function saveTableEditor() {
+    const doc = $docIr
+    if (!doc || typeof doc !== 'object' || !objectToolbar.blockId) return
+    const table = tsvToTable(tableDraftTsv, tableDraftCaption)
+    const next = updateBlock(doc as Record<string, unknown>, objectToolbar.blockId, { type: 'table', table })
+    if (!next) return
+    tableEditorOpen = false
+    objectToolbar.visible = false
+    lastRenderSig = ''
+    applyDocIrUpdate(next, { immediate: true })
+  }
+
+  function insertTableFromDialog() {
+    const doc = $docIr
+    if (!doc || typeof doc !== 'object') return
+    const rows = Math.max(1, Math.min(30, Number(tableInsertRows) || 1))
+    const cols = Math.max(1, Math.min(12, Number(tableInsertCols) || 1))
+    const tableBlock: Record<string, unknown> = {
+      id: makeId(),
+      type: 'table',
+      table: {
+        caption: tableInsertCaption.trim() || '表格',
+        columns: Array.from({ length: cols }, (_, index) => `列 ${index + 1}`),
+        rows: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ''))
+      }
+    }
+    const paragraph: Record<string, unknown> = { id: makeId(), type: 'paragraph', text: '' }
+    const anchor = resolveEditableFromSelection() || editingEl
+    const anchorId = String(anchor?.dataset.blockId || '')
+    const next = anchorId
+      ? insertBlocksAfter(doc as Record<string, unknown>, anchorId, [tableBlock, paragraph])
+      : appendBlocksToDoc(doc as Record<string, unknown>, [tableBlock, paragraph])
+    if (!next) return
+    tableInsertOpen = false
+    pendingFocusBlockId = String(paragraph.id)
+    applyDocIrUpdate(next, { immediate: true })
+  }
+
   function clearSelectedBlock() {
     setSelectedBlocksByIds([])
   }
@@ -1296,6 +1437,16 @@
     if (!$generating && !lockEditing) editor.dataset.caretActive = '1'
     if (target.closest('a,button,input,textarea,select,[data-wa-no-marquee="1"]')) return
     const block = target.closest('[data-block-id], [data-section-id], [data-doc-title="1"]') as HTMLElement | null
+    if (block && editor.contains(block)) {
+      const blockRect = block.getBoundingClientRect()
+      const inSelectionGutter = event.clientX >= blockRect.left - 34 && event.clientX < blockRect.left + 3
+      if (inSelectionGutter && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault()
+        selectParagraphText(block, event.shiftKey)
+        suppressClickOnce = true
+        return
+      }
+    }
     if (block && editor.contains(block) && (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)) {
       const id = blockIdOf(block)
       if (id) {
@@ -1311,9 +1462,7 @@
         return
       }
     }
-    const editorRect = editor.getBoundingClientRect()
-    const nearEditorLeftRail = event.clientX <= editorRect.left + 22
-    if (!event.altKey && !nearEditorLeftRail) return
+    if (!event.altKey) return
     dragSelectSeed = { x: event.clientX, y: event.clientY }
     dragSelecting = false
     dragRect = { left: event.clientX, top: event.clientY, width: 0, height: 0 }
@@ -1369,6 +1518,12 @@
     }
     const target = event.target as HTMLElement | null
     if (!target || !editor) return
+    const textBlock = target.closest('p[data-block-id], h1, h2, h3, h4, h5, h6, [data-section-id], [data-doc-title="1"]') as HTMLElement | null
+    if (event.detail >= 3 && textBlock && editor.contains(textBlock)) {
+      event.preventDefault()
+      selectParagraphText(textBlock)
+      return
+    }
     const object = target.closest('figure[data-block-id], .wa-table[data-block-id], .wa-page-break[data-block-id]') as HTMLElement | null
     if (object && editor.contains(object)) {
       event.preventDefault()
@@ -1522,6 +1677,15 @@
     if ($generating || lockEditing) return
     if (composing) return
     const inputType = event instanceof InputEvent ? String(event.inputType || '') : ''
+    // Some browsers target the outer editing host for Enter, so the keydown
+    // block splitter cannot always identify the active DocIR block. In that
+    // case the browser has already created the visual paragraph; reconcile
+    // the whole editable tree immediately so the new paragraph and trailing
+    // text cannot be lost by a later per-block commit.
+    if (inputType === 'insertParagraph') {
+      handleInput()
+      return
+    }
     if (inputType === 'historyUndo') nativeRedoHint = true
     else if (inputType === 'historyRedo') nativeRedoHint = false
     else nativeRedoHint = false
@@ -1554,7 +1718,10 @@
       if (selectedRoot) return selectedRoot
     }
     const active = document.activeElement as HTMLElement | null
-    if (active && editor.contains(active) && active.isContentEditable) return active
+    const activeRoot = findEditableRoot(active)
+    if (activeRoot) return activeRoot
+    const caretRoot = resolveEditableAtCaret()
+    if (caretRoot) return caretRoot
     const selected = selectedBlockEls[0] || null
     if (selected && selected.isContentEditable) {
       selected.focus()
@@ -1617,6 +1784,7 @@
     const sel = window.getSelection()
     if (!editor || !sel || sel.rangeCount === 0 || sel.isCollapsed || !selectionInsideEditor()) {
       selectionToolbar.visible = false
+      documentMeta = { ...documentMeta, selected: 0 }
       return
     }
     const range = sel.getRangeAt(0)
@@ -1635,6 +1803,7 @@
       text,
       words: text.replace(/\s/g, '').length
     }
+    documentMeta = { ...documentMeta, selected: selectionToolbar.words }
   }
 
   function restoreSavedTextRange() {
@@ -1685,6 +1854,13 @@
       showFindReplace = true
       return
     }
+    if (lower === 'view-outline') {
+      showNavigationPane = !showNavigationPane
+      return
+    }
+    if (lower === 'zoom-in') return setEditorZoom(editorZoom + 10)
+    if (lower === 'zoom-out') return setEditorZoom(editorZoom - 10)
+    if (lower === 'zoom-100') return setEditorZoom(100)
     if (lower === 'undo') {
       if (readonly) {
         emitToolbarState()
@@ -1893,19 +2069,79 @@
     
     // 表格
     if (cmd === 'table') {
-      const rows = prompt('行数：', '3')
-      const cols = prompt('列数：', '3')
-      if (!rows || !cols) return
-      let html = '<table style="border-collapse:collapse;width:100%;margin:10px 0;">'
-      for (let i = 0; i < parseInt(rows); i++) {
-        html += '<tr>'
-        for (let j = 0; j < parseInt(cols); j++) {
-          html += '<td style="border:1px solid #ccc;padding:8px;min-width:80px;">　</td>'
-        }
-        html += '</tr>'
+      tableInsertOpen = true
+      return
+    }
+
+    if (cmd === 'caption') {
+      if (!objectToolbar.blockId) {
+        alert('请先单击选择图片、图表或表格。')
+        return
       }
-      html += '</table>'
-      return document.execCommand('insertHTML', false, html)
+      const doc = $docIr
+      if (!doc || typeof doc !== 'object') return
+      const block = collectBlocksByIds(doc as Record<string, unknown>, [objectToolbar.blockId])[0]
+      if (!block) return
+      const isTable = String(block.type || '') === 'table'
+      const current = isTable
+        ? String((block.table as Record<string, unknown> | undefined)?.caption || '')
+        : String((block.figure as Record<string, unknown> | undefined)?.caption || '')
+      const caption = prompt(isTable ? '表格题注：' : '图片题注：', current || (isTable ? '表 1 ' : '图 1 '))
+      if (!caption) return
+      const payload = isTable
+        ? { type: 'table', table: { ...(block.table as Record<string, unknown> || {}), caption } }
+        : { type: 'figure', figure: { ...(block.figure as Record<string, unknown> || {}), caption } }
+      const next = updateBlock(doc as Record<string, unknown>, objectToolbar.blockId, payload)
+      if (next) {
+        objectToolbar.visible = false
+        applyDocIrUpdate(next, { immediate: true })
+      }
+      return
+    }
+
+    if (cmd === 'cross-reference') {
+      const targets = outlineItems.map((item, index) => `${index + 1}. ${item.text}`).join('\n')
+      if (!targets) {
+        alert('当前文档中没有可引用的标题。')
+        return
+      }
+      const value = prompt(`输入要引用的标题序号：\n${targets}`, '1')
+      const index = Number(value) - 1
+      const target = outlineItems[index]
+      if (!target) return
+      return exec('insertText', `见“${target.text}”`)
+    }
+
+    if (cmd === 'thesis-structure') {
+      const doc = $docIr
+      if (!doc || typeof doc !== 'object') return
+      const blocks: Array<Record<string, unknown>> = [
+        { id: makeId(), type: 'heading', level: 1, text: '摘要' },
+        { id: makeId(), type: 'paragraph', text: '在此撰写中文摘要。' },
+        { id: makeId(), type: 'heading', level: 1, text: 'Abstract' },
+        { id: makeId(), type: 'paragraph', text: 'Write the English abstract here.' },
+        { id: makeId(), type: 'page_break' },
+        { id: makeId(), type: 'heading', level: 1, text: '1 绪论' },
+        { id: makeId(), type: 'heading', level: 2, text: '1.1 研究背景' },
+        { id: makeId(), type: 'paragraph', text: '' },
+        { id: makeId(), type: 'heading', level: 1, text: '2 相关理论与关键技术' },
+        { id: makeId(), type: 'paragraph', text: '' },
+        { id: makeId(), type: 'heading', level: 1, text: '3 系统分析与设计' },
+        { id: makeId(), type: 'paragraph', text: '' },
+        { id: makeId(), type: 'heading', level: 1, text: '4 系统实现' },
+        { id: makeId(), type: 'paragraph', text: '' },
+        { id: makeId(), type: 'heading', level: 1, text: '5 系统测试' },
+        { id: makeId(), type: 'paragraph', text: '' },
+        { id: makeId(), type: 'heading', level: 1, text: '6 总结与展望' },
+        { id: makeId(), type: 'paragraph', text: '' },
+        { id: makeId(), type: 'heading', level: 1, text: '参考文献' },
+        { id: makeId(), type: 'paragraph', text: '' },
+        { id: makeId(), type: 'heading', level: 1, text: '致谢' },
+        { id: makeId(), type: 'paragraph', text: '' }
+      ]
+      const next = appendBlocksToDoc(doc as Record<string, unknown>, blocks)
+      if (next) applyDocIrUpdate(next, { immediate: true })
+      return
     }
     
     // 链接
@@ -2073,7 +2309,7 @@
         return
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey && !ctrl) {
+    if (e.key === 'Enter' && e.shiftKey && !ctrl) {
       const el = activeEditable
       if (el && el.dataset.blockId) {
         const tag = el.tagName.toLowerCase()
@@ -2086,29 +2322,12 @@
         }
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey && ctrl) {
-      if (activeEditable && editor) {
-        e.preventDefault()
-        document.execCommand('insertParagraph')
-        markEditableBlocks()
-        const html = editor.innerHTML || ''
-        const doc = htmlToDocIr(html)
-        if (doc) {
-          applyDocIrUpdate(doc, { immediate: true })
-          renderMode = 'doc'
-          lastRenderSig = `doc:${docIrSignature(doc)}`
-          docIrDirty.set(false)
-        } else {
-          const markdown = htmlToMarkdown(html)
-          sourceText.set(markdown)
-          lastMarkdown = markdown
-          docIrDirty.set(true)
-          pushHistory(markdown)
-          setEmptyFlag(markdown)
-        }
-        queueMicrotask(() => emitToolbarState())
-        return
-      }
+    if (e.key === 'Enter' && ctrl) {
+      e.preventDefault()
+      applyCommand('page-break')
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !ctrl) {
       const el = activeEditable
       if (el && el.dataset.blockId) {
         const tag = el.tagName.toLowerCase()
@@ -2414,6 +2633,12 @@
 
   function renderMathInEditor() {
     if (!editor) return
+    // KaTeX auto-render walks adjacent text nodes and may move the first
+    // character across editable block boundaries even when the document has
+    // no formula. Keep ordinary prose untouched and only invoke it when a
+    // supported delimiter is actually present.
+    const text = String(editor.textContent || '')
+    if (!text.includes('$')) return
     try {
       renderMathInElement(editor, {
         delimiters: [
@@ -2807,22 +3032,57 @@
     </div>
   {/if}
 
-  <div
-    class="editable"
-    data-render-mode={renderMode}
-    bind:this={editor}
-    contenteditable={$generating || lockEditing ? 'false' : 'true'}
-    role="region"
-    aria-label="文档编辑区"
-    onmousedown={handleEditorMouseDown}
-    oninput={handleEditableInput}
-    onfocusin={handleEditableFocus}
-    onfocusout={handleEditableBlur}
-    oncompositionstart={handleCompositionStart}
-    oncompositionend={handleCompositionEnd}
-    onclick={handleEditorClick}
-    onkeydown={handleKeydown}
-  ></div>
+  <div class:with-navigation={showNavigationPane} class="editor-workspace">
+    {#if showNavigationPane}
+      <aside class="navigation-pane" aria-label="文档导航">
+        <header>
+          <strong>导航</strong>
+          <button onclick={() => (showNavigationPane = false)} title="关闭导航窗格">×</button>
+        </header>
+        <div class="navigation-tabs"><span class="active">标题导航</span></div>
+        {#if outlineItems.length}
+          <nav>
+            {#each outlineItems as item}
+              <button style={`--outline-level:${Math.max(0, item.level - 1)}`} onclick={() => jumpToOutline(item.id)}>{item.text}</button>
+            {/each}
+          </nav>
+        {:else}
+          <p>应用“标题 1–3”后，这里会形成论文目录。</p>
+        {/if}
+      </aside>
+    {/if}
+    <div class="paper-stage">
+      <div class="ruler" aria-hidden="true"><span>0</span><span>2</span><span>4</span><span>6</span><span>8</span><span>10</span><span>12</span><span>14</span><span>16</span></div>
+      <div
+        class="editable"
+        data-render-mode={renderMode}
+        bind:this={editor}
+        contenteditable={$generating || lockEditing ? 'false' : 'true'}
+        role="region"
+        aria-label="文档编辑区"
+        onmousedown={handleEditorMouseDown}
+        oninput={handleEditableInput}
+        onfocusin={handleEditableFocus}
+        onfocusout={handleEditableBlur}
+        oncompositionstart={handleCompositionStart}
+        oncompositionend={handleCompositionEnd}
+        onclick={handleEditorClick}
+        onkeydown={handleKeydown}
+      ></div>
+    </div>
+  </div>
+
+  <footer class="word-status-bar">
+    <span>第 1 页，共 {documentMeta.pages} 页</span>
+    <span>{documentMeta.chars} 字符</span>
+    <span>{documentMeta.paragraphs} 段</span>
+    {#if documentMeta.selected > 0}<span>已选择 {documentMeta.selected} 字</span>{/if}
+    <span class="status-spacer"></span>
+    <button onclick={() => setEditorZoom(editorZoom - 10)} title="缩小">−</button>
+    <input aria-label="缩放" type="range" min="60" max="180" step="10" value={editorZoom} oninput={(event) => setEditorZoom(Number(event.currentTarget.value))} />
+    <button onclick={() => setEditorZoom(editorZoom + 10)} title="放大">＋</button>
+    <button class="zoom-value" onclick={() => setEditorZoom(100)}>{editorZoom}%</button>
+  </footer>
 
   {#if selectionToolbar.visible}
     <div
@@ -2859,7 +3119,33 @@
       <button onclick={() => insertParagraphBesideObject('before')}>上方插入段落</button>
       <button onclick={() => insertParagraphBesideObject('after')}>下方插入段落</button>
       {#if objectToolbar.kind === 'figure' || objectToolbar.kind === 'image'}<button onclick={openFigureEditor}>编辑</button>{/if}
+      {#if objectToolbar.kind === 'table'}<button onclick={openTableEditor}>编辑表格</button>{/if}
       <button class="danger" onclick={deleteSelectedObject}>删除</button>
+    </div>
+  {/if}
+
+  {#if tableInsertOpen}
+    <div class="figure-editor-backdrop" onclick={() => (tableInsertOpen = false)} role="presentation"></div>
+    <div class="figure-editor-dialog compact-dialog" role="dialog" aria-modal="true" aria-label="插入表格" tabindex="-1">
+      <header><strong>插入表格</strong><button onclick={() => (tableInsertOpen = false)}>×</button></header>
+      <div class="table-size-fields">
+        <label>列数<input type="number" min="1" max="12" bind:value={tableInsertCols} /></label>
+        <label>数据行数<input type="number" min="1" max="30" bind:value={tableInsertRows} /></label>
+      </div>
+      <label>题注<input bind:value={tableInsertCaption} /></label>
+      <p>第一行会作为表头。插入后可选中表格并通过“编辑表格”粘贴 Excel 数据。</p>
+      <footer><button onclick={() => (tableInsertOpen = false)}>取消</button><button class="primary" onclick={insertTableFromDialog}>插入</button></footer>
+    </div>
+  {/if}
+
+  {#if tableEditorOpen}
+    <div class="figure-editor-backdrop" onclick={() => (tableEditorOpen = false)} role="presentation"></div>
+    <div class="figure-editor-dialog" role="dialog" aria-modal="true" aria-label="编辑表格" tabindex="-1">
+      <header><strong>编辑表格</strong><button onclick={() => (tableEditorOpen = false)}>×</button></header>
+      <label>题注<input bind:value={tableDraftCaption} /></label>
+      <label>表格数据<textarea class="table-data-editor" rows="14" bind:value={tableDraftTsv}></textarea></label>
+      <p>使用 Tab 分隔列、换行分隔行；第一行是表头。可直接从 Excel 复制并粘贴。</p>
+      <footer><button onclick={() => (tableEditorOpen = false)}>取消</button><button class="primary" onclick={saveTableEditor}>应用</button></footer>
     </div>
   {/if}
 

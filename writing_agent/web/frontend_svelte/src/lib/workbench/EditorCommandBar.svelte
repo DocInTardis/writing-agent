@@ -4,7 +4,7 @@
   import type { EditorCommand } from '../types'
   import type { ResumeState } from './types'
 
-  type RibbonTab = 'home' | 'insert' | 'layout' | 'references' | 'review' | 'assistant'
+  type RibbonTab = 'home' | 'insert' | 'layout' | 'references' | 'review' | 'view' | 'assistant'
   type EditorToolbarState = {
     bold: boolean
     italic: boolean
@@ -75,6 +75,7 @@
     { id: 'layout', label: '布局' },
     { id: 'references', label: '引用' },
     { id: 'review', label: '审阅' },
+    { id: 'view', label: '视图' },
     { id: 'assistant', label: '助手' }
   ]
 
@@ -100,6 +101,8 @@
       <div class="ribbon-group compact" aria-label="剪贴板">
         <button class="tool-btn" title="撤销 Ctrl+Z" onclick={() => command('undo')} disabled={!editorToolbarState.canUndo}><Icon name="undo" size={15} /></button>
         <button class="tool-btn" title="重做 Ctrl+Y" onclick={() => command('redo')} disabled={!editorToolbarState.canRedo}><Icon name="redo" size={15} /></button>
+        <button class="tool-btn" title="剪切 Ctrl+X" onclick={() => command('cut')} disabled={!editorToolbarState.canCut}>✂</button>
+        <button class="tool-btn" title="复制 Ctrl+C" onclick={() => command('copy')} disabled={!editorToolbarState.canCopy}>▣</button>
         <button class="tool-btn" title="粘贴 Ctrl+V" onclick={() => command('paste')} disabled={!editorToolbarState.canPaste}><Icon name="paste" size={15} /></button>
         <span class="ribbon-label">剪贴板</span>
       </div>
@@ -131,7 +134,9 @@
           <button class:active={editorToolbarState.bold} class="tool-btn glyph" title="加粗 Ctrl+B" onclick={() => command('bold')}><strong>B</strong></button>
           <button class:active={editorToolbarState.italic} class="tool-btn glyph" title="斜体 Ctrl+I" onclick={() => command('italic')}><em>I</em></button>
           <button class:active={editorToolbarState.underline} class="tool-btn glyph underline" title="下划线 Ctrl+U" onclick={() => command('underline')}>U</button>
-          <button class="tool-btn glyph strike" title="删除线" onclick={() => command('strikethrough')}>ab</button>
+        <button class="tool-btn glyph strike" title="删除线" onclick={() => command('strikethrough')}>ab</button>
+        <button class="tool-btn glyph" title="上标" onclick={() => command('superscript')}>x²</button>
+        <button class="tool-btn glyph" title="下标" onclick={() => command('subscript')}>x₂</button>
           <button class="tool-btn color-tool" title="文字颜色" onclick={() => command('color:#c00000')}>A<span class="color-line red"></span></button>
           <button class="tool-btn color-tool" title="突出显示" onclick={() => command('bgcolor:#fff2cc')}>A<span class="color-line yellow"></span></button>
           <button class="tool-btn" title="清除格式" onclick={() => command('clear-format')}><Icon name="clear" size={15} /></button>
@@ -163,6 +168,7 @@
         <button class="ribbon-action" onclick={() => command('code')}><Icon name="code" size={17} />代码</button>
         <button class="ribbon-action" onclick={() => command('hr')}><span>—</span>分隔线</button>
         <button class="ribbon-action" onclick={() => command('page-break')}><span>↵</span>分页符</button>
+        <button class="ribbon-action" onclick={() => command('thesis-structure')}><span>§</span>论文结构</button>
         <button class="ribbon-action" onclick={onOpenCanvas}><Icon name="diagram" size={17} />图形</button>
       </div>
     {:else if activeTab === 'layout'}
@@ -180,6 +186,8 @@
       <div class="ribbon-group action-group">
         <button class="ribbon-action" onclick={() => command('toc')}><span>☷</span>目录</button>
         <button class="ribbon-action" onclick={() => command('footnote')}><span>¹</span>脚注</button>
+        <button class="ribbon-action" onclick={() => command('caption')}><span>图1</span>题注</button>
+        <button class="ribbon-action" onclick={() => command('cross-reference')}><span>↪</span>交叉引用</button>
         <button class="ribbon-action" onclick={() => command('math-inline')}><span>π</span>行内公式</button>
         <button class="ribbon-action" onclick={() => command('math-block')}><span>∫</span>公式块</button>
         <button class="ribbon-action" onclick={onOpenCitations}><Icon name="cite" size={17} />引文管理</button>
@@ -191,6 +199,13 @@
         <button class:active={showAiRatePanel} class="ribbon-action" onclick={() => (showAiRatePanel = !showAiRatePanel)}><Icon name="ai" size={17} />AI 痕迹</button>
         <button class:active={showFeedbackPanel} class="ribbon-action" onclick={() => (showFeedbackPanel = !showFeedbackPanel)}><Icon name="star" size={17} />评分</button>
         <button class="ribbon-action" onclick={onRunBatch}><Icon name="batch" size={17} />批量处理</button>
+      </div>
+    {:else if activeTab === 'view'}
+      <div class="ribbon-group action-group">
+        <button class="ribbon-action" onclick={() => command('view-outline')}><span>☰</span>导航窗格</button>
+        <button class="ribbon-action" onclick={() => command('zoom-out')}><span>−</span>缩小</button>
+        <button class="ribbon-action" onclick={() => command('zoom-100')}><span>100%</span>实际大小</button>
+        <button class="ribbon-action" onclick={() => command('zoom-in')}><span>＋</span>放大</button>
       </div>
     {:else}
       <div class="ribbon-group assistant-group">

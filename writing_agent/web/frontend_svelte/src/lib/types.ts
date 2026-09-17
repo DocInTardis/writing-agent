@@ -55,6 +55,13 @@ export type EditorCommand =
   | 'math-block'
   | 'footnote'
   | 'toc'
+  | 'caption'
+  | 'cross-reference'
+  | 'thesis-structure'
+  | 'view-outline'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'zoom-100'
   | 'find-replace'
   | `font:${string}`
   | `size:${string}`
