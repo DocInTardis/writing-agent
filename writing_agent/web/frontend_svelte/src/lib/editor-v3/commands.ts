@@ -121,6 +121,10 @@ registerDocumentCommand('set_font_family', (editor, command) => {
   const fontFamily = String(command.params.fontFamily || '').trim()
   return fontFamily ? editor.chain().focus().setFontFamily(fontFamily).run() : false
 })
+registerDocumentCommand('set_font_size', (editor, command) => {
+  const fontSize = String(command.params.fontSize || '').trim()
+  return fontSize ? editor.chain().focus().setMark('textStyle', { fontSize }).run() : false
+})
 registerDocumentCommand('set_alignment', (editor, command) => {
   const alignment = String(command.params.alignment || '')
   if (!['left', 'center', 'right', 'justify'].includes(alignment)) return false
@@ -134,6 +138,28 @@ registerDocumentCommand('apply_style', (editor, command) => {
   const level = Number(match[1]) as 1 | 2 | 3 | 4 | 5 | 6
   return editor.chain().focus().setHeading({ level }).updateAttributes('heading', { styleId }).run()
 })
+registerDocumentCommand('set_paragraph_format', (editor, command) => {
+  const attrs: Record<string, unknown> = {}
+  for (const key of [
+    'lineSpacing',
+    'firstLineIndentEm',
+    'leftIndentEm',
+    'rightIndentEm',
+    'spaceBeforePt',
+    'spaceAfterPt',
+    'keepWithNext',
+    'keepLinesTogether',
+    'pageBreakBefore'
+  ]) {
+    if (key in command.params) attrs[key] = command.params[key]
+  }
+  if (!Object.keys(attrs).length) return false
+  return editor.chain().focus().updateAttributes('paragraph', attrs).updateAttributes('heading', attrs).run()
+})
+registerDocumentCommand('toggle_bullet_list', (editor) => editor.chain().focus().toggleBulletList().run())
+registerDocumentCommand('toggle_ordered_list', (editor) => editor.chain().focus().toggleOrderedList().run())
+registerDocumentCommand('toggle_blockquote', (editor) => editor.chain().focus().toggleBlockquote().run())
+registerDocumentCommand('toggle_code_block', (editor) => editor.chain().focus().toggleCodeBlock().run())
+registerDocumentCommand('clear_formatting', (editor) => editor.chain().focus().unsetAllMarks().clearNodes().run())
 registerDocumentCommand('undo', (editor) => editor.chain().focus().undo().run())
 registerDocumentCommand('redo', (editor) => editor.chain().focus().redo().run())
-

@@ -16,6 +16,11 @@
     canCopy: boolean
     canCut: boolean
     canPaste: boolean
+    styleId?: string
+    fontFamily?: string
+    fontSize?: string
+    alignment?: string
+    lineSpacing?: number | null
   }
 
   let {
@@ -108,15 +113,18 @@
       </div>
       <div class="ribbon-group wide" aria-label="字体与样式">
         <div class="ribbon-row">
-          <select aria-label="段落样式" onchange={(event) => command(event.currentTarget.value)}>
+          <select aria-label="段落样式" value={editorToolbarState.styleId === 'normal' ? 'paragraph' : (editorToolbarState.styleId || 'paragraph').replace('-', '')} onchange={(event) => command(event.currentTarget.value)}>
             <option value="paragraph">正文</option>
             <option value="heading1">标题 1</option>
             <option value="heading2">标题 2</option>
             <option value="heading3">标题 3</option>
+            <option value="heading4">标题 4</option>
+            <option value="heading5">标题 5</option>
+            <option value="heading6">标题 6</option>
             <option value="quote">引用</option>
             <option value="code">代码</option>
           </select>
-          <select aria-label="字体" onchange={(event) => command(`font:${event.currentTarget.value}`)}>
+          <select aria-label="字体" value={editorToolbarState.fontFamily || 'Microsoft YaHei'} onchange={(event) => command(`font:${event.currentTarget.value}`)}>
             <option value="Microsoft YaHei">微软雅黑</option>
             <option value="SimSun">宋体</option>
             <option value="SimHei">黑体</option>
@@ -124,8 +132,8 @@
             <option value="Arial">Arial</option>
             <option value="Times New Roman">Times New Roman</option>
           </select>
-          <select class="size-select" aria-label="字号" onchange={(event) => command(`size:${event.currentTarget.value}`)}>
-            <option value="10px">10</option><option value="12px">12</option><option value="14px" selected>14</option>
+          <select class="size-select" aria-label="字号" value={editorToolbarState.fontSize || '14px'} onchange={(event) => command(`size:${event.currentTarget.value}`)}>
+            <option value="10px">10</option><option value="12px">12</option><option value="14px">14</option>
             <option value="16px">16</option><option value="18px">18</option><option value="22px">22</option>
             <option value="28px">28</option><option value="36px">36</option>
           </select>
@@ -153,8 +161,8 @@
           <button class="tool-btn align-glyph justify" title="两端对齐" onclick={() => command('align-justify')}>≡</button>
           <button class="tool-btn" title="减少缩进" onclick={() => command('outdent')}>←</button>
           <button class="tool-btn" title="增加缩进" onclick={() => command('indent')}>→</button>
-          <select class="line-select" aria-label="行距" onchange={(event) => command(`line-height:${event.currentTarget.value}`)}>
-            <option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5" selected>1.5</option><option value="2">2.0</option><option value="2.5">2.5</option>
+          <select class="line-select" aria-label="行距" value={String(editorToolbarState.lineSpacing || 1.5)} onchange={(event) => command(`line-height:${event.currentTarget.value}`)}>
+            <option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">2.0</option><option value="2.5">2.5</option>
           </select>
         </div>
         <span class="ribbon-label">段落</span>

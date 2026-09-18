@@ -1,10 +1,12 @@
 ﻿import { derived, get, writable } from 'svelte/store'
 import type { ChatMessage, ThoughtItem, ToastItem, EditorCommand } from './types'
+import type { DocumentV3 } from './editor-v3/model'
 
 export const docId = writable('')
 export const instruction = writable('')
 export const sourceText = writable('')
 export const docIr = writable<Record<string, unknown> | null>(null)
+export const documentV3 = writable<DocumentV3 | null>(null)
 export const docIrDirty = writable(false)
 export const flowStatus = writable('就绪')
 export const docStatus = writable('就绪')
@@ -98,6 +100,7 @@ if (typeof window !== 'undefined') {
       instruction,
       sourceText,
       docIr,
+      documentV3,
       docIrDirty,
       flowStatus,
       docStatus,

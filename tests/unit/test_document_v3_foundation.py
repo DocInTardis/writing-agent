@@ -103,9 +103,9 @@ def test_document_v3_command_api_persists_an_atomic_ai_edit() -> None:
         assert response.status_code == 200
         stored = app_v2.store.get(session.id)
         assert stored is not None
-        assert stored.document_v3["schema_version"] == 3
+        assert stored.document_v3["schemaVersion"] == 3
         block = stored.document_v3["sections"][0]["content"][1]
-        assert block["style_id"] == "heading-2"
+        assert block["styleId"] == "heading-2"
         assert stored.doc_text == "# 绪论\n\n## 研究背景"
     finally:
         app_v2.store.delete(session.id)

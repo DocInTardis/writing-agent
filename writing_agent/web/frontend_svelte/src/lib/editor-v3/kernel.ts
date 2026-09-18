@@ -1,4 +1,4 @@
-import { Editor, Extension, type JSONContent } from '@tiptap/core'
+import { Editor, Extension, Node, mergeAttributes, type JSONContent } from '@tiptap/core'
 import Color from '@tiptap/extension-color'
 import FontFamily from '@tiptap/extension-font-family'
 import Highlight from '@tiptap/extension-highlight'
@@ -7,6 +7,7 @@ import Superscript from '@tiptap/extension-superscript'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
 import StarterKit from '@tiptap/starter-kit'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
 
 import type { DocumentV3, InlineNode, SectionV3, StyleDefinition, V3BlockNode } from './model'
 
@@ -38,6 +39,145 @@ const StableNodeAttributes = Extension.create({
   }
 })
 
+const ParagraphFormatting = Extension.create({
+  name: 'paragraphFormatting',
+  addGlobalAttributes() {
+    const attributes = {
+      lineSpacing: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.style.lineHeight || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.lineSpacing ? { style: `line-height:${attrs.lineSpacing}` } : {}
+      },
+      firstLineIndentEm: {
+        default: null,
+        parseHTML: (element: HTMLElement) => Number.parseFloat(element.style.textIndent) || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.firstLineIndentEm !== null ? { style: `text-indent:${attrs.firstLineIndentEm}em` } : {}
+      },
+      leftIndentEm: {
+        default: null,
+        parseHTML: (element: HTMLElement) => Number.parseFloat(element.style.marginLeft) || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.leftIndentEm ? { style: `margin-left:${attrs.leftIndentEm}em` } : {}
+      },
+      rightIndentEm: {
+        default: null,
+        parseHTML: (element: HTMLElement) => Number.parseFloat(element.style.marginRight) || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.rightIndentEm ? { style: `margin-right:${attrs.rightIndentEm}em` } : {}
+      },
+      spaceBeforePt: {
+        default: null,
+        parseHTML: (element: HTMLElement) => Number.parseFloat(element.style.marginTop) || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.spaceBeforePt !== null ? { style: `margin-top:${attrs.spaceBeforePt}pt` } : {}
+      },
+      spaceAfterPt: {
+        default: null,
+        parseHTML: (element: HTMLElement) => Number.parseFloat(element.style.marginBottom) || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.spaceAfterPt !== null ? { style: `margin-bottom:${attrs.spaceAfterPt}pt` } : {}
+      },
+      keepWithNext: { default: null },
+      keepLinesTogether: { default: null },
+      pageBreakBefore: { default: null }
+    }
+    return [{ types: ['paragraph', 'heading'], attributes }]
+  }
+})
+
+const ReliableBlockIdentity = Extension.create({
+  name: 'reliableBlockIdentity',
+  addProseMirrorPlugins() {
+    return [new Plugin({
+      key: new PluginKey('reliableBlockIdentity'),
+      appendTransaction(transactions, _oldState, newState) {
+        if (!transactions.some((transaction) => transaction.docChanged)) return null
+        const seen = new Set<string>()
+        const transaction = newState.tr
+        let changed = false
+        newState.doc.descendants((node, position) => {
+          if (!['paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList', 'listItem'].includes(node.type.name)) return
+          const attrs = { ...node.attrs }
+          let nodeChanged = false
+          const currentId = String(attrs.nodeId || '')
+          if (!currentId || seen.has(currentId)) {
+            attrs.nodeId = newNodeId(node.type.name)
+            nodeChanged = true
+          }
+          seen.add(String(attrs.nodeId))
+          if (node.type.name === 'paragraph' && /^heading-[1-6]$/.test(String(attrs.styleId || ''))) {
+            attrs.styleId = 'normal'
+            nodeChanged = true
+          }
+          if (node.type.name === 'heading') {
+            const expectedStyle = `heading-${Number(attrs.level || 1)}`
+            if (attrs.styleId !== expectedStyle) {
+              attrs.styleId = expectedStyle
+              nodeChanged = true
+            }
+          }
+          if (nodeChanged) {
+            changed = true
+            transaction.setNodeMarkup(position, undefined, attrs)
+          }
+        })
+        return changed ? transaction : null
+      }
+    })]
+  }
+})
+
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addGlobalAttributes() {
+    return [{
+      types: ['textStyle'],
+      attributes: {
+        fontSize: {
+          default: null,
+          parseHTML: (element) => element.style.fontSize || null,
+          renderHTML: (attributes) => attributes.fontSize ? { style: `font-size:${attributes.fontSize}` } : {}
+        }
+      }
+    }]
+  }
+})
+
+function atomNode(name: 'figure' | 'table' | 'pageBreak' | 'equationBlock') {
+  return Node.create({
+    name,
+    group: 'block',
+    atom: true,
+    selectable: true,
+    addAttributes() {
+      return {
+        nodeId: { default: null },
+        sectionId: { default: null },
+        payload: { default: {} }
+      }
+    },
+    parseHTML() {
+      return [{ tag: `[data-v3-node="${name}"]` }]
+    },
+    renderHTML({ HTMLAttributes }) {
+      const payload = HTMLAttributes.payload && typeof HTMLAttributes.payload === 'object' ? HTMLAttributes.payload : {}
+      const caption = String((payload as Record<string, unknown>).caption || '')
+      const label = name === 'pageBreak' ? '分页符' : name === 'table' ? '表格' : name === 'figure' ? '图片/图表' : '公式'
+      const { payload: _payload, ...domAttributes } = HTMLAttributes
+      return [
+        'div',
+        mergeAttributes(domAttributes, {
+          'data-v3-node': name,
+          'data-node-id': HTMLAttributes.nodeId || '',
+          class: `v3-object v3-object-${name}`
+        }),
+        name === 'pageBreak' ? '分页符' : `${label}${caption ? ` · ${caption}` : ''}`
+      ]
+    }
+  })
+}
+
+const FigureNode = atomNode('figure')
+const TableNode = atomNode('table')
+const PageBreakNode = atomNode('pageBreak')
+const EquationBlockNode = atomNode('equationBlock')
+
 function textNodes(content: Array<V3BlockNode | InlineNode> | undefined): JSONContent[] {
   if (!content) return []
   return content.flatMap((node) => {
@@ -59,6 +199,10 @@ function blockToJson(block: V3BlockNode, sectionId: string): JSONContent[] {
   }
   if (block.type === 'codeBlock') return [{ type: 'codeBlock', attrs, content: textNodes(block.content) }]
   if (block.type === 'horizontalRule') return [{ type: 'horizontalRule' }]
+  if (block.type === 'figure') return [{ type: 'figure', attrs: { nodeId: block.id, sectionId, payload: block.attrs?.figure || block.attrs || {} } }]
+  if (block.type === 'table') return [{ type: 'table', attrs: { nodeId: block.id, sectionId, payload: block.attrs?.table || block.attrs || {} } }]
+  if (block.type === 'pageBreak') return [{ type: 'pageBreak', attrs: { nodeId: block.id, sectionId } }]
+  if (block.type === 'equationBlock') return [{ type: 'equationBlock', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
   if (block.type === 'bulletList' || block.type === 'orderedList') {
     const items = (block.content || []).filter((item): item is V3BlockNode => 'id' in item)
     return [{
@@ -77,11 +221,110 @@ function blockToJson(block: V3BlockNode, sectionId: string): JSONContent[] {
   return [{ type: 'paragraph', attrs, content: textNodes(block.content) }]
 }
 
+const newNodeId = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`
+
+function inlineFromJson(nodes: JSONContent[] | undefined): InlineNode[] {
+  return (nodes || []).flatMap((node) => {
+    if (node.type === 'text') return [{ type: 'text', text: node.text || '', marks: (node.marks || []) as InlineNode['marks'] } as InlineNode]
+    if (node.type === 'hardBreak') return [{ type: 'hardBreak' } as InlineNode]
+    return []
+  })
+}
+
+function blockFromJson(node: JSONContent): V3BlockNode | null {
+  const attrs = (node.attrs || {}) as Record<string, unknown>
+  const id = String(attrs.nodeId || newNodeId(node.type || 'block'))
+  const styleId = String(attrs.styleId || (node.type === 'heading' ? `heading-${Number(attrs.level || 1)}` : 'normal'))
+  const paragraphAttrs = { ...attrs }
+  delete paragraphAttrs.nodeId
+  delete paragraphAttrs.sectionId
+  delete paragraphAttrs.styleId
+  if (node.type === 'paragraph') return { id, type: 'paragraph', styleId, attrs: paragraphAttrs, content: inlineFromJson(node.content) }
+  if (node.type === 'heading') return { id, type: 'heading', styleId, attrs: paragraphAttrs, content: inlineFromJson(node.content) }
+  if (node.type === 'blockquote' || node.type === 'codeBlock') {
+    return { id, type: node.type, styleId, attrs: paragraphAttrs, content: inlineFromJson(node.content?.[0]?.content || node.content) }
+  }
+  if (node.type === 'bulletList' || node.type === 'orderedList') {
+    return {
+      id,
+      type: node.type,
+      attrs: paragraphAttrs,
+      content: (node.content || []).map((item) => ({
+        id: String(item.attrs?.nodeId || newNodeId('listItem')),
+        type: 'listItem',
+        content: (item.content || []).map(blockFromJson).filter((child): child is V3BlockNode => Boolean(child))
+      }))
+    }
+  }
+  if (node.type === 'horizontalRule') return { id, type: 'horizontalRule' }
+  if (node.type === 'figure') return { id, type: 'figure', attrs: { figure: attrs.payload || {} } }
+  if (node.type === 'table') return { id, type: 'table', attrs: { table: attrs.payload || {} } }
+  if (node.type === 'pageBreak') return { id, type: 'pageBreak' }
+  if (node.type === 'equationBlock') return { id, type: 'equationBlock', attrs: (attrs.payload || {}) as Record<string, unknown> }
+  return null
+}
+
+export function tiptapToDocumentV3(base: DocumentV3, json: JSONContent): DocumentV3 {
+  const next = structuredClone(base)
+  const sectionMap = new Map(next.sections.map((section) => [section.id, section]))
+  for (const section of next.sections) section.content = []
+  for (const node of json.content || []) {
+    const sectionId = String(node.attrs?.sectionId || next.sections[0]?.id || '')
+    let section = sectionMap.get(sectionId)
+    if (!section) {
+      section = {
+        id: sectionId || newNodeId('section'),
+        breakType: 'nextPage',
+        layout: structuredClone(next.sections[0]?.layout),
+        headerFooter: structuredClone(next.sections[0]?.headerFooter),
+        content: []
+      }
+      next.sections.push(section)
+      sectionMap.set(section.id, section)
+    }
+    const block = blockFromJson(node)
+    if (block) section.content.push(block)
+  }
+  return next
+}
+
+export function documentV3ToText(doc: DocumentV3): string {
+  const inlineText = (content: Array<V3BlockNode | InlineNode> | undefined): string =>
+    (content || []).map((node) => 'text' in node && node.type === 'text' ? node.text || '' : 'id' in node ? inlineText(node.content) : '').join('')
+  const lines: string[] = []
+  for (const section of doc.sections) {
+    for (const block of section.content) {
+      const text = inlineText(block.content).trim()
+      if (!text) continue
+      if (block.type === 'heading') lines.push(`${'#'.repeat(Math.max(1, Math.min(6, Number(block.attrs?.level || 1))))} ${text}`)
+      else lines.push(text)
+    }
+  }
+  return lines.join('\n\n')
+}
+
 export function documentV3ToTiptap(doc: DocumentV3): JSONContent {
-  return {
+  const json: JSONContent = {
     type: 'doc',
     content: doc.sections.flatMap((section) => section.content.flatMap((block) => blockToJson(block, section.id)))
   }
+  const seen = new Set<string>()
+  const normalize = (node: JSONContent) => {
+    if (node.attrs?.nodeId) {
+      const currentId = String(node.attrs.nodeId)
+      if (seen.has(currentId)) node.attrs.nodeId = newNodeId(node.type || 'block')
+      seen.add(String(node.attrs.nodeId))
+    }
+    if (node.type === 'paragraph' && /^heading-[1-6]$/.test(String(node.attrs?.styleId || ''))) {
+      node.attrs = { ...(node.attrs || {}), styleId: 'normal' }
+    }
+    if (node.type === 'heading') {
+      node.attrs = { ...(node.attrs || {}), styleId: `heading-${Number(node.attrs?.level || 1)}` }
+    }
+    for (const child of node.content || []) normalize(child)
+  }
+  normalize(json)
+  return json
 }
 
 function cssForStyle(style: StyleDefinition): string {
@@ -120,13 +363,20 @@ export function createEditorKernel(options: {
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
       TextStyle,
+      FontSize,
       Color,
       FontFamily,
       Highlight.configure({ multicolor: true }),
       Subscript,
       Superscript,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      StableNodeAttributes
+      StableNodeAttributes,
+      ParagraphFormatting,
+      ReliableBlockIdentity,
+      FigureNode,
+      TableNode,
+      PageBreakNode,
+      EquationBlockNode
     ],
     onUpdate: ({ editor }) => options.onUpdate?.(editor.getJSON()),
     onSelectionUpdate: ({ editor }) => options.onSelectionUpdate?.(editor)

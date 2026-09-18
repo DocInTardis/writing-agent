@@ -1,5 +1,5 @@
 <script lang="ts">
-  import EditorWorkbench from './EditorWorkbench.svelte'
+  import StructuredEditor from './StructuredEditor.svelte'
 
   let {
     showToolbar = true,
@@ -16,9 +16,10 @@
     onblockselect?: (payload: any) => void
     ontoolbarstate?: (state: any) => void
   } = $props()
+
 </script>
 
-<EditorWorkbench
+<StructuredEditor
   {showToolbar}
   {paper}
   {lockEditing}

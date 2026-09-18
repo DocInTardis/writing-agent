@@ -2188,6 +2188,9 @@
     if (cmd === 'heading1') return exec('formatBlock', 'H1')
     if (cmd === 'heading2') return exec('formatBlock', 'H2')
     if (cmd === 'heading3') return exec('formatBlock', 'H3')
+    if (cmd === 'heading4') return exec('formatBlock', 'H4')
+    if (cmd === 'heading5') return exec('formatBlock', 'H5')
+    if (cmd === 'heading6') return exec('formatBlock', 'H6')
     if (cmd === 'paragraph') return exec('formatBlock', 'P')
     
     // 列表与缩进

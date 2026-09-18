@@ -31,16 +31,24 @@ async def save_doc(doc_id: str, request: Request) -> dict:
 
     data = await request.json()
     incoming_v3 = data.get("document_v3")
+    saved_from_v3 = False
+    v3_text = ""
     if isinstance(incoming_v3, dict):
         try:
             from writing_agent.v3 import DocumentV3
+            from writing_agent.v3.document_model import to_plain_text
 
-            session.document_v3 = DocumentV3.model_validate(incoming_v3).model_dump(mode="json")
+            parsed_v3 = DocumentV3.model_validate(incoming_v3)
+            session.document_v3 = parsed_v3.model_dump(mode="json", by_alias=True)
+            v3_text = to_plain_text(parsed_v3)
+            saved_from_v3 = True
         except Exception as exc:
             raise app_v2.HTTPException(status_code=422, detail=f"invalid document_v3: {exc}") from exc
     incoming_ir = data.get("doc_ir")
     saved_from_ir = False
-    if isinstance(incoming_ir, dict) and incoming_ir.get("sections") is not None:
+    if saved_from_v3:
+        text = v3_text
+    elif isinstance(incoming_ir, dict) and incoming_ir.get("sections") is not None:
         try:
             session.doc_ir = incoming_ir
             text = app_v2.doc_ir_to_text(app_v2.doc_ir_from_dict(session.doc_ir))
@@ -59,7 +67,7 @@ async def save_doc(doc_id: str, request: Request) -> dict:
     ):
         text = session.doc_text
 
-    if saved_from_ir:
+    if saved_from_ir or saved_from_v3:
         session.doc_text = text
     else:
         app_v2._set_doc_text(session, text)

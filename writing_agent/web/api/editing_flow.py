@@ -153,10 +153,10 @@ async def document_v3_command(doc_id: str, request: Request) -> dict:
         status = 409 if result.error == "review_mode_not_ready" else 422
         raise app_v2.HTTPException(status_code=status, detail=result.error or "command failed")
     if result.changed and result.document is not None:
-        session.document_v3 = result.document.model_dump(mode="json")
+        session.document_v3 = result.document.model_dump(mode="json", by_alias=True)
         session.doc_text = to_plain_text(result.document)
         app_v2.store.put(session)
-    return result.model_dump(mode="json", exclude_none=True)
+    return result.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 def document_v3_tool_schema() -> dict:

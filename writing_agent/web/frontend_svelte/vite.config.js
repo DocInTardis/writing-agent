@@ -19,6 +19,9 @@ export default defineConfig({
       output: {
         entryFileNames: 'main.js',
         chunkFileNames: 'chunk-[name].js',
+        manualChunks(id) {
+          if (id.includes('@tiptap') || id.includes('prosemirror')) return 'editor-kernel'
+        },
         assetFileNames: (asset) => {
           if (asset.name && asset.name.endsWith('.css')) return 'style.css'
           return '[name][extname]'

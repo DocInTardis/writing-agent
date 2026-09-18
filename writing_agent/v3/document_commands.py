@@ -59,7 +59,7 @@ class DocumentCommandRegistry:
 
     def tool_schema(self) -> dict[str, Any]:
         """JSON schema suitable for model tool/function definitions."""
-        return DocumentCommand.model_json_schema()
+        return DocumentCommand.model_json_schema(by_alias=True)
 
     def execute(self, document: DocumentV3, command: DocumentCommand) -> CommandResult:
         handler = self._handlers.get(command.type)
@@ -150,4 +150,3 @@ def create_default_registry() -> DocumentCommandRegistry:
     registry.register("apply_style", _apply_style)
     registry.register("set_paragraph_format", _set_paragraph_format)
     return registry
-

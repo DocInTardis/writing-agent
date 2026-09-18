@@ -13,8 +13,17 @@ def _id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex}"
 
 
+def _to_camel(value: str) -> str:
+    head, *tail = value.split("_")
+    return head + "".join(part[:1].upper() + part[1:] for part in tail)
+
+
+STRICT_CONFIG = ConfigDict(extra="forbid", alias_generator=_to_camel, populate_by_name=True)
+FLEXIBLE_CONFIG = ConfigDict(extra="allow", alias_generator=_to_camel, populate_by_name=True)
+
+
 class StyleProperties(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = STRICT_CONFIG
 
     font_family: str | None = None
     font_size_pt: float | None = None
@@ -37,7 +46,7 @@ class StyleProperties(BaseModel):
 
 
 class StyleDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = STRICT_CONFIG
 
     id: str
     name: str
@@ -49,7 +58,7 @@ class StyleDefinition(BaseModel):
 
 
 class InlineNode(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = FLEXIBLE_CONFIG
 
     type: Literal[
         "text",
@@ -65,7 +74,7 @@ class InlineNode(BaseModel):
 
 
 class BlockNode(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = FLEXIBLE_CONFIG
 
     id: str = Field(default_factory=lambda: _id("block"))
     type: Literal[
@@ -91,7 +100,7 @@ class BlockNode(BaseModel):
 
 
 class PageLayout(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = STRICT_CONFIG
 
     page_size: Literal["A4", "A3", "Letter", "custom"] = "A4"
     width_mm: float | None = None
@@ -112,7 +121,7 @@ class PageLayout(BaseModel):
 
 
 class PageNumberDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = STRICT_CONFIG
 
     enabled: bool = True
     format: Literal["arabic", "lowerRoman", "upperRoman", "lowerLetter", "upperLetter"] = "arabic"
@@ -122,7 +131,7 @@ class PageNumberDefinition(BaseModel):
 
 
 class HeaderFooterDefinition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = STRICT_CONFIG
 
     link_header_to_previous: bool = True
     link_footer_to_previous: bool = True
@@ -138,7 +147,7 @@ class HeaderFooterDefinition(BaseModel):
 
 
 class SectionV3(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = STRICT_CONFIG
 
     id: str = Field(default_factory=lambda: _id("section"))
     break_type: Literal["nextPage", "continuous", "oddPage", "evenPage"] = "nextPage"
@@ -148,7 +157,7 @@ class SectionV3(BaseModel):
 
 
 class DocumentV3(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = STRICT_CONFIG
 
     schema_version: Literal[3] = 3
     id: str = Field(default_factory=lambda: _id("doc"))

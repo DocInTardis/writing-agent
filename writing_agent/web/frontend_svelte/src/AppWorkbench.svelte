@@ -78,6 +78,7 @@
     sourceText,
     docIr,
     docIrDirty,
+    documentV3,
     editorCommand,
     wordCount,
     thinkingSummary,
@@ -253,7 +254,12 @@
     canRedo: false,
     canCopy: false,
     canCut: false,
-    canPaste: false
+    canPaste: false,
+    styleId: 'normal',
+    fontFamily: '',
+    fontSize: '',
+    alignment: 'left',
+    lineSpacing: null as number | null
   })
   let queuedInstructionSeed = $state(0)
   let queuedGlobalInstructions = $state<QueuedInstruction[]>([])
@@ -1019,7 +1025,12 @@
       canRedo: Boolean((detail as any).canRedo),
       canCopy: Boolean((detail as any).canCopy),
       canCut: Boolean((detail as any).canCut),
-      canPaste: Boolean((detail as any).canPaste)
+      canPaste: Boolean((detail as any).canPaste),
+      styleId: String((detail as any).styleId || 'normal'),
+      fontFamily: String((detail as any).fontFamily || ''),
+      fontSize: String((detail as any).fontSize || ''),
+      alignment: String((detail as any).alignment || 'left'),
+      lineSpacing: (detail as any).lineSpacing == null ? null : Number((detail as any).lineSpacing)
     }
   }
 
@@ -1988,6 +1999,7 @@
         docIr.set(null)
         lastSavedDocIr = null
       }
+      documentV3.set(data.document_v3 && typeof data.document_v3 === 'object' ? data.document_v3 : null)
       loadVersionLog().catch(() => {})
     } catch (err) {
       pushToast(`加载失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
@@ -2390,6 +2402,7 @@
       }
       const payload: Record<string, unknown> = { text: $sourceText }
       if (!$docIrDirty && $docIr) payload.doc_ir = $docIr
+      if ($documentV3) payload.document_v3 = $documentV3
       await fetch(`/api/doc/${id}/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
