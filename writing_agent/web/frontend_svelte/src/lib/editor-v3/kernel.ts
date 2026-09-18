@@ -7,7 +7,8 @@ import Superscript from '@tiptap/extension-superscript'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
 import StarterKit from '@tiptap/starter-kit'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 
 import type { DocumentV3, InlineNode, SectionV3, StyleDefinition, V3BlockNode } from './model'
 
@@ -118,6 +119,61 @@ const ReliableBlockIdentity = Extension.create({
           }
         })
         return changed ? transaction : null
+      }
+    })]
+  }
+})
+
+const BLOCK_NODE_TYPES = new Set([
+  'paragraph',
+  'heading',
+  'blockquote',
+  'codeBlock',
+  'bulletList',
+  'orderedList',
+  'listItem'
+])
+
+function currentSectionId(editorNode: ProseMirrorNode, position: number): string | null {
+  const resolved = editorNode.resolve(Math.max(0, Math.min(position, editorNode.content.size)))
+  for (let depth = resolved.depth; depth >= 0; depth -= 1) {
+    const value = resolved.node(depth).attrs?.sectionId
+    if (value) return String(value)
+  }
+  return null
+}
+
+function normalizePastedNode(node: ProseMirrorNode, sectionId: string | null): ProseMirrorNode {
+  if (node.isText) return node
+  const children: ProseMirrorNode[] = []
+  node.content.forEach((child) => children.push(normalizePastedNode(child, sectionId)))
+  let attrs: Record<string, unknown> = { ...node.attrs }
+  if (BLOCK_NODE_TYPES.has(node.type.name)) {
+    attrs = { ...attrs, nodeId: null, sectionId: sectionId || attrs.sectionId || null }
+    if (node.type.name === 'paragraph') attrs.styleId = 'normal'
+    if (node.type.name === 'heading') attrs.styleId = `heading-${Number(attrs.level || 1)}`
+  }
+  const content = Fragment.fromArray(children)
+  return BLOCK_NODE_TYPES.has(node.type.name)
+    ? node.type.create(attrs, content, node.marks)
+    : node.copy(content)
+}
+
+const ReliableClipboard = Extension.create({
+  name: 'reliableClipboard',
+  addProseMirrorPlugins() {
+    return [new Plugin({
+      key: new PluginKey('reliableClipboard'),
+      props: {
+        transformPasted(slice, view) {
+          const sectionId = currentSectionId(view.state.doc, view.state.selection.from)
+          const content: ProseMirrorNode[] = []
+          slice.content.forEach((node) => content.push(normalizePastedNode(node, sectionId)))
+          return new Slice(Fragment.fromArray(content), slice.openStart, slice.openEnd)
+        },
+        transformPastedText(text) {
+          return text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
+        }
       }
     })]
   }
@@ -290,12 +346,16 @@ export function tiptapToDocumentV3(base: DocumentV3, json: JSONContent): Documen
 
 export function documentV3ToText(doc: DocumentV3): string {
   const inlineText = (content: Array<V3BlockNode | InlineNode> | undefined): string =>
-    (content || []).map((node) => 'text' in node && node.type === 'text' ? node.text || '' : 'id' in node ? inlineText(node.content) : '').join('')
+    (content || []).map((node) => {
+      if ('text' in node && node.type === 'text') return node.text || ''
+      if (!('id' in node) && node.type === 'hardBreak') return '\n'
+      return 'id' in node ? inlineText(node.content) : ''
+    }).join('')
   const lines: string[] = []
   for (const section of doc.sections) {
     for (const block of section.content) {
-      const text = inlineText(block.content).trim()
-      if (!text) continue
+      const text = inlineText(block.content)
+      if (!text.trim()) continue
       if (block.type === 'heading') lines.push(`${'#'.repeat(Math.max(1, Math.min(6, Number(block.attrs?.level || 1))))} ${text}`)
       else lines.push(text)
     }
@@ -325,6 +385,18 @@ export function documentV3ToTiptap(doc: DocumentV3): JSONContent {
   }
   normalize(json)
   return json
+}
+
+export function plainTextToTiptapContent(value: string): JSONContent[] {
+  const normalized = value.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
+  return normalized.split(/\n{2,}/).map((paragraph) => {
+    const content: JSONContent[] = []
+    paragraph.split('\n').forEach((line, index) => {
+      if (index) content.push({ type: 'hardBreak' })
+      if (line) content.push({ type: 'text', text: line })
+    })
+    return { type: 'paragraph', attrs: { nodeId: null, styleId: 'normal' }, content }
+  })
 }
 
 function cssForStyle(style: StyleDefinition): string {
@@ -373,14 +445,73 @@ export function createEditorKernel(options: {
       StableNodeAttributes,
       ParagraphFormatting,
       ReliableBlockIdentity,
+      ReliableClipboard,
       FigureNode,
       TableNode,
       PageBreakNode,
       EquationBlockNode
     ],
     onUpdate: ({ editor }) => options.onUpdate?.(editor.getJSON()),
-    onSelectionUpdate: ({ editor }) => options.onSelectionUpdate?.(editor)
+    onSelectionUpdate: ({ editor }) => options.onSelectionUpdate?.(editor),
+    onFocus: ({ editor }) => options.onSelectionUpdate?.(editor),
+    onBlur: ({ editor }) => options.onSelectionUpdate?.(editor)
   })
+}
+
+export function selectedBlocks(editor: Editor): Array<{ id: string; type: string; text: string }> {
+  const { from, to, empty, $from } = editor.state.selection
+  const blocks: Array<{ id: string; type: string; text: string }> = []
+  const seen = new Set<string>()
+  const append = (node: ProseMirrorNode) => {
+    const id = String(node.attrs?.nodeId || '')
+    if (!id || seen.has(id) || !node.isTextblock) return
+    seen.add(id)
+    blocks.push({ id, type: node.type.name, text: node.textContent })
+  }
+  if (empty) {
+    for (let depth = $from.depth; depth >= 0; depth -= 1) {
+      const node = $from.node(depth)
+      if (node.isTextblock && node.attrs?.nodeId) {
+        append(node)
+        break
+      }
+    }
+    return blocks
+  }
+  editor.state.doc.nodesBetween(from, to, (node) => append(node))
+  return blocks
+}
+
+export function findBlockById(editor: Editor, nodeId: string): { node: ProseMirrorNode; position: number } | null {
+  let match: { node: ProseMirrorNode; position: number } | null = null
+  editor.state.doc.descendants((node, position) => {
+    if (!match && String(node.attrs?.nodeId || '') === nodeId) {
+      match = { node, position }
+      return false
+    }
+    return !match
+  })
+  return match
+}
+
+export function selectBlock(editor: Editor, nodeId: string, anchorNodeId = ''): boolean {
+  const target = findBlockById(editor, nodeId)
+  if (!target) return false
+  let selection
+  if (anchorNodeId && anchorNodeId !== nodeId) {
+    const anchor = findBlockById(editor, anchorNodeId)
+    if (anchor) {
+      const start = anchor.position <= target.position ? anchor : target
+      const end = anchor.position <= target.position ? target : anchor
+      const from = Math.min(editor.state.doc.content.size, start.position + 1)
+      const to = Math.min(editor.state.doc.content.size, end.position + end.node.nodeSize - 1)
+      selection = TextSelection.create(editor.state.doc, from, to)
+    }
+  }
+  selection ||= NodeSelection.create(editor.state.doc, target.position)
+  editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView())
+  editor.view.focus()
+  return true
 }
 
 export function sectionForPosition(doc: DocumentV3, sectionId: string): SectionV3 | undefined {

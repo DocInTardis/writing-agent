@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/core'
+import { NodeSelection } from '@tiptap/pm/state'
 
 export type CommandSource = 'user' | 'shortcut' | 'ai' | 'import'
 export type ReviewMode = 'direct' | 'suggest'
@@ -163,3 +164,52 @@ registerDocumentCommand('toggle_code_block', (editor) => editor.chain().focus().
 registerDocumentCommand('clear_formatting', (editor) => editor.chain().focus().unsetAllMarks().clearNodes().run())
 registerDocumentCommand('undo', (editor) => editor.chain().focus().undo().run())
 registerDocumentCommand('redo', (editor) => editor.chain().focus().redo().run())
+
+function selectedTopLevelNode(editor: Editor) {
+  const selection = editor.state.selection
+  if (!(selection instanceof NodeSelection) || selection.$from.depth !== 0) return null
+  return { node: selection.node, position: selection.from }
+}
+
+registerDocumentCommand('duplicate_block', (editor) => {
+  const selected = selectedTopLevelNode(editor)
+  if (!selected) return false
+  const insertAt = selected.position + selected.node.nodeSize
+  const transaction = editor.state.tr.insert(insertAt, selected.node)
+  transaction.setSelection(NodeSelection.create(transaction.doc, insertAt))
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
+})
+
+registerDocumentCommand('delete_block', (editor) => {
+  if (!selectedTopLevelNode(editor)) return false
+  return editor.chain().focus().deleteSelection().run()
+})
+
+registerDocumentCommand('move_block_up', (editor) => {
+  const selected = selectedTopLevelNode(editor)
+  if (!selected) return false
+  const before = editor.state.doc.childBefore(selected.position)
+  if (!before.node) return false
+  const insertAt = selected.position - before.node.nodeSize
+  const transaction = editor.state.tr
+    .delete(selected.position, selected.position + selected.node.nodeSize)
+    .insert(insertAt, selected.node)
+  transaction.setSelection(NodeSelection.create(transaction.doc, insertAt))
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
+})
+
+registerDocumentCommand('move_block_down', (editor) => {
+  const selected = selectedTopLevelNode(editor)
+  if (!selected) return false
+  const after = editor.state.doc.childAfter(selected.position + selected.node.nodeSize)
+  if (!after.node) return false
+  const insertAt = selected.position + after.node.nodeSize
+  const transaction = editor.state.tr
+    .delete(selected.position, selected.position + selected.node.nodeSize)
+    .insert(insertAt, selected.node)
+  transaction.setSelection(NodeSelection.create(transaction.doc, insertAt))
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
+})

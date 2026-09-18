@@ -2,6 +2,7 @@
   import { get } from 'svelte/store'
   import { onDestroy, onMount } from 'svelte'
   import type { Editor, JSONContent } from '@tiptap/core'
+  import { NodeSelection } from '@tiptap/pm/state'
 
   import {
     docIr,
@@ -15,6 +16,9 @@
     createEditorKernel,
     documentV3ToTiptap,
     documentV3ToText,
+    plainTextToTiptapContent,
+    selectBlock,
+    selectedBlocks,
     styleSheetForDocument,
     tiptapToDocumentV3
   } from '../editor-v3/kernel'
@@ -43,6 +47,61 @@
   let unsubscribeCommand = () => {}
   let unsubscribeDocIr = () => {}
   let mountedLegacyRef: Record<string, unknown> | null = null
+  let clipboardError = $state('')
+  let clipboardErrorTimer: ReturnType<typeof setTimeout> | null = null
+  let shell: HTMLDivElement
+  let blockHandleVisible = $state(false)
+  let blockHandleTop = $state(0)
+  let blockHandleLeft = $state(0)
+  let activeBlockId = $state('')
+  let blockSelectionAnchorId = ''
+  let blockSelectionActive = $state(false)
+
+  function topLevelBlockElement(element: Element | null): HTMLElement | null {
+    let candidate = element?.closest<HTMLElement>('[data-node-id]') || null
+    while (candidate?.parentElement && !candidate.parentElement.classList.contains('tiptap')) {
+      candidate = candidate.parentElement.closest<HTMLElement>('[data-node-id]')
+    }
+    return candidate
+  }
+
+  function positionBlockHandle(element: HTMLElement | null) {
+    if (!element || !shell) return
+    const blockId = String(element.dataset.nodeId || '')
+    if (!blockId) return
+    const shellRect = shell.getBoundingClientRect()
+    const blockRect = element.getBoundingClientRect()
+    activeBlockId = blockId
+    blockHandleTop = blockRect.top - shellRect.top + Math.min(4, Math.max(0, (blockRect.height - 24) / 2))
+    blockHandleLeft = blockRect.left - shellRect.left - 30
+    blockHandleVisible = true
+  }
+
+  function positionBlockHandleById(nodeId: string) {
+    if (!host || !nodeId) return
+    const element = Array.from(host.querySelectorAll<HTMLElement>('[data-node-id]'))
+      .find((candidate) => candidate.dataset.nodeId === nodeId && candidate.parentElement?.classList.contains('tiptap'))
+    positionBlockHandle(element || null)
+  }
+
+  function handleEditorPointerMove(event: PointerEvent) {
+    positionBlockHandle(topLevelBlockElement(event.target instanceof Element ? event.target : null))
+  }
+
+  function handleBlockHandleClick(event: MouseEvent) {
+    if (!editor || !activeBlockId) return
+    const extend = event.shiftKey && Boolean(blockSelectionAnchorId)
+    if (selectBlock(editor, activeBlockId, extend ? blockSelectionAnchorId : '')) {
+      if (!extend) blockSelectionAnchorId = activeBlockId
+      positionBlockHandleById(activeBlockId)
+    }
+  }
+
+  function runBlockCommand(type: 'move_block_up' | 'move_block_down' | 'duplicate_block' | 'delete_block') {
+    if (!editor) return
+    executeDocumentCommand(editor, createUserCommand(type))
+    emitSelection()
+  }
 
   function emitToolbarState() {
     if (!editor) return
@@ -72,20 +131,16 @@
 
   function emitSelection() {
     if (!editor) return
-    const { from, to, empty, $from: resolvedFrom } = editor.state.selection
-    let nodeId = ''
-    for (let depth = resolvedFrom.depth; depth >= 0; depth -= 1) {
-      const candidate = resolvedFrom.node(depth).attrs?.nodeId
-      if (candidate) {
-        nodeId = String(candidate)
-        break
-      }
-    }
+    const { from, to, empty } = editor.state.selection
+    const blocks = selectedBlocks(editor)
+    const blockIds = blocks.map((block) => block.id)
+    blockSelectionActive = editor.state.selection instanceof NodeSelection
+    if (blockIds.length === 1) positionBlockHandleById(blockIds[0])
     const text = empty ? '' : editor.state.doc.textBetween(from, to, '\n')
     onblockselect?.({
-      blockId: nodeId,
-      blockIds: nodeId ? [nodeId] : [],
-      blocks: nodeId ? [{ id: nodeId, kind: 'block', text }] : [],
+      blockId: blockIds[0] || '',
+      blockIds,
+      blocks: blocks.map((block) => ({ ...block, kind: 'block' })),
       text,
       rect: null,
       style: {}
@@ -107,6 +162,10 @@
 
   function runLegacyCommand(command: EditorCommand) {
     if (!editor) return
+    if (command === 'copy' || command === 'cut' || command === 'paste') {
+      void runClipboardCommand(command)
+      return
+    }
     const simple: Partial<Record<EditorCommand, string>> = {
       bold: 'toggle_bold',
       italic: 'toggle_italic',
@@ -160,6 +219,27 @@
     emitToolbarState()
   }
 
+  async function runClipboardCommand(command: 'copy' | 'cut' | 'paste') {
+    if (!editor || !navigator.clipboard) return
+    try {
+      if (command === 'paste') {
+        const text = await navigator.clipboard.readText()
+        if (!text) return
+        editor.chain().focus().insertContent(plainTextToTiptapContent(text)).run()
+        return
+      }
+      const { from, to, empty } = editor.state.selection
+      if (empty) return
+      const text = editor.state.doc.textBetween(from, to, '\n\n', '\n').replace(/^\n+|\n+$/g, '')
+      await navigator.clipboard.writeText(text)
+      if (command === 'cut') editor.chain().focus().deleteSelection().run()
+    } catch {
+      clipboardError = '系统未允许访问剪贴板，请使用 Ctrl+C、Ctrl+X 或 Ctrl+V。'
+      if (clipboardErrorTimer) clearTimeout(clipboardErrorTimer)
+      clipboardErrorTimer = setTimeout(() => (clipboardError = ''), 4000)
+    }
+  }
+
   function loadDocument(next: DocumentV3) {
     if (!editor) return
     activeDocument = next
@@ -208,15 +288,37 @@
     unsubscribeDocIr()
     editor?.destroy()
     styleElement?.remove()
+    if (clipboardErrorTimer) clearTimeout(clipboardErrorTimer)
   })
 </script>
 
-<div class:paper class="structured-editor-shell" aria-label="Document V3 编辑区">
+<div class:paper class="structured-editor-shell" role="group" aria-label="Document V3 编辑区" bind:this={shell} onpointermove={handleEditorPointerMove}>
+  {#if blockHandleVisible}
+    <button
+      class="block-handle"
+      style:top={`${blockHandleTop}px`}
+      style:left={`${blockHandleLeft}px`}
+      aria-label="选择当前块"
+      title="选择块；Shift 点击选择连续块"
+      onmousedown={(event) => event.preventDefault()}
+      onclick={handleBlockHandleClick}
+    >⋮⋮</button>
+  {/if}
+  {#if blockHandleVisible && blockSelectionActive}
+    <div class="block-actions" style:top={`${blockHandleTop}px`} style:left={`${blockHandleLeft + 32}px`} role="toolbar" aria-label="块操作">
+      <button title="上移块" aria-label="上移块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('move_block_up')}>↑</button>
+      <button title="下移块" aria-label="下移块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('move_block_down')}>↓</button>
+      <button title="复制块" aria-label="复制块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('duplicate_block')}>⧉</button>
+      <button class="danger" title="删除块" aria-label="删除块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('delete_block')}>×</button>
+    </div>
+  {/if}
   <div class="structured-editor" bind:this={host}></div>
+  {#if clipboardError}<div class="clipboard-error" role="status">{clipboardError}</div>{/if}
 </div>
 
 <style>
   .structured-editor-shell {
+    position: relative;
     box-sizing: border-box;
     width: min(100%, 21cm);
     min-height: 29.7cm;
@@ -245,6 +347,72 @@
   .structured-editor :global(.tiptap h5),
   .structured-editor :global(.tiptap h6) {
     min-height: 1.35em;
+    border-radius: 2px;
+    transition: background-color 80ms ease, box-shadow 80ms ease;
+  }
+  .structured-editor :global(.tiptap > [data-node-id]:hover) {
+    box-shadow: inset 2px 0 0 #c7d8f4;
+  }
+  .structured-editor :global(.tiptap > .ProseMirror-selectednode) {
+    background: #eef5ff;
+    box-shadow: inset 3px 0 0 #2f6fca;
+    outline: none;
+  }
+  .block-handle {
+    position: absolute;
+    z-index: 3;
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #8a94a4;
+    cursor: grab;
+    font-size: 15px;
+    line-height: 1;
+  }
+  .block-handle:hover,
+  .block-handle:focus-visible {
+    background: #e8eef7;
+    color: #2f5f9f;
+    outline: none;
+  }
+  .block-actions {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid #d5dce7;
+    border-radius: 5px;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(38, 50, 66, 0.12);
+    transform: translateY(-32px);
+  }
+  .block-actions button {
+    display: grid;
+    width: 25px;
+    height: 25px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: #4d596a;
+    cursor: pointer;
+  }
+  .block-actions button:hover,
+  .block-actions button:focus-visible {
+    background: #edf3fb;
+    outline: none;
+  }
+  .block-actions button.danger:hover,
+  .block-actions button.danger:focus-visible {
+    background: #fff0f0;
+    color: #b42318;
   }
   .structured-editor :global(.tiptap p.is-editor-empty:first-child::before) {
     color: #99a1ad;
@@ -270,5 +438,17 @@
     border-radius: 0;
     background: transparent;
     font-size: 11px;
+  }
+  .clipboard-error {
+    position: sticky;
+    bottom: 12px;
+    margin: 12px auto 0;
+    padding: 8px 12px;
+    border: 1px solid #f2c96d;
+    border-radius: 4px;
+    background: #fff8df;
+    color: #6f5310;
+    font-size: 12px;
+    text-align: center;
   }
 </style>
