@@ -224,7 +224,7 @@ export function blocksToHtml(blocks: UnknownRecord[], title?: string): string | 
   }
 
   parts.push('</div>')
-  parts.push('<div class="wa-footer" contenteditable="false">Page 1</div>')
+  parts.push('<div class="wa-footer" contenteditable="false"></div>')
   parts.push('</div>')
   return parts.length > 2 ? parts.join('') : null
 }

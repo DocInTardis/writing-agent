@@ -511,6 +511,13 @@
     text-align: left;
   }
 
+  .editable:focus,
+  .editable [data-block-id]:focus,
+  .editable [data-section-id]:focus,
+  .editable [data-doc-title='1']:focus {
+    outline: none;
+  }
+
   .editable ul,
   .editable ol {
     padding-left: 24px;

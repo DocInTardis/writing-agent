@@ -110,7 +110,7 @@
   let editorZoom = $state(100)
   let gutterAnchor: HTMLElement | null = null
   let outlineItems = $state<Array<{ id: string; text: string; level: number }>>([])
-  let documentMeta = $state({ pages: 1, paragraphs: 0, chars: 0, selected: 0 })
+  let documentMeta = $state({ currentPage: 1, pages: 1, paragraphs: 0, chars: 0, selected: 0 })
   type SlashCommandItem = {
     id: string
     label: string
@@ -148,6 +148,10 @@
   function syncEditorUiFlags() {
     if (!editor) return
     const readonly = $generating || lockEditing
+    // The page is one continuous editing host. Paragraphs remain semantic
+    // DocIR blocks, but they are not separate input boxes. This lets native
+    // caret navigation and wrapped lines behave like a desktop word processor.
+    editor.setAttribute('contenteditable', readonly ? 'false' : 'true')
     editor.dataset.readonly = readonly ? '1' : '0'
     editor.dataset.emptyHint = emptyHintText()
   }
@@ -255,7 +259,8 @@
 
   function setEditableAttrs(el: HTMLElement) {
     const editable = !$generating && !lockEditing
-    el.setAttribute('contenteditable', editable ? 'true' : 'false')
+    if (editable) el.removeAttribute('contenteditable')
+    else el.setAttribute('contenteditable', 'false')
     el.setAttribute('spellcheck', 'false')
     if (editable) el.dataset.waEdit = '1'
     else delete el.dataset.waEdit
@@ -285,7 +290,7 @@
   }
 
   function focusEditableAtStart(el: HTMLElement) {
-    el.focus()
+    editor?.focus()
     const range = document.createRange()
     range.selectNodeContents(el)
     range.collapse(true)
@@ -294,6 +299,47 @@
     selection?.addRange(range)
     editingEl = el
     editingKey = String(el.dataset.blockId || el.dataset.sectionId || el.dataset.docTitle || '')
+  }
+
+  function pageSizeCm(): [number, number] {
+    const settings = $pageSettings
+    const sizes: Record<string, [number, number]> = {
+      A4: [21, 29.7], A5: [14.8, 21], LETTER: [21.59, 27.94]
+    }
+    let [width, height] = sizes[settings.pageSize] || sizes.A4
+    if (settings.orientation === 'landscape') [width, height] = [height, width]
+    return [width, height]
+  }
+
+  function visualPageHeight(): number {
+    if (!editor) return 1
+    const [widthCm, heightCm] = pageSizeCm()
+    const rect = editor.getBoundingClientRect()
+    return Math.max(1, rect.width * (heightCm / widthCm))
+  }
+
+  function updateFooterText(pages: number) {
+    if (!editor) return
+    const settings = $pageSettings
+    const footer = editor.querySelector('.wa-footer') as HTMLElement | null
+    if (!footer) return
+    footer.style.display = settings.showFooter || settings.pageNumbers ? 'block' : 'none'
+    footer.style.textAlign = settings.pageNumberPosition
+    const pageText = settings.pageNumbers ? `第 ${Math.max(1, pages)} 页，共 ${Math.max(1, pages)} 页` : ''
+    footer.textContent = [settings.showFooter ? settings.footerText : '', pageText].filter(Boolean).join('　')
+  }
+
+  function caretPage(pages: number): number {
+    if (!editor) return 1
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || !selectionInsideEditor()) return documentMeta.currentPage
+    const range = selection.getRangeAt(0).cloneRange()
+    range.collapse(true)
+    const caretRect = range.getBoundingClientRect()
+    const editorRect = editor.getBoundingClientRect()
+    if (!caretRect || !editorRect.height) return documentMeta.currentPage
+    const offset = Math.max(0, caretRect.top - editorRect.top)
+    return Math.max(1, Math.min(pages, Math.floor(offset / visualPageHeight()) + 1))
   }
 
   function refreshDocumentMeta() {
@@ -314,11 +360,13 @@
     const paragraphs = countRoot.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').length
     const chars = String(countRoot.innerText || '').replace(/\s/g, '').length
     const enginePages = Number(editor.dataset.enginePages || 0)
-    const usableHeight = Math.max(1, editor.clientWidth * 1.414 - 160)
-    const measuredPages = enginePages > 0 ? enginePages : Math.max(1, Math.ceil(editor.scrollHeight / usableHeight))
+    const pageHeight = visualPageHeight()
+    const visualPages = Math.max(1, Math.ceil(editor.getBoundingClientRect().height / pageHeight))
+    const measuredPages = enginePages > 0 ? Math.max(enginePages, visualPages) : visualPages
     const manualPages = editor.querySelectorAll('.wa-page-break').length + 1
     const pages = Math.max(manualPages, measuredPages)
-    documentMeta = { ...documentMeta, pages, paragraphs, chars }
+    documentMeta = { ...documentMeta, currentPage: caretPage(pages), pages, paragraphs, chars }
+    updateFooterText(pages)
   }
 
   function setEditorZoom(value: number) {
@@ -773,6 +821,14 @@
   }
 
   function flushPendingEditableState() {
+    if (historyTimer || hasUntrackedParagraphStructure()) {
+      if (historyTimer) {
+        clearTimeout(historyTimer)
+        historyTimer = null
+      }
+      reconcileEditorDom()
+      return
+    }
     if (editCommitTimer) {
       clearTimeout(editCommitTimer)
       editCommitTimer = null
@@ -1499,7 +1555,7 @@
 
   function placeCaretAtBlockEnd(el: HTMLElement) {
     if (!el.isContentEditable) return
-    el.focus()
+    editor?.focus()
     const range = document.createRange()
     range.selectNodeContents(el)
     const empty = !normalizeInlineText(plainTextFromElement(el))
@@ -1682,7 +1738,7 @@
   }
 
   function placeCaretAtTextOffset(el: HTMLElement, offset: number) {
-    el.focus()
+    editor?.focus()
     const range = document.createRange()
     let remaining = Math.max(0, offset)
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
@@ -1815,6 +1871,28 @@
     if (splitTextBlockAtCaret(el)) event.preventDefault()
   }
 
+  function hasUntrackedParagraphStructure(): boolean {
+    if (!editor) return false
+    const body = editor.querySelector('.wa-body') as HTMLElement | null
+    if (!body) return false
+    const seenBlockIds = new Set<string>()
+    return Array.from(body.children).some((node) => {
+      const el = node as HTMLElement
+      const blockId = String(el.dataset.blockId || '')
+      // Chromium clones data-* attributes when a multiline paste splits a
+      // paragraph. Duplicate block IDs therefore mean new semantic paragraphs
+      // even though every element appears to be tracked.
+      if (blockId) {
+        if (seenBlockIds.has(blockId)) return true
+        seenBlockIds.add(blockId)
+        return false
+      }
+      if (el.dataset.sectionId || el.dataset.docTitle === '1') return false
+      if (el.matches('figure, table, .wa-table, .wa-figure, .wa-page-break')) return false
+      return el.matches('p, div, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, pre')
+    })
+  }
+
   function handleEditableFocus(event: FocusEvent) {
     if (editor) editor.dataset.caretActive = '1'
     if ($generating || lockEditing) {
@@ -1823,7 +1901,7 @@
       emitToolbarState()
       return
     }
-    const el = findEditableRoot(event.target)
+    const el = findEditableRoot(event.target) || resolveEditableFromSelection()
     if (!el) return
     editingEl = el
     editingKey = String(el.dataset.blockId || el.dataset.sectionId || el.dataset.docTitle || '')
@@ -1832,9 +1910,12 @@
 
   function handleEditableBlur(event: FocusEvent) {
     if (slashMenuOpen) closeSlashMenu()
-    const el = findEditableRoot(event.target)
+    const el = findEditableRoot(event.target) || editingEl
     if (el) {
-      if (!$generating && !lockEditing) commitEditableElement(el, { immediate: true })
+      if (!$generating && !lockEditing) {
+        if (hasUntrackedParagraphStructure()) reconcileEditorDom()
+        else commitEditableElement(el, { immediate: true })
+      }
       if (editingEl === el) {
         editingEl = null
         editingKey = ''
@@ -1856,13 +1937,33 @@
     if ($generating || lockEditing) return
     if (composing) return
     const inputType = event instanceof InputEvent ? String(event.inputType || '') : ''
+    // Do not rely on inputType: WebView2 and clipboard bridges may report a
+    // multiline paste as ordinary insertText. The DOM structure is the source
+    // of truth, so reconcile whenever Chromium has cloned a paragraph block.
+    if (hasUntrackedParagraphStructure()) {
+      handleInput(0)
+      return
+    }
     // Some browsers target the outer editing host for Enter, so the keydown
     // block splitter cannot always identify the active DocIR block. In that
     // case the browser has already created the visual paragraph; reconcile
     // the whole editable tree immediately so the new paragraph and trailing
     // text cannot be lost by a later per-block commit.
     if (inputType === 'insertParagraph') {
-      handleInput()
+      handleInput(0)
+      return
+    }
+    // A multiline paste can make the browser create new paragraph elements.
+    // Reconcile that structure as a document operation instead of attaching
+    // all pasted paragraphs to whichever block happened to own the caret.
+    if (inputType === 'insertFromPaste' || inputType === 'insertFromDrop') {
+      queueMicrotask(() => {
+        if (hasUntrackedParagraphStructure()) handleInput(0)
+        else {
+          const pastedInto = resolveEditableElement(event.target) || resolveEditableFromSelection()
+          if (pastedInto) scheduleCommit(pastedInto, 0)
+        }
+      })
       return
     }
     if (inputType === 'historyUndo') nativeRedoHint = true
@@ -1904,12 +2005,12 @@
     if (caretRoot) return caretRoot
     const selected = selectedBlockEls[0] || null
     if (selected && selected.isContentEditable) {
-      selected.focus()
+      editor.focus()
       return selected
     }
     const first = editor.querySelector('[data-wa-edit="1"]') as HTMLElement | null
     if (first) {
-      first.focus()
+      editor.focus()
       return first
     }
     return null
@@ -1937,12 +2038,7 @@
   function applyPageSettingsToEditor() {
     if (!editor) return
     const settings = $pageSettings
-    const landscape = settings.orientation === 'landscape'
-    const sizes: Record<string, [number, number]> = {
-      A4: [21, 29.7], A5: [14.8, 21], LETTER: [21.59, 27.94]
-    }
-    let [width, height] = sizes[settings.pageSize] || sizes.A4
-    if (landscape) [width, height] = [height, width]
+    const [width, height] = pageSizeCm()
     editor.style.width = `min(100%, ${width}cm)`
     editor.style.minHeight = `${height}cm`
     editor.style.padding = `${settings.marginTop}cm ${settings.marginRight}cm ${settings.marginBottom}cm ${settings.marginLeft}cm`
@@ -1953,15 +2049,17 @@
       header.textContent = settings.headerText || ''
     }
     if (footer) {
-      footer.style.display = settings.showFooter || settings.pageNumbers ? 'block' : 'none'
-      footer.style.textAlign = settings.pageNumberPosition
-      const parts = [settings.showFooter ? settings.footerText : '', settings.pageNumbers ? '第 1 页' : ''].filter(Boolean)
-      footer.textContent = parts.join('　')
+      updateFooterText(documentMeta.pages)
     }
+    queueMicrotask(() => refreshDocumentMeta())
   }
 
   function updateSelectionContext() {
     const sel = window.getSelection()
+    if (editor) {
+      const pages = Math.max(1, documentMeta.pages)
+      documentMeta = { ...documentMeta, currentPage: caretPage(pages) }
+    }
     if (!editor || !sel || sel.rangeCount === 0 || sel.isCollapsed || !selectionInsideEditor()) {
       selectionToolbar.visible = false
       documentMeta = { ...documentMeta, selected: 0 }
@@ -2836,36 +2934,46 @@
     }
   }
 
-  function handleInput() {
+  function reconcileEditorDom() {
     if (!editor) return
+    historyTimer = null
+    // Always serialize the latest DOM. Capturing HTML when the event fires
+    // allows subsequent keystrokes to be overwritten by a stale snapshot.
     const html = editor.innerHTML || ''
     const markdown = htmlToMarkdown(html)
     lastMarkdown = markdown
+    const currentTitle =
+      $docIr && typeof $docIr === 'object'
+        ? String(($docIr as Record<string, unknown>).title || '')
+        : ''
+    const doc = htmlToDocIr(html, currentTitle)
+    if (doc) {
+      docIr.set(doc)
+      docIrDirty.set(false)
+      lastRenderSig = `doc:${docIrSignature(doc)}`
+      renderMode = 'doc'
+    } else {
+      docIr.set(null)
+      docIrDirty.set(true)
+      lastRenderSig = `text:${markdown}`
+      renderMode = 'text'
+    }
+    sourceText.set(markdown)
+    setEmptyFlag(markdown)
+    pushHistory(markdown)
+    renderMathInEditor()
+    highlightCodeBlocks()
+    renderFiguresInEditor()
+  }
+
+  function handleInput(delayMs = 300) {
+    if (!editor) return
     if (historyTimer) clearTimeout(historyTimer)
-    historyTimer = setTimeout(() => {
-      const currentTitle =
-        $docIr && typeof $docIr === 'object'
-          ? String(($docIr as Record<string, unknown>).title || '')
-          : ''
-      const doc = htmlToDocIr(html, currentTitle)
-      if (doc) {
-        docIr.set(doc)
-        docIrDirty.set(false)
-        lastRenderSig = `doc:${docIrSignature(doc)}`
-        renderMode = 'doc'
-      } else {
-        docIr.set(null)
-        docIrDirty.set(true)
-        lastRenderSig = `text:${markdown}`
-        renderMode = 'text'
-      }
-      sourceText.set(markdown)
-      setEmptyFlag(markdown)
-      pushHistory(markdown)
-      renderMathInEditor()
-      highlightCodeBlocks()
-      renderFiguresInEditor()
-    }, 300)
+    if (delayMs <= 0) {
+      reconcileEditorDom()
+      return
+    }
+    historyTimer = setTimeout(() => reconcileEditorDom(), delayMs)
   }
 
   const unsubscribe = editorCommand.subscribe((cmd) => {
@@ -3202,7 +3310,7 @@
         class="editable"
         data-render-mode={renderMode}
         bind:this={editor}
-        contenteditable="false"
+        contenteditable="true"
         role="region"
         aria-label="文档编辑区"
         onmousedown={handleEditorMouseDown}
@@ -3219,7 +3327,7 @@
   </div>
 
   <footer class="word-status-bar">
-    <span>第 1 页，共 {documentMeta.pages} 页</span>
+    <span>第 {documentMeta.currentPage} 页，共 {documentMeta.pages} 页</span>
     <span>{documentMeta.chars} 字符</span>
     <span>{documentMeta.paragraphs} 段</span>
     {#if documentMeta.selected > 0}<span>已选择 {documentMeta.selected} 字</span>{/if}

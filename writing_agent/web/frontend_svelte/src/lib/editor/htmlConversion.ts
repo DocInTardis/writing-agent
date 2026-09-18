@@ -276,6 +276,7 @@ function buildDocIrFromBlocks(blocks: Array<Record<string, unknown>>, title: str
   const docTitle = String(title || '').trim() || '自动生成文档'
   const sections: Array<Record<string, unknown>> = []
   const stack: Array<{ level: number; node: Record<string, unknown> }> = []
+  const usedBlockIds = new Set<string>()
   let orphan: Array<Record<string, unknown>> = []
 
   const pushImplicit = () => {
@@ -308,8 +309,13 @@ function buildDocIrFromBlocks(blocks: Array<Record<string, unknown>>, title: str
       stack.push({ level, node })
       continue
     }
-    const docBlock = toDocIrBlock(b)
+    let docBlock = toDocIrBlock(b)
     if (!docBlock) continue
+    const blockId = String(docBlock.id || '')
+    if (!blockId || usedBlockIds.has(blockId)) {
+      docBlock = { ...docBlock, id: makeId() }
+    }
+    usedBlockIds.add(String(docBlock.id || ''))
     if (stack.length) {
       ;(stack[stack.length - 1].node.blocks as Array<Record<string, unknown>>).push(docBlock)
     } else {
