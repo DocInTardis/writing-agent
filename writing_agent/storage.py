@@ -71,6 +71,7 @@ class DocSession:
     html: str = ""
     doc_text: str = ""
     doc_ir: dict = field(default_factory=dict)
+    document_v3: dict = field(default_factory=dict)
     messages: list[dict[str, str]] = field(default_factory=list)
     template_name: str = ""
     template_html: str = ""
@@ -345,6 +346,7 @@ def _restore_session(raw: dict, session_id: str) -> DocSession:
     session.html = str(raw.get("html") or "")
     session.doc_text = str(raw.get("doc_text") or "")
     session.doc_ir = dict(raw.get("doc_ir") or {})
+    session.document_v3 = dict(raw.get("document_v3") or {})
     session.messages = list(raw.get("messages") or [])
     session.template_name = str(raw.get("template_name") or "")
     session.template_html = str(raw.get("template_html") or "")

@@ -35,6 +35,7 @@ class DocumentService:
             "overdue": bool(workspace.get("overdue", False)),
             "text": app_v2._safe_doc_text(session),
             "doc_ir": session.doc_ir or {},
+            "document_v3": getattr(session, "document_v3", {}) or {},
             "template_name": session.template_source_name or "",
             "required_h2": session.template_required_h2 or [],
             "template_outline": session.template_outline or [],

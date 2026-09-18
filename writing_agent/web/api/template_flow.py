@@ -30,6 +30,14 @@ async def save_doc(doc_id: str, request: Request) -> dict:
         raise app_v2.HTTPException(status_code=404, detail="document not found")
 
     data = await request.json()
+    incoming_v3 = data.get("document_v3")
+    if isinstance(incoming_v3, dict):
+        try:
+            from writing_agent.v3 import DocumentV3
+
+            session.document_v3 = DocumentV3.model_validate(incoming_v3).model_dump(mode="json")
+        except Exception as exc:
+            raise app_v2.HTTPException(status_code=422, detail=f"invalid document_v3: {exc}") from exc
     incoming_ir = data.get("doc_ir")
     saved_from_ir = False
     if isinstance(incoming_ir, dict) and incoming_ir.get("sections") is not None:

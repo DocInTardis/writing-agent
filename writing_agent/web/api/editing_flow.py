@@ -130,6 +130,48 @@ async def doc_ir_diff(doc_id: str, request: Request) -> dict:
     )
 
 
+async def document_v3_command(doc_id: str, request: Request) -> dict:
+    """Execute one validated, atomic command from either the UI or an AI tool."""
+    app_v2 = _app_v2()
+    session = app_v2.store.get(doc_id)
+    if session is None:
+        raise app_v2.HTTPException(status_code=404, detail="document not found")
+
+    from writing_agent.v3 import DocumentCommand, DocumentV3, create_default_registry, migrate_doc_ir
+    from writing_agent.v3.document_model import to_plain_text
+
+    data = await request.json()
+    try:
+        command = DocumentCommand.model_validate(data.get("command") or data)
+        raw_document = getattr(session, "document_v3", {}) or {}
+        document = DocumentV3.model_validate(raw_document) if raw_document else migrate_doc_ir(session.doc_ir or {})
+    except Exception as exc:
+        raise app_v2.HTTPException(status_code=422, detail=str(exc)) from exc
+
+    result = create_default_registry().execute(document, command)
+    if not result.ok:
+        status = 409 if result.error == "review_mode_not_ready" else 422
+        raise app_v2.HTTPException(status_code=status, detail=result.error or "command failed")
+    if result.changed and result.document is not None:
+        session.document_v3 = result.document.model_dump(mode="json")
+        session.doc_text = to_plain_text(result.document)
+        app_v2.store.put(session)
+    return result.model_dump(mode="json", exclude_none=True)
+
+
+def document_v3_tool_schema() -> dict:
+    from writing_agent.v3 import create_default_registry
+
+    registry = create_default_registry()
+    return {
+        "ok": 1,
+        "name": "execute_document_command",
+        "description": "Apply one validated and atomic command to a structured document.",
+        "command_types": registry.command_types(),
+        "input_schema": registry.tool_schema(),
+    }
+
+
 async def render_figure(request: Request) -> dict:
     app_v2 = _app_v2()
     data = await request.json()
@@ -245,6 +287,12 @@ class EditingService:
     async def doc_ir_diff(self, doc_id: str, request: Request) -> dict:
         return await doc_ir_diff(doc_id, request)
 
+    async def document_v3_command(self, doc_id: str, request: Request) -> dict:
+        return await document_v3_command(doc_id, request)
+
+    def document_v3_tool_schema(self) -> dict:
+        return document_v3_tool_schema()
+
     async def render_figure(self, request: Request) -> dict:
         return await render_figure(request)
 
@@ -275,6 +323,16 @@ async def doc_ir_ops_flow(doc_id: str, request: Request) -> dict:
 @router.post("/api/doc/{doc_id}/doc_ir/diff")
 async def doc_ir_diff_flow(doc_id: str, request: Request) -> dict:
     return await service.doc_ir_diff(doc_id, request)
+
+
+@router.post("/api/doc/{doc_id}/document-v3/commands")
+async def document_v3_command_flow(doc_id: str, request: Request) -> dict:
+    return await service.document_v3_command(doc_id, request)
+
+
+@router.get("/api/document-v3/tool-schema")
+def document_v3_tool_schema_flow() -> dict:
+    return service.document_v3_tool_schema()
 
 
 @router.post("/api/figure/render")
