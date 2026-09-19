@@ -22,7 +22,9 @@ export const history = writable<string[]>([])
 export const historyIndex = writable(-1)
 
 export type PageSettings = {
-  pageSize: 'A4' | 'A5' | 'LETTER'
+  pageSize: 'A3' | 'A4' | 'A5' | 'LETTER' | 'CUSTOM'
+  customWidthMm: number
+  customHeightMm: number
   orientation: 'portrait' | 'landscape'
   marginTop: number
   marginBottom: number
@@ -34,10 +36,19 @@ export type PageSettings = {
   footerText: string
   pageNumbers: boolean
   pageNumberPosition: 'left' | 'center' | 'right'
+  pageNumberArea: 'header' | 'footer'
+  pageNumberFormat: 'arabic' | 'lowerRoman' | 'upperRoman' | 'lowerLetter' | 'upperLetter'
+  pageNumberStart: number
+  differentFirstPage: boolean
+  differentOddEven: boolean
+  linkHeaderToPrevious: boolean
+  linkFooterToPrevious: boolean
 }
 
 export const pageSettings = writable<PageSettings>({
   pageSize: 'A4',
+  customWidthMm: 210,
+  customHeightMm: 297,
   orientation: 'portrait',
   marginTop: 2.54,
   marginBottom: 2.54,
@@ -48,7 +59,14 @@ export const pageSettings = writable<PageSettings>({
   showFooter: false,
   footerText: '',
   pageNumbers: true,
-  pageNumberPosition: 'center'
+  pageNumberPosition: 'center',
+  pageNumberArea: 'footer',
+  pageNumberFormat: 'arabic',
+  pageNumberStart: 1,
+  differentFirstPage: false,
+  differentOddEven: false,
+  linkHeaderToPrevious: true,
+  linkFooterToPrevious: true
 })
 
 export async function loadPageSettings() {
@@ -64,9 +82,11 @@ export async function loadPageSettings() {
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
   }
   pageSettings.set({
-    pageSize: ['A4', 'A5', 'LETTER'].includes(String(prefs.page_size || '').toUpperCase())
+    pageSize: ['A3', 'A4', 'A5', 'LETTER', 'CUSTOM'].includes(String(prefs.page_size || '').toUpperCase())
       ? String(prefs.page_size).toUpperCase() as PageSettings['pageSize']
       : current.pageSize,
+    customWidthMm: numeric(prefs.page_width_mm, current.customWidthMm),
+    customHeightMm: numeric(prefs.page_height_mm, current.customHeightMm),
     orientation: prefs.page_orientation === 'landscape' ? 'landscape' : 'portrait',
     marginTop: numeric(prefs.page_margin_top_cm, current.marginTop),
     marginBottom: numeric(prefs.page_margin_bottom_cm, current.marginBottom),
@@ -79,7 +99,16 @@ export async function loadPageSettings() {
     pageNumbers: Boolean(prefs.page_numbers ?? current.pageNumbers),
     pageNumberPosition: ['left', 'center', 'right'].includes(String(prefs.page_number_position || ''))
       ? prefs.page_number_position
-      : current.pageNumberPosition
+      : current.pageNumberPosition,
+    pageNumberArea: prefs.page_number_area === 'header' ? 'header' : current.pageNumberArea,
+    pageNumberFormat: ['arabic', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter'].includes(String(prefs.page_number_format || ''))
+      ? prefs.page_number_format
+      : current.pageNumberFormat,
+    pageNumberStart: numeric(prefs.page_number_start, current.pageNumberStart),
+    differentFirstPage: Boolean(prefs.different_first_page ?? current.differentFirstPage),
+    differentOddEven: Boolean(prefs.different_odd_even ?? current.differentOddEven),
+    linkHeaderToPrevious: Boolean(prefs.link_header_to_previous ?? current.linkHeaderToPrevious),
+    linkFooterToPrevious: Boolean(prefs.link_footer_to_previous ?? current.linkFooterToPrevious)
   })
 }
 

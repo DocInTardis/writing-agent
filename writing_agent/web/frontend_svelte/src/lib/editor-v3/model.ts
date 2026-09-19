@@ -41,7 +41,7 @@ export interface StyleDefinition {
 }
 
 export interface PageLayout {
-  pageSize: 'A4' | 'A3' | 'Letter' | 'custom'
+  pageSize: 'A4' | 'A5' | 'A3' | 'Letter' | 'custom'
   widthMm?: number
   heightMm?: number
   orientation: 'portrait' | 'landscape'

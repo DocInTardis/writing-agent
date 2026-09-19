@@ -19,6 +19,10 @@ pub struct LayoutConfig {
     pub margin: f32,
     pub metrics: FontMetrics,
     pub paged: bool,
+    /// Blocks that must start a new page. The identifier is part of the
+    /// document model, so pagination never has to infer manual breaks from
+    /// rendered HTML.
+    pub force_page_break_before: HashSet<Uuid>,
 }
 
 impl Default for LayoutConfig {
@@ -29,6 +33,7 @@ impl Default for LayoutConfig {
             margin: 64.0,
             metrics: FontMetrics::default(),
             paged: true,
+            force_page_break_before: HashSet::new(),
         }
     }
 }
@@ -150,17 +155,7 @@ impl LayoutEngine {
         let max_height = config.page_height - config.margin * 2.0;
         for block in &doc.blocks {
             let lb = std::sync::Arc::new(self.layout_block(block, config));
-            let needed = lb.height;
-            if config.paged && current.height + needed > max_height && !current.blocks.is_empty() {
-                pages.push(current);
-                current = Page {
-                    number: pages.len() + 1,
-                    blocks: Vec::new(),
-                    height: 0.0,
-                };
-            }
-            current.height += needed;
-            current.blocks.push(lb);
+            push_paginated_block(&mut pages, &mut current, lb, config, max_height);
         }
         pages.push(current);
         self.maybe_log_stats();
@@ -227,17 +222,7 @@ impl LayoutEngine {
                 cache.insert_with_sig(block.id(), fresh.clone(), sig);
                 fresh
             };
-            let needed = lb.height;
-            if config.paged && current.height + needed > max_height && !current.blocks.is_empty() {
-                pages.push(current);
-                current = Page {
-                    number: pages.len() + 1,
-                    blocks: Vec::new(),
-                    height: 0.0,
-                };
-            }
-            current.height += needed;
-            current.blocks.push(lb);
+            push_paginated_block(&mut pages, &mut current, lb, config, max_height);
         }
         pages.push(current);
         self.maybe_log_stats();
@@ -740,20 +725,77 @@ fn paginate_blocks(blocks: Vec<std::sync::Arc<LayoutBlock>>, config: &LayoutConf
     };
     let max_height = config.page_height - config.margin * 2.0;
     for block in blocks {
-        let needed = block.height;
-        if config.paged && current.height + needed > max_height && !current.blocks.is_empty() {
-            pages.push(current);
-            current = Page {
-                number: pages.len() + 1,
-                blocks: Vec::new(),
-                height: 0.0,
-            };
-        }
-        current.height += needed;
-        current.blocks.push(block);
+        push_paginated_block(&mut pages, &mut current, block, config, max_height);
     }
     pages.push(current);
     LayoutTree { pages }
+}
+
+fn start_next_page(pages: &mut Vec<Page>, current: &mut Page) {
+    let next_number = pages.len() + 2;
+    let finished = std::mem::replace(
+        current,
+        Page {
+            number: next_number,
+            blocks: Vec::new(),
+            height: 0.0,
+        },
+    );
+    pages.push(finished);
+}
+
+fn push_paginated_block(
+    pages: &mut Vec<Page>,
+    current: &mut Page,
+    block: std::sync::Arc<LayoutBlock>,
+    config: &LayoutConfig,
+    max_height: f32,
+) {
+    if !config.paged {
+        current.height += block.height;
+        current.blocks.push(block);
+        return;
+    }
+    if config.force_page_break_before.contains(&block.block_id) && !current.blocks.is_empty() {
+        start_next_page(pages, current);
+    }
+    let line_height = (config.metrics.font_size * config.metrics.line_height).max(1.0);
+    let splittable = matches!(
+        block.kind,
+        LayoutKind::Paragraph | LayoutKind::List | LayoutKind::Quote | LayoutKind::Code
+    ) && block.lines.len() > 1;
+    if splittable && current.height + block.height > max_height {
+        let mut line_index = 0usize;
+        while line_index < block.lines.len() {
+            let available = (max_height - current.height).max(0.0);
+            let mut line_count = (available / line_height).floor() as usize;
+            if line_count == 0 && !current.blocks.is_empty() {
+                start_next_page(pages, current);
+                continue;
+            }
+            line_count = line_count.max(1).min(block.lines.len() - line_index);
+            let fragment_height = line_count as f32 * line_height;
+            let fragment = std::sync::Arc::new(LayoutBlock {
+                block_id: block.block_id,
+                kind: block.kind.clone(),
+                lines: block.lines[line_index..line_index + line_count].to_vec(),
+                height: fragment_height,
+                meta: block.meta.clone(),
+            });
+            current.height += fragment_height;
+            current.blocks.push(fragment);
+            line_index += line_count;
+            if line_index < block.lines.len() {
+                start_next_page(pages, current);
+            }
+        }
+        return;
+    }
+    if current.height + block.height > max_height && !current.blocks.is_empty() {
+        start_next_page(pages, current);
+    }
+    current.height += block.height;
+    current.blocks.push(block);
 }
 
 #[cfg(feature = "parallel")]

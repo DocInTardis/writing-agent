@@ -9,8 +9,105 @@ import { TextStyle } from '@tiptap/extension-text-style'
 import StarterKit from '@tiptap/starter-kit'
 import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 
 import { resolvedStyleProperties, type DocumentV3, type InlineNode, type SectionV3, type StyleDefinition, type V3BlockNode } from './model'
+import type { DocumentLayout, LayoutPage } from '../engine/documentEngine'
+
+const paginationPluginKey = new PluginKey<DecorationSet>('rustPagination')
+
+function pageBoundary(page: LayoutPage, pageCount: number, nextPage?: LayoutPage, final = false) {
+  const element = document.createElement('span')
+  element.className = final ? 'wa-page-end' : 'wa-page-boundary'
+  element.contentEditable = 'false'
+  element.dataset.pageNumber = String(page.pageNumber)
+  element.setAttribute('aria-label', final ? `第 ${page.pageNumber} 页结束` : `第 ${page.pageNumber + 1} 页开始`)
+  if (page.footerText) {
+    const footerText = document.createElement('span')
+    footerText.className = 'wa-page-footer-text'
+    footerText.textContent = page.footerText
+    element.appendChild(footerText)
+  }
+  const footer = document.createElement('span')
+  footer.className = 'wa-page-number'
+  footer.style.textAlign = page.pageNumberAlignment || 'center'
+  footer.textContent = page.pageNumberText ? `第 ${page.pageNumberText} 页，共 ${pageCount} 页` : ''
+  element.appendChild(footer)
+  if (nextPage?.headerText) {
+    const headerText = document.createElement('span')
+    headerText.className = 'wa-page-header-text'
+    headerText.textContent = nextPage.headerText
+    element.appendChild(headerText)
+  }
+  return element
+}
+
+const RustPagination = Extension.create({
+  name: 'rustPagination',
+  addProseMirrorPlugins() {
+    return [new Plugin<DecorationSet>({
+      key: paginationPluginKey,
+      state: {
+        init: (_, state) => DecorationSet.empty,
+        apply(transaction, previous, _oldState, newState) {
+          const layout = transaction.getMeta(paginationPluginKey) as DocumentLayout | null | undefined
+          if (layout === undefined) return transaction.docChanged ? previous.map(transaction.mapping, transaction.doc) : previous
+          if (!layout?.pages?.length) return DecorationSet.empty
+          const positions = new Map<string, { position: number; size: number }>()
+          newState.doc.forEach((node, position) => {
+            const id = String(node.attrs?.nodeId || '')
+            if (id) positions.set(id, { position, size: node.nodeSize })
+          })
+          const decorations: Decoration[] = []
+          const firstPage = layout.pages[0]!
+          if (firstPage?.headerText) {
+            decorations.push(Decoration.widget(0, () => {
+              const header = document.createElement('div')
+              header.className = 'wa-first-page-header'
+              header.contentEditable = 'false'
+              header.textContent = firstPage.headerText || ''
+              return header
+            }, { side: -1, key: 'page-first-header' }))
+          }
+          for (const page of layout.pages) {
+            const first = page.blocks[0]
+            const target = first ? positions.get(first.blockId) : null
+            if (target && first.startOffset === 0) {
+              decorations.push(Decoration.node(target.position, target.position + target.size, {
+                'data-layout-page': String(page.pageNumber)
+              }))
+            }
+            if (target && page.pageNumber > 1) {
+              const pagePosition = first.startOffset > 0
+                ? Math.min(target.position + target.size - 1, target.position + 1 + first.startOffset)
+                : target.position
+              decorations.push(Decoration.widget(
+                pagePosition,
+                () => pageBoundary(layout.pages[page.pageNumber - 2] || page, layout.pageCount, page),
+                { side: -1, key: `page-${layout.layoutVersion}-${page.pageNumber}` }
+              ))
+            }
+          }
+          decorations.push(Decoration.widget(
+            newState.doc.content.size,
+            () => pageBoundary(layout.pages[layout.pages.length - 1] || firstPage, layout.pageCount, undefined, true),
+            { side: 1, key: `page-final-${layout.layoutVersion}` }
+          ))
+          return DecorationSet.create(newState.doc, decorations)
+        }
+      },
+      props: {
+        decorations(state) {
+          return paginationPluginKey.getState(state) || DecorationSet.empty
+        }
+      }
+    })]
+  }
+})
+
+export function applyPaginationLayout(editor: Editor, layout: DocumentLayout | null) {
+  editor.view.dispatch(editor.state.tr.setMeta(paginationPluginKey, layout))
+}
 
 const StableNodeAttributes = Extension.create({
   name: 'stableNodeAttributes',
@@ -556,6 +653,7 @@ export function createEditorKernel(options: {
       ReliableBlockIdentity,
       ReliableClipboard,
       ReliableBlockKeyboard,
+      RustPagination,
       FigureNode,
       TableNode,
       PageBreakNode,

@@ -144,3 +144,44 @@ fn cjk_forbidden_line_start_end() {
         }
     }
 }
+
+#[test]
+fn long_paragraph_splits_across_pages_without_splitting_the_document() {
+    let mut doc = Document::new();
+    let block_id = uuid::Uuid::new_v4();
+    doc.blocks.push(Block::Paragraph {
+        id: block_id,
+        content: vec![Inline::Text { value: Arc::from("分页正文".repeat(500)) }],
+        dirty: false,
+    });
+    let mut engine = LayoutEngine::new();
+    let config = LayoutConfig {
+        page_width: 180.0,
+        page_height: 140.0,
+        margin: 10.0,
+        ..LayoutConfig::default()
+    };
+    let layout = engine.layout(&doc, &config);
+    assert!(layout.pages.len() > 1);
+    assert!(layout.pages.iter().all(|page| page.blocks.iter().all(|block| block.block_id == block_id)));
+}
+
+#[test]
+fn explicit_page_break_starts_target_block_on_new_page() {
+    let mut doc = Document::new();
+    let first = uuid::Uuid::new_v4();
+    let second = uuid::Uuid::new_v4();
+    for id in [first, second] {
+        doc.blocks.push(Block::Paragraph {
+            id,
+            content: vec![Inline::Text { value: Arc::from("短段落") }],
+            dirty: false,
+        });
+    }
+    let mut config = LayoutConfig::default();
+    config.force_page_break_before.insert(second);
+    let mut engine = LayoutEngine::new();
+    let layout = engine.layout(&doc, &config);
+    assert_eq!(layout.pages.len(), 2);
+    assert_eq!(layout.pages[1].blocks[0].block_id, second);
+}

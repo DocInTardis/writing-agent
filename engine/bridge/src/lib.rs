@@ -1,7 +1,8 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wa_core::{Block, Document, Editor, EditorCommand, Inline, Style};
-use wa_engine::{HitTester, LayoutCache, LayoutConfig, LayoutEngine};
+use wa_engine::{FontMetrics, HitTester, LayoutCache, LayoutConfig, LayoutEngine, LayoutKind};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -9,6 +10,7 @@ pub struct WasmEditor {
     editor: Editor,
     layout_engine: LayoutEngine,
     layout_cache: LayoutCache,
+    layout_signature: Option<String>,
 }
 
 #[wasm_bindgen]
@@ -20,6 +22,7 @@ impl WasmEditor {
             editor: Editor::new(Document::new()),
             layout_engine: LayoutEngine::new(),
             layout_cache: LayoutCache::new(),
+            layout_signature: None,
         }
     }
 
@@ -28,6 +31,38 @@ impl WasmEditor {
         let doc: Document = serde_json::from_str(json)
             .map_err(|e| JsValue::from_str(&format!("JSON解析失败: {}", e)))?;
         self.editor = Editor::new(doc);
+        // A full protocol load may reuse stable block IDs with changed text.
+        // Keeping the previous cache would return stale geometry for those IDs.
+        self.layout_cache = LayoutCache::new();
+        self.layout_signature = None;
+        Ok(())
+    }
+
+    #[wasm_bindgen(js_name = syncJson)]
+    pub fn sync_json(&mut self, json: &str) -> Result<(), JsValue> {
+        let mut next: Document = serde_json::from_str(json)
+            .map_err(|e| JsValue::from_str(&format!("JSON解析失败: {}", e)))?;
+        let previous: HashMap<_, _> = self
+            .editor
+            .doc
+            .blocks
+            .iter()
+            .map(|block| {
+                let mut normalized = block.clone();
+                normalized.set_dirty(false);
+                (block.id(), serde_json::to_vec(&normalized).unwrap_or_default())
+            })
+            .collect();
+        for block in &mut next.blocks {
+            block.set_dirty(false);
+            let serialized = serde_json::to_vec(block).unwrap_or_default();
+            let changed = previous
+                .get(&block.id())
+                .map(|old| old != &serialized)
+                .unwrap_or(true);
+            block.set_dirty(changed);
+        }
+        self.editor.doc = next;
         Ok(())
     }
 
@@ -254,6 +289,7 @@ impl WasmEditor {
         let doc = wa_core::import_markdown(md);
         self.editor = Editor::new(doc);
         self.layout_cache = LayoutCache::new();
+        self.layout_signature = None;
         Ok(())
     }
 
@@ -265,6 +301,7 @@ impl WasmEditor {
         }
         self.editor.doc = next;
         self.layout_cache = LayoutCache::new();
+        self.layout_signature = None;
     }
 
     #[wasm_bindgen(js_name = layoutMetrics)]
@@ -285,6 +322,129 @@ impl WasmEditor {
             "documentVersion": self.editor.doc.version,
         }))
         .map_err(|e| JsValue::from_str(&format!("布局指标序列化失败: {}", e)))
+    }
+
+    /// Layout protocol consumed by the Document V3 editor. Editing remains in
+    /// one ProseMirror document; Rust returns geometry only.
+    #[wasm_bindgen(js_name = layoutProtocol)]
+    pub fn layout_protocol(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request: LayoutProtocolRequest = serde_json::from_str(request_json)
+            .map_err(|e| JsValue::from_str(&format!("分页请求解析失败: {}", e)))?;
+        let layout_signature = format!(
+            "{:.3}:{:.3}:{:.3}:{:.3}:{:.3}:{:.3}:{:.3}:{:.3}",
+            request.page_width,
+            request.page_height,
+            request.margin_top,
+            request.margin_right,
+            request.margin_bottom,
+            request.margin_left,
+            request.font_size,
+            request.line_height,
+        );
+        if self.layout_signature.as_deref() != Some(layout_signature.as_str()) {
+            self.layout_cache.clear();
+            self.layout_signature = Some(layout_signature);
+        }
+        let content_width = (request.page_width - request.margin_left - request.margin_right).max(80.0);
+        let content_height = (request.page_height - request.margin_top - request.margin_bottom).max(80.0);
+        let forced: HashSet<_> = request
+            .force_page_break_before
+            .iter()
+            .filter_map(|id| uuid::Uuid::parse_str(id).ok())
+            .collect();
+        let config = LayoutConfig {
+            page_width: content_width,
+            page_height: content_height,
+            margin: 0.0,
+            metrics: FontMetrics {
+                font_size: request.font_size.max(1.0),
+                line_height: request.line_height.max(0.5),
+            },
+            paged: true,
+            force_page_break_before: forced,
+        };
+        let tree = self
+            .layout_engine
+            .layout_cached(&self.editor.doc, &config, &mut self.layout_cache);
+        let line_height = config.metrics.font_size * config.metrics.line_height;
+        let mut pages = Vec::with_capacity(tree.pages.len());
+        let mut block_page = HashMap::new();
+        let mut block_offsets: HashMap<String, usize> = HashMap::new();
+        for page in &tree.pages {
+            let mut cursor_y = request.margin_top;
+            let mut blocks = Vec::with_capacity(page.blocks.len());
+            for block in &page.blocks {
+                let rust_id = block.block_id.to_string();
+                let source_id = request
+                    .source_ids
+                    .get(&rust_id)
+                    .cloned()
+                    .unwrap_or_else(|| rust_id.clone());
+                let section_id = request.section_ids.get(&rust_id).cloned().unwrap_or_default();
+                let block_start = *block_offsets.get(&rust_id).unwrap_or(&0);
+                let mut text_offset = block_start;
+                let mut line_y = cursor_y;
+                let lines = block
+                    .lines
+                    .iter()
+                    .enumerate()
+                    .map(|(index, line)| {
+                        let start_offset = text_offset;
+                        text_offset += line.text.chars().count();
+                        let value = serde_json::json!({
+                            "index": index,
+                            "text": line.text,
+                            "x": request.margin_left,
+                            "y": line_y,
+                            "width": line.width,
+                            "height": line_height,
+                            "startOffset": start_offset,
+                            "endOffset": text_offset,
+                        });
+                        line_y += line_height;
+                        value
+                    })
+                    .collect::<Vec<_>>();
+                block_offsets.insert(rust_id.clone(), text_offset);
+                blocks.push(serde_json::json!({
+                    "blockId": source_id,
+                    "rustId": rust_id,
+                    "sectionId": section_id,
+                    "kind": layout_kind_name(&block.kind),
+                    "pageNumber": page.number,
+                    "x": request.margin_left,
+                    "y": cursor_y,
+                    "width": content_width,
+                    "height": block.height,
+                    "overflow": block.height > content_height,
+                    "startOffset": block_start,
+                    "endOffset": text_offset,
+                    "lines": lines,
+                }));
+                block_page.insert(source_id, page.number);
+                cursor_y += block.height;
+            }
+            pages.push(serde_json::json!({
+                "pageNumber": page.number,
+                "width": request.page_width,
+                "height": request.page_height,
+                "contentX": request.margin_left,
+                "contentY": request.margin_top,
+                "contentWidth": content_width,
+                "contentHeight": content_height,
+                "usedHeight": page.height,
+                "blocks": blocks,
+            }));
+        }
+        serde_json::to_string(&serde_json::json!({
+            "protocolVersion": 1,
+            "layoutVersion": request.layout_version,
+            "documentVersion": self.editor.doc.version,
+            "pageCount": pages.len(),
+            "pages": pages,
+            "blockPage": block_page,
+        }))
+        .map_err(|e| JsValue::from_str(&format!("分页结果序列化失败: {}", e)))
     }
 
     #[wasm_bindgen(js_name = hitTest)]
@@ -380,6 +540,44 @@ struct FindHit {
     end: usize,
     block_type: String,
     snippet: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LayoutProtocolRequest {
+    page_width: f32,
+    page_height: f32,
+    margin_top: f32,
+    margin_right: f32,
+    margin_bottom: f32,
+    margin_left: f32,
+    #[serde(default = "default_font_size")]
+    font_size: f32,
+    #[serde(default = "default_line_height")]
+    line_height: f32,
+    #[serde(default)]
+    layout_version: u64,
+    #[serde(default)]
+    force_page_break_before: Vec<String>,
+    #[serde(default)]
+    source_ids: HashMap<String, String>,
+    #[serde(default)]
+    section_ids: HashMap<String, String>,
+}
+
+fn default_font_size() -> f32 { 14.0 }
+fn default_line_height() -> f32 { 1.6 }
+
+fn layout_kind_name(kind: &LayoutKind) -> &'static str {
+    match kind {
+        LayoutKind::Heading(_) => "heading",
+        LayoutKind::Paragraph => "paragraph",
+        LayoutKind::List => "list",
+        LayoutKind::Quote => "quote",
+        LayoutKind::Code => "code",
+        LayoutKind::Table => "table",
+        LayoutKind::Figure => "figure",
+    }
 }
 
 fn block_type_name(block: &Block) -> &'static str {

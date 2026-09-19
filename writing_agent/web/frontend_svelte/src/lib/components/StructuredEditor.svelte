@@ -14,6 +14,7 @@
   import { createNodeCommand, createUserCommand, executeDocumentCommand } from '../editor-v3/commands'
   import {
     createEditorKernel,
+    applyPaginationLayout,
     documentV3ToTiptap,
     documentV3ToText,
     plainTextToTiptapContent,
@@ -23,6 +24,7 @@
     tiptapToDocumentV3
   } from '../editor-v3/kernel'
   import { isDocumentV3, migrateLegacyDocIr, type DocumentV3 } from '../editor-v3/model'
+  import { paginateDocumentV3 } from '../engine/documentEngine'
   import type { EditorCommand } from '../types'
 
   let {
@@ -70,6 +72,53 @@
   let slashMenuTop = $state(0)
   let slashMenuLeft = $state(0)
   let slashMenuIndex = $state(0)
+  let paginationTimer: ReturnType<typeof setTimeout> | null = null
+  let paginationRevision = 0
+  let pageCount = $state(1)
+  let paginationState = $state<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
+  let resizeObserver: ResizeObserver | null = null
+  let observedShellWidth = 0
+
+  function handlePageSettingsChanged() {
+    const next = get(documentV3)
+    if (next && isDocumentV3(next)) loadDocument(structuredClone(next))
+  }
+
+  function applyPaperGeometry(document: DocumentV3) {
+    if (!shell) return
+    const layout = document.sections[0]?.layout
+    if (!layout) return
+    let width = layout.widthMm || (layout.pageSize === 'A3' ? 297 : layout.pageSize === 'A5' ? 148 : layout.pageSize === 'Letter' ? 215.9 : 210)
+    let height = layout.heightMm || (layout.pageSize === 'A3' ? 420 : layout.pageSize === 'A5' ? 210 : layout.pageSize === 'Letter' ? 279.4 : 297)
+    if (layout.orientation === 'landscape') [width, height] = [height, width]
+    shell.style.setProperty('--page-width', `${width}mm`)
+    shell.style.setProperty('--page-height', `${height}mm`)
+    shell.style.setProperty('--margin-top', `${layout.marginTopMm}mm`)
+    shell.style.setProperty('--margin-right', `${layout.marginRightMm}mm`)
+    shell.style.setProperty('--margin-bottom', `${layout.marginBottomMm}mm`)
+    shell.style.setProperty('--margin-left', `${layout.marginLeftMm}mm`)
+  }
+
+  function schedulePagination(immediate = false) {
+    if (paginationTimer) clearTimeout(paginationTimer)
+    const revision = ++paginationRevision
+    paginationTimer = setTimeout(async () => {
+      if (!editor || !activeDocument || revision !== paginationRevision) return
+      paginationState = 'loading'
+      try {
+        const layout = await paginateDocumentV3(activeDocument, revision)
+        if (!editor || revision !== paginationRevision) return
+        pageCount = Math.max(1, layout?.pageCount || 1)
+        paginationState = layout ? 'ready' : 'unavailable'
+        applyPaginationLayout(editor, layout)
+        if (shell) shell.dataset.pageCount = String(pageCount)
+      } catch (error) {
+        paginationState = 'error'
+        if (shell) shell.dataset.paginationError = error instanceof Error ? error.message : String(error)
+        console.error('Rust pagination failed.', error)
+      }
+    }, immediate ? 0 : 120)
+  }
 
   const slashCommands = [
     { label: '正文', keywords: 'paragraph 正文', command: 'apply_style', params: { styleId: 'normal' } },
@@ -348,6 +397,7 @@
     if (styleElement) styleElement.textContent = styleSheetForDocument(activeDocument)
     onblockedit?.({ documentV3: activeDocument, text })
     emitToolbarState()
+    schedulePagination()
   }
 
   function runLegacyCommand(command: EditorCommand) {
@@ -475,6 +525,8 @@
     documentV3.set(next)
     styleElement && (styleElement.textContent = styleSheetForDocument(next))
     editor.commands.setContent(documentV3ToTiptap(next), { emitUpdate: false })
+    applyPaperGeometry(next)
+    schedulePagination(true)
     emitToolbarState()
   }
 
@@ -495,6 +547,17 @@
       onSelectionUpdate: emitSelection,
       onSlashQuery: handleSlashQuery
     })
+    applyPaperGeometry(activeDocument)
+    schedulePagination(true)
+    observedShellWidth = shell.getBoundingClientRect().width
+    resizeObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width || 0
+      if (Math.abs(width - observedShellWidth) < 1) return
+      observedShellWidth = width
+      schedulePagination()
+    })
+    resizeObserver.observe(shell)
+    window.addEventListener('wa-page-settings-changed', handlePageSettingsChanged)
     unsubscribeCommand = editorCommand.subscribe((command) => {
       if (!command || !editor) return
       runLegacyCommand(command)
@@ -519,6 +582,9 @@
     editor?.destroy()
     styleElement?.remove()
     if (clipboardErrorTimer) clearTimeout(clipboardErrorTimer)
+    if (paginationTimer) clearTimeout(paginationTimer)
+    resizeObserver?.disconnect()
+    window.removeEventListener('wa-page-settings-changed', handlePageSettingsChanged)
   })
 </script>
 
@@ -529,6 +595,8 @@
   role="application"
   tabindex="-1"
   aria-label="Document V3 编辑区"
+  data-page-count={pageCount}
+  data-pagination-state={paginationState}
   bind:this={shell}
   onpointermove={handleEditorPointerMove}
   onkeydowncapture={handleShellKeyDown}
@@ -596,14 +664,14 @@
   .structured-editor-shell {
     position: relative;
     box-sizing: border-box;
-    width: min(100%, 21cm);
-    min-height: 29.7cm;
+    width: min(100%, var(--page-width, 21cm));
+    min-height: var(--page-height, 29.7cm);
     margin: 0 auto 64px;
     background: #fff;
     color: #1f2328;
   }
   .structured-editor-shell.paper {
-    padding: 2.54cm 2.54cm 2.54cm 3.18cm;
+    padding: var(--margin-top, 2.54cm) var(--margin-right, 2.54cm) var(--margin-bottom, 2.54cm) var(--margin-left, 3.18cm);
     border: 1px solid #d7dde5;
     border-radius: 3px;
     box-shadow: 0 8px 28px rgba(38, 50, 66, 0.12);
@@ -762,6 +830,31 @@
     background: transparent;
     font-size: 11px;
   }
+  .structured-editor :global(.wa-page-boundary),
+  .structured-editor :global(.wa-page-end) {
+    position: relative;
+    display: grid;
+    box-sizing: border-box;
+    width: calc(100% + var(--margin-left, 3.18cm) + var(--margin-right, 2.54cm));
+    min-height: 44px;
+    margin: var(--margin-bottom, 2.54cm) calc(-1 * var(--margin-right, 2.54cm)) var(--margin-top, 2.54cm) calc(-1 * var(--margin-left, 3.18cm));
+    padding: 8px var(--margin-right, 2.54cm) 8px var(--margin-left, 3.18cm);
+    border-top: 12px solid #e8ebf0;
+    color: #7a828d;
+    font: 11px/1.4 "Segoe UI", sans-serif;
+    pointer-events: none;
+  }
+  .structured-editor :global(.wa-page-end) {
+    min-height: 24px;
+    margin-bottom: calc(-1 * var(--margin-bottom, 2.54cm));
+    border-top: 1px solid #dfe3e9;
+  }
+  .structured-editor :global(.wa-page-number) { display: block; width: 100%; }
+  .structured-editor :global(.wa-page-footer-text),
+  .structured-editor :global(.wa-page-header-text),
+  .structured-editor :global(.wa-first-page-header) { display: block; color: #606975; text-align: center; }
+  .structured-editor :global(.wa-page-header-text) { margin-top: 20px; }
+  .structured-editor :global(.wa-first-page-header) { margin-bottom: 18px; pointer-events: none; }
   .clipboard-error {
     position: sticky;
     bottom: 12px;

@@ -23,6 +23,11 @@ export class WasmEditor {
     insertText(text: string): void;
     layout(width: number): any;
     layoutMetrics(width: number): any;
+    /**
+     * Layout protocol consumed by the Document V3 editor. Editing remains in
+     * one ProseMirror document; Rust returns geometry only.
+     */
+    layoutProtocol(request_json: string): string;
     listIndent(): void;
     listOutdent(): void;
     loadJson(json: string): void;
@@ -31,6 +36,7 @@ export class WasmEditor {
     replace(query: string, replacement: string): number;
     replaceMarkdown(md: string, checkpoint: boolean): void;
     setHeading(level: number): void;
+    syncJson(json: string): void;
     tableDeleteColumn(): void;
     tableDeleteRow(): void;
     tableInsertColumn(): void;
@@ -69,6 +75,7 @@ export interface InitOutput {
     readonly wasmeditor_insertText: (a: number, b: number, c: number) => void;
     readonly wasmeditor_layout: (a: number, b: number) => [number, number, number];
     readonly wasmeditor_layoutMetrics: (a: number, b: number) => [number, number, number];
+    readonly wasmeditor_layoutProtocol: (a: number, b: number, c: number) => [number, number, number, number];
     readonly wasmeditor_listIndent: (a: number) => void;
     readonly wasmeditor_listOutdent: (a: number) => void;
     readonly wasmeditor_loadJson: (a: number, b: number, c: number) => [number, number];
@@ -77,6 +84,7 @@ export interface InitOutput {
     readonly wasmeditor_replace: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly wasmeditor_replaceMarkdown: (a: number, b: number, c: number, d: number) => void;
     readonly wasmeditor_setHeading: (a: number, b: number) => void;
+    readonly wasmeditor_syncJson: (a: number, b: number, c: number) => [number, number];
     readonly wasmeditor_tableDeleteColumn: (a: number) => void;
     readonly wasmeditor_tableDeleteRow: (a: number) => void;
     readonly wasmeditor_tableInsertColumn: (a: number) => void;
