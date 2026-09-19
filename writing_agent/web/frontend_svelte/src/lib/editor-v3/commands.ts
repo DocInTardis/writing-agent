@@ -137,6 +137,17 @@ registerDocumentCommand('set_font_size', (editor, command) => {
   const fontSize = String(command.params.fontSize || '').trim()
   return fontSize ? editor.chain().focus().setMark('textStyle', { fontSize }).run() : false
 })
+registerDocumentCommand('set_character_format', (editor, command) => {
+  const attrs: Record<string, unknown> = {}
+  if ('letterSpacing' in command.params) attrs.letterSpacing = String(command.params.letterSpacing || '') || null
+  if ('textTransform' in command.params) {
+    const transform = String(command.params.textTransform || '')
+    if (!['none', 'uppercase', 'lowercase', 'capitalize'].includes(transform)) return false
+    attrs.textTransform = transform
+  }
+  if (!Object.keys(attrs).length) return false
+  return editor.chain().focus().setMark('textStyle', attrs).run()
+})
 registerDocumentCommand('set_alignment', (editor, command) => {
   const alignment = String(command.params.alignment || '')
   if (!['left', 'center', 'right', 'justify'].includes(alignment)) return false
@@ -161,7 +172,12 @@ registerDocumentCommand('set_paragraph_format', (editor, command) => {
     'spaceAfterPt',
     'keepWithNext',
     'keepLinesTogether',
-    'pageBreakBefore'
+    'pageBreakBefore',
+    'borderColor',
+    'borderWidthPt',
+    'borderStyle',
+    'shadingColor',
+    'tabStops'
   ]) {
     if (key in command.params) attrs[key] = command.params[key]
   }
@@ -185,6 +201,7 @@ registerDocumentCommand('insert_equation', (editor, command) => editor.chain().f
   type: 'equationBlock',
   attrs: { nodeId: null, payload: { latex: String(command.params.latex || '') } }
 }).run())
+registerDocumentCommand('insert_horizontal_rule', (editor) => editor.chain().focus().setHorizontalRule().run())
 registerDocumentCommand('clear_formatting', (editor) => editor.chain().focus().unsetAllMarks().clearNodes().run())
 registerDocumentCommand('undo', (editor) => editor.chain().focus().undo().run())
 registerDocumentCommand('redo', (editor) => editor.chain().focus().redo().run())

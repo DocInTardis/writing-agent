@@ -10,6 +10,8 @@ export interface StyleProperties {
   underline?: boolean
   color?: string
   backgroundColor?: string
+  letterSpacingPt?: number
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
   alignment?: 'left' | 'center' | 'right' | 'justify'
   lineSpacing?: number
   firstLineIndentEm?: number
@@ -21,6 +23,11 @@ export interface StyleProperties {
   keepWithNext?: boolean
   keepLinesTogether?: boolean
   pageBreakBefore?: boolean
+  borderColor?: string
+  borderWidthPt?: number
+  borderStyle?: 'none' | 'solid' | 'dashed' | 'double'
+  shadingColor?: string
+  tabStops?: Array<{ positionEm: number; alignment: 'left' | 'center' | 'right' | 'decimal' }>
 }
 
 export interface StyleDefinition {
@@ -190,6 +197,22 @@ export const DEFAULT_STYLES: StyleDefinition[] = [
       outlineLevel: 0
     }
   },
+  {
+    id: 'subtitle',
+    name: '副标题',
+    kind: 'paragraph',
+    basedOn: 'normal',
+    nextStyle: 'normal',
+    visible: true,
+    properties: {
+      fontFamily: 'SimHei',
+      fontSizePt: 16,
+      color: '#4b5563',
+      alignment: 'center',
+      firstLineIndentEm: 0,
+      spaceAfterPt: 14
+    }
+  },
   ...[1, 2, 3, 4, 5, 6].map<StyleDefinition>((level) => ({
     id: `heading-${level}`,
     name: `标题 ${level}`,
@@ -227,6 +250,25 @@ export const DEFAULT_STYLES: StyleDefinition[] = [
     nextStyle: 'normal',
     visible: true,
     properties: { fontSizePt: 10.5, alignment: 'center', firstLineIndentEm: 0, keepWithNext: true }
+  },
+  {
+    id: 'code',
+    name: '代码',
+    kind: 'paragraph',
+    basedOn: 'normal',
+    nextStyle: 'normal',
+    visible: true,
+    properties: {
+      fontFamily: 'Consolas',
+      fontSizePt: 10.5,
+      lineSpacing: 1.2,
+      firstLineIndentEm: 0,
+      leftIndentEm: 0.5,
+      rightIndentEm: 0.5,
+      spaceBeforePt: 6,
+      spaceAfterPt: 6,
+      shadingColor: '#f5f7fa'
+    }
   }
 ]
 
@@ -338,4 +380,18 @@ export function migrateLegacyDocIr(value: unknown): DocumentV3 {
 
 export function styleById(doc: DocumentV3, styleId: string): StyleDefinition | undefined {
   return doc.styles.find((style) => style.id === styleId)
+}
+
+export function resolvedStyleProperties(
+  doc: DocumentV3,
+  styleId: string,
+  visiting = new Set<string>()
+): StyleProperties {
+  if (!styleId || visiting.has(styleId)) return {}
+  const style = styleById(doc, styleId)
+  if (!style) return {}
+  const nextVisiting = new Set(visiting)
+  nextVisiting.add(styleId)
+  const inherited = style.basedOn ? resolvedStyleProperties(doc, style.basedOn, nextVisiting) : {}
+  return { ...inherited, ...style.properties }
 }

@@ -306,7 +306,14 @@
       fontFamily: editor.getAttributes('textStyle').fontFamily || '',
       fontSize: editor.getAttributes('textStyle').fontSize || '',
       alignment: editor.getAttributes('heading').textAlign || editor.getAttributes('paragraph').textAlign || 'left',
-      lineSpacing: editor.getAttributes('heading').lineSpacing || editor.getAttributes('paragraph').lineSpacing || null
+      lineSpacing: editor.getAttributes('heading').lineSpacing || editor.getAttributes('paragraph').lineSpacing || null,
+      letterSpacing: editor.getAttributes('textStyle').letterSpacing || '',
+      textTransform: editor.getAttributes('textStyle').textTransform || 'none',
+      firstLineIndentEm: editor.getAttributes('heading').firstLineIndentEm ?? editor.getAttributes('paragraph').firstLineIndentEm ?? null,
+      leftIndentEm: editor.getAttributes('heading').leftIndentEm ?? editor.getAttributes('paragraph').leftIndentEm ?? null,
+      rightIndentEm: editor.getAttributes('heading').rightIndentEm ?? editor.getAttributes('paragraph').rightIndentEm ?? null,
+      spaceBeforePt: editor.getAttributes('heading').spaceBeforePt ?? editor.getAttributes('paragraph').spaceBeforePt ?? null,
+      spaceAfterPt: editor.getAttributes('heading').spaceAfterPt ?? editor.getAttributes('paragraph').spaceAfterPt ?? null
     })
   }
 
@@ -369,11 +376,18 @@
       code: 'toggle_code_block',
       'clear-format': 'clear_formatting',
       undo: 'undo',
-      redo: 'redo'
+      redo: 'redo',
+      image: 'insert_figure',
+      table: 'insert_table',
+      'page-break': 'insert_page_break',
+      'math-block': 'insert_equation',
+      hr: 'insert_horizontal_rule',
+      caption: 'apply_style'
     }
     let type = simple[command]
     let params: Record<string, unknown> = {}
     if (command === 'paragraph') params = { styleId: 'normal' }
+    if (command === 'caption') params = { styleId: 'caption' }
     if (/^heading[1-6]$/.test(command)) params = { styleId: `heading-${command.slice(-1)}` }
     if (command.startsWith('font:')) {
       type = 'set_font_family'
@@ -396,6 +410,38 @@
     } else if (command === 'indent-first') {
       type = 'set_paragraph_format'
       params = { firstLineIndentEm: 2 }
+    } else if (command === 'indent' || command === 'outdent') {
+      const attrs = editor.getAttributes(editor.isActive('heading') ? 'heading' : 'paragraph')
+      const current = Number(attrs.leftIndentEm || 0)
+      type = 'set_paragraph_format'
+      params = { leftIndentEm: Math.max(0, current + (command === 'indent' ? 1 : -1)) }
+    } else if (command.startsWith('margin:')) {
+      type = 'set_paragraph_format'
+      params = { spaceBeforePt: 6, spaceAfterPt: 6 }
+    } else if (command.startsWith('letter-spacing:')) {
+      type = 'set_character_format'
+      params = { letterSpacing: command.slice(15) }
+    } else if (command.startsWith('text-transform:')) {
+      type = 'set_character_format'
+      params = { textTransform: command.slice(15) }
+    } else if (command.startsWith('space-before:')) {
+      type = 'set_paragraph_format'
+      params = { spaceBeforePt: Number(command.slice(13)) }
+    } else if (command.startsWith('space-after:')) {
+      type = 'set_paragraph_format'
+      params = { spaceAfterPt: Number(command.slice(12)) }
+    } else if (command.startsWith('left-indent:')) {
+      type = 'set_paragraph_format'
+      params = { leftIndentEm: Number(command.slice(12)) }
+    } else if (command.startsWith('right-indent:')) {
+      type = 'set_paragraph_format'
+      params = { rightIndentEm: Number(command.slice(13)) }
+    } else if (command.startsWith('border-color:')) {
+      type = 'set_paragraph_format'
+      params = { borderColor: command.slice(13), borderWidthPt: 0.75, borderStyle: 'solid' }
+    } else if (command.startsWith('shading-color:')) {
+      type = 'set_paragraph_format'
+      params = { shadingColor: command.slice(14) }
     }
     if (!type) return
     executeDocumentCommand(editor, createUserCommand(type, params))

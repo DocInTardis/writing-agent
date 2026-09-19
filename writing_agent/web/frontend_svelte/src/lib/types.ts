@@ -72,3 +72,11 @@ export type EditorCommand =
   | `bgcolor:${string}`
   | `line-height:${string}`
   | `margin:${string}`
+  | `letter-spacing:${string}`
+  | `text-transform:${string}`
+  | `space-before:${string}`
+  | `space-after:${string}`
+  | `left-indent:${string}`
+  | `right-indent:${string}`
+  | `border-color:${string}`
+  | `shading-color:${string}`

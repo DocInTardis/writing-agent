@@ -21,6 +21,13 @@
     fontSize?: string
     alignment?: string
     lineSpacing?: number | null
+    letterSpacing?: string
+    textTransform?: string
+    firstLineIndentEm?: number | null
+    leftIndentEm?: number | null
+    rightIndentEm?: number | null
+    spaceBeforePt?: number | null
+    spaceAfterPt?: number | null
   }
 
   let {
@@ -164,19 +171,49 @@
           <select class="line-select" aria-label="行距" value={String(editorToolbarState.lineSpacing || 1.5)} onchange={(event) => command(`line-height:${event.currentTarget.value}`)}>
             <option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">2.0</option><option value="2.5">2.5</option>
           </select>
+          <button class:active={showAdvancedToolbar} class="tool-btn" title="更多段落与字符格式" onclick={() => (showAdvancedToolbar = !showAdvancedToolbar)}>⋯</button>
         </div>
         <span class="ribbon-label">段落</span>
       </div>
+      {#if showAdvancedToolbar}
+        <div class="ribbon-group advanced-format" aria-label="高级格式">
+          <label>字距
+            <select value={editorToolbarState.letterSpacing || '0pt'} onchange={(event) => command(`letter-spacing:${event.currentTarget.value}`)}>
+              <option value="-0.5pt">紧缩</option><option value="0pt">标准</option><option value="0.5pt">加宽 0.5</option><option value="1pt">加宽 1</option><option value="2pt">加宽 2</option>
+            </select>
+          </label>
+          <label>大小写
+            <select value={editorToolbarState.textTransform || 'none'} onchange={(event) => command(`text-transform:${event.currentTarget.value}`)}>
+              <option value="none">原样</option><option value="uppercase">大写</option><option value="lowercase">小写</option><option value="capitalize">首字母大写</option>
+            </select>
+          </label>
+          <label>段前
+            <input type="number" min="0" max="72" step="1" value={editorToolbarState.spaceBeforePt ?? 0} onchange={(event) => command(`space-before:${event.currentTarget.value}`)} />
+          </label>
+          <label>段后
+            <input type="number" min="0" max="72" step="1" value={editorToolbarState.spaceAfterPt ?? 0} onchange={(event) => command(`space-after:${event.currentTarget.value}`)} />
+          </label>
+          <label>左缩进
+            <input type="number" min="0" max="20" step="0.5" value={editorToolbarState.leftIndentEm ?? 0} onchange={(event) => command(`left-indent:${event.currentTarget.value}`)} />
+          </label>
+          <label>右缩进
+            <input type="number" min="0" max="20" step="0.5" value={editorToolbarState.rightIndentEm ?? 0} onchange={(event) => command(`right-indent:${event.currentTarget.value}`)} />
+          </label>
+          <button class="tool-btn" title="段落边框" onclick={() => command('border-color:#9ca3af')}>□</button>
+          <button class="tool-btn" title="段落底纹" onclick={() => command('shading-color:#f3f4f6')}>▨</button>
+          <span class="ribbon-label">高级格式</span>
+        </div>
+      {/if}
     {:else if activeTab === 'insert'}
       <div class="ribbon-group action-group">
         <button class="ribbon-action" onclick={() => command('table')}><span>▦</span>表格</button>
         <button class="ribbon-action" onclick={() => command('image')}><span>▧</span>图片</button>
-        <button class="ribbon-action" onclick={() => command('link')}><span>↗</span>链接</button>
+        <button class="ribbon-action" disabled title="链接编辑将在对象与引用阶段启用"><span>↗</span>链接</button>
         <button class="ribbon-action" onclick={() => command('quote')}><Icon name="quote" size={17} />引用</button>
         <button class="ribbon-action" onclick={() => command('code')}><Icon name="code" size={17} />代码</button>
         <button class="ribbon-action" onclick={() => command('hr')}><span>—</span>分隔线</button>
         <button class="ribbon-action" onclick={() => command('page-break')}><span>↵</span>分页符</button>
-        <button class="ribbon-action" onclick={() => command('thesis-structure')}><span>§</span>论文结构</button>
+        <button class="ribbon-action" disabled title="论文结构模板尚未启用"><span>§</span>论文结构</button>
         <button class="ribbon-action" onclick={onOpenCanvas}><Icon name="diagram" size={17} />图形</button>
       </div>
     {:else if activeTab === 'layout'}
@@ -192,17 +229,17 @@
       </div>
     {:else if activeTab === 'references'}
       <div class="ribbon-group action-group">
-        <button class="ribbon-action" onclick={() => command('toc')}><span>☷</span>目录</button>
-        <button class="ribbon-action" onclick={() => command('footnote')}><span>¹</span>脚注</button>
+        <button class="ribbon-action" disabled title="自动目录将在引用阶段启用"><span>☷</span>目录</button>
+        <button class="ribbon-action" disabled title="脚注将在引用阶段启用"><span>¹</span>脚注</button>
         <button class="ribbon-action" onclick={() => command('caption')}><span>图1</span>题注</button>
-        <button class="ribbon-action" onclick={() => command('cross-reference')}><span>↪</span>交叉引用</button>
-        <button class="ribbon-action" onclick={() => command('math-inline')}><span>π</span>行内公式</button>
+        <button class="ribbon-action" disabled title="交叉引用将在引用阶段启用"><span>↪</span>交叉引用</button>
+        <button class="ribbon-action" disabled title="行内公式将在对象阶段启用"><span>π</span>行内公式</button>
         <button class="ribbon-action" onclick={() => command('math-block')}><span>∫</span>公式块</button>
         <button class="ribbon-action" onclick={onOpenCitations}><Icon name="cite" size={17} />引文管理</button>
       </div>
     {:else if activeTab === 'review'}
       <div class="ribbon-group action-group">
-        <button class="ribbon-action" onclick={() => command('find-replace')}><span>⌕</span>查找替换</button>
+        <button class="ribbon-action" disabled title="查找替换尚未启用"><span>⌕</span>查找替换</button>
         <button class:active={showPlagiarismPanel} class="ribbon-action" onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}><Icon name="shield" size={17} />查重</button>
         <button class:active={showAiRatePanel} class="ribbon-action" onclick={() => (showAiRatePanel = !showAiRatePanel)}><Icon name="ai" size={17} />AI 痕迹</button>
         <button class:active={showFeedbackPanel} class="ribbon-action" onclick={() => (showFeedbackPanel = !showFeedbackPanel)}><Icon name="star" size={17} />评分</button>
@@ -210,10 +247,10 @@
       </div>
     {:else if activeTab === 'view'}
       <div class="ribbon-group action-group">
-        <button class="ribbon-action" onclick={() => command('view-outline')}><span>☰</span>导航窗格</button>
-        <button class="ribbon-action" onclick={() => command('zoom-out')}><span>−</span>缩小</button>
-        <button class="ribbon-action" onclick={() => command('zoom-100')}><span>100%</span>实际大小</button>
-        <button class="ribbon-action" onclick={() => command('zoom-in')}><span>＋</span>放大</button>
+        <button class="ribbon-action" disabled title="导航窗格尚未启用"><span>☰</span>导航窗格</button>
+        <button class="ribbon-action" disabled title="缩放尚未启用"><span>−</span>缩小</button>
+        <button class="ribbon-action" disabled title="缩放尚未启用"><span>100%</span>实际大小</button>
+        <button class="ribbon-action" disabled title="缩放尚未启用"><span>＋</span>放大</button>
       </div>
     {:else}
       <div class="ribbon-group assistant-group">
@@ -227,3 +264,32 @@
     {/if}
   </div>
 </div>
+
+<style>
+  .advanced-format {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(82px, 1fr));
+    gap: 4px 8px;
+    min-width: 430px;
+  }
+  .advanced-format label {
+    display: grid;
+    grid-template-columns: auto minmax(50px, 1fr);
+    align-items: center;
+    gap: 4px;
+    color: #687386;
+    font-size: 11px;
+  }
+  .advanced-format select,
+  .advanced-format input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 25px;
+    min-width: 0;
+    border: 1px solid #d4dae3;
+    border-radius: 3px;
+    background: #fff;
+    color: #293241;
+    font-size: 11px;
+  }
+</style>

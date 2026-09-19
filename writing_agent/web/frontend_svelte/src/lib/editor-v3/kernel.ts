@@ -10,7 +10,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 
-import type { DocumentV3, InlineNode, SectionV3, StyleDefinition, V3BlockNode } from './model'
+import { resolvedStyleProperties, type DocumentV3, type InlineNode, type SectionV3, type StyleDefinition, type V3BlockNode } from './model'
 
 const StableNodeAttributes = Extension.create({
   name: 'stableNodeAttributes',
@@ -76,7 +76,28 @@ const ParagraphFormatting = Extension.create({
       },
       keepWithNext: { default: null },
       keepLinesTogether: { default: null },
-      pageBreakBefore: { default: null }
+      pageBreakBefore: { default: null },
+      borderColor: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.style.borderColor || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.borderColor ? { style: `border-color:${attrs.borderColor}` } : {}
+      },
+      borderWidthPt: {
+        default: null,
+        parseHTML: (element: HTMLElement) => Number.parseFloat(element.style.borderWidth) || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.borderWidthPt ? { style: `border-width:${attrs.borderWidthPt}pt` } : {}
+      },
+      borderStyle: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.style.borderStyle || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.borderStyle ? { style: `border-style:${attrs.borderStyle}` } : {}
+      },
+      shadingColor: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.style.backgroundColor || null,
+        renderHTML: (attrs: Record<string, unknown>) => attrs.shadingColor ? { style: `background-color:${attrs.shadingColor}` } : {}
+      },
+      tabStops: { default: null }
     }
     return [{ types: ['paragraph', 'heading'], attributes }]
   }
@@ -236,6 +257,27 @@ const FontSize = Extension.create({
           default: null,
           parseHTML: (element) => element.style.fontSize || null,
           renderHTML: (attributes) => attributes.fontSize ? { style: `font-size:${attributes.fontSize}` } : {}
+        }
+      }
+    }]
+  }
+})
+
+const CharacterFormatting = Extension.create({
+  name: 'characterFormatting',
+  addGlobalAttributes() {
+    return [{
+      types: ['textStyle'],
+      attributes: {
+        letterSpacing: {
+          default: null,
+          parseHTML: (element) => element.style.letterSpacing || null,
+          renderHTML: (attributes) => attributes.letterSpacing ? { style: `letter-spacing:${attributes.letterSpacing}` } : {}
+        },
+        textTransform: {
+          default: null,
+          parseHTML: (element) => element.style.textTransform || null,
+          renderHTML: (attributes) => attributes.textTransform ? { style: `text-transform:${attributes.textTransform}` } : {}
         }
       }
     }]
@@ -446,26 +488,34 @@ export function plainTextToTiptapContent(value: string): JSONContent[] {
   })
 }
 
-function cssForStyle(style: StyleDefinition): string {
-  const p = style.properties
+function cssForStyle(doc: DocumentV3, style: StyleDefinition): string {
+  const p = resolvedStyleProperties(doc, style.id)
   return [
     p.fontFamily ? `font-family:${JSON.stringify(p.fontFamily)}` : '',
     p.fontSizePt ? `font-size:${p.fontSizePt}pt` : '',
     p.bold ? 'font-weight:700' : '',
     p.italic ? 'font-style:italic' : '',
+    p.underline ? 'text-decoration:underline' : '',
     p.color ? `color:${p.color}` : '',
+    p.backgroundColor ? `background-color:${p.backgroundColor}` : '',
+    p.letterSpacingPt !== undefined ? `letter-spacing:${p.letterSpacingPt}pt` : '',
+    p.textTransform ? `text-transform:${p.textTransform}` : '',
     p.alignment ? `text-align:${p.alignment}` : '',
     p.lineSpacing ? `line-height:${p.lineSpacing}` : '',
     p.firstLineIndentEm !== undefined ? `text-indent:${p.firstLineIndentEm}em` : '',
     p.leftIndentEm ? `margin-left:${p.leftIndentEm}em` : '',
     p.rightIndentEm ? `margin-right:${p.rightIndentEm}em` : '',
     p.spaceBeforePt !== undefined ? `margin-top:${p.spaceBeforePt}pt` : '',
-    p.spaceAfterPt !== undefined ? `margin-bottom:${p.spaceAfterPt}pt` : ''
+    p.spaceAfterPt !== undefined ? `margin-bottom:${p.spaceAfterPt}pt` : '',
+    p.borderColor ? `border-color:${p.borderColor}` : '',
+    p.borderWidthPt !== undefined ? `border-width:${p.borderWidthPt}pt` : '',
+    p.borderStyle ? `border-style:${p.borderStyle}` : '',
+    p.shadingColor ? `background-color:${p.shadingColor}` : ''
   ].filter(Boolean).join(';')
 }
 
 export function styleSheetForDocument(doc: DocumentV3): string {
-  return doc.styles.map((style) => `[data-style-id="${style.id}"]{${cssForStyle(style)}}`).join('\n')
+  return doc.styles.map((style) => `[data-style-id="${style.id}"]{${cssForStyle(doc, style)}}`).join('\n')
 }
 
 export function createEditorKernel(options: {
@@ -494,6 +544,7 @@ export function createEditorKernel(options: {
       StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
       TextStyle,
       FontSize,
+      CharacterFormatting,
       Color,
       FontFamily,
       Highlight.configure({ multicolor: true }),
