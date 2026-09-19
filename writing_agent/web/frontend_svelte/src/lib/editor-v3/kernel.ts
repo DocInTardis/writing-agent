@@ -179,6 +179,53 @@ const ReliableClipboard = Extension.create({
   }
 })
 
+const ReliableBlockKeyboard = Extension.create({
+  name: 'reliableBlockKeyboard',
+  addProseMirrorPlugins() {
+    return [new Plugin({
+      key: new PluginKey('reliableBlockKeyboard'),
+      props: {
+        handleKeyDown(view, event) {
+          const { selection, doc } = view.state
+          if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'Space') {
+            const position = selection.$from.depth > 0 ? selection.$from.before(1) : selection.from
+            const node = doc.nodeAt(position)
+            if (!node) return false
+            event.preventDefault()
+            view.dispatch(view.state.tr.setSelection(NodeSelection.create(doc, position)).scrollIntoView())
+            return true
+          }
+          if (!(selection instanceof NodeSelection) || selection.$from.depth !== 0) return false
+          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            const target = event.key === 'ArrowUp'
+              ? doc.childBefore(selection.from)
+              : doc.childAfter(selection.to)
+            if (!target.node) return false
+            const position = event.key === 'ArrowUp'
+              ? selection.from - target.node.nodeSize
+              : selection.to
+            event.preventDefault()
+            view.dispatch(view.state.tr.setSelection(NodeSelection.create(doc, position)).scrollIntoView())
+            return true
+          }
+          if (event.key === 'Escape' || event.key === 'Enter' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            const preferEnd = event.key === 'ArrowLeft'
+            const node = selection.node
+            const inside = preferEnd ? selection.to - 1 : selection.from + 1
+            const position = node.isTextblock
+              ? Math.max(selection.from + 1, Math.min(inside, selection.to - 1))
+              : (preferEnd ? selection.from : selection.to)
+            event.preventDefault()
+            view.dispatch(view.state.tr.setSelection(TextSelection.near(doc.resolve(position), preferEnd ? -1 : 1)).scrollIntoView())
+            return true
+          }
+          return false
+        }
+      }
+    })]
+  }
+})
+
 const FontSize = Extension.create({
   name: 'fontSize',
   addGlobalAttributes() {
@@ -427,7 +474,18 @@ export function createEditorKernel(options: {
   editable?: boolean
   onUpdate?: (json: JSONContent) => void
   onSelectionUpdate?: (editor: Editor) => void
+  onSlashQuery?: (query: string | null, position: number, editor: Editor) => void
 }): Editor {
+  const reportSlashQuery = (editor: Editor) => {
+    const selection = editor.state.selection
+    if (!selection.empty || !selection.$from.parent.isTextblock) {
+      options.onSlashQuery?.(null, selection.from, editor)
+      return
+    }
+    const prefix = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\n')
+    const match = /^\/([^\s/]*)$/.exec(prefix)
+    options.onSlashQuery?.(match ? match[1] : null, selection.from, editor)
+  }
   return new Editor({
     element: options.element,
     editable: options.editable !== false,
@@ -446,13 +504,20 @@ export function createEditorKernel(options: {
       ParagraphFormatting,
       ReliableBlockIdentity,
       ReliableClipboard,
+      ReliableBlockKeyboard,
       FigureNode,
       TableNode,
       PageBreakNode,
       EquationBlockNode
     ],
-    onUpdate: ({ editor }) => options.onUpdate?.(editor.getJSON()),
-    onSelectionUpdate: ({ editor }) => options.onSelectionUpdate?.(editor),
+    onUpdate: ({ editor }) => {
+      options.onUpdate?.(editor.getJSON())
+      reportSlashQuery(editor)
+    },
+    onSelectionUpdate: ({ editor }) => {
+      options.onSelectionUpdate?.(editor)
+      reportSlashQuery(editor)
+    },
     onFocus: ({ editor }) => options.onSelectionUpdate?.(editor),
     onBlur: ({ editor }) => options.onSelectionUpdate?.(editor)
   })

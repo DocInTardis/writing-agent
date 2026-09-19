@@ -11,7 +11,7 @@
     editorCommand,
     sourceText
   } from '../stores'
-  import { createUserCommand, executeDocumentCommand } from '../editor-v3/commands'
+  import { createNodeCommand, createUserCommand, executeDocumentCommand } from '../editor-v3/commands'
   import {
     createEditorKernel,
     documentV3ToTiptap,
@@ -56,6 +56,82 @@
   let activeBlockId = $state('')
   let blockSelectionAnchorId = ''
   let blockSelectionActive = $state(false)
+  let selectedBlockIds = $state<string[]>([])
+  let dragTargetId = $state('')
+  let dragPlacement = $state<'before' | 'after'>('before')
+  let dragIndicatorTop = $state(0)
+  let blockPointerId: number | null = null
+  let blockPointerStartY = 0
+  let blockPointerDragging = false
+  let suppressHandleClick = false
+  let nativeBlockDrag = false
+  let slashQuery = $state('')
+  let slashMenuVisible = $state(false)
+  let slashMenuTop = $state(0)
+  let slashMenuLeft = $state(0)
+  let slashMenuIndex = $state(0)
+
+  const slashCommands = [
+    { label: '正文', keywords: 'paragraph 正文', command: 'apply_style', params: { styleId: 'normal' } },
+    { label: '标题 1', keywords: 'heading title 标题', command: 'apply_style', params: { styleId: 'heading-1' } },
+    { label: '标题 2', keywords: 'heading title 标题', command: 'apply_style', params: { styleId: 'heading-2' } },
+    { label: '标题 3', keywords: 'heading title 标题', command: 'apply_style', params: { styleId: 'heading-3' } },
+    { label: '项目列表', keywords: 'bullet list 列表', command: 'toggle_bullet_list', params: {} },
+    { label: '编号列表', keywords: 'number ordered list 编号', command: 'toggle_ordered_list', params: {} },
+    { label: '引用', keywords: 'quote 引用', command: 'toggle_blockquote', params: {} },
+    { label: '代码块', keywords: 'code 代码', command: 'toggle_code_block', params: {} },
+    { label: '分页符', keywords: 'page break 分页', command: 'insert_page_break', params: {} },
+    { label: '图片/图表', keywords: 'figure image 图片 图表', command: 'insert_figure', params: {} },
+    { label: '表格', keywords: 'table 表格', command: 'insert_table', params: {} },
+    { label: '公式', keywords: 'equation math 公式', command: 'insert_equation', params: {} }
+  ]
+
+  function filteredSlashCommands() {
+    const query = slashQuery.trim().toLocaleLowerCase()
+    return slashCommands.filter((item) => !query || `${item.label} ${item.keywords}`.toLocaleLowerCase().includes(query))
+  }
+
+  function handleSlashQuery(query: string | null, position: number, currentEditor: Editor) {
+    if (query === null) {
+      slashMenuVisible = false
+      return
+    }
+    slashQuery = query
+    slashMenuIndex = Math.min(slashMenuIndex, Math.max(0, filteredSlashCommands().length - 1))
+    const caret = currentEditor.view.coordsAtPos(position)
+    const shellRect = shell.getBoundingClientRect()
+    slashMenuTop = caret.bottom - shellRect.top + 6
+    slashMenuLeft = Math.max(0, caret.left - shellRect.left)
+    slashMenuVisible = true
+  }
+
+  function runSlashCommand(index: number) {
+    if (!editor) return
+    const item = filteredSlashCommands()[index]
+    if (!item) return
+    const resolvedFrom = editor.state.selection.$from
+    const from = editor.state.selection.from
+    editor.chain().focus().deleteRange({ from: resolvedFrom.start(), to: from }).run()
+    executeDocumentCommand(editor, createUserCommand(item.command, item.params))
+    slashMenuVisible = false
+    emitSelection()
+  }
+
+  function handleShellKeyDown(event: KeyboardEvent) {
+    if (!slashMenuVisible) return
+    const items = filteredSlashCommands()
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const delta = event.key === 'ArrowDown' ? 1 : -1
+      slashMenuIndex = (slashMenuIndex + delta + items.length) % Math.max(1, items.length)
+    } else if (event.key === 'Enter' && items.length) {
+      event.preventDefault()
+      runSlashCommand(slashMenuIndex)
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      slashMenuVisible = false
+    }
+  }
 
   function topLevelBlockElement(element: Element | null): HTMLElement | null {
     let candidate = element?.closest<HTMLElement>('[data-node-id]') || null
@@ -85,22 +161,127 @@
   }
 
   function handleEditorPointerMove(event: PointerEvent) {
+    if (blockPointerId === event.pointerId) {
+      if (Math.abs(event.clientY - blockPointerStartY) >= 4) blockPointerDragging = true
+      if (blockPointerDragging) {
+        event.preventDefault()
+        updateBlockDropTarget(event.clientY, event.target instanceof Element ? event.target : null)
+        return
+      }
+    }
     positionBlockHandle(topLevelBlockElement(event.target instanceof Element ? event.target : null))
   }
 
   function handleBlockHandleClick(event: MouseEvent) {
+    if (suppressHandleClick) {
+      suppressHandleClick = false
+      return
+    }
     if (!editor || !activeBlockId) return
     const extend = event.shiftKey && Boolean(blockSelectionAnchorId)
     if (selectBlock(editor, activeBlockId, extend ? blockSelectionAnchorId : '')) {
       if (!extend) blockSelectionAnchorId = activeBlockId
+      blockSelectionActive = true
       positionBlockHandleById(activeBlockId)
     }
   }
 
-  function runBlockCommand(type: 'move_block_up' | 'move_block_down' | 'duplicate_block' | 'delete_block') {
+  function runBlockCommand(type: 'move_block_up' | 'move_block_down' | 'duplicate_block' | 'delete_block' | 'insert_block_before' | 'insert_block_after') {
     if (!editor) return
     executeDocumentCommand(editor, createUserCommand(type))
     emitSelection()
+  }
+
+  function convertSelectedBlock(event: Event) {
+    if (!editor) return
+    const type = (event.currentTarget as HTMLSelectElement).value
+    if (!type) return
+    executeDocumentCommand(editor, createUserCommand('convert_block', { type }))
+    ;(event.currentTarget as HTMLSelectElement).value = ''
+    emitSelection()
+  }
+
+  function handleBlockPointerDown(event: PointerEvent) {
+    if (!editor || !activeBlockId || event.button !== 0) return
+    if (!selectedBlockIds.includes(activeBlockId)) selectBlock(editor, activeBlockId)
+    const ids = selectedBlocks(editor).map((block) => block.id)
+    selectedBlockIds = ids.length ? ids : [activeBlockId]
+    blockPointerId = event.pointerId
+    blockPointerStartY = event.clientY
+    blockPointerDragging = false
+    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  }
+
+  function handleBlockDragStart(event: DragEvent) {
+    if (!editor || !activeBlockId || !event.dataTransfer) return
+    nativeBlockDrag = true
+    blockPointerId = null
+    blockPointerDragging = false
+    if (!selectedBlockIds.includes(activeBlockId)) selectBlock(editor, activeBlockId)
+    selectedBlockIds = selectedBlocks(editor).map((block) => block.id)
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/x-writing-agent-blocks', JSON.stringify(selectedBlockIds))
+  }
+
+  function nearestTopLevelBlock(clientY: number): HTMLElement | null {
+    const blocks = Array.from(host.querySelectorAll<HTMLElement>(':scope > .tiptap > [data-node-id], .tiptap > [data-node-id]'))
+      .filter((element) => element.parentElement?.classList.contains('tiptap'))
+    let nearest: HTMLElement | null = null
+    let distance = Number.POSITIVE_INFINITY
+    for (const block of blocks) {
+      const rect = block.getBoundingClientRect()
+      const candidate = Math.abs(clientY - (rect.top + rect.height / 2))
+      if (candidate < distance) {
+        nearest = block
+        distance = candidate
+      }
+    }
+    return nearest
+  }
+
+  function updateBlockDropTarget(clientY: number, eventTarget: Element | null) {
+    const element = topLevelBlockElement(eventTarget) || nearestTopLevelBlock(clientY)
+    const targetId = String(element?.dataset.nodeId || '')
+    if (!element || !targetId || selectedBlockIds.includes(targetId)) return
+    const shellRect = shell.getBoundingClientRect()
+    const rect = element.getBoundingClientRect()
+    dragTargetId = targetId
+    dragPlacement = clientY >= rect.top + rect.height / 2 ? 'after' : 'before'
+    dragIndicatorTop = (dragPlacement === 'after' ? rect.bottom : rect.top) - shellRect.top
+  }
+
+  function clearBlockDrag() {
+    dragTargetId = ''
+  }
+
+  function handleNativeDragOver(event: DragEvent) {
+    if (!nativeBlockDrag) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+    updateBlockDropTarget(event.clientY, event.target instanceof Element ? event.target : null)
+  }
+
+  function handleNativeDrop(event: DragEvent) {
+    if (!nativeBlockDrag) return
+    event.preventDefault()
+    if (editor && dragTargetId) {
+      executeDocumentCommand(editor, createNodeCommand('move_blocks', selectedBlockIds, { targetId: dragTargetId, placement: dragPlacement }))
+      emitSelection()
+    }
+    nativeBlockDrag = false
+    clearBlockDrag()
+  }
+
+  function handleBlockPointerUp(event: PointerEvent) {
+    if (blockPointerId !== event.pointerId) return
+    suppressHandleClick = blockPointerDragging
+    if (blockPointerDragging && editor && dragTargetId) {
+      executeDocumentCommand(editor, createNodeCommand('move_blocks', selectedBlockIds, { targetId: dragTargetId, placement: dragPlacement }))
+      emitSelection()
+    }
+    blockPointerId = null
+    blockPointerDragging = false
+    clearBlockDrag()
   }
 
   function emitToolbarState() {
@@ -134,7 +315,9 @@
     const { from, to, empty } = editor.state.selection
     const blocks = selectedBlocks(editor)
     const blockIds = blocks.map((block) => block.id)
-    blockSelectionActive = editor.state.selection instanceof NodeSelection
+    selectedBlockIds = blockIds
+    if (editor.state.selection instanceof NodeSelection) blockSelectionActive = true
+    else if (editor.state.selection.empty) blockSelectionActive = false
     if (blockIds.length === 1) positionBlockHandleById(blockIds[0])
     const text = empty ? '' : editor.state.doc.textBetween(from, to, '\n')
     onblockselect?.({
@@ -263,7 +446,8 @@
       document: activeDocument,
       editable: !lockEditing,
       onUpdate: updateDocument,
-      onSelectionUpdate: emitSelection
+      onSelectionUpdate: emitSelection,
+      onSlashQuery: handleSlashQuery
     })
     unsubscribeCommand = editorCommand.subscribe((command) => {
       if (!command || !editor) return
@@ -292,7 +476,22 @@
   })
 </script>
 
-<div class:paper class="structured-editor-shell" role="group" aria-label="Document V3 编辑区" bind:this={shell} onpointermove={handleEditorPointerMove}>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions: wrapper delegates input to the ProseMirror application below -->
+<div
+  class:paper
+  class="structured-editor-shell"
+  role="application"
+  tabindex="-1"
+  aria-label="Document V3 编辑区"
+  bind:this={shell}
+  onpointermove={handleEditorPointerMove}
+  onkeydowncapture={handleShellKeyDown}
+  onpointerleave={() => { if (!blockSelectionActive) blockHandleVisible = false }}
+  onpointerup={handleBlockPointerUp}
+  onpointercancel={handleBlockPointerUp}
+  ondragover={handleNativeDragOver}
+  ondrop={handleNativeDrop}
+>
   {#if blockHandleVisible}
     <button
       class="block-handle"
@@ -300,15 +499,46 @@
       style:left={`${blockHandleLeft}px`}
       aria-label="选择当前块"
       title="选择块；Shift 点击选择连续块"
-      onmousedown={(event) => event.preventDefault()}
+      draggable="true"
+      onpointerdown={handleBlockPointerDown}
       onclick={handleBlockHandleClick}
+      ondragstart={handleBlockDragStart}
+      ondragend={() => { nativeBlockDrag = false; clearBlockDrag() }}
     >⋮⋮</button>
   {/if}
-  {#if blockHandleVisible && blockSelectionActive}
+  {#if dragTargetId}<div class="block-drop-indicator" style:top={`${dragIndicatorTop}px`}></div>{/if}
+  {#if slashMenuVisible}
+    <div class="slash-menu" style:top={`${slashMenuTop}px`} style:left={`${slashMenuLeft}px`} role="listbox" aria-label="插入块">
+      {#each filteredSlashCommands() as item, index}
+        <button
+          class:active={index === slashMenuIndex}
+          role="option"
+          aria-selected={index === slashMenuIndex}
+          onmousedown={(event) => event.preventDefault()}
+          onclick={() => runSlashCommand(index)}
+        >{item.label}</button>
+      {/each}
+      {#if !filteredSlashCommands().length}<div class="slash-empty">没有匹配的命令</div>{/if}
+    </div>
+  {/if}
+  {#if blockSelectionActive && selectedBlockIds.length}
     <div class="block-actions" style:top={`${blockHandleTop}px`} style:left={`${blockHandleLeft + 32}px`} role="toolbar" aria-label="块操作">
+      <button title="在前面插入段落" aria-label="在前面插入段落" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('insert_block_before')}>＋↑</button>
+      <button title="在后面插入段落" aria-label="在后面插入段落" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('insert_block_after')}>＋↓</button>
       <button title="上移块" aria-label="上移块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('move_block_up')}>↑</button>
       <button title="下移块" aria-label="下移块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('move_block_down')}>↓</button>
       <button title="复制块" aria-label="复制块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('duplicate_block')}>⧉</button>
+      <select title="转换块类型" aria-label="转换块类型" onchange={convertSelectedBlock}>
+        <option value="">转换</option>
+        <option value="paragraph">正文</option>
+        <option value="heading-1">标题 1</option>
+        <option value="heading-2">标题 2</option>
+        <option value="heading-3">标题 3</option>
+        <option value="blockquote">引用</option>
+        <option value="codeBlock">代码</option>
+        <option value="bulletList">项目列表</option>
+        <option value="orderedList">编号列表</option>
+      </select>
       <button class="danger" title="删除块" aria-label="删除块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('delete_block')}>×</button>
     </div>
   {/if}
@@ -403,6 +633,53 @@
     background: transparent;
     color: #4d596a;
     cursor: pointer;
+  }
+  .block-actions select {
+    height: 25px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: #4d596a;
+    font-size: 12px;
+  }
+  .block-drop-indicator {
+    position: absolute;
+    z-index: 5;
+    right: 0;
+    left: 0;
+    height: 2px;
+    background: #2f6fca;
+    pointer-events: none;
+  }
+  .slash-menu {
+    position: absolute;
+    z-index: 8;
+    display: grid;
+    width: 184px;
+    max-height: 280px;
+    overflow: auto;
+    padding: 4px;
+    border: 1px solid #d5dce7;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 10px 28px rgba(38, 50, 66, 0.18);
+  }
+  .slash-menu button {
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #263244;
+    text-align: left;
+  }
+  .slash-menu button:hover,
+  .slash-menu button.active {
+    background: #edf3fb;
+  }
+  .slash-empty {
+    padding: 8px;
+    color: #7a8594;
+    font-size: 12px;
   }
   .block-actions button:hover,
   .block-actions button:focus-visible {

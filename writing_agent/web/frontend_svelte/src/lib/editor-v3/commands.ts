@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/core'
-import { NodeSelection } from '@tiptap/pm/state'
+import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
 
 export type CommandSource = 'user' | 'shortcut' | 'ai' | 'import'
 export type ReviewMode = 'direct' | 'suggest'
@@ -45,6 +46,16 @@ export function createUserCommand(type: string, params: Record<string, unknown> 
   return selectionCommand({
     type,
     target: { kind: 'selection' },
+    params,
+    source: 'user',
+    reviewMode: 'direct'
+  })
+}
+
+export function createNodeCommand(type: string, nodeIds: string[], params: Record<string, unknown> = {}): DocumentCommand {
+  return selectionCommand({
+    type,
+    target: { kind: 'nodes', nodeIds: [...new Set(nodeIds.filter(Boolean))] },
     params,
     source: 'user',
     reviewMode: 'direct'
@@ -161,55 +172,159 @@ registerDocumentCommand('toggle_bullet_list', (editor) => editor.chain().focus()
 registerDocumentCommand('toggle_ordered_list', (editor) => editor.chain().focus().toggleOrderedList().run())
 registerDocumentCommand('toggle_blockquote', (editor) => editor.chain().focus().toggleBlockquote().run())
 registerDocumentCommand('toggle_code_block', (editor) => editor.chain().focus().toggleCodeBlock().run())
+registerDocumentCommand('insert_page_break', (editor) => editor.chain().focus().insertContent({ type: 'pageBreak', attrs: { nodeId: null } }).run())
+registerDocumentCommand('insert_figure', (editor, command) => editor.chain().focus().insertContent({
+  type: 'figure',
+  attrs: { nodeId: null, payload: { caption: String(command.params.caption || ''), source: String(command.params.source || '') } }
+}).run())
+registerDocumentCommand('insert_table', (editor, command) => editor.chain().focus().insertContent({
+  type: 'table',
+  attrs: { nodeId: null, payload: { rows: Math.max(1, Number(command.params.rows || 2)), columns: Math.max(1, Number(command.params.columns || 2)), cells: [] } }
+}).run())
+registerDocumentCommand('insert_equation', (editor, command) => editor.chain().focus().insertContent({
+  type: 'equationBlock',
+  attrs: { nodeId: null, payload: { latex: String(command.params.latex || '') } }
+}).run())
 registerDocumentCommand('clear_formatting', (editor) => editor.chain().focus().unsetAllMarks().clearNodes().run())
 registerDocumentCommand('undo', (editor) => editor.chain().focus().undo().run())
 registerDocumentCommand('redo', (editor) => editor.chain().focus().redo().run())
 
-function selectedTopLevelNode(editor: Editor) {
+interface TopLevelRange {
+  from: number
+  to: number
+  nodes: Array<{ node: ProseMirrorNode; position: number }>
+}
+
+function selectedTopLevelRange(editor: Editor): TopLevelRange | null {
   const selection = editor.state.selection
-  if (!(selection instanceof NodeSelection) || selection.$from.depth !== 0) return null
-  return { node: selection.node, position: selection.from }
+  if (selection instanceof NodeSelection && selection.$from.depth === 0) {
+    return {
+      from: selection.from,
+      to: selection.to,
+      nodes: [{ node: selection.node, position: selection.from }]
+    }
+  }
+  const nodes: TopLevelRange['nodes'] = []
+  editor.state.doc.forEach((node, position) => {
+    const end = position + node.nodeSize
+    if (end > selection.from && position < selection.to) nodes.push({ node, position })
+  })
+  if (!nodes.length) return null
+  return {
+    from: nodes[0].position,
+    to: nodes[nodes.length - 1].position + nodes[nodes.length - 1].node.nodeSize,
+    nodes
+  }
+}
+
+function selectInsertedRange(transaction: Transaction, from: number, to: number) {
+  const selection = to - from === transaction.doc.nodeAt(from)?.nodeSize
+    ? NodeSelection.create(transaction.doc, from)
+    : TextSelection.create(transaction.doc, Math.min(from + 1, transaction.doc.content.size), Math.max(from + 1, to - 1))
+  transaction.setSelection(selection)
 }
 
 registerDocumentCommand('duplicate_block', (editor) => {
-  const selected = selectedTopLevelNode(editor)
+  const selected = selectedTopLevelRange(editor)
   if (!selected) return false
-  const insertAt = selected.position + selected.node.nodeSize
-  const transaction = editor.state.tr.insert(insertAt, selected.node)
-  transaction.setSelection(NodeSelection.create(transaction.doc, insertAt))
+  const insertAt = selected.to
+  const content = Fragment.fromArray(selected.nodes.map(({ node }) => node))
+  const transaction = editor.state.tr.insert(insertAt, content)
+  selectInsertedRange(transaction, insertAt, insertAt + content.size)
   editor.view.dispatch(transaction.scrollIntoView())
   return true
 })
 
 registerDocumentCommand('delete_block', (editor) => {
-  if (!selectedTopLevelNode(editor)) return false
-  return editor.chain().focus().deleteSelection().run()
+  const selected = selectedTopLevelRange(editor)
+  if (!selected) return false
+  const transaction = editor.state.tr.delete(selected.from, selected.to)
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
 })
 
 registerDocumentCommand('move_block_up', (editor) => {
-  const selected = selectedTopLevelNode(editor)
+  const selected = selectedTopLevelRange(editor)
   if (!selected) return false
-  const before = editor.state.doc.childBefore(selected.position)
+  const before = editor.state.doc.childBefore(selected.from)
   if (!before.node) return false
-  const insertAt = selected.position - before.node.nodeSize
+  const insertAt = selected.from - before.node.nodeSize
+  const content = Fragment.fromArray(selected.nodes.map(({ node }) => node))
   const transaction = editor.state.tr
-    .delete(selected.position, selected.position + selected.node.nodeSize)
-    .insert(insertAt, selected.node)
-  transaction.setSelection(NodeSelection.create(transaction.doc, insertAt))
+    .delete(selected.from, selected.to)
+    .insert(insertAt, content)
+  selectInsertedRange(transaction, insertAt, insertAt + content.size)
   editor.view.dispatch(transaction.scrollIntoView())
   return true
 })
 
 registerDocumentCommand('move_block_down', (editor) => {
-  const selected = selectedTopLevelNode(editor)
+  const selected = selectedTopLevelRange(editor)
   if (!selected) return false
-  const after = editor.state.doc.childAfter(selected.position + selected.node.nodeSize)
+  const after = editor.state.doc.childAfter(selected.to)
   if (!after.node) return false
-  const insertAt = selected.position + after.node.nodeSize
+  const content = Fragment.fromArray(selected.nodes.map(({ node }) => node))
+  const insertAt = selected.from + after.node.nodeSize
   const transaction = editor.state.tr
-    .delete(selected.position, selected.position + selected.node.nodeSize)
-    .insert(insertAt, selected.node)
-  transaction.setSelection(NodeSelection.create(transaction.doc, insertAt))
+    .delete(selected.from, selected.to)
+    .insert(insertAt, content)
+  selectInsertedRange(transaction, insertAt, insertAt + content.size)
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
+})
+
+registerDocumentCommand('insert_block_before', (editor) => {
+  const selected = selectedTopLevelRange(editor)
+  if (!selected) return false
+  const paragraph = editor.state.schema.nodes.paragraph.create({ nodeId: null, styleId: 'normal' })
+  const transaction = editor.state.tr.insert(selected.from, paragraph)
+  transaction.setSelection(TextSelection.create(transaction.doc, selected.from + 1))
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
+})
+
+registerDocumentCommand('insert_block_after', (editor) => {
+  const selected = selectedTopLevelRange(editor)
+  if (!selected) return false
+  const paragraph = editor.state.schema.nodes.paragraph.create({ nodeId: null, styleId: 'normal' })
+  const transaction = editor.state.tr.insert(selected.to, paragraph)
+  transaction.setSelection(TextSelection.create(transaction.doc, selected.to + 1))
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
+})
+
+registerDocumentCommand('convert_block', (editor, command) => {
+  const target = String(command.params.type || 'paragraph')
+  if (target === 'paragraph') return editor.chain().focus().setParagraph().run()
+  const heading = /^heading-([1-6])$/.exec(target)
+  if (heading) return editor.chain().focus().setHeading({ level: Number(heading[1]) as 1 | 2 | 3 | 4 | 5 | 6 }).run()
+  if (target === 'blockquote') return editor.chain().focus().toggleBlockquote().run()
+  if (target === 'codeBlock') return editor.chain().focus().toggleCodeBlock().run()
+  if (target === 'bulletList') return editor.chain().focus().toggleBulletList().run()
+  if (target === 'orderedList') return editor.chain().focus().toggleOrderedList().run()
+  return false
+})
+
+registerDocumentCommand('move_blocks', (editor, command) => {
+  const nodeIds = command.target.kind === 'nodes' ? new Set(command.target.nodeIds) : new Set<string>()
+  const targetId = String(command.params.targetId || '')
+  const placement = command.params.placement === 'after' ? 'after' : 'before'
+  if (!nodeIds.size || !targetId || nodeIds.has(targetId)) return false
+  const indexed: Array<{ node: ProseMirrorNode; position: number; id: string }> = []
+  editor.state.doc.forEach((node, position) => indexed.push({ node, position, id: String(node.attrs?.nodeId || '') }))
+  const selected = indexed.filter((entry) => nodeIds.has(entry.id))
+  const target = indexed.find((entry) => entry.id === targetId)
+  if (!selected.length || !target) return false
+  const contiguous = selected.every((entry, index) => index === 0 || selected[index - 1].position + selected[index - 1].node.nodeSize === entry.position)
+  if (!contiguous) return false
+  const from = selected[0].position
+  const to = selected[selected.length - 1].position + selected[selected.length - 1].node.nodeSize
+  const content = Fragment.fromArray(selected.map(({ node }) => node))
+  let insertAt = target.position + (placement === 'after' ? target.node.nodeSize : 0)
+  if (insertAt > to) insertAt -= to - from
+  if (insertAt >= from && insertAt <= to) return false
+  const transaction = editor.state.tr.delete(from, to).insert(insertAt, content)
+  selectInsertedRange(transaction, insertAt, insertAt + content.size)
   editor.view.dispatch(transaction.scrollIntoView())
   return true
 })
