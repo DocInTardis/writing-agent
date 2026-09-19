@@ -87,6 +87,40 @@
   let selectionToolbarVisible = $state(false)
   let selectionToolbarTop = $state(0)
   let selectionToolbarLeft = $state(0)
+  let proofPanelVisible = $state(false)
+  let proofIssues = $state<Array<{ id: string; message: string; excerpt: string; from: number; to: number }>>([])
+
+  function refreshProofIssues() {
+    if (!editor) return
+    const issues: Array<{ id: string; message: string; excerpt: string; from: number; to: number }> = []
+    editor.state.doc.descendants((node, position) => {
+      if (!node.isText || !node.text) return
+      const rules: Array<{ expression: RegExp; message: string }> = [
+        { expression: /([，。！？；：,.!?;:])\1+/g, message: '连续重复标点' },
+        { expression: / {2,}/g, message: '连续多余空格' },
+        { expression: /\b([A-Za-z]{2,})\s+\1\b/gi, message: '疑似重复单词' },
+        { expression: /[^。！？!?]{121,}[。！？!?]?/g, message: '句子较长，建议检查断句' }
+      ]
+      for (const rule of rules) {
+        for (const match of node.text.matchAll(rule.expression)) {
+          const index = match.index || 0
+          const value = match[0]
+          issues.push({
+            id: `${position}-${index}-${rule.message}`,
+            message: rule.message,
+            excerpt: value.length > 34 ? `${value.slice(0, 34)}…` : value,
+            from: position + index,
+            to: position + index + value.length
+          })
+        }
+      }
+    })
+    proofIssues = issues
+  }
+
+  function jumpToProofIssue(issue: { from: number; to: number }) {
+    editor?.chain().focus().setTextSelection({ from: issue.from, to: issue.to }).scrollIntoView().run()
+  }
 
   function textMatches(query: string) {
     if (!editor || !query) return [] as Array<{ from: number; to: number }>
@@ -483,6 +517,7 @@
     onblockedit?.({ documentV3: activeDocument, text })
     emitToolbarState()
     schedulePagination()
+    if (proofPanelVisible) refreshProofIssues()
   }
 
   function runLegacyCommand(command: EditorCommand) {
@@ -493,6 +528,11 @@
     }
     if (command === 'find-replace') {
       findPanelVisible = !findPanelVisible
+      return
+    }
+    if (command === 'proofread') {
+      proofPanelVisible = !proofPanelVisible
+      if (proofPanelVisible) refreshProofIssues()
       return
     }
     if (command === 'view-outline') {
@@ -757,6 +797,15 @@
       {:else}<small>应用标题样式后将在这里显示。</small>{/each}
     </aside>
   {/if}
+  {#if proofPanelVisible}
+    <aside class="proof-panel" aria-label="基础校对结果">
+      <header><strong>基础校对</strong><button aria-label="关闭基础校对" onclick={() => (proofPanelVisible = false)}>×</button></header>
+      <p>系统拼写检查已开启；下列是可确定的文本问题。</p>
+      {#each proofIssues as issue (issue.id)}
+        <button class="proof-issue" onclick={() => jumpToProofIssue(issue)}><strong>{issue.message}</strong><span>{issue.excerpt}</span></button>
+      {:else}<div class="proof-empty">未发现重复标点、多余空格、重复英文单词或超长句。</div>{/each}
+    </aside>
+  {/if}
   {#if blockSelectionActive && selectedBlockIds.length}
     <div class="block-actions" style:top={`${blockHandleTop}px`} style:left={`${blockHandleLeft + 32}px`} role="toolbar" aria-label="块操作">
       <button title="在前面插入段落" aria-label="在前面插入段落" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('insert_block_before')}>＋↑</button>
@@ -908,6 +957,27 @@
   }
   .outline-panel button { overflow: hidden; padding-block: 6px; border: 0; border-radius: 3px; background: transparent; color: #344054; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .outline-panel button:hover { background: #edf3fb; }
+  .proof-panel {
+    position: absolute;
+    z-index: 10;
+    top: 10px;
+    left: calc(100% + 14px);
+    display: grid;
+    width: 250px;
+    max-height: 70vh;
+    gap: 6px;
+    overflow: auto;
+    padding: 10px;
+    border: 1px solid #d5dce7;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 5px 18px rgba(38, 50, 66, .12);
+  }
+  .proof-panel header { display: flex; align-items: center; justify-content: space-between; }
+  .proof-panel header button { border: 0; background: transparent; font-size: 18px; cursor: pointer; }
+  .proof-panel p, .proof-empty { margin: 0; color: #687386; font-size: 11px; line-height: 1.5; }
+  .proof-issue { display: grid; gap: 3px; padding: 7px; border: 0; border-radius: 4px; background: #fff8e6; color: #614a13; text-align: left; cursor: pointer; }
+  .proof-issue span { overflow: hidden; color: #75632f; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
   .block-actions button {
     display: grid;
     width: 25px;

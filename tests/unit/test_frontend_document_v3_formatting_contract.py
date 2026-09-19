@@ -65,9 +65,11 @@ def test_find_replace_outline_zoom_and_selection_toolbar_are_connected() -> None
     toolbar = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
 
-    for command in ("find-replace", "view-outline", "zoom-in", "zoom-out", "zoom-100"):
+    for command in ("find-replace", "proofread", "view-outline", "zoom-in", "zoom-out", "zoom-100"):
         assert f"command('{command}')" in toolbar
     assert 'aria-label="查找和替换"' in editor
     assert "function replaceAll()" in editor
     assert 'aria-label="文档导航大纲"' in editor
     assert 'aria-label="文字选区操作"' in editor
+    assert 'aria-label="基础校对结果"' in editor
+    assert "spellcheck: 'true'" in (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")

@@ -240,6 +240,7 @@
     {:else if activeTab === 'review'}
       <div class="ribbon-group action-group">
         <button class="ribbon-action" onclick={() => command('find-replace')}><span>⌕</span>查找替换</button>
+        <button class="ribbon-action" onclick={() => command('proofread')}><span>✓</span>基础校对</button>
         <button class:active={showPlagiarismPanel} class="ribbon-action" onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}><Icon name="shield" size={17} />查重</button>
         <button class:active={showAiRatePanel} class="ribbon-action" onclick={() => (showAiRatePanel = !showAiRatePanel)}><Icon name="ai" size={17} />AI 痕迹</button>
         <button class:active={showFeedbackPanel} class="ribbon-action" onclick={() => (showFeedbackPanel = !showFeedbackPanel)}><Icon name="star" size={17} />评分</button>

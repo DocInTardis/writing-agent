@@ -66,6 +66,7 @@ export type EditorCommand =
   | 'zoom-out'
   | 'zoom-100'
   | 'find-replace'
+  | 'proofread'
   | `font:${string}`
   | `size:${string}`
   | `color:${string}`

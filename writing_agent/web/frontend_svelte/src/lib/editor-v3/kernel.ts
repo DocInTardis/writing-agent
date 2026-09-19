@@ -637,6 +637,7 @@ export function createEditorKernel(options: {
     element: options.element,
     editable: options.editable !== false,
     content: documentV3ToTiptap(options.document),
+    editorProps: { attributes: { spellcheck: 'true', autocapitalize: 'sentences' } },
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
       TextStyle,
