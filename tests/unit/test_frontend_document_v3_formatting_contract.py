@@ -57,7 +57,17 @@ def test_unimplemented_ribbon_actions_are_not_presented_as_working() -> None:
         "自动目录将在引用阶段启用",
         "脚注将在引用阶段启用",
         "交叉引用将在引用阶段启用",
-        "查找替换尚未启用",
-        "缩放尚未启用",
     ):
         assert title in toolbar
+
+
+def test_find_replace_outline_zoom_and_selection_toolbar_are_connected() -> None:
+    toolbar = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
+    editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+
+    for command in ("find-replace", "view-outline", "zoom-in", "zoom-out", "zoom-100"):
+        assert f"command('{command}')" in toolbar
+    assert 'aria-label="查找和替换"' in editor
+    assert "function replaceAll()" in editor
+    assert 'aria-label="文档导航大纲"' in editor
+    assert 'aria-label="文字选区操作"' in editor

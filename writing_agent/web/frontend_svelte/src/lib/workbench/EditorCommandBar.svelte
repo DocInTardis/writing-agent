@@ -239,7 +239,7 @@
       </div>
     {:else if activeTab === 'review'}
       <div class="ribbon-group action-group">
-        <button class="ribbon-action" disabled title="查找替换尚未启用"><span>⌕</span>查找替换</button>
+        <button class="ribbon-action" onclick={() => command('find-replace')}><span>⌕</span>查找替换</button>
         <button class:active={showPlagiarismPanel} class="ribbon-action" onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}><Icon name="shield" size={17} />查重</button>
         <button class:active={showAiRatePanel} class="ribbon-action" onclick={() => (showAiRatePanel = !showAiRatePanel)}><Icon name="ai" size={17} />AI 痕迹</button>
         <button class:active={showFeedbackPanel} class="ribbon-action" onclick={() => (showFeedbackPanel = !showFeedbackPanel)}><Icon name="star" size={17} />评分</button>
@@ -247,10 +247,10 @@
       </div>
     {:else if activeTab === 'view'}
       <div class="ribbon-group action-group">
-        <button class="ribbon-action" disabled title="导航窗格尚未启用"><span>☰</span>导航窗格</button>
-        <button class="ribbon-action" disabled title="缩放尚未启用"><span>−</span>缩小</button>
-        <button class="ribbon-action" disabled title="缩放尚未启用"><span>100%</span>实际大小</button>
-        <button class="ribbon-action" disabled title="缩放尚未启用"><span>＋</span>放大</button>
+        <button class="ribbon-action" onclick={() => command('view-outline')}><span>☰</span>导航窗格</button>
+        <button class="ribbon-action" onclick={() => command('zoom-out')}><span>−</span>缩小</button>
+        <button class="ribbon-action" onclick={() => command('zoom-100')}><span>100%</span>实际大小</button>
+        <button class="ribbon-action" onclick={() => command('zoom-in')}><span>＋</span>放大</button>
       </div>
     {:else}
       <div class="ribbon-group assistant-group">
