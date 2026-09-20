@@ -38,6 +38,13 @@ def test_dragging_blocks_uses_command_registry_not_dom_reparenting() -> None:
     assert "block-drop-indicator" in editor
     assert "nearestTopLevelBlock" in editor
     assert "setPointerCapture" in editor
+    assert "nearestScrollableAncestor" in editor
+    assert "requestAnimationFrame(runBlockAutoScroll)" in editor
+    assert "document.elementFromPoint" in editor
+    assert "stopBlockAutoScroll()" in editor
+    assert "onblockdrag?.(true)" in editor
+    assert "onblockdrag?.(false)" in editor
+    assert "onblockdrag={handleBlockDrag}" in (ROOT / "writing_agent/web/frontend_svelte/src/AppWorkbench.svelte").read_text(encoding="utf-8")
     assert "createNodeCommand('move_blocks'" in editor
     assert "host.appendChild(" not in editor
     assert "element.appendChild(" not in editor

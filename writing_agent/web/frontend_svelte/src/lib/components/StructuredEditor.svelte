@@ -34,6 +34,7 @@
     onblockedit,
     onblockselect,
     onblockai,
+    onblockdrag,
     ontoolbarstate
   }: {
     showToolbar?: boolean
@@ -42,6 +43,7 @@
     onblockedit?: (payload: any) => void
     onblockselect?: (payload: any) => void
     onblockai?: () => void
+    onblockdrag?: (active: boolean) => void
     ontoolbarstate?: (state: any) => void
   } = $props()
 
@@ -69,8 +71,11 @@
   let blockPointerId: number | null = null
   let blockPointerStartY = 0
   let blockPointerDragging = false
+  let blockDragClientX = 0
+  let blockDragClientY = 0
+  let blockDragScrollElement: HTMLElement | null = null
+  let blockDragScrollFrame: number | null = null
   let suppressHandleClick = false
-  let nativeBlockDrag = false
   let slashQuery = $state('')
   let slashMenuVisible = $state(false)
   let slashMenuTop = $state(0)
@@ -512,9 +517,13 @@
 
   function handleEditorPointerMove(event: PointerEvent) {
     if (blockPointerId === event.pointerId) {
-      if (Math.abs(event.clientY - blockPointerStartY) >= 4) blockPointerDragging = true
+      if (!blockPointerDragging && Math.abs(event.clientY - blockPointerStartY) >= 4) {
+        blockPointerDragging = true
+        onblockdrag?.(true)
+      }
       if (blockPointerDragging) {
         event.preventDefault()
+        scheduleBlockAutoScroll(event.clientX, event.clientY)
         updateBlockDropTarget(event.clientY, event.target instanceof Element ? event.target : null)
         return
       }
@@ -584,19 +593,56 @@
     selectedBlockIds = ids.length ? ids : [activeBlockId]
     blockPointerId = event.pointerId
     blockPointerStartY = event.clientY
+    blockDragScrollElement = nearestScrollableAncestor(shell)
     blockPointerDragging = false
     ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
   }
 
-  function handleBlockDragStart(event: DragEvent) {
-    if (!editor || !activeBlockId || !event.dataTransfer) return
-    nativeBlockDrag = true
-    blockPointerId = null
-    blockPointerDragging = false
-    if (!selectedBlockIds.includes(activeBlockId)) selectBlock(editor, activeBlockId)
-    selectedBlockIds = selectedBlocks(editor).map((block) => block.id)
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('application/x-writing-agent-blocks', JSON.stringify(selectedBlockIds))
+  function nearestScrollableAncestor(element: HTMLElement): HTMLElement | null {
+    let parent = element.parentElement
+    while (parent) {
+      const overflowY = getComputedStyle(parent).overflowY
+      if (/(auto|scroll)/.test(overflowY) && parent.scrollHeight > parent.clientHeight) return parent
+      parent = parent.parentElement
+    }
+    return null
+  }
+
+  function stopBlockAutoScroll() {
+    if (blockDragScrollFrame !== null) cancelAnimationFrame(blockDragScrollFrame)
+    blockDragScrollFrame = null
+    blockDragScrollElement = null
+  }
+
+  function runBlockAutoScroll() {
+    blockDragScrollFrame = null
+    if (!blockPointerDragging) return
+    const edge = 72
+    const viewport = blockDragScrollElement?.getBoundingClientRect()
+    const top = viewport?.top ?? 0
+    const bottom = viewport?.bottom ?? window.innerHeight
+    const distanceTop = blockDragClientY - top
+    const distanceBottom = bottom - blockDragClientY
+    const delta = distanceTop < edge
+      ? -Math.max(4, Math.round((edge - distanceTop) / 4))
+      : distanceBottom < edge
+        ? Math.max(4, Math.round((edge - distanceBottom) / 4))
+        : 0
+    if (!delta) return
+    if (blockDragScrollElement) blockDragScrollElement.scrollTop += delta
+    else window.scrollBy(0, delta)
+    const hit = document.elementFromPoint(
+      Math.max(0, Math.min(window.innerWidth - 1, blockDragClientX)),
+      Math.max(0, Math.min(window.innerHeight - 1, blockDragClientY))
+    )
+    updateBlockDropTarget(blockDragClientY, hit)
+    blockDragScrollFrame = requestAnimationFrame(runBlockAutoScroll)
+  }
+
+  function scheduleBlockAutoScroll(clientX: number, clientY: number) {
+    blockDragClientX = clientX
+    blockDragClientY = clientY
+    if (blockDragScrollFrame === null) blockDragScrollFrame = requestAnimationFrame(runBlockAutoScroll)
   }
 
   function nearestTopLevelBlock(clientY: number): HTMLElement | null {
@@ -628,24 +674,8 @@
 
   function clearBlockDrag() {
     dragTargetId = ''
-  }
-
-  function handleNativeDragOver(event: DragEvent) {
-    if (!nativeBlockDrag) return
-    event.preventDefault()
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
-    updateBlockDropTarget(event.clientY, event.target instanceof Element ? event.target : null)
-  }
-
-  function handleNativeDrop(event: DragEvent) {
-    if (!nativeBlockDrag) return
-    event.preventDefault()
-    if (editor && dragTargetId) {
-      executeDocumentCommand(editor, createNodeCommand('move_blocks', selectedBlockIds, { targetId: dragTargetId, placement: dragPlacement }))
-      emitSelection()
-    }
-    nativeBlockDrag = false
-    clearBlockDrag()
+    stopBlockAutoScroll()
+    onblockdrag?.(false)
   }
 
   function handleBlockPointerUp(event: PointerEvent) {
@@ -985,6 +1015,7 @@
     if (clipboardErrorTimer) clearTimeout(clipboardErrorTimer)
     if (paginationTimer) clearTimeout(paginationTimer)
     resizeObserver?.disconnect()
+    stopBlockAutoScroll()
     window.removeEventListener('wa-page-settings-changed', handlePageSettingsChanged)
     window.removeEventListener('wa-editor-context', handleEditorContext)
   })
@@ -1005,8 +1036,6 @@
   onpointerleave={() => { if (!blockSelectionActive) blockHandleVisible = false }}
   onpointerup={handleBlockPointerUp}
   onpointercancel={handleBlockPointerUp}
-  ondragover={handleNativeDragOver}
-  ondrop={handleNativeDrop}
 >
   <input class="hidden-file-input" bind:this={markdownInput} type="file" accept=".md,.markdown,text/markdown,text/plain" onchange={importMarkdownFile} />
   {#if blockHandleVisible}
@@ -1016,11 +1045,8 @@
       style:left={`${blockHandleLeft}px`}
       aria-label="选择当前块"
       title="选择块；Shift 点击选择连续块"
-      draggable="true"
       onpointerdown={handleBlockPointerDown}
       onclick={handleBlockHandleClick}
-      ondragstart={handleBlockDragStart}
-      ondragend={() => { nativeBlockDrag = false; clearBlockDrag() }}
     >⋮⋮</button>
   {/if}
   {#if dragTargetId}<div class="block-drop-indicator" style:top={`${dragIndicatorTop}px`}></div>{/if}

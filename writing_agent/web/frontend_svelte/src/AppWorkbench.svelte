@@ -3477,6 +3477,15 @@
     requestAnimationFrame(() => openInlinePopover('assistant', 'down'))
   }
 
+  function handleBlockDrag(active: boolean) {
+    if (active) {
+      inlineBarVisible = false
+      inlinePopoverOpen = false
+      return
+    }
+    requestAnimationFrame(() => updateInlineOverlayPosition())
+  }
+
   function runEditorCommand(cmd: EditorCommand) {
     editorCommand.set(cmd)
   }
@@ -3696,6 +3705,7 @@
             onblockedit={handleBlockEdit}
             onblockselect={handleBlockSelect}
             onblockai={handleBlockAi}
+            onblockdrag={handleBlockDrag}
             ontoolbarstate={handleToolbarState}
           />
         {/if}

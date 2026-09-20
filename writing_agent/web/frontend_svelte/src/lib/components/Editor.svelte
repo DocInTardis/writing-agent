@@ -8,6 +8,7 @@
     onblockedit,
     onblockselect,
     onblockai,
+    onblockdrag,
     ontoolbarstate
   }: {
     showToolbar?: boolean
@@ -16,6 +17,7 @@
     onblockedit?: (payload: any) => void
     onblockselect?: (payload: any) => void
     onblockai?: () => void
+    onblockdrag?: (active: boolean) => void
     ontoolbarstate?: (state: any) => void
   } = $props()
 
@@ -28,5 +30,6 @@
   {onblockedit}
   {onblockselect}
   {onblockai}
+  {onblockdrag}
   {ontoolbarstate}
 />
