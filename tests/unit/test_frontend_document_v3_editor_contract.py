@@ -61,3 +61,29 @@ def test_tables_use_the_editable_tiptap_table_model() -> None:
     assert "tableBlockToJson" in kernel
     assert "tableFromJson" in kernel
     assert ".insertTable({" in commands
+
+
+def test_table_context_actions_share_the_document_command_pipeline() -> None:
+    app = (ROOT / "writing_agent/web/frontend_svelte/src/AppWorkbench.svelte").read_text(encoding="utf-8")
+    editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+    command_bar = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
+    commands = (FRONTEND / "editor-v3/commands.ts").read_text(encoding="utf-8")
+
+    assert "inTable: editor.isActive('table')" in editor
+    assert "canMergeCells: editor.isActive('table') && editor.can().mergeCells()" in editor
+    assert "inTable: Boolean((detail as any).inTable)" in app
+    assert 'aria-label="表格工具"' in command_bar
+    for ui_command, document_command in (
+        ("table-row-before", "table_add_row_before"),
+        ("table-row-after", "table_add_row_after"),
+        ("table-row-delete", "table_delete_row"),
+        ("table-column-before", "table_add_column_before"),
+        ("table-column-after", "table_add_column_after"),
+        ("table-column-delete", "table_delete_column"),
+        ("table-merge-cells", "table_merge_cells"),
+        ("table-split-cell", "table_split_cell"),
+        ("table-toggle-header-row", "table_toggle_header_row"),
+        ("table-delete", "table_delete"),
+    ):
+        assert f"'{ui_command}': '{document_command}'" in editor
+        assert f"registerDocumentCommand('{document_command}'" in commands

@@ -16,6 +16,9 @@
     canCopy: boolean
     canCut: boolean
     canPaste: boolean
+    inTable: boolean
+    canMergeCells: boolean
+    canSplitCell: boolean
     styleId?: string
     fontFamily?: string
     fontSize?: string
@@ -108,6 +111,28 @@
       >{tab.label}</button>
     {/each}
   </div>
+
+  {#if editorToolbarState.inTable}
+    <div class="table-context-tools" role="toolbar" aria-label="表格工具">
+      <span class="table-context-title">表格</span>
+      <div class="table-tool-group" aria-label="行操作">
+        <button title="在上方插入行" onclick={() => command('table-row-before')}>↑ 行</button>
+        <button title="在下方插入行" onclick={() => command('table-row-after')}>↓ 行</button>
+        <button title="删除当前行" onclick={() => command('table-row-delete')}>删除行</button>
+      </div>
+      <div class="table-tool-group" aria-label="列操作">
+        <button title="在左侧插入列" onclick={() => command('table-column-before')}>← 列</button>
+        <button title="在右侧插入列" onclick={() => command('table-column-after')}>→ 列</button>
+        <button title="删除当前列" onclick={() => command('table-column-delete')}>删除列</button>
+      </div>
+      <div class="table-tool-group" aria-label="单元格操作">
+        <button title="合并选中的单元格" onclick={() => command('table-merge-cells')} disabled={!editorToolbarState.canMergeCells}>合并</button>
+        <button title="拆分当前单元格" onclick={() => command('table-split-cell')} disabled={!editorToolbarState.canSplitCell}>拆分</button>
+        <button title="切换标题行" onclick={() => command('table-toggle-header-row')}>标题行</button>
+      </div>
+      <button class="table-delete" title="删除整个表格" onclick={() => command('table-delete')}>删除表格</button>
+    </div>
+  {/if}
 
   <div class="ribbon-content">
     {#if activeTab === 'home'}
@@ -266,6 +291,50 @@
 </div>
 
 <style>
+  .table-context-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 5px 14px;
+    border-top: 1px solid #e2e7ee;
+    border-bottom: 1px solid #d9e0e9;
+    background: #f7faff;
+  }
+  .table-context-title {
+    padding-right: 3px;
+    color: #205dab;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .table-tool-group {
+    display: flex;
+    gap: 3px;
+    padding-right: 8px;
+    border-right: 1px solid #d6dee9;
+  }
+  .table-context-tools button {
+    min-height: 28px;
+    padding: 3px 9px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: #344256;
+    font: inherit;
+    cursor: pointer;
+  }
+  .table-context-tools button:hover:not(:disabled) {
+    border-color: #c8d5e6;
+    background: #eaf2fc;
+  }
+  .table-context-tools button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .table-context-tools .table-delete {
+    margin-left: auto;
+    color: #a52a2a;
+  }
   .advanced-format {
     display: grid;
     grid-template-columns: repeat(4, minmax(82px, 1fr));

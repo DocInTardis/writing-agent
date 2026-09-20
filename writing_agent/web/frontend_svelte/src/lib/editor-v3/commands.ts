@@ -240,6 +240,16 @@ registerDocumentCommand('insert_table', (editor, command) => editor.chain().focu
   cols: Math.max(1, Number(command.params.columns || command.params.cols || 3)),
   withHeaderRow: command.params.withHeaderRow !== false
 }).run())
+registerDocumentCommand('table_add_row_before', (editor) => editor.chain().focus().addRowBefore().run())
+registerDocumentCommand('table_add_row_after', (editor) => editor.chain().focus().addRowAfter().run())
+registerDocumentCommand('table_delete_row', (editor) => editor.chain().focus().deleteRow().run())
+registerDocumentCommand('table_add_column_before', (editor) => editor.chain().focus().addColumnBefore().run())
+registerDocumentCommand('table_add_column_after', (editor) => editor.chain().focus().addColumnAfter().run())
+registerDocumentCommand('table_delete_column', (editor) => editor.chain().focus().deleteColumn().run())
+registerDocumentCommand('table_merge_cells', (editor) => editor.chain().focus().mergeCells().run())
+registerDocumentCommand('table_split_cell', (editor) => editor.chain().focus().splitCell().run())
+registerDocumentCommand('table_toggle_header_row', (editor) => editor.chain().focus().toggleHeaderRow().run())
+registerDocumentCommand('table_delete', (editor) => editor.chain().focus().deleteTable().run())
 registerDocumentCommand('insert_equation', (editor, command) => editor.chain().focus().insertContent({
   type: 'equationBlock',
   attrs: { nodeId: null, payload: { latex: String(command.params.latex || '') } }
