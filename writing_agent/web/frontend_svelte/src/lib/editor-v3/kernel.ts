@@ -297,14 +297,68 @@ const ReliableClipboard = Extension.create({
   }
 })
 
-const ReliableBlockKeyboard = Extension.create({
+const ReliableBlockKeyboard = Extension.create<{
+  onCommand?: (type: string, params?: Record<string, unknown>) => boolean
+}>({
   name: 'reliableBlockKeyboard',
+  priority: 1000,
+  addOptions() {
+    return { onCommand: undefined }
+  },
   addProseMirrorPlugins() {
+    const onCommand = this.options.onCommand
+    type RecentMarkdownRule = { from: number; to: number; raw: string; blockType: string } | null
+    const markdownRuleKey = new PluginKey<RecentMarkdownRule>('reliableMarkdownRuleUndo')
     return [new Plugin({
-      key: new PluginKey('reliableBlockKeyboard'),
+      key: markdownRuleKey,
+      state: {
+        init: () => null,
+        apply(transaction, recent, oldState, newState): RecentMarkdownRule {
+          if (!transaction.docChanged) return recent
+          const oldParent = oldState.selection.$from.parent
+          const oldText = oldParent.isTextblock ? oldParent.textContent : ''
+          const marker = /^(#{1,6}|[-+*]|\d+[.)]|>|```)$/.exec(oldText)
+          const $cursor = newState.selection.$from
+          const topDepth = Math.min(1, $cursor.depth)
+          const topNode = $cursor.node(topDepth)
+          const topFrom = topDepth ? $cursor.before(topDepth) : 0
+          const converted = Boolean(marker) && (
+            topNode.type.name === 'heading' ||
+            topNode.type.name === 'bulletList' ||
+            topNode.type.name === 'orderedList' ||
+            topNode.type.name === 'blockquote' ||
+            topNode.type.name === 'codeBlock'
+          )
+          if (converted) return { from: topFrom, to: topFrom + topNode.nodeSize, raw: `${marker?.[1]} `, blockType: topNode.type.name }
+          if (recent && topFrom === recent.from && topNode.type.name === recent.blockType && !topNode.textContent) {
+            return { ...recent, to: topFrom + topNode.nodeSize }
+          }
+          return null
+        }
+      },
       props: {
         handleKeyDown(view, event) {
           const { selection, doc } = view.state
+          if (event.isComposing || event.keyCode === 229) return false
+          if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLocaleLowerCase() === 'z') {
+            const recent = markdownRuleKey.getState(view.state)
+            if (recent) {
+              const applied = onCommand?.('restore_markdown_trigger', recent) || false
+              if (applied) event.preventDefault()
+              return applied
+            }
+          }
+          if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+            const applied = onCommand?.(event.key === 'ArrowUp' ? 'move_block_up' : 'move_block_down') || false
+            if (applied) event.preventDefault()
+            return applied
+          }
+          if ((event.ctrlKey || event.metaKey) && event.altKey && !event.shiftKey && /^[0-3]$/.test(event.key)) {
+            const styleId = event.key === '0' ? 'normal' : `heading-${event.key}`
+            const applied = onCommand?.('apply_style', { styleId }) || false
+            if (applied) event.preventDefault()
+            return applied
+          }
           if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'Space') {
             const position = selection.$from.depth > 0 ? selection.$from.before(1) : selection.from
             const node = doc.nodeAt(position)
@@ -622,6 +676,7 @@ export function createEditorKernel(options: {
   onUpdate?: (json: JSONContent) => void
   onSelectionUpdate?: (editor: Editor) => void
   onSlashQuery?: (query: string | null, position: number, editor: Editor) => void
+  onShortcutCommand?: (type: string, params?: Record<string, unknown>) => boolean
 }): Editor {
   const reportSlashQuery = (editor: Editor) => {
     const selection = editor.state.selection
@@ -653,7 +708,7 @@ export function createEditorKernel(options: {
       ParagraphFormatting,
       ReliableBlockIdentity,
       ReliableClipboard,
-      ReliableBlockKeyboard,
+      ReliableBlockKeyboard.configure({ onCommand: options.onShortcutCommand }),
       RustPagination,
       FigureNode,
       TableNode,

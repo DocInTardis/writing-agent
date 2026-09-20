@@ -109,6 +109,19 @@
     <textarea id="prefsJson" rows="6" bind:value={prefsJson}></textarea>
   </div>
 
+  <details class="shortcut-settings">
+    <summary>编辑快捷键</summary>
+    <dl>
+      <dt>Ctrl / ⌘ + Alt + 0</dt><dd>正文</dd>
+      <dt>Ctrl / ⌘ + Alt + 1–3</dt><dd>标题 1–3</dd>
+      <dt>Alt + Shift + ↑ / ↓</dt><dd>移动段落或所选块</dd>
+      <dt>Ctrl / ⌘ + Shift + Space</dt><dd>选择当前块</dd>
+      <dt>↑ / ↓（块选择）</dt><dd>选择相邻块</dd>
+      <dt>Esc / Enter（块选择）</dt><dd>回到文字编辑</dd>
+    </dl>
+    <p>输入法组合输入期间不会接管这些按键。</p>
+  </details>
+
   <div class="settings-actions">
     <button class="btn primary" onclick={saveSettings}>保存</button>
     <button class="btn ghost" onclick={() => (open = false)}>取消</button>
@@ -168,4 +181,10 @@
     justify-content: flex-end;
     margin-top: 12px;
   }
+  .shortcut-settings { margin-top: 14px; color: #4f5d70; font-size: 12px; }
+  .shortcut-settings summary { cursor: pointer; font-weight: 600; }
+  .shortcut-settings dl { display: grid; grid-template-columns: 1.6fr 1fr; gap: 6px 10px; margin: 10px 0; }
+  .shortcut-settings dt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .shortcut-settings dd { margin: 0; }
+  .shortcut-settings p { margin: 0; color: #7a8594; }
 </style>

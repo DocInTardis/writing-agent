@@ -67,6 +67,9 @@ export type EditorCommand =
   | 'zoom-100'
   | 'find-replace'
   | 'proofread'
+  | 'markdown-import'
+  | 'markdown-export'
+  | 'view-shortcuts'
   | `font:${string}`
   | `size:${string}`
   | `color:${string}`

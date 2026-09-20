@@ -52,6 +52,16 @@ export function createUserCommand(type: string, params: Record<string, unknown> 
   })
 }
 
+export function createShortcutCommand(type: string, params: Record<string, unknown> = {}): DocumentCommand {
+  return selectionCommand({
+    type,
+    target: { kind: 'selection' },
+    params,
+    source: 'shortcut',
+    reviewMode: 'direct'
+  })
+}
+
 export function createNodeCommand(type: string, nodeIds: string[], params: Record<string, unknown> = {}): DocumentCommand {
   return selectionCommand({
     type,
@@ -205,6 +215,20 @@ registerDocumentCommand('insert_horizontal_rule', (editor) => editor.chain().foc
 registerDocumentCommand('clear_formatting', (editor) => editor.chain().focus().unsetAllMarks().clearNodes().run())
 registerDocumentCommand('undo', (editor) => editor.chain().focus().undo().run())
 registerDocumentCommand('redo', (editor) => editor.chain().focus().redo().run())
+registerDocumentCommand('restore_markdown_trigger', (editor, command) => {
+  const from = Number(command.params.from)
+  const to = Number(command.params.to)
+  const raw = String(command.params.raw || '')
+  if (!Number.isInteger(from) || !Number.isInteger(to) || !raw || from < 0 || to <= from || to > editor.state.doc.content.size) return false
+  const paragraph = editor.state.schema.nodes.paragraph.create(
+    { nodeId: null, styleId: 'normal' },
+    editor.state.schema.text(raw)
+  )
+  const transaction = editor.state.tr.replaceWith(from, to, paragraph)
+  transaction.setSelection(TextSelection.create(transaction.doc, from + 1 + raw.length))
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
+})
 
 interface TopLevelRange {
   from: number

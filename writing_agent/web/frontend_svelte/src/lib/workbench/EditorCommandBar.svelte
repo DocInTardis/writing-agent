@@ -206,6 +206,8 @@
       {/if}
     {:else if activeTab === 'insert'}
       <div class="ribbon-group action-group">
+        <button class="ribbon-action" onclick={() => command('markdown-import')}><span>MD↓</span>导入 Markdown</button>
+        <button class="ribbon-action" onclick={() => command('markdown-export')}><span>MD↑</span>导出 Markdown</button>
         <button class="ribbon-action" onclick={() => command('table')}><span>▦</span>表格</button>
         <button class="ribbon-action" onclick={() => command('image')}><span>▧</span>图片</button>
         <button class="ribbon-action" disabled title="链接编辑将在对象与引用阶段启用"><span>↗</span>链接</button>
@@ -252,6 +254,7 @@
         <button class="ribbon-action" onclick={() => command('zoom-out')}><span>−</span>缩小</button>
         <button class="ribbon-action" onclick={() => command('zoom-100')}><span>100%</span>实际大小</button>
         <button class="ribbon-action" onclick={() => command('zoom-in')}><span>＋</span>放大</button>
+        <button class="ribbon-action" onclick={() => command('view-shortcuts')}><span>⌨</span>快捷键</button>
       </div>
     {:else}
       <div class="ribbon-group assistant-group">

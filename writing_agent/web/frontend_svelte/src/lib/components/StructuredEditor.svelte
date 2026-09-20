@@ -11,7 +11,7 @@
     editorCommand,
     sourceText
   } from '../stores'
-  import { createNodeCommand, createUserCommand, executeDocumentCommand } from '../editor-v3/commands'
+  import { createNodeCommand, createShortcutCommand, createUserCommand, executeDocumentCommand } from '../editor-v3/commands'
   import {
     createEditorKernel,
     applyPaginationLayout,
@@ -24,6 +24,7 @@
     tiptapToDocumentV3
   } from '../editor-v3/kernel'
   import { isDocumentV3, migrateLegacyDocIr, type DocumentV3 } from '../editor-v3/model'
+  import { documentV3ToMarkdown, replaceDocumentContentFromMarkdown } from '../editor-v3/markdown'
   import { paginateDocumentV3 } from '../engine/documentEngine'
   import type { EditorCommand } from '../types'
 
@@ -89,6 +90,12 @@
   let selectionToolbarLeft = $state(0)
   let proofPanelVisible = $state(false)
   let proofIssues = $state<Array<{ id: string; message: string; excerpt: string; from: number; to: number }>>([])
+  let markdownInput: HTMLInputElement
+  let markdownExportVisible = $state(false)
+  let markdownExportText = $state('')
+  let markdownExportWarnings = $state<string[]>([])
+  let markdownNotice = $state('')
+  let shortcutPanelVisible = $state(false)
 
   function refreshProofIssues() {
     if (!editor) return
@@ -188,6 +195,47 @@
   function setZoom(next: number) {
     zoomPercent = Math.max(50, Math.min(200, next))
     shell?.style.setProperty('--editor-zoom', String(zoomPercent / 100))
+  }
+
+  function prepareMarkdownExport() {
+    if (!activeDocument) return
+    const result = documentV3ToMarkdown(activeDocument)
+    markdownExportText = result.markdown
+    markdownExportWarnings = result.warnings
+    markdownExportVisible = true
+  }
+
+  function downloadMarkdown() {
+    if (!activeDocument || !markdownExportText) return
+    const blob = new Blob([markdownExportText], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    const safeName = (activeDocument.title || 'document').replace(/[\\/:*?"<>|]+/g, '_')
+    anchor.href = url
+    anchor.download = `${safeName}.md`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    markdownExportVisible = false
+    markdownNotice = 'Markdown 已导出；Document V3 原文档未改变。'
+  }
+
+  async function importMarkdownFile(event: Event) {
+    const input = event.currentTarget as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file || !activeDocument) return
+    try {
+      const markdown = await file.text()
+      const next = replaceDocumentContentFromMarkdown(activeDocument, markdown, file.name)
+      loadDocument(next)
+      const text = documentV3ToText(next)
+      sourceText.set(text)
+      docIrDirty.set(true)
+      onblockedit?.({ documentV3: next, text })
+      markdownNotice = `已导入 ${file.name}：页面设置和样式库继续由 Document V3 管理。`
+    } catch (error) {
+      markdownNotice = `Markdown 导入失败：${error instanceof Error ? error.message : String(error)}`
+    }
   }
 
   function handlePageSettingsChanged() {
@@ -539,6 +587,18 @@
       outlineVisible = !outlineVisible
       return
     }
+    if (command === 'markdown-import') {
+      markdownInput?.click()
+      return
+    }
+    if (command === 'markdown-export') {
+      prepareMarkdownExport()
+      return
+    }
+    if (command === 'view-shortcuts') {
+      shortcutPanelVisible = !shortcutPanelVisible
+      return
+    }
     if (command === 'zoom-in' || command === 'zoom-out' || command === 'zoom-100') {
       setZoom(command === 'zoom-100' ? 100 : zoomPercent + (command === 'zoom-in' ? 10 : -10))
       return
@@ -682,7 +742,13 @@
       editable: !lockEditing,
       onUpdate: updateDocument,
       onSelectionUpdate: emitSelection,
-      onSlashQuery: handleSlashQuery
+      onSlashQuery: handleSlashQuery,
+      onShortcutCommand: (type, params = {}) => {
+        if (!editor) return false
+        const result = executeDocumentCommand(editor, createShortcutCommand(type, params))
+        if (result.ok) emitSelection()
+        return result.ok
+      }
     })
     applyPaperGeometry(activeDocument)
     schedulePagination(true)
@@ -743,6 +809,7 @@
   ondragover={handleNativeDragOver}
   ondrop={handleNativeDrop}
 >
+  <input class="hidden-file-input" bind:this={markdownInput} type="file" accept=".md,.markdown,text/markdown,text/plain" onchange={importMarkdownFile} />
   {#if blockHandleVisible}
     <button
       class="block-handle"
@@ -806,6 +873,30 @@
       {:else}<div class="proof-empty">未发现重复标点、多余空格、重复英文单词或超长句。</div>{/each}
     </aside>
   {/if}
+  {#if shortcutPanelVisible}
+    <aside class="shortcut-panel" aria-label="编辑快捷键">
+      <header><strong>编辑快捷键</strong><button aria-label="关闭快捷键" onclick={() => (shortcutPanelVisible = false)}>×</button></header>
+      <dl>
+        <dt>Ctrl / ⌘ + Alt + 0</dt><dd>转为正文</dd>
+        <dt>Ctrl / ⌘ + Alt + 1–3</dt><dd>转为标题 1–3</dd>
+        <dt>Alt + Shift + ↑ / ↓</dt><dd>移动当前段落或所选块</dd>
+        <dt>Ctrl / ⌘ + Shift + Space</dt><dd>选择当前块</dd>
+        <dt>↑ / ↓（已选块）</dt><dd>选择相邻块</dd>
+        <dt>Esc / Enter（已选块）</dt><dd>回到文字编辑</dd>
+      </dl>
+      <p>输入法正在组合文字时，系统不会接管这些快捷键。</p>
+    </aside>
+  {/if}
+  {#if markdownExportVisible}
+    <div class="markdown-dialog-backdrop" role="presentation">
+      <div class="markdown-dialog" role="dialog" aria-modal="true" aria-labelledby="markdown-export-title" tabindex="-1">
+        <header><strong id="markdown-export-title">导出 Markdown</strong><button aria-label="取消导出 Markdown" onclick={() => (markdownExportVisible = false)}>×</button></header>
+        <p>Markdown 适合交换纯文本结构，不是本软件的主文档格式。导出不会修改当前 Document V3 文档。</p>
+        <ul>{#each markdownExportWarnings as warning}<li>{warning}</li>{/each}</ul>
+        <div><button onclick={() => (markdownExportVisible = false)}>取消</button><button class="primary" onclick={downloadMarkdown}>了解并导出</button></div>
+      </div>
+    </div>
+  {/if}
   {#if blockSelectionActive && selectedBlockIds.length}
     <div class="block-actions" style:top={`${blockHandleTop}px`} style:left={`${blockHandleLeft + 32}px`} role="toolbar" aria-label="块操作">
       <button title="在前面插入段落" aria-label="在前面插入段落" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('insert_block_before')}>＋↑</button>
@@ -829,6 +920,7 @@
   {/if}
   <div class="structured-editor" bind:this={host}></div>
   {#if clipboardError}<div class="clipboard-error" role="status">{clipboardError}</div>{/if}
+  {#if markdownNotice}<div class="markdown-notice" role="status"><span>{markdownNotice}</span><button aria-label="关闭 Markdown 提示" onclick={() => (markdownNotice = '')}>×</button></div>{/if}
 </div>
 
 <style>
@@ -842,6 +934,7 @@
     color: #1f2328;
     zoom: var(--editor-zoom, 1);
   }
+  .hidden-file-input { display: none; }
   .structured-editor-shell.paper {
     padding: var(--margin-top, 2.54cm) var(--margin-right, 2.54cm) var(--margin-bottom, 2.54cm) var(--margin-left, 3.18cm);
     border: 1px solid #d7dde5;
@@ -973,6 +1066,32 @@
     background: #fff;
     box-shadow: 0 5px 18px rgba(38, 50, 66, .12);
   }
+  .shortcut-panel {
+    position: absolute;
+    z-index: 10;
+    top: 10px;
+    right: 10px;
+    width: 310px;
+    padding: 12px;
+    border: 1px solid #d5dce7;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(32, 45, 64, .16);
+  }
+  .shortcut-panel header { display: flex; align-items: center; justify-content: space-between; }
+  .shortcut-panel header button { border: 0; background: transparent; font-size: 18px; cursor: pointer; }
+  .shortcut-panel dl { display: grid; grid-template-columns: 1.35fr 1fr; gap: 7px 12px; margin: 12px 0; font-size: 12px; }
+  .shortcut-panel dt { color: #253858; font-family: Consolas, monospace; }
+  .shortcut-panel dd { margin: 0; color: #536174; }
+  .shortcut-panel p { margin: 0; color: #7a8594; font-size: 11px; }
+  .markdown-dialog-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; background: rgba(20, 29, 43, .28); }
+  .markdown-dialog { box-sizing: border-box; width: min(540px, calc(100vw - 32px)); padding: 18px; border: 1px solid #ccd4df; border-radius: 8px; background: #fff; box-shadow: 0 18px 55px rgba(22, 34, 51, .22); }
+  .markdown-dialog header { display: flex; align-items: center; justify-content: space-between; font-size: 16px; }
+  .markdown-dialog header button { border: 0; background: transparent; font-size: 20px; cursor: pointer; }
+  .markdown-dialog p, .markdown-dialog li { color: #536174; font-size: 12px; line-height: 1.6; }
+  .markdown-dialog > div { display: flex; justify-content: flex-end; gap: 8px; }
+  .markdown-dialog > div button { padding: 7px 14px; border: 1px solid #cbd3df; border-radius: 5px; background: #fff; cursor: pointer; }
+  .markdown-dialog > div button.primary { border-color: #2468c8; background: #2468c8; color: #fff; }
   .proof-panel header { display: flex; align-items: center; justify-content: space-between; }
   .proof-panel header button { border: 0; background: transparent; font-size: 18px; cursor: pointer; }
   .proof-panel p, .proof-empty { margin: 0; color: #687386; font-size: 11px; line-height: 1.5; }
@@ -1109,4 +1228,6 @@
     font-size: 12px;
     text-align: center;
   }
+  .markdown-notice { position: sticky; z-index: 12; bottom: 12px; display: flex; max-width: 620px; justify-content: space-between; gap: 12px; margin: 12px auto 0; padding: 8px 12px; border: 1px solid #9fc0eb; border-radius: 5px; background: #edf5ff; color: #254d7c; font-size: 12px; }
+  .markdown-notice button { border: 0; background: transparent; color: inherit; cursor: pointer; }
 </style>
