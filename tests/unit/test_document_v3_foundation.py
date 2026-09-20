@@ -177,6 +177,9 @@ def test_structured_table_merges_and_cell_styles_survive_docx_export() -> None:
                         [{"text": "第二行", "type": "cell", "colspan": 1, "rowspan": 1}],
                     ],
                     "rowHeights": [36, 42, 42],
+                    "repeatHeader": True,
+                    "alignment": "center",
+                    "widthPercent": 75,
                 }
             },
         )
@@ -197,6 +200,9 @@ def test_structured_table_merges_and_cell_styles_survive_docx_export() -> None:
         assert 'w:gridSpan w:val="2"' in xml
         assert "w:vMerge" in xml
         assert 'w:fill="DBEAFE"' in xml
+        assert "w:tblHeader" in xml
+        assert 'w:jc w:val="center"' in xml
+        assert 'w:tblW w:type="pct" w:w="3750"' in xml
         assert "合并标题" in xml
         assert "纵向合并" in xml
     finally:

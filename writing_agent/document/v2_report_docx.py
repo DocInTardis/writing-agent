@@ -26,7 +26,7 @@ from typing import Any
 
 from docx import Document
 from docx.enum.section import WD_SECTION
-from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -165,13 +165,37 @@ def _table_span(value: Any, maximum: int | None = None) -> int:
     return min(span, maximum) if maximum is not None else span
 
 
-def _add_structured_table(doc: Document, payload: dict[str, Any]) -> bool:
+def _apply_table_properties(table: Any, payload: dict[str, Any]) -> None:
+    alignment = str(payload.get("alignment") or "left").lower()
+    table.alignment = {
+        "left": WD_TABLE_ALIGNMENT.LEFT,
+        "center": WD_TABLE_ALIGNMENT.CENTER,
+        "right": WD_TABLE_ALIGNMENT.RIGHT,
+    }.get(alignment, WD_TABLE_ALIGNMENT.LEFT)
+    try:
+        width_percent = max(20, min(100, int(payload.get("widthPercent") or 100)))
+    except (TypeError, ValueError):
+        width_percent = 100
+    tbl_pr = table._tbl.tblPr
+    tbl_width = tbl_pr.find(qn("w:tblW"))
+    if tbl_width is None:
+        tbl_width = OxmlElement("w:tblW")
+        tbl_pr.append(tbl_width)
+    tbl_width.set(qn("w:type"), "pct")
+    tbl_width.set(qn("w:w"), str(width_percent * 50))
+    if payload.get("repeatHeader") and table.rows:
+        tr_pr = table.rows[0]._tr.get_or_add_trPr()
+        if tr_pr.find(qn("w:tblHeader")) is None:
+            tr_pr.append(OxmlElement("w:tblHeader"))
+
+
+def _add_structured_table(doc: Document, payload: dict[str, Any]) -> Any | None:
     raw_rows = payload.get("cells")
     if not isinstance(raw_rows, list) or not raw_rows:
-        return False
+        return None
     rows = [row for row in raw_rows if isinstance(row, list)]
     if not rows:
-        return False
+        return None
     column_count = max(
         1,
         *(sum(_table_span(cell.get("colspan")) for cell in row if isinstance(cell, dict)) for row in rows),
@@ -219,7 +243,8 @@ def _add_structured_table(doc: Document, payload: dict[str, Any]) -> bool:
                 continue
             if height > 0:
                 row.height = Pt(height * 0.75)
-    return True
+    _apply_table_properties(table, payload)
+    return table
 
 
 class V2ReportDocxExporter:
@@ -875,7 +900,8 @@ class V2ReportDocxExporter:
                 cap_p = doc.add_paragraph(f"表{table_no}  {caption}")
                 cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-                if not _add_structured_table(doc, t):
+                table = _add_structured_table(doc, t)
+                if table is None:
                     table = doc.add_table(rows=1, cols=len(columns))
                     table.style = "Table Grid"
                     hdr_cells = table.rows[0].cells
@@ -886,6 +912,7 @@ class V2ReportDocxExporter:
                         row_cells = table.add_row().cells
                         for i in range(len(columns)):
                             row_cells[i].text = str(rr[i] if i < len(rr) else "")
+                    _apply_table_properties(table, t)
                 continue
 
             if b.type == "figure":

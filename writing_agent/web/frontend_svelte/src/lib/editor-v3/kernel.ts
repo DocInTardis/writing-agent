@@ -6,11 +6,11 @@ import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
+import { Table, TableCell, TableHeader, TableRow, TableView } from '@tiptap/extension-table'
 import StarterKit from '@tiptap/starter-kit'
 import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
-import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
 
 import { resolvedStyleProperties, type DocumentV3, type InlineNode, type SectionV3, type StyleDefinition, type V3BlockNode } from './model'
 import type { DocumentLayout, LayoutPage } from '../engine/documentEngine'
@@ -146,6 +146,31 @@ const StableNodeAttributes = Extension.create({
             default: '',
             parseHTML: (element) => element.getAttribute('data-caption') || '',
             renderHTML: (attributes) => attributes.caption ? { 'data-caption': attributes.caption } : {}
+          },
+          repeatHeader: {
+            default: false,
+            parseHTML: (element) => element.getAttribute('data-repeat-header') === 'true',
+            renderHTML: (attributes) => attributes.repeatHeader ? { 'data-repeat-header': 'true' } : {}
+          },
+          tableAlignment: {
+            default: 'left',
+            parseHTML: (element) => element.getAttribute('data-table-alignment') || 'left',
+            renderHTML: (attributes) => ({
+              'data-table-alignment': attributes.tableAlignment || 'left',
+              style: attributes.tableAlignment === 'center'
+                ? 'margin-left:auto;margin-right:auto'
+                : attributes.tableAlignment === 'right'
+                  ? 'margin-left:auto;margin-right:0'
+                  : 'margin-left:0;margin-right:auto'
+            })
+          },
+          widthPercent: {
+            default: 100,
+            parseHTML: (element) => Number(element.getAttribute('data-width-percent') || 100),
+            renderHTML: (attributes) => {
+              const width = Math.max(20, Math.min(100, Number(attributes.widthPercent || 100)))
+              return { 'data-width-percent': String(width), style: `width:${width}%` }
+            }
           }
         }
       }
@@ -196,6 +221,34 @@ const SizedTableRow = TableRow.extend({
     }
   }
 })
+
+class DocumentTableView extends TableView {
+  constructor(node: ProseMirrorNode, cellMinWidth: number, view?: EditorView, HTMLAttributes: Record<string, unknown> = {}) {
+    super(node, cellMinWidth, view, HTMLAttributes)
+    this.applyDocumentAttributes(node)
+  }
+
+  update(node: ProseMirrorNode): boolean {
+    const updated = super.update(node)
+    if (updated) this.applyDocumentAttributes(node)
+    return updated
+  }
+
+  private applyDocumentAttributes(node: ProseMirrorNode) {
+    const alignment = ['left', 'center', 'right'].includes(String(node.attrs.tableAlignment))
+      ? String(node.attrs.tableAlignment)
+      : 'left'
+    const width = Math.max(20, Math.min(100, Number(node.attrs.widthPercent || 100)))
+    this.table.dataset.caption = String(node.attrs.caption || '')
+    this.table.dataset.repeatHeader = node.attrs.repeatHeader ? 'true' : 'false'
+    this.table.dataset.tableAlignment = alignment
+    this.table.dataset.widthPercent = String(width)
+    this.table.style.width = `${width}%`
+    this.table.style.minWidth = ''
+    this.table.style.marginLeft = alignment === 'left' ? '0' : 'auto'
+    this.table.style.marginRight = alignment === 'right' ? '0' : 'auto'
+  }
+}
 
 const ParagraphFormatting = Extension.create({
   name: 'paragraphFormatting',
@@ -616,7 +669,18 @@ function tableBlockToJson(block: V3BlockNode, sectionId: string): JSONContent {
   if (!rows.length) {
     rows.push({ type: 'tableRow', content: Array.from({ length: columnCount }, () => cell('tableCell', '')) })
   }
-  return { type: 'table', attrs: { nodeId: block.id, sectionId, caption: String(table.caption || '') }, content: rows }
+  return {
+    type: 'table',
+    attrs: {
+      nodeId: block.id,
+      sectionId,
+      caption: String(table.caption || ''),
+      repeatHeader: Boolean(table.repeatHeader),
+      tableAlignment: ['left', 'center', 'right'].includes(String(table.alignment)) ? String(table.alignment) : 'left',
+      widthPercent: Math.max(20, Math.min(100, Number(table.widthPercent || 100)))
+    },
+    content: rows
+  }
 }
 
 function blockToJson(block: V3BlockNode, sectionId: string): JSONContent[] {
@@ -692,7 +756,10 @@ function tableFromJson(node: JSONContent, id: string): V3BlockNode {
         columns,
         rows: bodyRows,
         cells,
-        rowHeights
+        rowHeights,
+        repeatHeader: Boolean(node.attrs?.repeatHeader),
+        alignment: String(node.attrs?.tableAlignment || 'left'),
+        widthPercent: Math.max(20, Math.min(100, Number(node.attrs?.widthPercent || 100)))
       }
     }
   }
@@ -882,7 +949,7 @@ export function createEditorKernel(options: {
       ReliableBlockKeyboard.configure({ onCommand: options.onShortcutCommand }),
       RustPagination,
       FigureNode,
-      Table.configure({ resizable: true }),
+      Table.configure({ resizable: true, View: DocumentTableView }),
       SizedTableRow,
       StyledTableHeader,
       StyledTableCell,

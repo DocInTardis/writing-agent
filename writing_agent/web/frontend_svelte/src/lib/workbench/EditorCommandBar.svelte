@@ -19,6 +19,12 @@
     inTable: boolean
     canMergeCells: boolean
     canSplitCell: boolean
+    tableCaption?: string
+    tableRepeatHeader?: boolean
+    tableAlignment?: string
+    tableWidthPercent?: number
+    tableCellBackground?: string
+    tableCellVerticalAlign?: string
     styleId?: string
     fontFamily?: string
     fontSize?: string
@@ -115,6 +121,29 @@
   {#if editorToolbarState.inTable}
     <div class="table-context-tools" role="toolbar" aria-label="表格工具">
       <span class="table-context-title">表格</span>
+      <div class="table-tool-group table-properties" aria-label="表格属性">
+        <label>
+          <span>表题</span>
+          <input
+            aria-label="表格题注"
+            maxlength="200"
+            value={editorToolbarState.tableCaption || ''}
+            placeholder="可选"
+            onblur={(event) => command(`table-caption:${event.currentTarget.value}`)}
+          />
+        </label>
+        <select aria-label="表格对齐" value={editorToolbarState.tableAlignment || 'left'} onchange={(event) => command(`table-align:${event.currentTarget.value}`)}>
+          <option value="left">左对齐</option>
+          <option value="center">居中</option>
+          <option value="right">右对齐</option>
+        </select>
+        <select aria-label="表格宽度" value={String(editorToolbarState.tableWidthPercent || 100)} onchange={(event) => command(`table-width:${event.currentTarget.value}`)}>
+          <option value="50">50%</option>
+          <option value="75">75%</option>
+          <option value="100">100%</option>
+        </select>
+        <button class:active={editorToolbarState.tableRepeatHeader} title="跨页时重复显示标题行" onclick={() => command('table-toggle-repeat-header')}>重复标题</button>
+      </div>
       <div class="table-tool-group" aria-label="行操作">
         <button title="在上方插入行" onclick={() => command('table-row-before')}>↑ 行</button>
         <button title="在下方插入行" onclick={() => command('table-row-after')}>↓ 行</button>
@@ -139,16 +168,16 @@
       <div class="table-tool-group table-style-tools" aria-label="单元格样式">
         <label title="单元格垂直对齐">
           <span class="sr-only">垂直对齐</span>
-          <select aria-label="单元格垂直对齐" onchange={(event) => command(`table-cell-valign:${event.currentTarget.value}`)}>
+          <select aria-label="单元格垂直对齐" value={editorToolbarState.tableCellVerticalAlign || 'top'} onchange={(event) => command(`table-cell-valign:${event.currentTarget.value}`)}>
             <option value="top">靠上</option>
             <option value="middle">居中</option>
             <option value="bottom">靠下</option>
           </select>
         </label>
-        <button class="cell-fill fill-none" title="清除单元格底纹" aria-label="清除单元格底纹" onclick={() => command('table-cell-bg:none')}>×</button>
-        <button class="cell-fill fill-blue" title="浅蓝底纹" aria-label="浅蓝底纹" onclick={() => command('table-cell-bg:#dbeafe')}></button>
-        <button class="cell-fill fill-yellow" title="浅黄底纹" aria-label="浅黄底纹" onclick={() => command('table-cell-bg:#fef3c7')}></button>
-        <button class="cell-fill fill-green" title="浅绿底纹" aria-label="浅绿底纹" onclick={() => command('table-cell-bg:#dcfce7')}></button>
+        <button class:active={!editorToolbarState.tableCellBackground} class="cell-fill fill-none" title="清除单元格底纹" aria-label="清除单元格底纹" onclick={() => command('table-cell-bg:none')}>×</button>
+        <button class:active={editorToolbarState.tableCellBackground?.toLowerCase() === '#dbeafe'} class="cell-fill fill-blue" title="浅蓝底纹" aria-label="浅蓝底纹" onclick={() => command('table-cell-bg:#dbeafe')}></button>
+        <button class:active={editorToolbarState.tableCellBackground?.toLowerCase() === '#fef3c7'} class="cell-fill fill-yellow" title="浅黄底纹" aria-label="浅黄底纹" onclick={() => command('table-cell-bg:#fef3c7')}></button>
+        <button class:active={editorToolbarState.tableCellBackground?.toLowerCase() === '#dcfce7'} class="cell-fill fill-green" title="浅绿底纹" aria-label="浅绿底纹" onclick={() => command('table-cell-bg:#dcfce7')}></button>
       </div>
       <button class="table-delete" title="删除整个表格" onclick={() => command('table-delete')}>删除表格</button>
     </div>
@@ -313,6 +342,7 @@
 <style>
   .table-context-tools {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     min-height: 38px;
@@ -335,6 +365,29 @@
     border-right: 1px solid #d6dee9;
   }
   .table-style-tools select {
+    min-height: 28px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #fff;
+    color: #344256;
+  }
+  .table-properties label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #5b6778;
+    font-size: 11px;
+  }
+  .table-properties input {
+    width: 112px;
+    min-height: 28px;
+    padding: 3px 7px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #fff;
+    color: #243247;
+  }
+  .table-properties select {
     min-height: 28px;
     border: 1px solid #cbd5e1;
     border-radius: 4px;

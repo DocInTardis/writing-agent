@@ -3,6 +3,7 @@
   import { onDestroy, onMount } from 'svelte'
   import type { Editor, JSONContent } from '@tiptap/core'
   import { NodeSelection } from '@tiptap/pm/state'
+  import { CellSelection } from '@tiptap/pm/tables'
 
   import {
     docIr,
@@ -693,6 +694,10 @@
   function emitToolbarState() {
     if (!editor) return
     const selection = editor.state.selection
+    const tableAttrs = editor.getAttributes('table')
+    const cellAttrs = editor.isActive('tableHeader')
+      ? editor.getAttributes('tableHeader')
+      : editor.getAttributes('tableCell')
     ontoolbarstate?.({
       focused: editor.isFocused,
       readonly: !editor.isEditable,
@@ -709,6 +714,12 @@
       inTable: editor.isActive('table'),
       canMergeCells: editor.isActive('table') && editor.can().mergeCells(),
       canSplitCell: editor.isActive('table') && editor.can().splitCell(),
+      tableCaption: String(tableAttrs.caption || ''),
+      tableRepeatHeader: Boolean(tableAttrs.repeatHeader),
+      tableAlignment: String(tableAttrs.tableAlignment || 'left'),
+      tableWidthPercent: Number(tableAttrs.widthPercent || 100),
+      tableCellBackground: String(cellAttrs.backgroundColor || ''),
+      tableCellVerticalAlign: String(cellAttrs.verticalAlign || 'top'),
       blockType: editor.isActive('heading') ? 'heading' : 'paragraph',
       headingLevel: editor.getAttributes('heading').level || null,
       styleId: editor.getAttributes('heading').styleId || editor.getAttributes('paragraph').styleId || 'normal',
@@ -741,7 +752,9 @@
     else if (editor.state.selection.empty) blockSelectionActive = false
     if (blocks.length === 1) positionBlockHandleById(blocks[0].id)
     const text = empty ? '' : editor.state.doc.textBetween(from, to, '\n')
-    selectionToolbarVisible = !empty && !(editor.state.selection instanceof NodeSelection)
+    selectionToolbarVisible = !empty
+      && !(editor.state.selection instanceof NodeSelection)
+      && !(editor.state.selection instanceof CellSelection)
     const contextKind = editor.state.selection instanceof NodeSelection ? 'block' : selectionToolbarVisible ? 'text' : 'editor'
     window.dispatchEvent(new CustomEvent('wa-editor-context', { detail: { kind: contextKind } }))
     if (selectionToolbarVisible && shell) {
@@ -859,6 +872,7 @@
       'table-toggle-header-cell': 'table_toggle_header_cell',
       'table-distribute-columns': 'table_distribute_columns',
       'table-distribute-rows': 'table_distribute_rows',
+      'table-toggle-repeat-header': 'table_set_repeat_header',
       'table-delete': 'table_delete',
       'page-break': 'insert_page_break',
       'math-block': 'insert_equation',
@@ -870,6 +884,7 @@
     if (command === 'paragraph') params = { styleId: 'normal' }
     if (command === 'caption') params = { styleId: 'caption' }
     if (/^heading[1-6]$/.test(command)) params = { styleId: `heading-${command.slice(-1)}` }
+    if (command === 'table-toggle-repeat-header') params = { enabled: !Boolean(editor.getAttributes('table').repeatHeader) }
     if (command.startsWith('style:')) {
       type = 'apply_style'
       params = { styleId: command.slice(6) }
@@ -891,6 +906,15 @@
     } else if (command.startsWith('table-cell-valign:')) {
       type = 'table_set_vertical_align'
       params = { alignment: command.slice(18) }
+    } else if (command.startsWith('table-caption:')) {
+      type = 'table_set_caption'
+      params = { caption: command.slice(14) }
+    } else if (command.startsWith('table-align:')) {
+      type = 'table_set_alignment'
+      params = { alignment: command.slice(12) }
+    } else if (command.startsWith('table-width:')) {
+      type = 'table_set_width'
+      params = { widthPercent: Number(command.slice(12)) }
     } else if (command.startsWith('align-')) {
       type = 'set_alignment'
       params = { alignment: command.slice(6) }

@@ -50,6 +50,7 @@ export type EditorCommand =
   | 'table-toggle-header-cell'
   | 'table-distribute-columns'
   | 'table-distribute-rows'
+  | 'table-toggle-repeat-header'
   | 'table-delete'
   | 'undo'
   | 'redo'
@@ -104,6 +105,9 @@ export type EditorCommand =
   | `shading-color:${string}`
   | `table-cell-bg:${string}`
   | `table-cell-valign:${string}`
+  | `table-caption:${string}`
+  | `table-align:${string}`
+  | `table-width:${string}`
 
 export interface EditorCommandRequest {
   command: EditorCommand

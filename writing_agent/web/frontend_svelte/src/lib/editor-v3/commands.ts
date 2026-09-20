@@ -251,6 +251,20 @@ registerDocumentCommand('table_split_cell', (editor) => editor.chain().focus().s
 registerDocumentCommand('table_toggle_header_row', (editor) => editor.chain().focus().toggleHeaderRow().run())
 registerDocumentCommand('table_toggle_header_column', (editor) => editor.chain().focus().toggleHeaderColumn().run())
 registerDocumentCommand('table_toggle_header_cell', (editor) => editor.chain().focus().toggleHeaderCell().run())
+registerDocumentCommand('table_set_caption', (editor, command) => editor.chain().focus().updateAttributes('table', {
+  caption: String(command.params.caption || '').slice(0, 200)
+}).run())
+registerDocumentCommand('table_set_repeat_header', (editor, command) => editor.chain().focus().updateAttributes('table', {
+  repeatHeader: Boolean(command.params.enabled)
+}).run())
+registerDocumentCommand('table_set_alignment', (editor, command) => editor.chain().focus().updateAttributes('table', {
+  tableAlignment: ['left', 'center', 'right'].includes(String(command.params.alignment))
+    ? String(command.params.alignment)
+    : 'left'
+}).run())
+registerDocumentCommand('table_set_width', (editor, command) => editor.chain().focus().updateAttributes('table', {
+  widthPercent: Math.max(20, Math.min(100, Number(command.params.widthPercent || 100)))
+}).run())
 registerDocumentCommand('table_set_cell_background', (editor, command) => editor.chain().focus().setCellAttribute(
   'backgroundColor',
   command.params.color ? String(command.params.color) : null
