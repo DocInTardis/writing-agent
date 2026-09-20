@@ -145,12 +145,13 @@ def parse_report_text(text: str) -> ParsedDoc:
 
     flush_paragraph(para_buf)
 
+    exploded_blocks = _explode_markers(blocks)
     if not saw_h1:
-        derived = _derive_title_from_blocks(blocks)
+        derived = _derive_title_from_blocks(exploded_blocks)
         if derived:
             title = derived
-        blocks.insert(0, DocBlock(type="heading", level=1, text=title))
-    return ParsedDoc(title=title, blocks=_explode_markers(blocks))
+        exploded_blocks.insert(0, DocBlock(type="heading", level=1, text=title))
+    return ParsedDoc(title=title, blocks=exploded_blocks)
 
 
 def _explode_markers(blocks: list[DocBlock]) -> list[DocBlock]:

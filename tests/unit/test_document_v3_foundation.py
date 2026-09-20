@@ -9,6 +9,7 @@ import writing_agent.web.app_v2 as app_v2
 from writing_agent.v3 import DocumentCommand, DocumentV3, create_default_registry, migrate_doc_ir
 from writing_agent.v3.document_commands import CommandTarget
 from writing_agent.v3.document_model import BlockNode, to_plain_text, validate_unique_ids
+from writing_agent.v2.doc_format import parse_report_text
 
 
 def _legacy_doc() -> dict:
@@ -119,6 +120,17 @@ def test_plain_text_bridge_preserves_structured_tables_for_export() -> None:
     text = to_plain_text(document)
 
     assert '[[TABLE:{"caption":"测试表","columns":["项目","结果"],"rows":[["保存","成功"]]}]]' in text
+
+
+def test_table_only_document_does_not_leak_its_internal_marker_into_the_title() -> None:
+    parsed = parse_report_text(
+        '[[TABLE:{"caption":"结果表","columns":["项目"],"rows":[["完成"]],'
+        '"cells":[[{"text":"项目","type":"header","colspan":1,"rowspan":1}]]}]]'
+    )
+
+    assert parsed.blocks[0].type == "heading"
+    assert not str(parsed.blocks[0].text or "").startswith("[[TABLE:")
+    assert any(block.type == "table" and block.table.get("caption") == "结果表" for block in parsed.blocks)
 
 
 def test_saved_document_v3_table_is_present_in_docx_export() -> None:
