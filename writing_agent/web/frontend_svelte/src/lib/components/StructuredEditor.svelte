@@ -23,7 +23,7 @@
     styleSheetForDocument,
     tiptapToDocumentV3
   } from '../editor-v3/kernel'
-  import { isDocumentV3, migrateLegacyDocIr, type DocumentV3 } from '../editor-v3/model'
+  import { isDocumentV3, migrateLegacyDocIr, type DocumentV3, type StyleDefinition, type StyleProperties } from '../editor-v3/model'
   import { documentV3ToMarkdown, replaceDocumentContentFromMarkdown } from '../editor-v3/markdown'
   import { paginateDocumentV3 } from '../engine/documentEngine'
   import type { EditorCommand } from '../types'
@@ -96,6 +96,22 @@
   let markdownExportWarnings = $state<string[]>([])
   let markdownNotice = $state('')
   let shortcutPanelVisible = $state(false)
+  let styleManagerVisible = $state(false)
+  let managedStyleId = $state('normal')
+  let managedStyleName = $state('正文')
+  let managedBasedOn = $state('')
+  let managedNextStyle = $state('normal')
+  let managedFontFamily = $state('')
+  let managedFontSizePt: number | '' = $state('')
+  let managedBold = $state(false)
+  let managedItalic = $state(false)
+  let managedAlignment = $state<'left' | 'center' | 'right' | 'justify'>('left')
+  let managedLineSpacing: number | '' = $state('')
+  let managedSpaceBeforePt: number | '' = $state('')
+  let managedSpaceAfterPt: number | '' = $state('')
+  let creatingStyle = $state(false)
+  let styleManagerNotice = $state('')
+  let styleRevision = $state(0)
 
   function refreshProofIssues() {
     if (!editor) return
@@ -195,6 +211,120 @@
   function setZoom(next: number) {
     zoomPercent = Math.max(50, Math.min(200, next))
     shell?.style.setProperty('--editor-zoom', String(zoomPercent / 100))
+  }
+
+  function visibleStyles(): StyleDefinition[] {
+    void styleRevision
+    return (activeDocument?.styles || []).filter((style) => style.visible && style.kind === 'paragraph')
+  }
+
+  function loadManagedStyle(styleId: string) {
+    const style = activeDocument?.styles.find((candidate) => candidate.id === styleId)
+    if (!style) return
+    const properties = style.properties || {}
+    managedStyleId = style.id
+    managedStyleName = style.name
+    managedBasedOn = style.basedOn || ''
+    managedNextStyle = style.nextStyle || 'normal'
+    managedFontFamily = properties.fontFamily || ''
+    managedFontSizePt = properties.fontSizePt ?? ''
+    managedBold = Boolean(properties.bold)
+    managedItalic = Boolean(properties.italic)
+    managedAlignment = properties.alignment || 'left'
+    managedLineSpacing = properties.lineSpacing ?? ''
+    managedSpaceBeforePt = properties.spaceBeforePt ?? ''
+    managedSpaceAfterPt = properties.spaceAfterPt ?? ''
+    creatingStyle = false
+    styleManagerNotice = ''
+  }
+
+  function beginCreateStyle() {
+    if (!editor) return
+    const paragraphAttrs = editor.getAttributes(editor.isActive('heading') ? 'heading' : 'paragraph')
+    const textAttrs = editor.getAttributes('textStyle')
+    managedStyleId = `user-style-${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+    managedStyleName = '新样式'
+    managedBasedOn = String(paragraphAttrs.styleId || 'normal')
+    managedNextStyle = 'normal'
+    managedFontFamily = String(textAttrs.fontFamily || '')
+    const fontSize = Number.parseFloat(String(textAttrs.fontSize || ''))
+    managedFontSizePt = Number.isFinite(fontSize) ? fontSize * 0.75 : ''
+    managedBold = editor.isActive('bold')
+    managedItalic = editor.isActive('italic')
+    managedAlignment = (paragraphAttrs.textAlign || 'left') as typeof managedAlignment
+    managedLineSpacing = paragraphAttrs.lineSpacing ?? ''
+    managedSpaceBeforePt = paragraphAttrs.spaceBeforePt ?? ''
+    managedSpaceAfterPt = paragraphAttrs.spaceAfterPt ?? ''
+    creatingStyle = true
+    styleManagerNotice = '正在基于当前段落创建样式。'
+  }
+
+  function publishStyleChange(next: DocumentV3, message: string) {
+    activeDocument = next
+    styleRevision += 1
+    documentV3.set(next)
+    docIrDirty.set(true)
+    if (styleElement) styleElement.textContent = styleSheetForDocument(next)
+    const text = documentV3ToText(next)
+    onblockedit?.({ documentV3: next, text })
+    schedulePagination(true)
+    emitToolbarState()
+    styleManagerNotice = message
+  }
+
+  function saveManagedStyle() {
+    if (!activeDocument) return
+    const name = managedStyleName.trim()
+    if (!name) {
+      styleManagerNotice = '样式名称不能为空。'
+      return
+    }
+    if (managedBasedOn === managedStyleId) {
+      styleManagerNotice = '样式不能继承自身。'
+      return
+    }
+    const properties: StyleProperties = {
+      fontFamily: managedFontFamily || undefined,
+      fontSizePt: managedFontSizePt === '' ? undefined : Number(managedFontSizePt),
+      bold: managedBold || undefined,
+      italic: managedItalic || undefined,
+      alignment: managedAlignment,
+      lineSpacing: managedLineSpacing === '' ? undefined : Number(managedLineSpacing),
+      spaceBeforePt: managedSpaceBeforePt === '' ? undefined : Number(managedSpaceBeforePt),
+      spaceAfterPt: managedSpaceAfterPt === '' ? undefined : Number(managedSpaceAfterPt)
+    }
+    const definition: StyleDefinition = {
+      id: managedStyleId,
+      name,
+      kind: 'paragraph',
+      basedOn: managedBasedOn || undefined,
+      nextStyle: managedNextStyle || 'normal',
+      visible: true,
+      properties
+    }
+    const next = structuredClone(activeDocument)
+    const index = next.styles.findIndex((style) => style.id === definition.id)
+    if (index >= 0) next.styles[index] = definition
+    else next.styles.push(definition)
+    const styleMap = new Map(next.styles.map((style) => [style.id, style]))
+    const visited = new Set<string>()
+    let cursor: StyleDefinition | undefined = definition
+    while (cursor?.basedOn) {
+      if (visited.has(cursor.id) || cursor.basedOn === definition.id) {
+        styleManagerNotice = '样式继承关系不能形成循环。'
+        return
+      }
+      visited.add(cursor.id)
+      cursor = styleMap.get(cursor.basedOn)
+    }
+    creatingStyle = false
+    publishStyleChange(next, index >= 0 ? `已全局更新“${name}”。` : `已创建“${name}”。`)
+  }
+
+  function applyManagedStyle() {
+    if (!editor) return
+    executeDocumentCommand(editor, createUserCommand('apply_style', { styleId: managedStyleId }))
+    emitSelection()
   }
 
   function prepareMarkdownExport() {
@@ -521,7 +651,8 @@
       leftIndentEm: editor.getAttributes('heading').leftIndentEm ?? editor.getAttributes('paragraph').leftIndentEm ?? null,
       rightIndentEm: editor.getAttributes('heading').rightIndentEm ?? editor.getAttributes('paragraph').rightIndentEm ?? null,
       spaceBeforePt: editor.getAttributes('heading').spaceBeforePt ?? editor.getAttributes('paragraph').spaceBeforePt ?? null,
-      spaceAfterPt: editor.getAttributes('heading').spaceAfterPt ?? editor.getAttributes('paragraph').spaceAfterPt ?? null
+      spaceAfterPt: editor.getAttributes('heading').spaceAfterPt ?? editor.getAttributes('paragraph').spaceAfterPt ?? null,
+      styles: visibleStyles().map((style) => ({ id: style.id, name: style.name }))
     })
   }
 
@@ -599,6 +730,14 @@
       shortcutPanelVisible = !shortcutPanelVisible
       return
     }
+    if (command === 'style-manager') {
+      styleManagerVisible = !styleManagerVisible
+      if (styleManagerVisible) {
+        const currentStyleId = editor.getAttributes(editor.isActive('heading') ? 'heading' : 'paragraph').styleId || 'normal'
+        loadManagedStyle(String(currentStyleId))
+      }
+      return
+    }
     if (command === 'zoom-in' || command === 'zoom-out' || command === 'zoom-100') {
       setZoom(command === 'zoom-100' ? 100 : zoomPercent + (command === 'zoom-in' ? 10 : -10))
       return
@@ -636,7 +775,10 @@
     if (command === 'paragraph') params = { styleId: 'normal' }
     if (command === 'caption') params = { styleId: 'caption' }
     if (/^heading[1-6]$/.test(command)) params = { styleId: `heading-${command.slice(-1)}` }
-    if (command.startsWith('font:')) {
+    if (command.startsWith('style:')) {
+      type = 'apply_style'
+      params = { styleId: command.slice(6) }
+    } else if (command.startsWith('font:')) {
       type = 'set_font_family'
       params = { fontFamily: command.slice(5) }
     } else if (command.startsWith('size:')) {
@@ -719,6 +861,7 @@
   function loadDocument(next: DocumentV3) {
     if (!editor) return
     activeDocument = next
+    styleRevision += 1
     documentV3.set(next)
     styleElement && (styleElement.textContent = styleSheetForDocument(next))
     editor.commands.setContent(documentV3ToTiptap(next), { emitUpdate: false })
@@ -745,7 +888,16 @@
       onSlashQuery: handleSlashQuery,
       onShortcutCommand: (type, params = {}) => {
         if (!editor) return false
-        const result = executeDocumentCommand(editor, createShortcutCommand(type, params))
+        let commandType = type
+        let commandParams = params
+        if (type === 'split_with_next_style') {
+          const currentStyleId = String(params.styleId || '')
+          const nextStyleId = activeDocument?.styles.find((style) => style.id === currentStyleId)?.nextStyle
+          if (!nextStyleId || nextStyleId === currentStyleId) return false
+          commandType = 'split_block_with_style'
+          commandParams = { styleId: nextStyleId }
+        }
+        const result = executeDocumentCommand(editor, createShortcutCommand(commandType, commandParams))
         if (result.ok) emitSelection()
         return result.ok
       }
@@ -885,6 +1037,32 @@
         <dt>Esc / Enter（已选块）</dt><dd>回到文字编辑</dd>
       </dl>
       <p>输入法正在组合文字时，系统不会接管这些快捷键。</p>
+    </aside>
+  {/if}
+  {#if styleManagerVisible}
+    <aside class="style-manager" aria-label="文档样式管理">
+      <header><strong>文档样式</strong><button aria-label="关闭样式管理" onclick={() => (styleManagerVisible = false)}>×</button></header>
+      <div class="style-manager-actions">
+        <select aria-label="选择要编辑的样式" value={managedStyleId} onchange={(event) => loadManagedStyle(event.currentTarget.value)}>
+          {#each visibleStyles() as style (style.id)}<option value={style.id}>{style.name}</option>{/each}
+          {#if creatingStyle}<option value={managedStyleId}>{managedStyleName}</option>{/if}
+        </select>
+        <button onclick={beginCreateStyle}>基于当前格式新建</button>
+      </div>
+      <label>名称<input bind:value={managedStyleName} /></label>
+      <div class="style-grid">
+        <label>基于<select bind:value={managedBasedOn}><option value="">无</option>{#each visibleStyles().filter((style) => style.id !== managedStyleId) as style}<option value={style.id}>{style.name}</option>{/each}</select></label>
+        <label>后续段落<select bind:value={managedNextStyle}>{#each visibleStyles() as style}<option value={style.id}>{style.name}</option>{/each}</select></label>
+        <label>字体<input bind:value={managedFontFamily} placeholder="继承" /></label>
+        <label>字号 pt<input type="number" min="6" max="96" step="0.5" bind:value={managedFontSizePt} /></label>
+        <label>对齐<select bind:value={managedAlignment}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option><option value="justify">两端对齐</option></select></label>
+        <label>行距<input type="number" min="0.8" max="4" step="0.05" bind:value={managedLineSpacing} /></label>
+        <label>段前 pt<input type="number" min="0" max="144" bind:value={managedSpaceBeforePt} /></label>
+        <label>段后 pt<input type="number" min="0" max="144" bind:value={managedSpaceAfterPt} /></label>
+      </div>
+      <div class="style-flags"><label><input type="checkbox" bind:checked={managedBold} /> 加粗</label><label><input type="checkbox" bind:checked={managedItalic} /> 斜体</label></div>
+      {#if styleManagerNotice}<p>{styleManagerNotice}</p>{/if}
+      <footer><button onclick={applyManagedStyle}>应用到当前段落</button><button class="primary" onclick={saveManagedStyle}>保存并全局更新</button></footer>
     </aside>
   {/if}
   {#if markdownExportVisible}
@@ -1084,6 +1262,20 @@
   .shortcut-panel dt { color: #253858; font-family: Consolas, monospace; }
   .shortcut-panel dd { margin: 0; color: #536174; }
   .shortcut-panel p { margin: 0; color: #7a8594; font-size: 11px; }
+  .style-manager { position: absolute; z-index: 11; top: 10px; right: 10px; box-sizing: border-box; width: 390px; padding: 13px; border: 1px solid #cfd7e2; border-radius: 7px; background: #fff; box-shadow: 0 10px 30px rgba(30, 43, 62, .18); color: #263244; font-size: 12px; }
+  .style-manager header, .style-manager footer, .style-manager-actions, .style-flags { display: flex; align-items: center; gap: 8px; }
+  .style-manager header { justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
+  .style-manager header button { border: 0; background: transparent; font-size: 19px; cursor: pointer; }
+  .style-manager-actions select { flex: 1; }
+  .style-manager label { display: grid; gap: 3px; margin-top: 8px; color: #5b6675; }
+  .style-manager input, .style-manager select, .style-manager button { box-sizing: border-box; min-height: 29px; border: 1px solid #cfd6e1; border-radius: 4px; background: #fff; color: #263244; }
+  .style-manager button { padding: 4px 8px; cursor: pointer; }
+  .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 9px; }
+  .style-flags label { display: flex; align-items: center; gap: 5px; }
+  .style-flags input { min-height: auto; }
+  .style-manager p { margin: 8px 0 0; color: #28639e; }
+  .style-manager footer { justify-content: flex-end; margin-top: 12px; }
+  .style-manager footer .primary { border-color: #2468c8; background: #2468c8; color: #fff; }
   .markdown-dialog-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; background: rgba(20, 29, 43, .28); }
   .markdown-dialog { box-sizing: border-box; width: min(540px, calc(100vw - 32px)); padding: 18px; border: 1px solid #ccd4df; border-radius: 8px; background: #fff; box-shadow: 0 18px 55px rgba(22, 34, 51, .22); }
   .markdown-dialog header { display: flex; align-items: center; justify-content: space-between; font-size: 16px; }

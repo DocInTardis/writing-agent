@@ -359,6 +359,12 @@ const ReliableBlockKeyboard = Extension.create<{
             if (applied) event.preventDefault()
             return applied
           }
+          if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && selection.empty && selection.$from.parent.isTextblock) {
+            const styleId = String(selection.$from.parent.attrs?.styleId || '')
+            const applied = styleId ? onCommand?.('split_with_next_style', { styleId }) || false : false
+            if (applied) event.preventDefault()
+            if (applied) return true
+          }
           if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'Space') {
             const position = selection.$from.depth > 0 ? selection.$from.before(1) : selection.from
             const node = doc.nodeAt(position)

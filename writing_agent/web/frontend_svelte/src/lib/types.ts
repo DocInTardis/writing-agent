@@ -70,6 +70,8 @@ export type EditorCommand =
   | 'markdown-import'
   | 'markdown-export'
   | 'view-shortcuts'
+  | 'style-manager'
+  | `style:${string}`
   | `font:${string}`
   | `size:${string}`
   | `color:${string}`

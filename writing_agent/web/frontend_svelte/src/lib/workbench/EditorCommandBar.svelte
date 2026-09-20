@@ -28,6 +28,7 @@
     rightIndentEm?: number | null
     spaceBeforePt?: number | null
     spaceAfterPt?: number | null
+    styles?: Array<{ id: string; name: string }>
   }
 
   let {
@@ -120,17 +121,12 @@
       </div>
       <div class="ribbon-group wide" aria-label="字体与样式">
         <div class="ribbon-row">
-          <select aria-label="段落样式" value={editorToolbarState.styleId === 'normal' ? 'paragraph' : (editorToolbarState.styleId || 'paragraph').replace('-', '')} onchange={(event) => command(event.currentTarget.value)}>
-            <option value="paragraph">正文</option>
-            <option value="heading1">标题 1</option>
-            <option value="heading2">标题 2</option>
-            <option value="heading3">标题 3</option>
-            <option value="heading4">标题 4</option>
-            <option value="heading5">标题 5</option>
-            <option value="heading6">标题 6</option>
-            <option value="quote">引用</option>
-            <option value="code">代码</option>
+          <select aria-label="段落样式" value={`style:${editorToolbarState.styleId || 'normal'}`} onchange={(event) => command(event.currentTarget.value)}>
+            {#each editorToolbarState.styles || [] as style (style.id)}
+              <option value={`style:${style.id}`}>{style.name}</option>
+            {/each}
           </select>
+          <button class="tool-btn" title="管理文档样式" onclick={() => command('style-manager')}>样式…</button>
           <select aria-label="字体" value={editorToolbarState.fontFamily || 'Microsoft YaHei'} onchange={(event) => command(`font:${event.currentTarget.value}`)}>
             <option value="Microsoft YaHei">微软雅黑</option>
             <option value="SimSun">宋体</option>

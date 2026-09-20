@@ -167,9 +167,24 @@ registerDocumentCommand('apply_style', (editor, command) => {
   const styleId = String(command.params.styleId || 'normal')
   if (styleId === 'normal') return editor.chain().focus().setParagraph().updateAttributes('paragraph', { styleId }).run()
   const match = /^heading-([1-6])$/.exec(styleId)
-  if (!match) return editor.chain().focus().updateAttributes('paragraph', { styleId }).run()
+  if (!match) return editor.chain().focus().setParagraph().updateAttributes('paragraph', { styleId }).run()
   const level = Number(match[1]) as 1 | 2 | 3 | 4 | 5 | 6
   return editor.chain().focus().setHeading({ level }).updateAttributes('heading', { styleId }).run()
+})
+registerDocumentCommand('split_block_with_style', (editor, command) => {
+  const styleId = String(command.params.styleId || 'normal')
+  return editor.chain().focus().splitBlock().command(({ tr }) => {
+    const { $from } = tr.selection
+    if (!$from.parent.isTextblock || $from.depth < 1) return false
+    const heading = /^heading-([1-6])$/.exec(styleId)
+    const type = heading ? editor.state.schema.nodes.heading : editor.state.schema.nodes.paragraph
+    if (!type) return false
+    const attrs: Record<string, unknown> = { ...$from.parent.attrs, styleId }
+    if (heading) attrs.level = Number(heading[1])
+    else delete attrs.level
+    tr.setNodeMarkup($from.before($from.depth), type, attrs)
+    return true
+  }).run()
 })
 registerDocumentCommand('set_paragraph_format', (editor, command) => {
   const attrs: Record<string, unknown> = {}

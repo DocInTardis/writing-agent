@@ -259,7 +259,15 @@
     fontFamily: '',
     fontSize: '',
     alignment: 'left',
-    lineSpacing: null as number | null
+    lineSpacing: null as number | null,
+    letterSpacing: '',
+    textTransform: 'none',
+    firstLineIndentEm: null as number | null,
+    leftIndentEm: null as number | null,
+    rightIndentEm: null as number | null,
+    spaceBeforePt: null as number | null,
+    spaceAfterPt: null as number | null,
+    styles: [] as Array<{ id: string; name: string }>
   })
   let queuedInstructionSeed = $state(0)
   let queuedGlobalInstructions = $state<QueuedInstruction[]>([])
@@ -1030,7 +1038,17 @@
       fontFamily: String((detail as any).fontFamily || ''),
       fontSize: String((detail as any).fontSize || ''),
       alignment: String((detail as any).alignment || 'left'),
-      lineSpacing: (detail as any).lineSpacing == null ? null : Number((detail as any).lineSpacing)
+      lineSpacing: (detail as any).lineSpacing == null ? null : Number((detail as any).lineSpacing),
+      letterSpacing: String((detail as any).letterSpacing || ''),
+      textTransform: String((detail as any).textTransform || 'none'),
+      firstLineIndentEm: (detail as any).firstLineIndentEm == null ? null : Number((detail as any).firstLineIndentEm),
+      leftIndentEm: (detail as any).leftIndentEm == null ? null : Number((detail as any).leftIndentEm),
+      rightIndentEm: (detail as any).rightIndentEm == null ? null : Number((detail as any).rightIndentEm),
+      spaceBeforePt: (detail as any).spaceBeforePt == null ? null : Number((detail as any).spaceBeforePt),
+      spaceAfterPt: (detail as any).spaceAfterPt == null ? null : Number((detail as any).spaceAfterPt),
+      styles: Array.isArray((detail as any).styles)
+        ? (detail as any).styles.map((style: any) => ({ id: String(style.id || ''), name: String(style.name || '') })).filter((style: any) => style.id && style.name)
+        : []
     }
   }
 

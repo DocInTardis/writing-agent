@@ -46,7 +46,7 @@ def test_block_shortcuts_use_registered_document_commands_and_ignore_ime() -> No
     assert "registerDocumentCommand('restore_markdown_trigger'" in commands
     assert "export function createShortcutCommand" in commands
     assert "source: 'shortcut'" in commands
-    assert "executeDocumentCommand(editor, createShortcutCommand(type, params))" in editor
+    assert "executeDocumentCommand(editor, createShortcutCommand(commandType, commandParams))" in editor
     assert 'aria-label="编辑快捷键"' in editor
     settings = (FRONTEND / "components/Settings.svelte").read_text(encoding="utf-8")
     assert '<summary>编辑快捷键</summary>' in settings
