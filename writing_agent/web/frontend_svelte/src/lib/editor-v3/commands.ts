@@ -155,6 +155,16 @@ registerDocumentCommand('set_character_format', (editor, command) => {
     if (!['none', 'uppercase', 'lowercase', 'capitalize'].includes(transform)) return false
     attrs.textTransform = transform
   }
+  if ('fontWeight' in command.params) {
+    const weight = String(command.params.fontWeight || '')
+    if (!['400', '500', '600', '700'].includes(weight)) return false
+    attrs.fontWeight = weight
+  }
+  if ('fontStyle' in command.params) {
+    const style = String(command.params.fontStyle || '')
+    if (!['normal', 'italic'].includes(style)) return false
+    attrs.fontStyle = style
+  }
   if (!Object.keys(attrs).length) return false
   return editor.chain().focus().setMark('textStyle', attrs).run()
 })
@@ -216,11 +226,19 @@ registerDocumentCommand('toggle_code_block', (editor) => editor.chain().focus().
 registerDocumentCommand('insert_page_break', (editor) => editor.chain().focus().insertContent({ type: 'pageBreak', attrs: { nodeId: null } }).run())
 registerDocumentCommand('insert_figure', (editor, command) => editor.chain().focus().insertContent({
   type: 'figure',
-  attrs: { nodeId: null, payload: { caption: String(command.params.caption || ''), source: String(command.params.source || '') } }
+  attrs: {
+    nodeId: null,
+    payload: {
+      ...command.params,
+      caption: String(command.params.caption || ''),
+      source: String(command.params.source || '')
+    }
+  }
 }).run())
-registerDocumentCommand('insert_table', (editor, command) => editor.chain().focus().insertContent({
-  type: 'table',
-  attrs: { nodeId: null, payload: { rows: Math.max(1, Number(command.params.rows || 2)), columns: Math.max(1, Number(command.params.columns || 2)), cells: [] } }
+registerDocumentCommand('insert_table', (editor, command) => editor.chain().focus().insertTable({
+  rows: Math.max(1, Number(command.params.rows || 3)),
+  cols: Math.max(1, Number(command.params.columns || command.params.cols || 3)),
+  withHeaderRow: command.params.withHeaderRow !== false
 }).run())
 registerDocumentCommand('insert_equation', (editor, command) => editor.chain().focus().insertContent({
   type: 'equationBlock',

@@ -728,12 +728,15 @@
     if (!editor) return
     const { from, to, empty } = editor.state.selection
     const blocks = selectedBlocks(editor)
-    const blockIds = blocks.map((block) => block.id)
+    // A caret is an editing position, not a selection. Only expose blocks to
+    // contextual actions after the user has made a real text/node selection.
+    const exposedBlocks = empty ? [] : blocks
+    const blockIds = exposedBlocks.map((block) => block.id)
     selectedBlockIds = blockIds
-    selectedBlocksCollapsed = blocks.length > 0 && blocks.every((block) => block.collapsed)
+    selectedBlocksCollapsed = exposedBlocks.length > 0 && exposedBlocks.every((block) => block.collapsed)
     if (editor.state.selection instanceof NodeSelection) blockSelectionActive = true
     else if (editor.state.selection.empty) blockSelectionActive = false
-    if (blockIds.length === 1) positionBlockHandleById(blockIds[0])
+    if (blocks.length === 1) positionBlockHandleById(blocks[0].id)
     const text = empty ? '' : editor.state.doc.textBetween(from, to, '\n')
     selectionToolbarVisible = !empty && !(editor.state.selection instanceof NodeSelection)
     const contextKind = editor.state.selection instanceof NodeSelection ? 'block' : selectionToolbarVisible ? 'text' : 'editor'
@@ -748,7 +751,7 @@
     onblockselect?.({
       blockId: blockIds[0] || '',
       blockIds,
-      blocks: blocks.map((block) => ({ ...block, kind: 'block' })),
+      blocks: exposedBlocks.map((block) => ({ ...block, kind: 'block' })),
       text,
       rect: null,
       style: {}
@@ -774,7 +777,7 @@
     if (proofPanelVisible) refreshProofIssues()
   }
 
-  function runLegacyCommand(command: EditorCommand) {
+  function runLegacyCommand(command: EditorCommand, commandParams: Record<string, unknown> = {}) {
     if (!editor) return
     if (command === 'copy' || command === 'cut' || command === 'paste') {
       void runClipboardCommand(command)
@@ -846,7 +849,7 @@
       caption: 'apply_style'
     }
     let type = simple[command]
-    let params: Record<string, unknown> = {}
+    let params: Record<string, unknown> = { ...commandParams }
     if (command === 'paragraph') params = { styleId: 'normal' }
     if (command === 'caption') params = { styleId: 'caption' }
     if (/^heading[1-6]$/.test(command)) params = { styleId: `heading-${command.slice(-1)}` }
@@ -888,6 +891,12 @@
     } else if (command.startsWith('text-transform:')) {
       type = 'set_character_format'
       params = { textTransform: command.slice(15) }
+    } else if (command.startsWith('font-weight:')) {
+      type = 'set_character_format'
+      params = { fontWeight: command.slice(12) }
+    } else if (command.startsWith('font-style:')) {
+      type = 'set_character_format'
+      params = { fontStyle: command.slice(11) }
     } else if (command.startsWith('space-before:')) {
       type = 'set_paragraph_format'
       params = { spaceBeforePt: Number(command.slice(13)) }
@@ -991,7 +1000,8 @@
     window.addEventListener('wa-editor-context', handleEditorContext)
     unsubscribeCommand = editorCommand.subscribe((command) => {
       if (!command || !editor) return
-      runLegacyCommand(command)
+      if (typeof command === 'string') runLegacyCommand(command)
+      else runLegacyCommand(command.command, command.params || {})
       editorCommand.set(null)
     })
     unsubscribeDocIr = docIr.subscribe((next) => {
@@ -1476,6 +1486,50 @@
     border-radius: 0;
     background: transparent;
     font-size: 11px;
+  }
+  .structured-editor :global(.tableWrapper) {
+    margin: 14px 0;
+    overflow-x: auto;
+  }
+  .structured-editor :global(table) {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    background: #fff;
+  }
+  .structured-editor :global(th),
+  .structured-editor :global(td) {
+    position: relative;
+    min-width: 72px;
+    padding: 7px 9px;
+    border: 1px solid #aeb7c3;
+    vertical-align: top;
+    text-align: left;
+  }
+  .structured-editor :global(th) {
+    background: #eef3f8;
+    font-weight: 600;
+  }
+  .structured-editor :global(th p),
+  .structured-editor :global(td p) {
+    margin: 0;
+    min-height: 1.4em;
+  }
+  .structured-editor :global(.selectedCell::after) {
+    position: absolute;
+    inset: 0;
+    content: '';
+    pointer-events: none;
+    background: rgb(43 111 210 / 12%);
+  }
+  .structured-editor :global(.column-resize-handle) {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    bottom: 0;
+    width: 4px;
+    background: #2b6fd2;
+    pointer-events: none;
   }
   .structured-editor :global(.wa-page-boundary),
   .structured-editor :global(.wa-page-end) {

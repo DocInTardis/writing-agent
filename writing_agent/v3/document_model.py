@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from typing import Any, Literal
 from uuid import uuid4
@@ -32,6 +33,8 @@ class StyleProperties(BaseModel):
     underline: bool | None = None
     color: str | None = None
     background_color: str | None = None
+    letter_spacing_pt: float | None = None
+    text_transform: Literal["none", "uppercase", "lowercase", "capitalize"] | None = None
     alignment: Literal["left", "center", "right", "justify"] | None = None
     line_spacing: float | None = None
     first_line_indent_em: float | None = None
@@ -43,6 +46,11 @@ class StyleProperties(BaseModel):
     keep_with_next: bool | None = None
     keep_lines_together: bool | None = None
     page_break_before: bool | None = None
+    border_color: str | None = None
+    border_width_pt: float | None = None
+    border_style: Literal["none", "solid", "dashed", "double"] | None = None
+    shading_color: str | None = None
+    tab_stops: list[dict[str, Any]] | None = None
 
 
 class StyleDefinition(BaseModel):
@@ -360,6 +368,16 @@ def to_plain_text(doc: DocumentV3) -> str:
 
     for section in doc.sections:
         for block in section.content:
+            if block.type == "table":
+                payload = block.attrs.get("table") if isinstance(block.attrs, dict) else None
+                if isinstance(payload, dict):
+                    lines.append(f"[[TABLE:{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}]]")
+                continue
+            if block.type == "figure":
+                payload = block.attrs.get("figure") if isinstance(block.attrs, dict) else None
+                if isinstance(payload, dict):
+                    lines.append(f"[[FIGURE:{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}]]")
+                continue
             text = inline_text(block).strip()
             if not text:
                 continue

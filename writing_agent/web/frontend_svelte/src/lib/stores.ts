@@ -1,5 +1,5 @@
 ﻿import { derived, get, writable } from 'svelte/store'
-import type { ChatMessage, ThoughtItem, ToastItem, EditorCommand } from './types'
+import type { ChatMessage, ThoughtItem, ToastItem, EditorCommand, EditorCommandRequest } from './types'
 import type { DocumentV3 } from './editor-v3/model'
 
 export const docId = writable('')
@@ -17,7 +17,7 @@ export const thinkingMissing = writable<string[]>([])
 export const thoughtLog = writable<ThoughtItem[]>([])
 export const ribbonOpen = writable(false)
 export const generating = writable(false)
-export const editorCommand = writable<EditorCommand | null>(null)
+export const editorCommand = writable<EditorCommand | EditorCommandRequest | null>(null)
 export const history = writable<string[]>([])
 export const historyIndex = writable(-1)
 

@@ -80,9 +80,16 @@ export type EditorCommand =
   | `margin:${string}`
   | `letter-spacing:${string}`
   | `text-transform:${string}`
+  | `font-weight:${string}`
+  | `font-style:${string}`
   | `space-before:${string}`
   | `space-after:${string}`
   | `left-indent:${string}`
   | `right-indent:${string}`
   | `border-color:${string}`
   | `shading-color:${string}`
+
+export interface EditorCommandRequest {
+  command: EditorCommand
+  params?: Record<string, unknown>
+}

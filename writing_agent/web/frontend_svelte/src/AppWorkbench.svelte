@@ -1013,7 +1013,6 @@
     if (payload.text) {
       const txt = String(payload.text || '')
       sourceText.set(txt)
-      lastSavedText = txt
     }
     if (payload.meta && payload.meta.action) {
       pushToast('块已更新', 'ok')
@@ -1259,7 +1258,25 @@
   function applyInlineBlockStyle(patch: Record<string, string>) {
     if (!ensureInlineEditAllowed('修改当前选中块')) return
     const targets = selectedBlockIds.length ? selectedBlockIds : selectedBlockId ? [selectedBlockId] : []
-    if (!targets.length || !$docIr) return
+    if (!targets.length) return
+    const [key, rawValue] = Object.entries(patch)[0] || []
+    const value = String(rawValue || '').trim()
+    if (!key || !value) return
+    const command =
+      key === 'fontFamily' ? `font:${value}` :
+      key === 'fontSize' ? `size:${value}` :
+      key === 'lineHeight' ? `line-height:${value}` :
+      key === 'align' ? `align-${value}` :
+      key === 'color' ? `color:${value}` :
+      key === 'background' ? `bgcolor:${value}` :
+      key === 'fontWeight' ? `font-weight:${value}` :
+      key === 'fontStyle' ? `font-style:${value}` : ''
+    if (command) {
+      runEditorCommand(command as EditorCommand)
+      requestAnimationFrame(() => updateInlineOverlayPosition())
+      return
+    }
+    if (!$docIr) return
     const blockTargets = blockTargetIds(targets)
     const sectionTargets = sectionTargetIds(targets)
     const touchesDocTitle = targets.includes(DOC_TITLE_TARGET_ID)
@@ -1639,99 +1656,6 @@
   })
 
   let activeCandidate = $derived(blockCandidates[activeCandidateIndex] || null)
-
-  function insertBlockAfterBlock(
-    doc: Record<string, unknown>,
-    blockId: string,
-    blockToInsert: Record<string, unknown>
-  ): Record<string, unknown> | null {
-    if (!blockId) return null
-    const sections = Array.isArray((doc as any).sections) ? ((doc as any).sections as Array<Record<string, unknown>>) : []
-    if (!sections.length) return null
-    let changed = false
-    const walk = (items: Array<Record<string, unknown>>) => {
-      let localChanged = false
-      const next = items.map((sec) => {
-        let touched = false
-        let nextSec = sec
-        const blocks = Array.isArray((sec as any).blocks) ? (((sec as any).blocks as Array<Record<string, unknown>>).slice()) : []
-        const idx = blocks.findIndex((b) => String((b as any)?.id || '') === blockId)
-        if (idx >= 0) {
-          blocks.splice(idx + 1, 0, blockToInsert)
-          nextSec = { ...nextSec, blocks }
-          touched = true
-        }
-        const children = Array.isArray((sec as any).children)
-          ? (((sec as any).children as Array<Record<string, unknown>>))
-          : []
-        if (children.length) {
-          const nextChildren = walk(children)
-          if (nextChildren !== children) {
-            nextSec = { ...nextSec, children: nextChildren }
-            touched = true
-          }
-        }
-        if (touched) localChanged = true
-        return touched ? nextSec : sec
-      })
-      if (localChanged) changed = true
-      return localChanged ? next : items
-    }
-    const nextSections = walk(sections)
-    if (!changed) return null
-    return { ...doc, sections: nextSections }
-  }
-
-  function appendBlockToDoc(doc: Record<string, unknown>, blockToInsert: Record<string, unknown>): Record<string, unknown> | null {
-    const sections = Array.isArray((doc as any).sections) ? ((doc as any).sections as Array<Record<string, unknown>>) : []
-    if (!sections.length) return null
-    const first = sections[0]
-    const blocks = Array.isArray((first as any).blocks) ? (((first as any).blocks as Array<Record<string, unknown>>).slice()) : []
-    blocks.push(blockToInsert)
-    const nextFirst = { ...first, blocks }
-    const nextSections = sections.slice()
-    nextSections[0] = nextFirst
-    return { ...doc, sections: nextSections }
-  }
-
-  function insertDiagramIntoDoc(spec: Record<string, unknown>, opts?: { targetIds?: string[] }) {
-    if (!spec || typeof spec !== 'object') return
-    const doc = $docIr
-    if (!doc || typeof doc !== 'object') return
-    const figureBlock = { id: Math.random().toString(36).slice(2), type: 'figure', figure: spec }
-    const blockIds = blockTargetIds(opts?.targetIds || [])
-    const anchor = blockIds.length ? blockIds[blockIds.length - 1] : ''
-    const nextDoc =
-      (anchor && insertBlockAfterBlock(doc as Record<string, unknown>, anchor, figureBlock)) ||
-      appendBlockToDoc(doc as Record<string, unknown>, figureBlock)
-    if (!nextDoc) return
-    applyDocIrSnapshot(nextDoc as Record<string, unknown>)
-  }
-
-  function insertTableIntoDoc(opts?: { targetIds?: string[] }) {
-    const doc = $docIr
-    if (!doc || typeof doc !== 'object') return
-    const tableBlock = {
-      id: Math.random().toString(36).slice(2),
-      type: 'table',
-      table: {
-        caption: '新建表格',
-        columns: ['列1', '列2', '列3'],
-        rows: [
-          ['', '', ''],
-          ['', '', '']
-        ]
-      }
-    }
-    const blockIds = blockTargetIds(opts?.targetIds || [])
-    const anchor = blockIds.length ? blockIds[blockIds.length - 1] : ''
-    const nextDoc =
-      (anchor && insertBlockAfterBlock(doc as Record<string, unknown>, anchor, tableBlock)) ||
-      appendBlockToDoc(doc as Record<string, unknown>, tableBlock)
-    if (!nextDoc) return
-    applyDocIrSnapshot(nextDoc as Record<string, unknown>)
-    pushToast('已插入表格块，可直接编辑内容。', 'ok')
-  }
 
   const blockCache = new Map<string, any>()
 
@@ -2372,9 +2296,9 @@
     }, 1600)
   }
 
-  async function saveDoc() {
+  async function saveDoc(options: { quiet?: boolean } = {}): Promise<boolean> {
     const id = $docId
-    if (!id) return
+    if (!id) return false
     try {
       if ($docIr && !$docIrDirty && lastSavedDocIr) {
         const ops = buildDocIrOps(lastSavedDocIr, $docIr)
@@ -2409,24 +2333,25 @@
               lastSavedText = $sourceText
               partialSavedSnapshot = $sourceText
             }
-            pushToast('已保存', 'ok')
-            return
+            if (!options.quiet) pushToast('已保存', 'ok')
+            return true
           }
         } else if (ops && ops.length === 0) {
           lastSavedText = $sourceText
           partialSavedSnapshot = $sourceText
           lastSavedDocIr = $docIr
-          return
+          return true
         }
       }
       const payload: Record<string, unknown> = { text: $sourceText }
       if (!$docIrDirty && $docIr) payload.doc_ir = $docIr
       if ($documentV3) payload.document_v3 = $documentV3
-      await fetch(`/api/doc/${id}/save`, {
+      const response = await fetch(`/api/doc/${id}/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
+      if (!response.ok) throw new Error((await response.text()) || response.statusText)
       lastSavedText = $sourceText
       partialSavedSnapshot = $sourceText
       if (!$docIrDirty && $docIr) {
@@ -2434,9 +2359,11 @@
       } else {
         lastSavedDocIr = null
       }
-      pushToast('已保存', 'ok')
+      if (!options.quiet) pushToast('已保存', 'ok')
+      return true
     } catch (err) {
       pushToast(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
+      return false
     }
   }
 
@@ -2559,6 +2486,9 @@
   async function preflightExport(format: 'docx' | 'pdf') {
     if (!$docId) return false
     try {
+      // Export is a transaction boundary: flush the current editor state even
+      // when autosave is still waiting for its debounce timer.
+      if (!(await saveDoc({ quiet: true }))) return false
       const resp = await fetch(`/api/doc/${$docId}/export/check?format=${format}&auto_fix=1`)
       if (!resp.ok) {
         const msg = await resp.text()
@@ -2783,11 +2713,11 @@
       const uploadKind = String(data.kind || '')
       if (source === 'inline-image' && isImage) {
         const caption = file.name.replace(/\.[^.]+$/, '')
-        insertDiagramIntoDoc(
-          { caption, source: 'upload', filename: file.name },
-          { targetIds: opts?.targetIds || [] }
-        )
-        saveDoc().catch(() => {})
+        runEditorCommand('image', {
+          caption,
+          source: String(data.url || data.path || data.asset_url || file.name),
+          filename: file.name
+        })
         pushToast('图片上传成功，已插入选中内容后。', 'ok')
         appendChat('system', `已插入图片：${file.name}`)
         return
@@ -2818,8 +2748,8 @@
   function triggerInlineTableInsert() {
     if (!selectedBlockIds.length) return
     if (!ensureInlineEditAllowed('插表')) return
-    insertTableIntoDoc({ targetIds: selectedBlockIds.slice() })
-    saveDoc().catch(() => {})
+    runEditorCommand('table', { rows: 3, columns: 3, withHeaderRow: true })
+    closeInlinePopover()
   }
 
   async function handleInlineImageSelect(event: Event) {
@@ -3486,8 +3416,8 @@
     requestAnimationFrame(() => updateInlineOverlayPosition())
   }
 
-  function runEditorCommand(cmd: EditorCommand) {
-    editorCommand.set(cmd)
+  function runEditorCommand(cmd: EditorCommand, params?: Record<string, unknown>) {
+    editorCommand.set(params ? { command: cmd, params } : cmd)
   }
 
   $effect(() => {
@@ -4049,7 +3979,7 @@
   open={canvasOpen}
   docId={$docId}
   onclose={() => (canvasOpen = false)}
-  oninsert={(payload) => insertDiagramIntoDoc(payload.spec)}
+  oninsert={(payload) => runEditorCommand('image', payload.spec)}
 />
 
 <ErrorBoundary>

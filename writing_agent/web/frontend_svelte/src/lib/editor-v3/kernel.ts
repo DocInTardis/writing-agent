@@ -6,6 +6,7 @@ import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
+import { TableKit } from '@tiptap/extension-table'
 import StarterKit from '@tiptap/starter-kit'
 import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
@@ -114,7 +115,7 @@ const StableNodeAttributes = Extension.create({
   addGlobalAttributes() {
     return [
       {
-        types: ['paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList', 'listItem'],
+        types: ['paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList', 'listItem', 'table'],
         attributes: {
           nodeId: {
             default: null,
@@ -216,7 +217,7 @@ const ReliableBlockIdentity = Extension.create({
         const transaction = newState.tr
         let changed = false
         newState.doc.descendants((node, position) => {
-          if (!['paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList', 'listItem'].includes(node.type.name)) return
+          if (!['paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList', 'listItem', 'table'].includes(node.type.name)) return
           const attrs = { ...node.attrs }
           let nodeChanged = false
           const currentId = String(attrs.nodeId || '')
@@ -440,13 +441,23 @@ const CharacterFormatting = Extension.create({
           default: null,
           parseHTML: (element) => element.style.textTransform || null,
           renderHTML: (attributes) => attributes.textTransform ? { style: `text-transform:${attributes.textTransform}` } : {}
+        },
+        fontWeight: {
+          default: null,
+          parseHTML: (element) => element.style.fontWeight || null,
+          renderHTML: (attributes) => attributes.fontWeight ? { style: `font-weight:${attributes.fontWeight}` } : {}
+        },
+        fontStyle: {
+          default: null,
+          parseHTML: (element) => element.style.fontStyle || null,
+          renderHTML: (attributes) => attributes.fontStyle ? { style: `font-style:${attributes.fontStyle}` } : {}
         }
       }
     }]
   }
 })
 
-function atomNode(name: 'figure' | 'table' | 'pageBreak' | 'equationBlock') {
+function atomNode(name: 'figure' | 'pageBreak' | 'equationBlock') {
   return Node.create({
     name,
     group: 'block',
@@ -465,7 +476,7 @@ function atomNode(name: 'figure' | 'table' | 'pageBreak' | 'equationBlock') {
     renderHTML({ HTMLAttributes }) {
       const payload = HTMLAttributes.payload && typeof HTMLAttributes.payload === 'object' ? HTMLAttributes.payload : {}
       const caption = String((payload as Record<string, unknown>).caption || '')
-      const label = name === 'pageBreak' ? '分页符' : name === 'table' ? '表格' : name === 'figure' ? '图片/图表' : '公式'
+      const label = name === 'pageBreak' ? '分页符' : name === 'figure' ? '图片/图表' : '公式'
       const { payload: _payload, ...domAttributes } = HTMLAttributes
       return [
         'div',
@@ -481,7 +492,6 @@ function atomNode(name: 'figure' | 'table' | 'pageBreak' | 'equationBlock') {
 }
 
 const FigureNode = atomNode('figure')
-const TableNode = atomNode('table')
 const PageBreakNode = atomNode('pageBreak')
 const EquationBlockNode = atomNode('equationBlock')
 
@@ -496,6 +506,35 @@ function textNodes(content: Array<V3BlockNode | InlineNode> | undefined): JSONCo
   })
 }
 
+function tableBlockToJson(block: V3BlockNode, sectionId: string): JSONContent {
+  const table = ((block.attrs?.table || block.attrs || {}) as Record<string, unknown>)
+  const columns = Array.isArray(table.columns) ? table.columns.map((value) => String(value ?? '')) : []
+  const sourceRows = Array.isArray(table.rows) ? table.rows : []
+  const bodyRows = sourceRows.map((row) => Array.isArray(row) ? row.map((value) => String(value ?? '')) : [])
+  const columnCount = Math.max(1, columns.length, ...bodyRows.map((row) => row.length))
+  const cell = (type: 'tableHeader' | 'tableCell', text: string): JSONContent => ({
+    type,
+    content: [{ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] }]
+  })
+  const rows: JSONContent[] = []
+  if (columns.length) {
+    rows.push({
+      type: 'tableRow',
+      content: Array.from({ length: columnCount }, (_, index) => cell('tableHeader', columns[index] || ''))
+    })
+  }
+  for (const row of bodyRows) {
+    rows.push({
+      type: 'tableRow',
+      content: Array.from({ length: columnCount }, (_, index) => cell('tableCell', row[index] || ''))
+    })
+  }
+  if (!rows.length) {
+    rows.push({ type: 'tableRow', content: Array.from({ length: columnCount }, () => cell('tableCell', '')) })
+  }
+  return { type: 'table', attrs: { nodeId: block.id, sectionId }, content: rows }
+}
+
 function blockToJson(block: V3BlockNode, sectionId: string): JSONContent[] {
   const attrs = { ...(block.attrs || {}), nodeId: block.id, styleId: block.styleId || null, sectionId }
   if (block.type === 'heading') {
@@ -507,7 +546,7 @@ function blockToJson(block: V3BlockNode, sectionId: string): JSONContent[] {
   if (block.type === 'codeBlock') return [{ type: 'codeBlock', attrs, content: textNodes(block.content) }]
   if (block.type === 'horizontalRule') return [{ type: 'horizontalRule' }]
   if (block.type === 'figure') return [{ type: 'figure', attrs: { nodeId: block.id, sectionId, payload: block.attrs?.figure || block.attrs || {} } }]
-  if (block.type === 'table') return [{ type: 'table', attrs: { nodeId: block.id, sectionId, payload: block.attrs?.table || block.attrs || {} } }]
+  if (block.type === 'table') return [tableBlockToJson(block, sectionId)]
   if (block.type === 'pageBreak') return [{ type: 'pageBreak', attrs: { nodeId: block.id, sectionId } }]
   if (block.type === 'equationBlock') return [{ type: 'equationBlock', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
   if (block.type === 'bulletList' || block.type === 'orderedList') {
@@ -538,6 +577,21 @@ function inlineFromJson(nodes: JSONContent[] | undefined): InlineNode[] {
   })
 }
 
+function jsonText(node: JSONContent): string {
+  if (node.type === 'text') return node.text || ''
+  if (node.type === 'hardBreak') return '\n'
+  return (node.content || []).map(jsonText).join('')
+}
+
+function tableFromJson(node: JSONContent, id: string): V3BlockNode {
+  const rows = (node.content || []).filter((row) => row.type === 'tableRow')
+  const firstCells = rows[0]?.content || []
+  const hasHeader = firstCells.length > 0 && firstCells.every((cell) => cell.type === 'tableHeader')
+  const columns = hasHeader ? firstCells.map((cell) => jsonText(cell)) : []
+  const bodyRows = (hasHeader ? rows.slice(1) : rows).map((row) => (row.content || []).map((cell) => jsonText(cell)))
+  return { id, type: 'table', attrs: { table: { caption: '', columns, rows: bodyRows } } }
+}
+
 function blockFromJson(node: JSONContent): V3BlockNode | null {
   const attrs = (node.attrs || {}) as Record<string, unknown>
   const id = String(attrs.nodeId || newNodeId(node.type || 'block'))
@@ -565,7 +619,7 @@ function blockFromJson(node: JSONContent): V3BlockNode | null {
   }
   if (node.type === 'horizontalRule') return { id, type: 'horizontalRule' }
   if (node.type === 'figure') return { id, type: 'figure', attrs: { figure: attrs.payload || {} } }
-  if (node.type === 'table') return { id, type: 'table', attrs: { table: attrs.payload || {} } }
+  if (node.type === 'table') return tableFromJson(node, id)
   if (node.type === 'pageBreak') return { id, type: 'pageBreak' }
   if (node.type === 'equationBlock') return { id, type: 'equationBlock', attrs: (attrs.payload || {}) as Record<string, unknown> }
   return null
@@ -722,7 +776,7 @@ export function createEditorKernel(options: {
       ReliableBlockKeyboard.configure({ onCommand: options.onShortcutCommand }),
       RustPagination,
       FigureNode,
-      TableNode,
+      TableKit.configure({ table: { resizable: true } }),
       PageBreakNode,
       EquationBlockNode
     ],

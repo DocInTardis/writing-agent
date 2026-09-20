@@ -36,3 +36,28 @@ def test_save_payload_includes_canonical_document_v3() -> None:
     app = (ROOT / "writing_agent/web/frontend_svelte/src/AppWorkbench.svelte").read_text(encoding="utf-8")
 
     assert "if ($documentV3) payload.document_v3 = $documentV3" in app
+
+
+def test_export_flushes_current_editor_state_before_preflight() -> None:
+    app = (ROOT / "writing_agent/web/frontend_svelte/src/AppWorkbench.svelte").read_text(encoding="utf-8")
+
+    assert "if (!(await saveDoc({ quiet: true }))) return false" in app
+    assert "lastSavedText = txt" not in app[app.index("function handleBlockEdit"):app.index("function handleToolbarState")]
+
+
+def test_context_toolbar_requires_a_real_selection() -> None:
+    editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+
+    assert "const exposedBlocks = empty ? [] : blocks" in editor
+    assert "blocks: exposedBlocks.map" in editor
+
+
+def test_tables_use_the_editable_tiptap_table_model() -> None:
+    kernel = (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
+    commands = (FRONTEND / "editor-v3/commands.ts").read_text(encoding="utf-8")
+
+    assert "import { TableKit } from '@tiptap/extension-table'" in kernel
+    assert "TableKit.configure" in kernel
+    assert "tableBlockToJson" in kernel
+    assert "tableFromJson" in kernel
+    assert ".insertTable({" in commands

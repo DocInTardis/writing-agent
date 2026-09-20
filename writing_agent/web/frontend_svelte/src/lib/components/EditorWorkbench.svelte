@@ -2981,13 +2981,14 @@
 
   const unsubscribe = editorCommand.subscribe((cmd) => {
     if (cmd) {
-      if (cmd === 'commit') {
+      const command = typeof cmd === 'string' ? cmd : cmd.command
+      if (command === 'commit') {
         flushPendingEditableState()
         editorCommand.set(null)
         queueMicrotask(() => emitToolbarState())
         return
       }
-      applyCommand(cmd)
+      applyCommand(command)
       editorCommand.set(null)
       queueMicrotask(() => emitToolbarState())
     }

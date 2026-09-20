@@ -28,7 +28,7 @@ def test_selection_reports_every_touched_text_block() -> None:
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
 
     assert "export function selectedBlocks" in kernel
-    assert "nodesBetween(from, to" in kernel
+    assert "editor.state.doc.forEach((node, position)" in kernel
     assert "const blocks = selectedBlocks(editor)" in editor
     assert "blockIds," in editor
 
