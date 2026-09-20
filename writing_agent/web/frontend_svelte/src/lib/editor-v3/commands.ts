@@ -249,6 +249,58 @@ registerDocumentCommand('table_delete_column', (editor) => editor.chain().focus(
 registerDocumentCommand('table_merge_cells', (editor) => editor.chain().focus().mergeCells().run())
 registerDocumentCommand('table_split_cell', (editor) => editor.chain().focus().splitCell().run())
 registerDocumentCommand('table_toggle_header_row', (editor) => editor.chain().focus().toggleHeaderRow().run())
+registerDocumentCommand('table_toggle_header_column', (editor) => editor.chain().focus().toggleHeaderColumn().run())
+registerDocumentCommand('table_toggle_header_cell', (editor) => editor.chain().focus().toggleHeaderCell().run())
+registerDocumentCommand('table_set_cell_background', (editor, command) => editor.chain().focus().setCellAttribute(
+  'backgroundColor',
+  command.params.color ? String(command.params.color) : null
+).run())
+registerDocumentCommand('table_set_vertical_align', (editor, command) => editor.chain().focus().setCellAttribute(
+  'verticalAlign',
+  ['top', 'middle', 'bottom'].includes(String(command.params.alignment)) ? String(command.params.alignment) : 'top'
+).run())
+registerDocumentCommand('table_distribute_columns', (editor) => {
+  const selection = editor.state.selection
+  let tableDepth = -1
+  for (let depth = selection.$from.depth; depth > 0; depth -= 1) {
+    if (selection.$from.node(depth).type.name === 'table') {
+      tableDepth = depth
+      break
+    }
+  }
+  if (tableDepth < 0) return false
+  const table = selection.$from.node(tableDepth)
+  const tablePosition = selection.$from.before(tableDepth)
+  let transaction = editor.state.tr
+  table.descendants((node, position) => {
+    if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+      transaction = transaction.setNodeMarkup(tablePosition + 1 + position, undefined, { ...node.attrs, colwidth: null })
+    }
+  })
+  editor.view.dispatch(transaction)
+  return true
+})
+registerDocumentCommand('table_distribute_rows', (editor) => {
+  const selection = editor.state.selection
+  let tableDepth = -1
+  for (let depth = selection.$from.depth; depth > 0; depth -= 1) {
+    if (selection.$from.node(depth).type.name === 'table') {
+      tableDepth = depth
+      break
+    }
+  }
+  if (tableDepth < 0) return false
+  const table = selection.$from.node(tableDepth)
+  const tablePosition = selection.$from.before(tableDepth)
+  let heightPx = 36
+  table.forEach((row) => { heightPx = Math.max(heightPx, Number(row.attrs.heightPx) || 0) })
+  let transaction = editor.state.tr
+  table.forEach((row, offset) => {
+    transaction = transaction.setNodeMarkup(tablePosition + 1 + offset, undefined, { ...row.attrs, heightPx })
+  })
+  editor.view.dispatch(transaction)
+  return true
+})
 registerDocumentCommand('table_delete', (editor) => editor.chain().focus().deleteTable().run())
 registerDocumentCommand('insert_equation', (editor, command) => editor.chain().focus().insertContent({
   type: 'equationBlock',

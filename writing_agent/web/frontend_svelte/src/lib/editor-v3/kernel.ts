@@ -6,7 +6,7 @@ import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyle } from '@tiptap/extension-text-style'
-import { TableKit } from '@tiptap/extension-table'
+import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import StarterKit from '@tiptap/starter-kit'
 import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
@@ -138,8 +138,62 @@ const StableNodeAttributes = Extension.create({
             renderHTML: (attributes) => attributes.collapsed ? { 'data-collapsed': 'true' } : {}
           }
         }
+      },
+      {
+        types: ['table'],
+        attributes: {
+          caption: {
+            default: '',
+            parseHTML: (element) => element.getAttribute('data-caption') || '',
+            renderHTML: (attributes) => attributes.caption ? { 'data-caption': attributes.caption } : {}
+          }
+        }
       }
     ]
+  }
+})
+
+const tableCellStyleAttributes = {
+  backgroundColor: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.style.backgroundColor || null,
+    renderHTML: (attributes: Record<string, unknown>) => attributes.backgroundColor
+      ? { style: `background-color:${attributes.backgroundColor}` }
+      : {}
+  },
+  verticalAlign: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.style.verticalAlign || null,
+    renderHTML: (attributes: Record<string, unknown>) => attributes.verticalAlign
+      ? { style: `vertical-align:${attributes.verticalAlign}` }
+      : {}
+  }
+}
+
+const StyledTableCell = TableCell.extend({
+  addAttributes() {
+    return { ...(this.parent?.() || {}), ...tableCellStyleAttributes }
+  }
+})
+
+const StyledTableHeader = TableHeader.extend({
+  addAttributes() {
+    return { ...(this.parent?.() || {}), ...tableCellStyleAttributes }
+  }
+})
+
+const SizedTableRow = TableRow.extend({
+  addAttributes() {
+    return {
+      ...(this.parent?.() || {}),
+      heightPx: {
+        default: null,
+        parseHTML: (element: HTMLElement) => Number.parseFloat(element.style.height) || null,
+        renderHTML: (attributes: Record<string, unknown>) => attributes.heightPx
+          ? { style: `height:${attributes.heightPx}px` }
+          : {}
+      }
+    }
   }
 })
 
@@ -511,28 +565,58 @@ function tableBlockToJson(block: V3BlockNode, sectionId: string): JSONContent {
   const columns = Array.isArray(table.columns) ? table.columns.map((value) => String(value ?? '')) : []
   const sourceRows = Array.isArray(table.rows) ? table.rows : []
   const bodyRows = sourceRows.map((row) => Array.isArray(row) ? row.map((value) => String(value ?? '')) : [])
+  const storedCells = Array.isArray(table.cells) ? table.cells : []
+  const storedRowHeights = Array.isArray(table.rowHeights) ? table.rowHeights : []
   const columnCount = Math.max(1, columns.length, ...bodyRows.map((row) => row.length))
-  const cell = (type: 'tableHeader' | 'tableCell', text: string): JSONContent => ({
+  const cell = (type: 'tableHeader' | 'tableCell', text: string, attrs: Record<string, unknown> = {}): JSONContent => ({
     type,
+    attrs,
     content: [{ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] }]
   })
   const rows: JSONContent[] = []
-  if (columns.length) {
-    rows.push({
-      type: 'tableRow',
-      content: Array.from({ length: columnCount }, (_, index) => cell('tableHeader', columns[index] || ''))
-    })
-  }
-  for (const row of bodyRows) {
-    rows.push({
-      type: 'tableRow',
-      content: Array.from({ length: columnCount }, (_, index) => cell('tableCell', row[index] || ''))
-    })
+  if (storedCells.length) {
+    for (const [rowIndex, rawRow] of storedCells.entries()) {
+      if (!Array.isArray(rawRow)) continue
+      const cells = rawRow.flatMap((rawCell): JSONContent[] => {
+        if (!rawCell || typeof rawCell !== 'object' || Array.isArray(rawCell)) return []
+        const value = rawCell as Record<string, unknown>
+        const type = value.type === 'header' ? 'tableHeader' : 'tableCell'
+        const colspan = Math.max(1, Number(value.colspan || 1))
+        const rowspan = Math.max(1, Number(value.rowspan || 1))
+        const colwidth = Array.isArray(value.colwidth)
+          ? value.colwidth.map((width) => Number(width)).filter((width) => Number.isFinite(width) && width > 0)
+          : null
+        return [cell(type, String(value.text ?? ''), {
+          colspan,
+          rowspan,
+          colwidth: colwidth?.length ? colwidth : null,
+          backgroundColor: value.backgroundColor ? String(value.backgroundColor) : null,
+          verticalAlign: value.verticalAlign ? String(value.verticalAlign) : null
+        })]
+      })
+      if (cells.length) {
+        const heightPx = Number(storedRowHeights[rowIndex])
+        rows.push({ type: 'tableRow', attrs: { heightPx: Number.isFinite(heightPx) && heightPx > 0 ? heightPx : null }, content: cells })
+      }
+    }
+  } else {
+    if (columns.length) {
+      rows.push({
+        type: 'tableRow',
+        content: Array.from({ length: columnCount }, (_, index) => cell('tableHeader', columns[index] || ''))
+      })
+    }
+    for (const row of bodyRows) {
+      rows.push({
+        type: 'tableRow',
+        content: Array.from({ length: columnCount }, (_, index) => cell('tableCell', row[index] || ''))
+      })
+    }
   }
   if (!rows.length) {
     rows.push({ type: 'tableRow', content: Array.from({ length: columnCount }, () => cell('tableCell', '')) })
   }
-  return { type: 'table', attrs: { nodeId: block.id, sectionId }, content: rows }
+  return { type: 'table', attrs: { nodeId: block.id, sectionId, caption: String(table.caption || '') }, content: rows }
 }
 
 function blockToJson(block: V3BlockNode, sectionId: string): JSONContent[] {
@@ -589,7 +673,29 @@ function tableFromJson(node: JSONContent, id: string): V3BlockNode {
   const hasHeader = firstCells.length > 0 && firstCells.every((cell) => cell.type === 'tableHeader')
   const columns = hasHeader ? firstCells.map((cell) => jsonText(cell)) : []
   const bodyRows = (hasHeader ? rows.slice(1) : rows).map((row) => (row.content || []).map((cell) => jsonText(cell)))
-  return { id, type: 'table', attrs: { table: { caption: '', columns, rows: bodyRows } } }
+  const cells = rows.map((row) => (row.content || []).map((cell) => ({
+    text: jsonText(cell),
+    type: cell.type === 'tableHeader' ? 'header' : 'cell',
+    colspan: Math.max(1, Number(cell.attrs?.colspan || 1)),
+    rowspan: Math.max(1, Number(cell.attrs?.rowspan || 1)),
+    colwidth: Array.isArray(cell.attrs?.colwidth) ? cell.attrs?.colwidth : null,
+    backgroundColor: cell.attrs?.backgroundColor || null,
+    verticalAlign: cell.attrs?.verticalAlign || null
+  })))
+  const rowHeights = rows.map((row) => Number(row.attrs?.heightPx) || null)
+  return {
+    id,
+    type: 'table',
+    attrs: {
+      table: {
+        caption: String(node.attrs?.caption || ''),
+        columns,
+        rows: bodyRows,
+        cells,
+        rowHeights
+      }
+    }
+  }
 }
 
 function blockFromJson(node: JSONContent): V3BlockNode | null {
@@ -776,7 +882,10 @@ export function createEditorKernel(options: {
       ReliableBlockKeyboard.configure({ onCommand: options.onShortcutCommand }),
       RustPagination,
       FigureNode,
-      TableKit.configure({ table: { resizable: true } }),
+      Table.configure({ resizable: true }),
+      SizedTableRow,
+      StyledTableHeader,
+      StyledTableCell,
       PageBreakNode,
       EquationBlockNode
     ],

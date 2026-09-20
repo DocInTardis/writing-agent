@@ -162,18 +162,30 @@ def _explode_markers(blocks: list[DocBlock]) -> list[DocBlock]:
 
         txt = b.text or ""
         pos = 0
-        for m in _MARKER_RE.finditer(txt):
-            before = txt[pos : m.start()].strip()
+        while True:
+            marker = _STRUCTURED_MARKER_START_RE.search(txt, pos)
+            if not marker:
+                break
+            brace_start = txt.find("{", marker.end())
+            if brace_start < 0:
+                break
+            brace_end = _scan_json_object_end(txt, brace_start)
+            if brace_end < 0:
+                break
+            close = txt.find("]]", brace_end + 1)
+            if close < 0:
+                break
+            before = txt[pos : marker.start()].strip()
             if before:
                 out.append(DocBlock(type="paragraph", text=before))
-            kind = (m.group(1) or "").lower()
-            raw = (m.group(2) or "").strip()
+            kind = (marker.group(1) or "").lower()
+            raw = txt[brace_start : brace_end + 1].strip()
             data = _safe_json_loads(raw)
             if kind == "table":
                 out.append(DocBlock(type="table", table=data if isinstance(data, dict) else {"raw": raw}))
             else:
                 out.append(DocBlock(type="figure", figure=data if isinstance(data, dict) else {"raw": raw}))
-            pos = m.end()
+            pos = close + 2
         tail = txt[pos:].strip()
         if tail:
             out.append(DocBlock(type="paragraph", text=tail))

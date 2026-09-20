@@ -855,6 +855,10 @@
       'table-merge-cells': 'table_merge_cells',
       'table-split-cell': 'table_split_cell',
       'table-toggle-header-row': 'table_toggle_header_row',
+      'table-toggle-header-column': 'table_toggle_header_column',
+      'table-toggle-header-cell': 'table_toggle_header_cell',
+      'table-distribute-columns': 'table_distribute_columns',
+      'table-distribute-rows': 'table_distribute_rows',
       'table-delete': 'table_delete',
       'page-break': 'insert_page_break',
       'math-block': 'insert_equation',
@@ -881,6 +885,12 @@
     } else if (command.startsWith('bgcolor:')) {
       type = 'set_highlight'
       params = { color: command.slice(8) }
+    } else if (command.startsWith('table-cell-bg:')) {
+      type = 'table_set_cell_background'
+      params = { color: command.slice(14) === 'none' ? null : command.slice(14) }
+    } else if (command.startsWith('table-cell-valign:')) {
+      type = 'table_set_vertical_align'
+      params = { alignment: command.slice(18) }
     } else if (command.startsWith('align-')) {
       type = 'set_alignment'
       params = { alignment: command.slice(6) }

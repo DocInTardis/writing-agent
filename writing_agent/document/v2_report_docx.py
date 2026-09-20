@@ -26,7 +26,9 @@ from typing import Any
 
 from docx import Document
 from docx.enum.section import WD_SECTION
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
 from docx.text.paragraph import Paragraph
@@ -141,6 +143,83 @@ def _toc_footer_postprocess_enabled() -> bool:
     # namespace edge-cases that trigger Word repair prompts on some versions.
     raw = str(os.environ.get("WRITING_AGENT_DOCX_TOC_FOOTER_POSTPROCESS", "0")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _table_cell_fill(cell: Any, color: str) -> None:
+    value = str(color or "").strip().lstrip("#")
+    if not re.fullmatch(r"[0-9A-Fa-f]{6}", value):
+        return
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shading = tc_pr.find(qn("w:shd"))
+    if shading is None:
+        shading = OxmlElement("w:shd")
+        tc_pr.append(shading)
+    shading.set(qn("w:fill"), value.upper())
+
+
+def _table_span(value: Any, maximum: int | None = None) -> int:
+    try:
+        span = max(1, int(value or 1))
+    except (TypeError, ValueError):
+        span = 1
+    return min(span, maximum) if maximum is not None else span
+
+
+def _add_structured_table(doc: Document, payload: dict[str, Any]) -> bool:
+    raw_rows = payload.get("cells")
+    if not isinstance(raw_rows, list) or not raw_rows:
+        return False
+    rows = [row for row in raw_rows if isinstance(row, list)]
+    if not rows:
+        return False
+    column_count = max(
+        1,
+        *(sum(_table_span(cell.get("colspan")) for cell in row if isinstance(cell, dict)) for row in rows),
+    )
+    table = doc.add_table(rows=len(rows), cols=column_count)
+    table.style = "Table Grid"
+    occupied: set[tuple[int, int]] = set()
+    for row_index, row in enumerate(rows):
+        column_index = 0
+        for raw_cell in row:
+            if not isinstance(raw_cell, dict):
+                continue
+            while (row_index, column_index) in occupied and column_index < column_count:
+                column_index += 1
+            if column_index >= column_count:
+                break
+            colspan = _table_span(raw_cell.get("colspan"), column_count - column_index)
+            rowspan = _table_span(raw_cell.get("rowspan"), len(rows) - row_index)
+            for rr in range(row_index, row_index + rowspan):
+                for cc in range(column_index, column_index + colspan):
+                    if rr != row_index or cc != column_index:
+                        occupied.add((rr, cc))
+            cell = table.cell(row_index, column_index)
+            if colspan > 1 or rowspan > 1:
+                cell = cell.merge(table.cell(row_index + rowspan - 1, column_index + colspan - 1))
+            cell.text = str(raw_cell.get("text") or "")
+            if raw_cell.get("type") == "header":
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.bold = True
+            _table_cell_fill(cell, str(raw_cell.get("backgroundColor") or ""))
+            alignment = str(raw_cell.get("verticalAlign") or "top")
+            cell.vertical_alignment = {
+                "top": WD_CELL_VERTICAL_ALIGNMENT.TOP,
+                "middle": WD_CELL_VERTICAL_ALIGNMENT.CENTER,
+                "bottom": WD_CELL_VERTICAL_ALIGNMENT.BOTTOM,
+            }.get(alignment, WD_CELL_VERTICAL_ALIGNMENT.TOP)
+            column_index += colspan
+    heights = payload.get("rowHeights")
+    if isinstance(heights, list):
+        for row, raw_height in zip(table.rows, heights):
+            try:
+                height = float(raw_height)
+            except (TypeError, ValueError):
+                continue
+            if height > 0:
+                row.height = Pt(height * 0.75)
+    return True
 
 
 class V2ReportDocxExporter:
@@ -796,16 +875,17 @@ class V2ReportDocxExporter:
                 cap_p = doc.add_paragraph(f"表{table_no}  {caption}")
                 cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-                table = doc.add_table(rows=1, cols=len(columns))
-                table.style = "Table Grid"
-                hdr_cells = table.rows[0].cells
-                for i, col in enumerate(columns):
-                    hdr_cells[i].text = str(col)
-                for r in body:
-                    rr = r if isinstance(r, list) else [str(r)]
-                    row_cells = table.add_row().cells
-                    for i in range(len(columns)):
-                        row_cells[i].text = str(rr[i] if i < len(rr) else "")
+                if not _add_structured_table(doc, t):
+                    table = doc.add_table(rows=1, cols=len(columns))
+                    table.style = "Table Grid"
+                    hdr_cells = table.rows[0].cells
+                    for i, col in enumerate(columns):
+                        hdr_cells[i].text = str(col)
+                    for r in body:
+                        rr = r if isinstance(r, list) else [str(r)]
+                        row_cells = table.add_row().cells
+                        for i in range(len(columns)):
+                            row_cells[i].text = str(rr[i] if i < len(rr) else "")
                 continue
 
             if b.type == "figure":

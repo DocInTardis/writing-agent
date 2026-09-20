@@ -46,6 +46,10 @@ export type EditorCommand =
   | 'table-merge-cells'
   | 'table-split-cell'
   | 'table-toggle-header-row'
+  | 'table-toggle-header-column'
+  | 'table-toggle-header-cell'
+  | 'table-distribute-columns'
+  | 'table-distribute-rows'
   | 'table-delete'
   | 'undo'
   | 'redo'
@@ -98,6 +102,8 @@ export type EditorCommand =
   | `right-indent:${string}`
   | `border-color:${string}`
   | `shading-color:${string}`
+  | `table-cell-bg:${string}`
+  | `table-cell-valign:${string}`
 
 export interface EditorCommandRequest {
   command: EditorCommand

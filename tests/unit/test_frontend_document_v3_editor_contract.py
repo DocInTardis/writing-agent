@@ -56,10 +56,15 @@ def test_tables_use_the_editable_tiptap_table_model() -> None:
     kernel = (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
     commands = (FRONTEND / "editor-v3/commands.ts").read_text(encoding="utf-8")
 
-    assert "import { TableKit } from '@tiptap/extension-table'" in kernel
-    assert "TableKit.configure" in kernel
+    assert "import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'" in kernel
+    assert "Table.configure({ resizable: true })" in kernel
+    assert "StyledTableCell" in kernel
+    assert "StyledTableHeader" in kernel
     assert "tableBlockToJson" in kernel
     assert "tableFromJson" in kernel
+    assert "rowspan: Math.max" in kernel
+    assert "backgroundColor: cell.attrs?.backgroundColor" in kernel
+    assert "} else {\n    if (columns.length)" in kernel
     assert ".insertTable({" in commands
 
 
@@ -83,7 +88,12 @@ def test_table_context_actions_share_the_document_command_pipeline() -> None:
         ("table-merge-cells", "table_merge_cells"),
         ("table-split-cell", "table_split_cell"),
         ("table-toggle-header-row", "table_toggle_header_row"),
+        ("table-toggle-header-column", "table_toggle_header_column"),
+        ("table-toggle-header-cell", "table_toggle_header_cell"),
+        ("table-distribute-columns", "table_distribute_columns"),
+        ("table-distribute-rows", "table_distribute_rows"),
         ("table-delete", "table_delete"),
     ):
         assert f"'{ui_command}': '{document_command}'" in editor
         assert f"registerDocumentCommand('{document_command}'" in commands
+    assert "params = { alignment: command.slice(18) }" in editor

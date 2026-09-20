@@ -129,6 +129,26 @@
         <button title="合并选中的单元格" onclick={() => command('table-merge-cells')} disabled={!editorToolbarState.canMergeCells}>合并</button>
         <button title="拆分当前单元格" onclick={() => command('table-split-cell')} disabled={!editorToolbarState.canSplitCell}>拆分</button>
         <button title="切换标题行" onclick={() => command('table-toggle-header-row')}>标题行</button>
+        <button title="切换标题列" onclick={() => command('table-toggle-header-column')}>标题列</button>
+        <button title="切换当前单元格的标题属性" onclick={() => command('table-toggle-header-cell')}>标题格</button>
+      </div>
+      <div class="table-tool-group" aria-label="表格尺寸">
+        <button title="清除手动列宽并均分各列" onclick={() => command('table-distribute-columns')}>均分列</button>
+        <button title="统一各行高度" onclick={() => command('table-distribute-rows')}>均分行</button>
+      </div>
+      <div class="table-tool-group table-style-tools" aria-label="单元格样式">
+        <label title="单元格垂直对齐">
+          <span class="sr-only">垂直对齐</span>
+          <select aria-label="单元格垂直对齐" onchange={(event) => command(`table-cell-valign:${event.currentTarget.value}`)}>
+            <option value="top">靠上</option>
+            <option value="middle">居中</option>
+            <option value="bottom">靠下</option>
+          </select>
+        </label>
+        <button class="cell-fill fill-none" title="清除单元格底纹" aria-label="清除单元格底纹" onclick={() => command('table-cell-bg:none')}>×</button>
+        <button class="cell-fill fill-blue" title="浅蓝底纹" aria-label="浅蓝底纹" onclick={() => command('table-cell-bg:#dbeafe')}></button>
+        <button class="cell-fill fill-yellow" title="浅黄底纹" aria-label="浅黄底纹" onclick={() => command('table-cell-bg:#fef3c7')}></button>
+        <button class="cell-fill fill-green" title="浅绿底纹" aria-label="浅绿底纹" onclick={() => command('table-cell-bg:#dcfce7')}></button>
       </div>
       <button class="table-delete" title="删除整个表格" onclick={() => command('table-delete')}>删除表格</button>
     </div>
@@ -309,9 +329,38 @@
   }
   .table-tool-group {
     display: flex;
+    align-items: center;
     gap: 3px;
     padding-right: 8px;
     border-right: 1px solid #d6dee9;
+  }
+  .table-style-tools select {
+    min-height: 28px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #fff;
+    color: #344256;
+  }
+  .table-context-tools button.cell-fill {
+    width: 24px;
+    min-height: 24px;
+    padding: 0;
+    border-color: #b8c2cf;
+  }
+  .fill-none { background: #fff !important; color: #64748b !important; }
+  .fill-blue { background: #dbeafe !important; }
+  .fill-yellow { background: #fef3c7 !important; }
+  .fill-green { background: #dcfce7 !important; }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
   .table-context-tools button {
     min-height: 28px;

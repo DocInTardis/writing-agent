@@ -149,6 +149,60 @@ def test_saved_document_v3_table_is_present_in_docx_export() -> None:
         app_v2.store.delete(session.id)
 
 
+def test_structured_table_merges_and_cell_styles_survive_docx_export() -> None:
+    session = app_v2.store.create()
+    document = migrate_doc_ir(_legacy_doc())
+    document.sections[0].content.append(
+        BlockNode(
+            id="table-structured-export",
+            type="table",
+            attrs={
+                "table": {
+                    "caption": "结构化表格",
+                    "columns": ["合并标题", ""],
+                    "rows": [["左侧", "右侧"], ["纵向合并", "内容"]],
+                    "cells": [
+                        [{"text": "合并标题", "type": "header", "colspan": 2, "rowspan": 1}],
+                        [
+                            {
+                                "text": "纵向合并",
+                                "type": "cell",
+                                "colspan": 1,
+                                "rowspan": 2,
+                                "backgroundColor": "#DBEAFE",
+                                "verticalAlign": "middle",
+                            },
+                            {"text": "第一行", "type": "cell", "colspan": 1, "rowspan": 1},
+                        ],
+                        [{"text": "第二行", "type": "cell", "colspan": 1, "rowspan": 1}],
+                    ],
+                    "rowHeights": [36, 42, 42],
+                }
+            },
+        )
+    )
+    client = TestClient(app_v2.app)
+    try:
+        save = client.post(
+            f"/api/doc/{session.id}/save",
+            json={"document_v3": document.model_dump(mode="json", by_alias=True)},
+        )
+        assert save.status_code == 200
+
+        response = client.get(f"/download/{session.id}.docx")
+        assert response.status_code == 200
+        exported = Document(io.BytesIO(response.content))
+        assert len(exported.tables) == 1
+        xml = exported.tables[0]._tbl.xml
+        assert 'w:gridSpan w:val="2"' in xml
+        assert "w:vMerge" in xml
+        assert 'w:fill="DBEAFE"' in xml
+        assert "合并标题" in xml
+        assert "纵向合并" in xml
+    finally:
+        app_v2.store.delete(session.id)
+
+
 def test_document_v3_command_api_persists_an_atomic_ai_edit() -> None:
     session = app_v2.store.create()
     session.doc_ir = _legacy_doc()
