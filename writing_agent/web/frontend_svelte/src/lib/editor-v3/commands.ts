@@ -299,6 +299,18 @@ registerDocumentCommand('delete_block', (editor) => {
   return true
 })
 
+registerDocumentCommand('toggle_block_collapsed', (editor) => {
+  const selected = selectedTopLevelRange(editor)
+  if (!selected) return false
+  const collapse = !selected.nodes.every(({ node }) => Boolean(node.attrs?.collapsed))
+  const transaction = editor.state.tr
+  for (const { node, position } of selected.nodes) {
+    transaction.setNodeMarkup(position, undefined, { ...node.attrs, collapsed: collapse })
+  }
+  editor.view.dispatch(transaction.scrollIntoView())
+  return true
+})
+
 registerDocumentCommand('move_block_up', (editor) => {
   const selected = selectedTopLevelRange(editor)
   if (!selected) return false

@@ -908,7 +908,7 @@
   function selectedBlocksRect(ids: string[]) {
     const cleanIds = (ids || []).map((id) => String(id || '').trim()).filter(Boolean)
     if (!cleanIds.length) return null
-    const editable = document.querySelector('.editable') as HTMLElement | null
+    const editable = document.querySelector('.structured-editor .tiptap, .editable') as HTMLElement | null
     if (!editable) return null
     let left = Number.POSITIVE_INFINITY
     let top = Number.POSITIVE_INFINITY
@@ -928,7 +928,8 @@
       } else {
         const blockId = blockIdFromTarget(id)
         if (blockId) {
-          const sel = `[data-block-id="${CSS.escape(blockId)}"]`
+          const escaped = CSS.escape(blockId)
+          const sel = `[data-node-id="${escaped}"], [data-block-id="${escaped}"]`
           el = editable.querySelector(sel) as HTMLElement | null
         }
       }
@@ -3472,6 +3473,10 @@
     if (aborter) aborter.abort('用户点击停止')
   }
 
+  function handleBlockAi() {
+    requestAnimationFrame(() => openInlinePopover('assistant', 'down'))
+  }
+
   function runEditorCommand(cmd: EditorCommand) {
     editorCommand.set(cmd)
   }
@@ -3690,6 +3695,7 @@
             lockEditing={typingActive || streamTypingActive}
             onblockedit={handleBlockEdit}
             onblockselect={handleBlockSelect}
+            onblockai={handleBlockAi}
             ontoolbarstate={handleToolbarState}
           />
         {/if}

@@ -130,6 +130,11 @@ const StableNodeAttributes = Extension.create({
             default: null,
             parseHTML: (element) => element.getAttribute('data-section-id'),
             renderHTML: (attributes) => attributes.sectionId ? { 'data-section-id': attributes.sectionId } : {}
+          },
+          collapsed: {
+            default: false,
+            parseHTML: (element) => element.getAttribute('data-collapsed') === 'true',
+            renderHTML: (attributes) => attributes.collapsed ? { 'data-collapsed': 'true' } : {}
           }
         }
       }
@@ -734,27 +739,24 @@ export function createEditorKernel(options: {
   })
 }
 
-export function selectedBlocks(editor: Editor): Array<{ id: string; type: string; text: string }> {
+export function selectedBlocks(editor: Editor): Array<{ id: string; type: string; text: string; collapsed: boolean }> {
   const { from, to, empty, $from } = editor.state.selection
-  const blocks: Array<{ id: string; type: string; text: string }> = []
+  const blocks: Array<{ id: string; type: string; text: string; collapsed: boolean }> = []
   const seen = new Set<string>()
   const append = (node: ProseMirrorNode) => {
     const id = String(node.attrs?.nodeId || '')
-    if (!id || seen.has(id) || !node.isTextblock) return
+    if (!id || seen.has(id)) return
     seen.add(id)
-    blocks.push({ id, type: node.type.name, text: node.textContent })
+    blocks.push({ id, type: node.type.name, text: node.textContent, collapsed: Boolean(node.attrs?.collapsed) })
   }
   if (empty) {
-    for (let depth = $from.depth; depth >= 0; depth -= 1) {
-      const node = $from.node(depth)
-      if (node.isTextblock && node.attrs?.nodeId) {
-        append(node)
-        break
-      }
-    }
+    if ($from.depth >= 1) append($from.node(1))
     return blocks
   }
-  editor.state.doc.nodesBetween(from, to, (node) => append(node))
+  editor.state.doc.forEach((node, position) => {
+    const end = position + node.nodeSize
+    if (end > from && position < to) append(node)
+  })
   return blocks
 }
 

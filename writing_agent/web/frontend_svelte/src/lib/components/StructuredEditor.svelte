@@ -33,6 +33,7 @@
     lockEditing = false,
     onblockedit,
     onblockselect,
+    onblockai,
     ontoolbarstate
   }: {
     showToolbar?: boolean
@@ -40,6 +41,7 @@
     lockEditing?: boolean
     onblockedit?: (payload: any) => void
     onblockselect?: (payload: any) => void
+    onblockai?: () => void
     ontoolbarstate?: (state: any) => void
   } = $props()
 
@@ -60,6 +62,7 @@
   let blockSelectionAnchorId = ''
   let blockSelectionActive = $state(false)
   let selectedBlockIds = $state<string[]>([])
+  let selectedBlocksCollapsed = $state(false)
   let dragTargetId = $state('')
   let dragPlacement = $state<'before' | 'after'>('before')
   let dragIndicatorTop = $state(0)
@@ -533,10 +536,36 @@
     }
   }
 
-  function runBlockCommand(type: 'move_block_up' | 'move_block_down' | 'duplicate_block' | 'delete_block' | 'insert_block_before' | 'insert_block_after') {
+  function runBlockCommand(type: 'move_block_up' | 'move_block_down' | 'duplicate_block' | 'delete_block' | 'insert_block_before' | 'insert_block_after' | 'toggle_block_collapsed') {
     if (!editor) return
     executeDocumentCommand(editor, createUserCommand(type))
     emitSelection()
+  }
+
+  function showClipboardStatus(message: string) {
+    clipboardError = message
+    if (clipboardErrorTimer) clearTimeout(clipboardErrorTimer)
+    clipboardErrorTimer = setTimeout(() => (clipboardError = ''), 3000)
+  }
+
+  async function copySelectedBlockContent() {
+    if (!editor) return
+    const text = selectedBlocks(editor).map((block) => block.text).join('\n\n').trim()
+    if (!text) {
+      showClipboardStatus('所选块没有可复制的文字。')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(text)
+      showClipboardStatus(`已复制 ${selectedBlockIds.length || 1} 个块的内容。`)
+    } catch {
+      showClipboardStatus('系统未允许访问剪贴板，请使用 Ctrl+C。')
+    }
+  }
+
+  function openBlockAi() {
+    emitSelection()
+    onblockai?.()
   }
 
   function convertSelectedBlock(event: Event) {
@@ -671,6 +700,7 @@
     const blocks = selectedBlocks(editor)
     const blockIds = blocks.map((block) => block.id)
     selectedBlockIds = blockIds
+    selectedBlocksCollapsed = blocks.length > 0 && blocks.every((block) => block.collapsed)
     if (editor.state.selection instanceof NodeSelection) blockSelectionActive = true
     else if (editor.state.selection.empty) blockSelectionActive = false
     if (blockIds.length === 1) positionBlockHandleById(blockIds[0])
@@ -699,6 +729,10 @@
   function updateDocument(json: JSONContent) {
     if (!activeDocument) return
     activeDocument = tiptapToDocumentV3(activeDocument, json)
+    if (editor) {
+      const currentBlocks = selectedBlocks(editor)
+      selectedBlocksCollapsed = currentBlocks.length > 0 && currentBlocks.every((block) => block.collapsed)
+    }
     documentV3.set(activeDocument)
     const text = documentV3ToText(activeDocument)
     sourceText.set(text)
@@ -1094,7 +1128,10 @@
       <button title="在后面插入段落" aria-label="在后面插入段落" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('insert_block_after')}>＋↓</button>
       <button title="上移块" aria-label="上移块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('move_block_up')}>↑</button>
       <button title="下移块" aria-label="下移块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('move_block_down')}>↓</button>
-      <button title="复制块" aria-label="复制块" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('duplicate_block')}>⧉</button>
+      <button title="复制块内容" aria-label="复制块内容" onmousedown={(event) => event.preventDefault()} onclick={copySelectedBlockContent}>⎘</button>
+      <button title="创建块副本" aria-label="创建块副本" onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('duplicate_block')}>⧉</button>
+      <button title={selectedBlocksCollapsed ? '展开块' : '折叠块'} aria-label={selectedBlocksCollapsed ? '展开块' : '折叠块'} onmousedown={(event) => event.preventDefault()} onclick={() => runBlockCommand('toggle_block_collapsed')}>{selectedBlocksCollapsed ? '▾' : '▸'}</button>
+      <button class="ai" title="使用 AI 处理所选块" aria-label="使用 AI 处理所选块" onmousedown={(event) => event.preventDefault()} onclick={openBlockAi}>AI</button>
       <select title="转换块类型" aria-label="转换块类型" onchange={convertSelectedBlock}>
         <option value="">转换</option>
         <option value="paragraph">正文</option>
@@ -1149,6 +1186,23 @@
     min-height: 1.35em;
     border-radius: 2px;
     transition: background-color 80ms ease, box-shadow 80ms ease;
+  }
+  .structured-editor :global(.tiptap > [data-collapsed="true"]) {
+    position: relative;
+    max-height: 1.45em;
+    overflow: hidden;
+    padding-right: 24px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .structured-editor :global(.tiptap > [data-collapsed="true"]::after) {
+    position: absolute;
+    right: 4px;
+    bottom: 0;
+    content: '…';
+    color: #6f7b8d;
+    background: #fff;
+    pointer-events: none;
   }
   .structured-editor :global(.tiptap > [data-node-id]:hover) {
     box-shadow: inset 2px 0 0 #c7d8f4;
@@ -1371,6 +1425,7 @@
     background: #fff0f0;
     color: #b42318;
   }
+  .block-actions button.ai { width: 30px; color: #205db0; font-size: 10px; font-weight: 700; }
   .structured-editor :global(.tiptap p.is-editor-empty:first-child::before) {
     color: #99a1ad;
     content: '开始输入正文…';

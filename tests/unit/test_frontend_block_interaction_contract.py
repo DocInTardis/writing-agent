@@ -62,16 +62,32 @@ def test_slash_menu_lists_only_registered_executable_actions() -> None:
         assert f"registerDocumentCommand('{command}'" in commands
 
 
-def test_block_menu_exposes_insert_convert_duplicate_move_and_delete() -> None:
+def test_block_menu_exposes_complete_block_workflow() -> None:
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+    commands = (FRONTEND / "editor-v3/commands.ts").read_text(encoding="utf-8")
+    kernel = (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
+    workbench = (ROOT / "writing_agent/web/frontend_svelte/src/AppWorkbench.svelte").read_text(encoding="utf-8")
 
     for label in (
         "在前面插入段落",
         "在后面插入段落",
         "上移块",
         "下移块",
-        "复制块",
+        "复制块内容",
+        "创建块副本",
+        "折叠块",
+        "展开块",
+        "使用 AI 处理所选块",
         "转换块类型",
         "删除块",
     ):
         assert label in editor
+    assert "navigator.clipboard.writeText(text)" in editor
+    assert "registerDocumentCommand('toggle_block_collapsed'" in commands
+    assert "transaction.setNodeMarkup" in commands
+    assert "data-collapsed" in kernel
+    assert "editor.state.doc.forEach((node, position)" in kernel
+    assert "onblockai={handleBlockAi}" in workbench
+    assert "openInlinePopover('assistant', 'down')" in workbench
+    assert "document.querySelector('.structured-editor .tiptap, .editable')" in workbench
+    assert '`[data-node-id="${escaped}"], [data-block-id="${escaped}"]`' in workbench
