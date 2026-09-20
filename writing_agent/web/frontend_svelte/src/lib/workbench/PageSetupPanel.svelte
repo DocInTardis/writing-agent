@@ -1,5 +1,6 @@
 <script lang="ts">
   import { get } from 'svelte/store'
+  import { onDestroy, onMount } from 'svelte'
   import { docId, docIrDirty, documentV3, pageSettings, pushToast, type PageSettings } from '../stores'
   import type { HeaderFooterDefinition, V3BlockNode } from '../editor-v3/model'
 
@@ -106,8 +107,21 @@
 
   function show() {
     open = true
+    window.dispatchEvent(new CustomEvent('wa-editor-context', { detail: { kind: 'page' } }))
     void load()
   }
+
+  function close() {
+    open = false
+  }
+
+  function handleEditorContext(event: Event) {
+    const kind = String((event as CustomEvent<{ kind?: string }>).detail?.kind || '')
+    if (kind && kind !== 'page') open = false
+  }
+
+  onMount(() => window.addEventListener('wa-editor-context', handleEditorContext))
+  onDestroy(() => window.removeEventListener('wa-editor-context', handleEditorContext))
 
   async function save() {
     if (!$docId) return
@@ -190,9 +204,9 @@
 <button class="ribbon-action" onclick={show}>页面设置</button>
 
 {#if open}
-  <div class="page-setup-backdrop" role="presentation" onclick={() => (open = false)}></div>
+  <div class="page-setup-backdrop" role="presentation" onclick={close}></div>
   <div class="page-setup-panel" role="dialog" aria-modal="true" aria-label="页面设置" tabindex="-1">
-    <header><strong>页面设置</strong><button onclick={() => (open = false)} aria-label="关闭">×</button></header>
+    <header><strong>页面设置</strong><button onclick={close} aria-label="关闭">×</button></header>
     <div class="page-setup-grid">
       <label>纸张<select bind:value={draft.pageSize}><option>A3</option><option>A4</option><option>A5</option><option>LETTER</option><option value="CUSTOM">自定义</option></select></label>
       <label>方向<select bind:value={draft.orientation}><option value="portrait">纵向</option><option value="landscape">横向</option></select></label>
@@ -226,7 +240,7 @@
         <label class="check"><input type="checkbox" bind:checked={draft.linkFooterToPrevious} />页脚链接前一节</label>
       </fieldset>
     </div>
-    <footer><button class="btn ghost" onclick={() => (open = false)}>取消</button><button class="btn primary" onclick={save} disabled={loading}>{loading ? '保存中…' : '应用'}</button></footer>
+    <footer><button class="btn ghost" onclick={close}>取消</button><button class="btn primary" onclick={save} disabled={loading}>{loading ? '保存中…' : '应用'}</button></footer>
   </div>
 {/if}
 

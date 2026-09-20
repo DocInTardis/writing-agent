@@ -42,3 +42,17 @@ def test_toolbar_lists_document_styles_and_applies_them_through_registry() -> No
     assert "command.startsWith('style:')" in editor
     assert "createUserCommand(type, params)" in editor
     assert "registerDocumentCommand('apply_style'" in commands
+
+
+def test_text_block_and_page_contexts_are_mutually_exclusive() -> None:
+    editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+    page_setup = (FRONTEND / "workbench/PageSetupPanel.svelte").read_text(encoding="utf-8")
+
+    assert "wa-editor-context" in editor
+    assert "contextKind" in editor
+    assert "kind !== 'page'" in editor
+    assert "selectionToolbarVisible = false" in editor
+    assert "blockSelectionActive = false" in editor
+    assert "kind: 'page'" in page_setup
+    assert "kind !== 'page'" in page_setup
+    assert "removeEventListener('wa-editor-context'" in page_setup

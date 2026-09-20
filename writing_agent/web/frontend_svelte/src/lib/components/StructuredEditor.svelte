@@ -373,6 +373,15 @@
     if (next && isDocumentV3(next)) loadDocument(structuredClone(next))
   }
 
+  function handleEditorContext(event: Event) {
+    const kind = String((event as CustomEvent<{ kind?: string }>).detail?.kind || '')
+    if (kind !== 'page') return
+    selectionToolbarVisible = false
+    blockSelectionActive = false
+    selectedBlockIds = []
+    styleManagerVisible = false
+  }
+
   function applyPaperGeometry(document: DocumentV3) {
     if (!shell) return
     const layout = document.sections[0]?.layout
@@ -667,6 +676,8 @@
     if (blockIds.length === 1) positionBlockHandleById(blockIds[0])
     const text = empty ? '' : editor.state.doc.textBetween(from, to, '\n')
     selectionToolbarVisible = !empty && !(editor.state.selection instanceof NodeSelection)
+    const contextKind = editor.state.selection instanceof NodeSelection ? 'block' : selectionToolbarVisible ? 'text' : 'editor'
+    window.dispatchEvent(new CustomEvent('wa-editor-context', { detail: { kind: contextKind } }))
     if (selectionToolbarVisible && shell) {
       const start = editor.view.coordsAtPos(from)
       const end = editor.view.coordsAtPos(to)
@@ -913,6 +924,7 @@
     })
     resizeObserver.observe(shell)
     window.addEventListener('wa-page-settings-changed', handlePageSettingsChanged)
+    window.addEventListener('wa-editor-context', handleEditorContext)
     unsubscribeCommand = editorCommand.subscribe((command) => {
       if (!command || !editor) return
       runLegacyCommand(command)
@@ -940,6 +952,7 @@
     if (paginationTimer) clearTimeout(paginationTimer)
     resizeObserver?.disconnect()
     window.removeEventListener('wa-page-settings-changed', handlePageSettingsChanged)
+    window.removeEventListener('wa-editor-context', handleEditorContext)
   })
 </script>
 
