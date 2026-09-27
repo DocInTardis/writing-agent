@@ -354,6 +354,17 @@ def to_plain_text(doc: DocumentV3) -> str:
 
     lines: list[str] = []
 
+    footnote_defs: dict[str, tuple[str, str]] = {}
+    raw_footnotes = doc.notes.get("footnotes") if isinstance(doc.notes, dict) else None
+    if isinstance(raw_footnotes, list):
+        for index, item in enumerate(raw_footnotes, start=1):
+            if not isinstance(item, dict):
+                continue
+            note_id = str(item.get("id") or f"footnote-{index}")
+            footnote_defs[note_id] = (str(item.get("label") or index), str(item.get("text") or ""))
+
+    referenced_footnotes: list[str] = []
+
     def inline_text(node: BlockNode) -> str:
         parts: list[str] = []
         for child in node.content:
@@ -362,12 +373,31 @@ def to_plain_text(doc: DocumentV3) -> str:
                     parts.append(child.text or "")
                 elif child.type == "hardBreak":
                     parts.append("\n")
+                elif child.type == "footnoteReference":
+                    note_id = str(child.attrs.get("noteId") or "")
+                    label, _ = footnote_defs.get(note_id, (str(child.attrs.get("label") or len(referenced_footnotes) + 1), str(child.attrs.get("text") or "")))
+                    if note_id and note_id not in referenced_footnotes:
+                        referenced_footnotes.append(note_id)
+                    parts.append(f"[^{label}]")
+                elif child.type == "field":
+                    kind = str(child.attrs.get("fieldKind") or "")
+                    if kind == "equation":
+                        parts.append(f"${str(child.attrs.get('latex') or '')}$")
+                    elif kind == "crossReference":
+                        parts.append(str(child.attrs.get("label") or child.attrs.get("targetText") or ""))
+                elif child.type == "citation":
+                    parts.append(str(child.attrs.get("label") or child.attrs.get("key") or ""))
             elif isinstance(child, BlockNode):
                 parts.append(inline_text(child))
         return "".join(parts)
 
-    for section in doc.sections:
+    for section_index, section in enumerate(doc.sections):
+        if section_index and section.break_type != "continuous":
+            lines.append("[[PAGE_BREAK]]")
         for block in section.content:
+            if block.type == "pageBreak":
+                lines.append("[[PAGE_BREAK]]")
+                continue
             if block.type == "table":
                 payload = block.attrs.get("table") if isinstance(block.attrs, dict) else None
                 if isinstance(payload, dict):
@@ -378,6 +408,14 @@ def to_plain_text(doc: DocumentV3) -> str:
                 if isinstance(payload, dict):
                     lines.append(f"[[FIGURE:{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}]]")
                 continue
+            if block.type == "equationBlock":
+                latex = str(block.attrs.get("latex") or block.attrs.get("source") or "").strip()
+                if latex:
+                    lines.append(f"$${latex}$$")
+                continue
+            if block.type == "tableOfContents":
+                # The DOCX exporter builds a real TOC from heading structure.
+                continue
             text = inline_text(block).strip()
             if not text:
                 continue
@@ -386,4 +424,8 @@ def to_plain_text(doc: DocumentV3) -> str:
                 lines.append(f"{'#' * level} {text}")
             else:
                 lines.append(text)
+    for note_id in referenced_footnotes:
+        label, text = footnote_defs.get(note_id, (note_id, ""))
+        if text:
+            lines.append(f"[^{label}]: {text}")
     return "\n\n".join(lines).strip()

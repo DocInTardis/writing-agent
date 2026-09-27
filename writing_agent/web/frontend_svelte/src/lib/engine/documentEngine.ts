@@ -139,13 +139,26 @@ function coreBlock(block: V3BlockNode, rustId: string): CoreBlock | null {
     return { id: rustId, type: 'quote', content: [{ id: nestedId, type: 'paragraph', content: coreInline(text), dirty: false }], dirty: false }
   }
   if (block.type === 'codeBlock' || block.type === 'equationBlock') {
-    return { id: rustId, type: 'code', lang: block.type === 'equationBlock' ? 'math' : String(block.attrs?.language || ''), code: text || String(block.attrs?.source || ''), dirty: false }
+    const equationSource = String(block.attrs?.latex || block.attrs?.source || '')
+    return { id: rustId, type: 'code', lang: block.type === 'equationBlock' ? 'math' : String(block.attrs?.language || ''), code: text || equationSource, dirty: false }
   }
   if (block.type === 'table') {
-    const rawRows = Array.isArray(block.attrs?.rows) ? block.attrs.rows : []
-    const rows = rawRows.map((row) => Array.isArray(row)
-      ? row.map((cell) => ({ content: coreInline(String(cell ?? '')) }))
-      : [])
+    const table = block.attrs?.table && typeof block.attrs.table === 'object' && !Array.isArray(block.attrs.table)
+      ? block.attrs.table as Record<string, unknown>
+      : block.attrs || {}
+    const richCells = Array.isArray(table.cells) ? table.cells : []
+    const rawRows = Array.isArray(table.rows) ? table.rows : []
+    const columns = Array.isArray(table.columns) ? table.columns : []
+    const rows = richCells.length
+      ? richCells.map((row) => Array.isArray(row)
+        ? row.map((cell) => ({ content: coreInline(String(cell && typeof cell === 'object' && !Array.isArray(cell) ? (cell as Record<string, unknown>).text ?? '' : cell ?? '')) }))
+        : [])
+      : [
+          ...(columns.length ? [columns.map((cell) => ({ content: coreInline(String(cell ?? '')) }))] : []),
+          ...rawRows.map((row) => Array.isArray(row)
+            ? row.map((cell) => ({ content: coreInline(String(cell ?? '')) }))
+            : [])
+        ]
     return { id: rustId, type: 'table', rows: rows.length ? rows : [[{ content: coreInline('表格') }]], dirty: false }
   }
   if (block.type === 'figure') {

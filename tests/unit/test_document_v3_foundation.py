@@ -8,7 +8,7 @@ from docx import Document
 import writing_agent.web.app_v2 as app_v2
 from writing_agent.v3 import DocumentCommand, DocumentV3, create_default_registry, migrate_doc_ir
 from writing_agent.v3.document_commands import CommandTarget
-from writing_agent.v3.document_model import BlockNode, to_plain_text, validate_unique_ids
+from writing_agent.v3.document_model import BlockNode, InlineNode, to_plain_text, validate_unique_ids
 from writing_agent.v2.doc_format import parse_report_text
 
 
@@ -159,6 +159,66 @@ def test_saved_document_v3_table_is_present_in_docx_export() -> None:
         assert cells == ["项目", "结果", "导出", "成功"]
     finally:
         app_v2.store.delete(session.id)
+
+
+def test_saved_document_v3_embedded_image_is_present_in_docx_export() -> None:
+    session = app_v2.store.create()
+    document = migrate_doc_ir(_legacy_doc())
+    document.sections[0].content.append(
+        BlockNode(
+            id="image-export",
+            type="figure",
+            attrs={
+                "figure": {
+                    "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlL4SAAAAAASUVORK5CYII=",
+                    "caption": "嵌入图片",
+                    "widthPercent": 50,
+                }
+            },
+        )
+    )
+    client = TestClient(app_v2.app)
+    try:
+        save = client.post(
+            f"/api/doc/{session.id}/save",
+            json={"document_v3": document.model_dump(mode="json", by_alias=True)},
+        )
+        assert save.status_code == 200
+
+        response = client.get(f"/download/{session.id}.docx")
+        assert response.status_code == 200
+        exported = Document(io.BytesIO(response.content))
+        assert len(exported.inline_shapes) == 1
+        assert any("嵌入图片" in paragraph.text for paragraph in exported.paragraphs)
+    finally:
+        app_v2.store.delete(session.id)
+
+
+def test_document_v3_plain_text_preserves_page_break_equation_and_footnote_semantics() -> None:
+    document = migrate_doc_ir(_legacy_doc())
+    document.notes = {"footnotes": [{"id": "note-1", "label": "1", "text": "脚注正文"}]}
+    document.sections[0].content.extend(
+        [
+            BlockNode(
+                id="annotated",
+                type="paragraph",
+                content=[
+                    InlineNode(type="text", text="正文"),
+                    InlineNode(type="footnoteReference", attrs={"noteId": "note-1", "label": "1"}),
+                    InlineNode(type="field", attrs={"fieldKind": "equation", "latex": "E=mc^2"}),
+                ],
+            ),
+            BlockNode(id="manual-break", type="pageBreak"),
+            BlockNode(id="equation", type="equationBlock", attrs={"latex": "x^2+y^2"}),
+        ]
+    )
+
+    text = to_plain_text(document)
+
+    assert "正文[^1]$E=mc^2$" in text
+    assert "[[PAGE_BREAK]]" in text
+    assert "$$x^2+y^2$$" in text
+    assert "[^1]: 脚注正文" in text
 
 
 def test_structured_table_merges_and_cell_styles_survive_docx_export() -> None:

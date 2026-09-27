@@ -48,3 +48,25 @@ def test_full_document_load_invalidates_stale_rust_layout_cache() -> None:
     load_json = bridge.split("pub fn load_json", 1)[1].split("pub fn export_json", 1)[0]
 
     assert "self.layout_cache = LayoutCache::new()" in load_json
+
+
+def test_rust_layout_reads_persistent_table_and_equation_payloads() -> None:
+    engine = (FRONTEND / "engine/documentEngine.ts").read_text(encoding="utf-8")
+
+    assert "block.attrs?.table" in engine
+    assert "table.cells" in engine
+    assert "table.columns" in engine
+    assert "block.attrs?.latex" in engine
+
+
+def test_section_breaks_are_structural_document_v3_boundaries() -> None:
+    kernel = (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
+    commands = (FRONTEND / "editor-v3/commands.ts").read_text(encoding="utf-8")
+    toolbar = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
+
+    assert "SectionBreakNode" in kernel
+    assert "nextSectionId" in kernel
+    assert "next.sections = rebuilt" in kernel
+    assert "registerDocumentCommand('insert_section_break'" in commands
+    assert "command('section-break-next')" in toolbar
+    assert "command('section-break-continuous')" in toolbar

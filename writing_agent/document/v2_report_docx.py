@@ -18,6 +18,8 @@ from writing_agent.document._docx_compat import (
 import logging
 logger = logging.getLogger(__name__)
 
+import base64
+import binascii
 import os
 import re
 from dataclasses import dataclass
@@ -37,6 +39,51 @@ from writing_agent.document import v2_report_docx_helpers as docx_helpers, v2_re
 from writing_agent.models import FormattingRequirements
 from writing_agent.v2.doc_format import DocBlock, ParsedDoc, parse_report_text
 from writing_agent.v2.figure_render import render_figure_bundle, score_figure_spec
+
+
+_EMBEDDED_IMAGE_RE = re.compile(
+    r"^data:(image/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/=\r\n]+)$",
+    flags=re.IGNORECASE,
+)
+_MAX_EMBEDDED_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+def _embedded_image_bytes(spec: dict[str, Any]) -> bytes | None:
+    source = str(spec.get("src") or spec.get("url") or "").strip()
+    match = _EMBEDDED_IMAGE_RE.fullmatch(source)
+    if not match:
+        return None
+    encoded = re.sub(r"\s+", "", match.group(2))
+    if len(encoded) > ((_MAX_EMBEDDED_IMAGE_BYTES + 2) // 3) * 4:
+        return None
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error):
+        return None
+    return raw if 0 < len(raw) <= _MAX_EMBEDDED_IMAGE_BYTES else None
+
+
+def _add_picture_paragraph(doc: Document, image: bytes, *, width_percent: float = 100.0) -> None:
+    pic_p = doc.add_paragraph()
+    pic_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    try:
+        pic_p.paragraph_format.first_line_indent = Pt(0)
+        pic_p.paragraph_format.left_indent = Pt(0)
+        pic_p.paragraph_format.right_indent = Pt(0)
+        pic_p.paragraph_format.space_before = Pt(0)
+        pic_p.paragraph_format.space_after = Pt(0)
+        pic_p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+        pic_p.paragraph_format.line_spacing = 1.0
+    except Exception as exc:
+        logger.debug("Unable to normalize picture paragraph: %s", exc, exc_info=True)
+    run = pic_p.add_run()
+    try:
+        sec = doc.sections[0]
+        available = sec.page_width - sec.left_margin - sec.right_margin
+        ratio = max(0.1, min(1.0, float(width_percent or 100.0) / 100.0))
+        run.add_picture(BytesIO(image), width=int(available * ratio))
+    except Exception:
+        run.add_picture(BytesIO(image), width=Cm(15))
 
 
 @dataclass(frozen=True)
@@ -917,6 +964,14 @@ class V2ReportDocxExporter:
 
             if b.type == "figure":
                 f = b.figure or {}
+                embedded_image = _embedded_image_bytes(f)
+                if embedded_image:
+                    fig_no += 1
+                    caption = str(f.get("caption") or "").strip() or f"图{fig_no}"
+                    cap_p = doc.add_paragraph(f"图{fig_no}  {caption}")
+                    cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    _add_picture_paragraph(doc, embedded_image, width_percent=float(f.get("widthPercent") or 100.0))
+                    continue
                 try:
                     svg, png, rendered_caption = render_figure_bundle(f)
                 except Exception:
@@ -933,26 +988,7 @@ class V2ReportDocxExporter:
                 cap_p = doc.add_paragraph(f"图{fig_no}  {caption}")
                 cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 if png:
-                    pic_p = doc.add_paragraph()
-                    pic_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    try:
-                        pic_p.paragraph_format.first_line_indent = Pt(0)
-                        pic_p.paragraph_format.left_indent = Pt(0)
-                        pic_p.paragraph_format.right_indent = Pt(0)
-                        pic_p.paragraph_format.space_before = Pt(0)
-                        pic_p.paragraph_format.space_after = Pt(0)
-                        pic_p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
-                        pic_p.paragraph_format.line_spacing = 1.0
-                    except Exception as _exc:
-                        logger.debug("Ignored error in v2_report_docx.py: %s", _exc, exc_info=True)
-
-                    run = pic_p.add_run()
-                    try:
-                        sec = doc.sections[0]
-                        width = sec.page_width - sec.left_margin - sec.right_margin
-                        run.add_picture(BytesIO(png), width=width)
-                    except Exception:
-                        run.add_picture(BytesIO(png), width=Cm(15))
+                    _add_picture_paragraph(doc, png)
                 continue
         if docx_helpers._is_reference_title(current_section) and ref_buffer:
             flush_reference_buffer()

@@ -35,6 +35,10 @@
     firstLineIndentEm?: number | null
     leftIndentEm?: number | null
     rightIndentEm?: number | null
+    keepWithNext?: boolean
+    keepLinesTogether?: boolean
+    pageBreakBefore?: boolean
+    tabStops?: Array<{ positionEm: number; alignment: string }>
     spaceBeforePt?: number | null
     spaceAfterPt?: number | null
     styles?: Array<{ id: string; name: string }>
@@ -269,6 +273,17 @@
           <label>右缩进
             <input type="number" min="0" max="20" step="0.5" value={editorToolbarState.rightIndentEm ?? 0} onchange={(event) => command(`right-indent:${event.currentTarget.value}`)} />
           </label>
+          <label>首行/悬挂
+            <input type="number" min="-10" max="10" step="0.5" value={editorToolbarState.firstLineIndentEm ?? 0} onchange={(event) => command(`first-indent:${event.currentTarget.value}`)} />
+          </label>
+          <label>制表位
+            <select value={editorToolbarState.tabStops?.[0]?.positionEm || 0} onchange={(event) => command(`tab-stop:${event.currentTarget.value}`)}>
+              <option value="0">无</option><option value="4">4 字符</option><option value="8">8 字符</option><option value="12">12 字符</option><option value="16">16 字符</option>
+            </select>
+          </label>
+          <label class="check-format"><input type="checkbox" checked={editorToolbarState.keepWithNext} onchange={(event) => command(`keep-with-next:${event.currentTarget.checked}`)} /> 与下段同页</label>
+          <label class="check-format"><input type="checkbox" checked={editorToolbarState.keepLinesTogether} onchange={(event) => command(`keep-lines:${event.currentTarget.checked}`)} /> 段中不分页</label>
+          <label class="check-format"><input type="checkbox" checked={editorToolbarState.pageBreakBefore} onchange={(event) => command(`page-break-before:${event.currentTarget.checked}`)} /> 段前分页</label>
           <button class="tool-btn" title="段落边框" onclick={() => command('border-color:#9ca3af')}>□</button>
           <button class="tool-btn" title="段落底纹" onclick={() => command('shading-color:#f3f4f6')}>▨</button>
           <span class="ribbon-label">高级格式</span>
@@ -280,7 +295,7 @@
         <button class="ribbon-action" onclick={() => command('markdown-export')}><span>MD↑</span>导出 Markdown</button>
         <button class="ribbon-action" onclick={() => command('table')}><span>▦</span>表格</button>
         <button class="ribbon-action" onclick={() => command('image')}><span>▧</span>图片</button>
-        <button class="ribbon-action" disabled title="链接编辑将在对象与引用阶段启用"><span>↗</span>链接</button>
+        <button class="ribbon-action" onclick={() => command('link')}><span>↗</span>链接</button>
         <button class="ribbon-action" onclick={() => command('quote')}><Icon name="quote" size={17} />引用</button>
         <button class="ribbon-action" onclick={() => command('code')}><Icon name="code" size={17} />代码</button>
         <button class="ribbon-action" onclick={() => command('hr')}><span>—</span>分隔线</button>
@@ -296,16 +311,18 @@
         <button class="ribbon-action" onclick={() => command('indent-first')}>首行缩进</button>
         <button class="ribbon-action" onclick={() => command('margin:10px 0')}>段落间距</button>
         <button class="ribbon-action" onclick={() => command('page-break')}>分页符</button>
+        <button class="ribbon-action" onclick={() => command('section-break-next')}>下一页分节</button>
+        <button class="ribbon-action" onclick={() => command('section-break-continuous')}>连续分节</button>
         <PageSetupPanel />
         <button class="ribbon-action" onclick={onOpenInfoDrawer}>页面信息</button>
       </div>
     {:else if activeTab === 'references'}
       <div class="ribbon-group action-group">
-        <button class="ribbon-action" disabled title="自动目录将在引用阶段启用"><span>☷</span>目录</button>
-        <button class="ribbon-action" disabled title="脚注将在引用阶段启用"><span>¹</span>脚注</button>
+        <button class="ribbon-action" onclick={() => command('toc')} title="插入目录；再次使用可更新目录"><span>☷</span>目录</button>
+        <button class="ribbon-action" onclick={() => command('footnote')}><span>¹</span>脚注</button>
         <button class="ribbon-action" onclick={() => command('caption')}><span>图1</span>题注</button>
-        <button class="ribbon-action" disabled title="交叉引用将在引用阶段启用"><span>↪</span>交叉引用</button>
-        <button class="ribbon-action" disabled title="行内公式将在对象阶段启用"><span>π</span>行内公式</button>
+        <button class="ribbon-action" onclick={() => command('cross-reference')}><span>↪</span>交叉引用</button>
+        <button class="ribbon-action" onclick={() => command('math-inline')}><span>π</span>行内公式</button>
         <button class="ribbon-action" onclick={() => command('math-block')}><span>∫</span>公式块</button>
         <button class="ribbon-action" onclick={onOpenCitations}><Icon name="cite" size={17} />引文管理</button>
       </div>
@@ -463,4 +480,6 @@
     color: #293241;
     font-size: 11px;
   }
+  .advanced-format label.check-format { display: flex; align-items: center; gap: 5px; }
+  .advanced-format label.check-format input { width: auto; height: auto; }
 </style>

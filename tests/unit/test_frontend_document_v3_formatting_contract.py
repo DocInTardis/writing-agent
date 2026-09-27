@@ -43,22 +43,23 @@ def test_advanced_formatting_controls_report_current_editor_state() -> None:
     toolbar = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
 
-    for label in ("字距", "大小写", "段前", "段后", "左缩进", "右缩进", "段落边框", "段落底纹"):
+    for label in ("字距", "大小写", "段前", "段后", "左缩进", "右缩进", "首行/悬挂", "制表位", "与下段同页", "段中不分页", "段前分页", "段落边框", "段落底纹"):
         assert label in toolbar
-    for state in ("letterSpacing", "textTransform", "spaceBeforePt", "spaceAfterPt", "leftIndentEm", "rightIndentEm"):
+    for state in ("letterSpacing", "textTransform", "spaceBeforePt", "spaceAfterPt", "leftIndentEm", "rightIndentEm", "keepWithNext", "keepLinesTogether", "pageBreakBefore", "tabStops"):
         assert state in editor
 
 
-def test_unimplemented_ribbon_actions_are_not_presented_as_working() -> None:
+def test_reference_ribbon_actions_use_document_v3_commands() -> None:
     toolbar = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
+    commands = (FRONTEND / "editor-v3/commands.ts").read_text(encoding="utf-8")
+    kernel = (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
 
-    for title in (
-        "链接编辑将在对象与引用阶段启用",
-        "自动目录将在引用阶段启用",
-        "脚注将在引用阶段启用",
-        "交叉引用将在引用阶段启用",
-    ):
-        assert title in toolbar
+    for command in ("link", "toc", "footnote", "cross-reference", "math-inline"):
+        assert f"command('{command}')" in toolbar
+    for command in ("set_link", "insert_footnote_reference", "insert_cross_reference", "insert_inline_equation", "update_table_of_contents"):
+        assert f"registerDocumentCommand('{command}'" in commands
+    for node in ("LinkMark", "FootnoteReferenceNode", "InlineEquationNode", "CrossReferenceNode", "TableOfContentsNode"):
+        assert node in kernel
 
 
 def test_find_replace_outline_zoom_and_selection_toolbar_are_connected() -> None:

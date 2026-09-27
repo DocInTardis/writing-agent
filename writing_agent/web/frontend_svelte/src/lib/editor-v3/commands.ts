@@ -34,6 +34,23 @@ type CommandHandler = (editor: Editor, command: DocumentCommand<any>) => boolean
 
 const registry = new Map<string, CommandHandler>()
 
+function insertInlineContent(editor: Editor, content: Record<string, unknown>): boolean {
+  const selection = editor.state.selection
+  if (selection instanceof NodeSelection && selection.node.isBlock) {
+    const inline = editor.state.schema.nodeFromJSON(content)
+    const paragraph = editor.state.schema.nodes.paragraph.create(
+      { nodeId: null, styleId: 'normal', sectionId: selection.node.attrs?.sectionId || null },
+      inline
+    )
+    const insertAt = selection.to
+    const transaction = editor.state.tr.insert(insertAt, paragraph)
+    transaction.setSelection(TextSelection.create(transaction.doc, insertAt + 2))
+    editor.view.dispatch(transaction.scrollIntoView())
+    return true
+  }
+  return editor.chain().focus().insertContent(content).run()
+}
+
 function selectionCommand(command: Omit<DocumentCommand, 'id' | 'timestamp'>): DocumentCommand {
   return {
     ...command,
@@ -139,6 +156,16 @@ registerDocumentCommand('set_highlight', (editor, command) => {
   const color = String(command.params.color || '').trim()
   return color ? editor.chain().focus().setHighlight({ color }).run() : false
 })
+registerDocumentCommand('set_link', (editor, command) => {
+  const href = String(command.params.href || '').trim()
+  if (!href || !/^(https?:\/\/|mailto:|#)/i.test(href)) return false
+  return editor.chain().focus().extendMarkRange('link').setMark('link', {
+    href,
+    title: String(command.params.title || '').trim() || null,
+    target: command.params.target === '_self' ? '_self' : '_blank'
+  }).run()
+})
+registerDocumentCommand('unset_link', (editor) => editor.chain().focus().extendMarkRange('link').unsetMark('link').run())
 registerDocumentCommand('set_font_family', (editor, command) => {
   const fontFamily = String(command.params.fontFamily || '').trim()
   return fontFamily ? editor.chain().focus().setFontFamily(fontFamily).run() : false
@@ -224,17 +251,52 @@ registerDocumentCommand('toggle_ordered_list', (editor) => editor.chain().focus(
 registerDocumentCommand('toggle_blockquote', (editor) => editor.chain().focus().toggleBlockquote().run())
 registerDocumentCommand('toggle_code_block', (editor) => editor.chain().focus().toggleCodeBlock().run())
 registerDocumentCommand('insert_page_break', (editor) => editor.chain().focus().insertContent({ type: 'pageBreak', attrs: { nodeId: null } }).run())
-registerDocumentCommand('insert_figure', (editor, command) => editor.chain().focus().insertContent({
-  type: 'figure',
-  attrs: {
-    nodeId: null,
-    payload: {
-      ...command.params,
-      caption: String(command.params.caption || ''),
-      source: String(command.params.source || '')
+registerDocumentCommand('insert_section_break', (editor, command) => {
+  const breakType = ['continuous', 'nextPage', 'oddPage', 'evenPage'].includes(String(command.params.breakType))
+    ? String(command.params.breakType)
+    : 'nextPage'
+  return editor.chain().focus().insertContent({
+    type: 'sectionBreak',
+    attrs: {
+      nodeId: null,
+      sectionId: null,
+      payload: { nextSectionId: `section_${crypto.randomUUID().replace(/-/g, '')}`, breakType }
     }
-  }
-}).run())
+  }).run()
+})
+registerDocumentCommand('insert_figure', (editor, command) => editor.chain().focus().insertContent([
+  {
+    type: 'figure',
+    attrs: {
+      nodeId: null,
+      payload: {
+        ...command.params,
+        caption: String(command.params.caption || ''),
+        source: String(command.params.source || '')
+      }
+    }
+  },
+  { type: 'paragraph', attrs: { nodeId: null, styleId: 'normal' } }
+]).run())
+registerDocumentCommand('update_figure', (editor, command) => {
+  if (!editor.isActive('figure')) return false
+  const current = editor.getAttributes('figure').payload
+  const payload = current && typeof current === 'object' ? current as Record<string, unknown> : {}
+  return editor.chain().focus().updateAttributes('figure', {
+    payload: {
+      ...payload,
+      caption: String(command.params.caption ?? payload.caption ?? ''),
+      alt: String(command.params.alt ?? payload.alt ?? ''),
+      widthPercent: Math.max(10, Math.min(100, Number(command.params.widthPercent ?? payload.widthPercent ?? 100))),
+      alignment: ['left', 'center', 'right'].includes(String(command.params.alignment ?? payload.alignment))
+        ? String(command.params.alignment ?? payload.alignment)
+        : 'center',
+      wrap: ['inline', 'square'].includes(String(command.params.wrap ?? payload.wrap))
+        ? String(command.params.wrap ?? payload.wrap)
+        : 'inline'
+    }
+  }).run()
+})
 registerDocumentCommand('insert_table', (editor, command) => editor.chain().focus().insertTable({
   rows: Math.max(1, Number(command.params.rows || 3)),
   cols: Math.max(1, Number(command.params.columns || command.params.cols || 3)),
@@ -320,6 +382,55 @@ registerDocumentCommand('insert_equation', (editor, command) => editor.chain().f
   type: 'equationBlock',
   attrs: { nodeId: null, payload: { latex: String(command.params.latex || '') } }
 }).run())
+registerDocumentCommand('insert_inline_equation', (editor, command) => {
+  const latex = String(command.params.latex || '').trim()
+  if (!latex) return false
+  return insertInlineContent(editor, { type: 'inlineEquation', attrs: { payload: { fieldKind: 'equation', latex } } })
+})
+registerDocumentCommand('insert_footnote_reference', (editor, command) => {
+  const noteId = String(command.params.noteId || '').trim()
+  const text = String(command.params.text || '').trim()
+  if (!noteId || !text) return false
+  return insertInlineContent(editor, {
+    type: 'footnoteReference',
+    attrs: { payload: { noteId, label: String(command.params.label || ''), text } }
+  })
+})
+registerDocumentCommand('insert_cross_reference', (editor, command) => {
+  const targetId = String(command.params.targetId || '').trim()
+  if (!targetId) return false
+  return insertInlineContent(editor, {
+    type: 'crossReference',
+    attrs: { payload: { fieldKind: 'crossReference', targetId, targetText: String(command.params.targetText || ''), label: String(command.params.label || '') } }
+  })
+})
+registerDocumentCommand('update_table_of_contents', (editor) => {
+  const entries: Array<{ id: string; level: number; text: string }> = []
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === 'heading') entries.push({
+      id: String(node.attrs.nodeId || ''),
+      level: Math.max(1, Math.min(6, Number(node.attrs.level || 1))),
+      text: node.textContent || '未命名标题'
+    })
+  })
+  let tocPosition = -1
+  editor.state.doc.forEach((node, position) => {
+    if (tocPosition < 0 && node.type.name === 'tableOfContents') tocPosition = position
+  })
+  if (tocPosition >= 0) {
+    const current = editor.state.doc.nodeAt(tocPosition)
+    if (!current) return false
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(tocPosition, undefined, {
+      ...current.attrs,
+      payload: { entries, updatedAt: Date.now() }
+    }))
+    return true
+  }
+  return editor.chain().focus().insertContent({
+    type: 'tableOfContents',
+    attrs: { nodeId: null, sectionId: null, payload: { entries, updatedAt: Date.now() } }
+  }).run()
+})
 registerDocumentCommand('insert_horizontal_rule', (editor) => editor.chain().focus().setHorizontalRule().run())
 registerDocumentCommand('clear_formatting', (editor) => editor.chain().focus().unsetAllMarks().clearNodes().run())
 registerDocumentCommand('undo', (editor) => editor.chain().focus().undo().run())

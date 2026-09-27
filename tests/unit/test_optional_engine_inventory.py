@@ -10,15 +10,15 @@ class OptionalEngineInventoryTests(unittest.TestCase):
     def test_frontend_has_real_wasm_document_engine_integration(self):
         frontend = ROOT / "writing_agent/web/frontend_svelte"
         bridge = frontend / "src/lib/engine/documentEngine.ts"
-        component = frontend / "src/lib/components/EditorWorkbench.svelte"
+        component = frontend / "src/lib/components/StructuredEditor.svelte"
         self.assertTrue(bridge.exists())
         source = bridge.read_text(encoding="utf-8")
         editor = component.read_text(encoding="utf-8")
         self.assertIn("new wasm.WasmEditor()", source)
-        self.assertIn("replaceMarkdown", source)
+        self.assertIn("syncJson", source)
         self.assertIn("layoutMetrics", source)
-        self.assertIn("initDocumentEngine", editor)
-        self.assertIn("editor.dataset.engine", editor)
+        self.assertIn("paginateDocumentV3", editor)
+        self.assertIn("applyPaginationLayout", editor)
 
     def test_rust_engine_is_available_without_runtime_build(self):
         bridge_path = ROOT / "writing_agent/v2/rust_bridge.py"

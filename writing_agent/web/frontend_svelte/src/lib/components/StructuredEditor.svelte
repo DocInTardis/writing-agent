@@ -100,6 +100,7 @@
   let proofPanelVisible = $state(false)
   let proofIssues = $state<Array<{ id: string; message: string; excerpt: string; from: number; to: number }>>([])
   let markdownInput: HTMLInputElement
+  let imageInput: HTMLInputElement
   let markdownExportVisible = $state(false)
   let markdownExportText = $state('')
   let markdownExportWarnings = $state<string[]>([])
@@ -121,6 +122,124 @@
   let creatingStyle = $state(false)
   let styleManagerNotice = $state('')
   let styleRevision = $state(0)
+  let referenceDialog = $state<'link' | 'equation' | 'footnote' | 'crossReference' | ''>('')
+  let referenceHref = $state('https://')
+  let referenceTitle = $state('')
+  let referenceLatex = $state('')
+  let referenceNoteText = $state('')
+  let referenceTargetId = $state('')
+  let figureDialogVisible = $state(false)
+  let figureCaption = $state('')
+  let figureAlt = $state('')
+  let figureWidthPercent = $state(100)
+  let figureAlignment = $state<'left' | 'center' | 'right'>('center')
+  let figureWrap = $state<'inline' | 'square'>('inline')
+  let objectNotice = $state('')
+
+  async function importImageFile(event: Event) {
+    const input = event.currentTarget as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file || !editor) return
+    if (!file.type.startsWith('image/')) {
+      objectNotice = '请选择图片文件。'
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      objectNotice = '图片不能超过 10 MiB；请先压缩后再插入。'
+      return
+    }
+    const src = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(reader.error || new Error('读取图片失败'))
+      reader.readAsDataURL(file)
+    }).catch(() => '')
+    if (!src) {
+      objectNotice = '图片读取失败。'
+      return
+    }
+    const result = executeDocumentCommand(editor, createUserCommand('insert_figure', {
+      src,
+      mimeType: file.type,
+      fileName: file.name,
+      alt: file.name.replace(/\.[^.]+$/, ''),
+      caption: '',
+      widthPercent: 100,
+      alignment: 'center',
+      wrap: 'inline'
+    }))
+    objectNotice = result.ok ? `已插入 ${file.name}` : '图片插入失败。'
+  }
+
+  function openFigureEditor() {
+    if (!editor || !editor.isActive('figure')) return false
+    const payload = editor.getAttributes('figure').payload as Record<string, unknown> | undefined
+    figureCaption = String(payload?.caption || '')
+    figureAlt = String(payload?.alt || '')
+    figureWidthPercent = Math.max(10, Math.min(100, Number(payload?.widthPercent || 100)))
+    figureAlignment = (['left', 'center', 'right'].includes(String(payload?.alignment)) ? payload?.alignment : 'center') as typeof figureAlignment
+    figureWrap = (['inline', 'square'].includes(String(payload?.wrap)) ? payload?.wrap : 'inline') as typeof figureWrap
+    figureDialogVisible = true
+    return true
+  }
+
+  function applyFigureSettings() {
+    if (!editor) return
+    const result = executeDocumentCommand(editor, createUserCommand('update_figure', {
+      caption: figureCaption,
+      alt: figureAlt,
+      widthPercent: figureWidthPercent,
+      alignment: figureAlignment,
+      wrap: figureWrap
+    }))
+    if (result.ok) figureDialogVisible = false
+  }
+
+  function openReferenceDialog(kind: typeof referenceDialog) {
+    if (!editor || !kind) return
+    referenceDialog = kind
+    if (kind === 'link') {
+      const attrs = editor.getAttributes('link')
+      referenceHref = String(attrs.href || 'https://')
+      referenceTitle = String(attrs.title || '')
+    } else if (kind === 'equation') referenceLatex = ''
+    else if (kind === 'footnote') referenceNoteText = ''
+    else if (kind === 'crossReference') referenceTargetId = outlineHeadings()[0]?.id || ''
+  }
+
+  function applyReferenceDialog() {
+    if (!editor || !referenceDialog) return
+    if (referenceDialog === 'link') {
+      const result = executeDocumentCommand(editor, createUserCommand('set_link', { href: referenceHref, title: referenceTitle }))
+      if (!result.ok) return
+    } else if (referenceDialog === 'equation') {
+      const result = executeDocumentCommand(editor, createUserCommand('insert_inline_equation', { latex: referenceLatex }))
+      if (!result.ok) return
+    } else if (referenceDialog === 'footnote') {
+      const text = referenceNoteText.trim()
+      if (!text || !activeDocument) return
+      const noteId = `footnote_${crypto.randomUUID().replace(/-/g, '')}`
+      const notes = activeDocument.notes && typeof activeDocument.notes === 'object' ? activeDocument.notes : {}
+      const footnotes = Array.isArray(notes.footnotes) ? [...notes.footnotes] : []
+      const label = String(footnotes.length + 1)
+      footnotes.push({ id: noteId, label, text })
+      activeDocument.notes = { ...notes, footnotes }
+      const result = executeDocumentCommand(editor, createUserCommand('insert_footnote_reference', { noteId, label, text }))
+      if (!result.ok) return
+    } else if (referenceDialog === 'crossReference') {
+      const target = outlineHeadings().find((heading) => heading.id === referenceTargetId)
+      if (!target) return
+      const result = executeDocumentCommand(editor, createUserCommand('insert_cross_reference', {
+        targetId: target.id,
+        targetText: target.text,
+        label: target.text
+      }))
+      if (!result.ok) return
+    }
+    referenceDialog = ''
+    emitSelection()
+  }
 
   function refreshProofIssues() {
     if (!editor) return
@@ -732,6 +851,10 @@
       firstLineIndentEm: editor.getAttributes('heading').firstLineIndentEm ?? editor.getAttributes('paragraph').firstLineIndentEm ?? null,
       leftIndentEm: editor.getAttributes('heading').leftIndentEm ?? editor.getAttributes('paragraph').leftIndentEm ?? null,
       rightIndentEm: editor.getAttributes('heading').rightIndentEm ?? editor.getAttributes('paragraph').rightIndentEm ?? null,
+      keepWithNext: Boolean(editor.getAttributes('heading').keepWithNext ?? editor.getAttributes('paragraph').keepWithNext),
+      keepLinesTogether: Boolean(editor.getAttributes('heading').keepLinesTogether ?? editor.getAttributes('paragraph').keepLinesTogether),
+      pageBreakBefore: Boolean(editor.getAttributes('heading').pageBreakBefore ?? editor.getAttributes('paragraph').pageBreakBefore),
+      tabStops: editor.getAttributes('heading').tabStops ?? editor.getAttributes('paragraph').tabStops ?? [],
       spaceBeforePt: editor.getAttributes('heading').spaceBeforePt ?? editor.getAttributes('paragraph').spaceBeforePt ?? null,
       spaceAfterPt: editor.getAttributes('heading').spaceAfterPt ?? editor.getAttributes('paragraph').spaceAfterPt ?? null,
       styles: visibleStyles().map((style) => ({ id: style.id, name: style.name }))
@@ -820,6 +943,10 @@
       prepareMarkdownExport()
       return
     }
+    if (command === 'image') {
+      if (!openFigureEditor()) imageInput?.click()
+      return
+    }
     if (command === 'view-shortcuts') {
       shortcutPanelVisible = !shortcutPanelVisible
       return
@@ -830,6 +957,28 @@
         const currentStyleId = editor.getAttributes(editor.isActive('heading') ? 'heading' : 'paragraph').styleId || 'normal'
         loadManagedStyle(String(currentStyleId))
       }
+      return
+    }
+    if (command === 'link') {
+      if (editor.state.selection.empty && editor.isActive('link')) executeDocumentCommand(editor, createUserCommand('unset_link'))
+      else openReferenceDialog('link')
+      return
+    }
+    if (command === 'math-inline') {
+      openReferenceDialog('equation')
+      return
+    }
+    if (command === 'footnote') {
+      openReferenceDialog('footnote')
+      return
+    }
+    if (command === 'cross-reference') {
+      openReferenceDialog('crossReference')
+      return
+    }
+    if (command === 'toc') {
+      executeDocumentCommand(editor, createUserCommand('update_table_of_contents'))
+      emitSelection()
       return
     }
     if (command === 'zoom-in' || command === 'zoom-out' || command === 'zoom-100') {
@@ -875,6 +1024,8 @@
       'table-toggle-repeat-header': 'table_set_repeat_header',
       'table-delete': 'table_delete',
       'page-break': 'insert_page_break',
+      'section-break-next': 'insert_section_break',
+      'section-break-continuous': 'insert_section_break',
       'math-block': 'insert_equation',
       hr: 'insert_horizontal_rule',
       caption: 'apply_style'
@@ -885,6 +1036,8 @@
     if (command === 'caption') params = { styleId: 'caption' }
     if (/^heading[1-6]$/.test(command)) params = { styleId: `heading-${command.slice(-1)}` }
     if (command === 'table-toggle-repeat-header') params = { enabled: !Boolean(editor.getAttributes('table').repeatHeader) }
+    if (command === 'section-break-next') params = { breakType: 'nextPage' }
+    if (command === 'section-break-continuous') params = { breakType: 'continuous' }
     if (command.startsWith('style:')) {
       type = 'apply_style'
       params = { styleId: command.slice(6) }
@@ -956,6 +1109,22 @@
     } else if (command.startsWith('right-indent:')) {
       type = 'set_paragraph_format'
       params = { rightIndentEm: Number(command.slice(13)) }
+    } else if (command.startsWith('first-indent:')) {
+      type = 'set_paragraph_format'
+      params = { firstLineIndentEm: Number(command.slice(13)) }
+    } else if (command.startsWith('keep-with-next:')) {
+      type = 'set_paragraph_format'
+      params = { keepWithNext: command.slice(15) === 'true' }
+    } else if (command.startsWith('keep-lines:')) {
+      type = 'set_paragraph_format'
+      params = { keepLinesTogether: command.slice(11) === 'true' }
+    } else if (command.startsWith('page-break-before:')) {
+      type = 'set_paragraph_format'
+      params = { pageBreakBefore: command.slice(18) === 'true' }
+    } else if (command.startsWith('tab-stop:')) {
+      const positionEm = Number(command.slice(9))
+      type = 'set_paragraph_format'
+      params = { tabStops: Number.isFinite(positionEm) && positionEm > 0 ? [{ positionEm, alignment: 'left' }] : [] }
     } else if (command.startsWith('border-color:')) {
       type = 'set_paragraph_format'
       params = { borderColor: command.slice(13), borderWidthPt: 0.75, borderStyle: 'solid' }
@@ -1095,6 +1264,7 @@
   onpointercancel={handleBlockPointerUp}
 >
   <input class="hidden-file-input" bind:this={markdownInput} type="file" accept=".md,.markdown,text/markdown,text/plain" onchange={importMarkdownFile} />
+  <input class="hidden-file-input" bind:this={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" onchange={importImageFile} />
   {#if blockHandleVisible}
     <button
       class="block-handle"
@@ -1195,6 +1365,47 @@
       <footer><button onclick={applyManagedStyle}>应用到当前段落</button><button class="primary" onclick={saveManagedStyle}>保存并全局更新</button></footer>
     </aside>
   {/if}
+  {#if referenceDialog}
+    <div class="reference-dialog-backdrop" role="presentation">
+      <form class="reference-dialog" aria-label="插入引用对象" onsubmit={(event) => { event.preventDefault(); applyReferenceDialog() }}>
+        <header>
+          <strong>{referenceDialog === 'link' ? '插入链接' : referenceDialog === 'equation' ? '插入行内公式' : referenceDialog === 'footnote' ? '插入脚注' : '插入交叉引用'}</strong>
+          <button type="button" aria-label="关闭引用对象窗口" onclick={() => (referenceDialog = '')}>×</button>
+        </header>
+        {#if referenceDialog === 'link'}
+          <label>地址<input bind:value={referenceHref} placeholder="https://example.com 或 #书签" /></label>
+          <label>提示文字<input bind:value={referenceTitle} placeholder="可选" /></label>
+          <p>先选择文字再插入链接；光标位于已有链接中时可再次编辑。</p>
+        {:else if referenceDialog === 'equation'}
+          <label>LaTeX<input bind:value={referenceLatex} placeholder="例如 E = mc^2" /></label>
+        {:else if referenceDialog === 'footnote'}
+          <label>脚注内容<textarea bind:value={referenceNoteText} rows="4"></textarea></label>
+          <p>脚注正文保存在 Document V3 的 notes 中，正文只保存稳定引用 ID。</p>
+        {:else}
+          <label>引用标题<select bind:value={referenceTargetId}>
+            {#each outlineHeadings() as heading (heading.id)}
+              <option value={heading.id}>{'　'.repeat(Math.max(0, heading.level - 1))}{heading.text}</option>
+            {/each}
+          </select></label>
+          {#if !outlineHeadings().length}<p>当前文档还没有可引用的标题。</p>{/if}
+        {/if}
+        <footer><button type="button" onclick={() => (referenceDialog = '')}>取消</button><button class="primary" type="submit">插入</button></footer>
+      </form>
+    </div>
+  {/if}
+  {#if figureDialogVisible}
+    <div class="reference-dialog-backdrop" role="presentation">
+      <form class="reference-dialog" aria-label="图片属性" onsubmit={(event) => { event.preventDefault(); applyFigureSettings() }}>
+        <header><strong>图片属性</strong><button type="button" aria-label="关闭图片属性" onclick={() => (figureDialogVisible = false)}>×</button></header>
+        <label>题注<input bind:value={figureCaption} placeholder="例如：图 1 系统架构" /></label>
+        <label>替代文字<input bind:value={figureAlt} placeholder="用于无障碍和导出" /></label>
+        <label>宽度 {figureWidthPercent}%<input type="range" min="10" max="100" step="5" bind:value={figureWidthPercent} /></label>
+        <label>对齐<select bind:value={figureAlignment}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label>
+        <label>环绕<select bind:value={figureWrap}><option value="inline">嵌入型</option><option value="square">四周型</option></select></label>
+        <footer><button type="button" onclick={() => (figureDialogVisible = false)}>取消</button><button class="primary" type="submit">应用</button></footer>
+      </form>
+    </div>
+  {/if}
   {#if markdownExportVisible}
     <div class="markdown-dialog-backdrop" role="presentation">
       <div class="markdown-dialog" role="dialog" aria-modal="true" aria-labelledby="markdown-export-title" tabindex="-1">
@@ -1232,6 +1443,7 @@
   <div class="structured-editor" bind:this={host}></div>
   {#if clipboardError}<div class="clipboard-error" role="status">{clipboardError}</div>{/if}
   {#if markdownNotice}<div class="markdown-notice" role="status"><span>{markdownNotice}</span><button aria-label="关闭 Markdown 提示" onclick={() => (markdownNotice = '')}>×</button></div>{/if}
+  {#if objectNotice}<div class="markdown-notice" role="status"><span>{objectNotice}</span><button aria-label="关闭对象提示" onclick={() => (objectNotice = '')}>×</button></div>{/if}
 </div>
 
 <style>
@@ -1427,6 +1639,16 @@
   .style-manager footer { justify-content: flex-end; margin-top: 12px; }
   .style-manager footer .primary { border-color: #2468c8; background: #2468c8; color: #fff; }
   .markdown-dialog-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; background: rgba(20, 29, 43, .28); }
+  .reference-dialog-backdrop { position: fixed; z-index: 31; inset: 0; display: grid; place-items: center; background: rgba(20, 29, 43, .28); }
+  .reference-dialog { box-sizing: border-box; display: grid; width: min(440px, calc(100vw - 32px)); gap: 11px; padding: 17px; border: 1px solid #ccd4df; border-radius: 8px; background: #fff; box-shadow: 0 18px 55px rgba(22, 34, 51, .22); color: #263244; }
+  .reference-dialog header, .reference-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .reference-dialog header button { border: 0; background: transparent; font-size: 20px; cursor: pointer; }
+  .reference-dialog label { display: grid; gap: 4px; color: #536174; font-size: 12px; }
+  .reference-dialog input, .reference-dialog textarea, .reference-dialog select { box-sizing: border-box; width: 100%; min-height: 32px; padding: 6px 8px; border: 1px solid #cbd3df; border-radius: 5px; background: #fff; color: #263244; font: inherit; }
+  .reference-dialog p { margin: 0; color: #687386; font-size: 11px; line-height: 1.5; }
+  .reference-dialog footer { justify-content: flex-end; }
+  .reference-dialog footer button { padding: 7px 14px; border: 1px solid #cbd3df; border-radius: 5px; background: #fff; cursor: pointer; }
+  .reference-dialog footer button.primary { border-color: #2468c8; background: #2468c8; color: #fff; }
   .markdown-dialog { box-sizing: border-box; width: min(540px, calc(100vw - 32px)); padding: 18px; border: 1px solid #ccd4df; border-radius: 8px; background: #fff; box-shadow: 0 18px 55px rgba(22, 34, 51, .22); }
   .markdown-dialog header { display: flex; align-items: center; justify-content: space-between; font-size: 16px; }
   .markdown-dialog header button { border: 0; background: transparent; font-size: 20px; cursor: pointer; }
@@ -1526,7 +1748,11 @@
     text-align: center;
     user-select: none;
   }
-  .structured-editor :global(.v3-object-pageBreak) {
+  .structured-editor :global(.v3-inline-object) { display: inline-block; margin: 0 2px; padding: 0 3px; border-radius: 3px; background: #eef4ff; color: #205dab; font-size: .86em; cursor: pointer; user-select: all; }
+  .structured-editor :global(.v3-inline-inlineEquation) { background: #f6f3ff; color: #5b3f91; font-family: Cambria Math, serif; }
+  .structured-editor :global(a[data-type="link"]), .structured-editor :global(a[href]) { color: #1d5fa7; text-decoration: underline; }
+  .structured-editor :global(.v3-object-pageBreak),
+  .structured-editor :global(.v3-object-sectionBreak) {
     padding: 0;
     border-width: 1px 0 0;
     border-style: dashed;
@@ -1534,6 +1760,22 @@
     background: transparent;
     font-size: 11px;
   }
+  .structured-editor :global(.v3-object-figure) { padding: 10px; background: #fff; }
+  .structured-editor :global(.v3-object-figure[data-wrap="square"][data-alignment="left"]) { float: left; max-width: 52%; margin: 0 18px 12px 0; }
+  .structured-editor :global(.v3-object-figure[data-wrap="square"][data-alignment="right"]) { float: right; max-width: 52%; margin: 0 0 12px 18px; }
+  .structured-editor :global(.v3-object-figure img) { display: block; max-width: 100%; max-height: 560px; margin: 0 auto; object-fit: contain; }
+  .structured-editor :global(.v3-object-figure figcaption) { margin-top: 8px; color: #586577; font-size: 12px; text-align: center; }
+  .structured-editor :global(.v3-figure-placeholder) { padding: 24px; background: #f8fafc; }
+  .structured-editor :global(.v3-object-tableOfContents) { display: grid; gap: 7px; padding: 16px 20px; background: #fff; text-align: left; }
+  .structured-editor :global(.v3-toc-title) { margin-bottom: 5px; color: #1f2937; font-size: 18px; text-align: center; }
+  .structured-editor :global(.v3-toc-entry) { display: flex; align-items: baseline; gap: 5px; color: #344054; font-size: 12px; }
+  .structured-editor :global(.v3-toc-entry[data-level="2"]) { padding-left: 1.5em; }
+  .structured-editor :global(.v3-toc-entry[data-level="3"]) { padding-left: 3em; }
+  .structured-editor :global(.v3-toc-entry[data-level="4"]),
+  .structured-editor :global(.v3-toc-entry[data-level="5"]),
+  .structured-editor :global(.v3-toc-entry[data-level="6"]) { padding-left: 4.5em; }
+  .structured-editor :global(.v3-toc-leader) { flex: 1; border-bottom: 1px dotted #98a2b3; }
+  .structured-editor :global(.v3-toc-page) { color: #667085; }
   .structured-editor :global(.tableWrapper) {
     margin: 14px 0;
     overflow-x: auto;

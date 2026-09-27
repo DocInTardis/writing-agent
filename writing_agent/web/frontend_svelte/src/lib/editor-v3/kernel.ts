@@ -1,4 +1,4 @@
-import { Editor, Extension, Node, mergeAttributes, type JSONContent } from '@tiptap/core'
+import { Editor, Extension, Mark, Node, mergeAttributes, type JSONContent } from '@tiptap/core'
 import Color from '@tiptap/extension-color'
 import FontFamily from '@tiptap/extension-font-family'
 import Highlight from '@tiptap/extension-highlight'
@@ -564,7 +564,62 @@ const CharacterFormatting = Extension.create({
   }
 })
 
-function atomNode(name: 'figure' | 'pageBreak' | 'equationBlock') {
+const LinkMark = Mark.create({
+  name: 'link',
+  inclusive: false,
+  addAttributes() {
+    return {
+      href: { default: '' },
+      title: { default: null },
+      target: { default: '_blank' }
+    }
+  },
+  parseHTML() {
+    return [{ tag: 'a[href]' }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    const href = String(HTMLAttributes.href || '').trim()
+    return ['a', mergeAttributes(HTMLAttributes, {
+      href,
+      rel: 'noopener noreferrer',
+      target: HTMLAttributes.target || '_blank'
+    }), 0]
+  }
+})
+
+function inlineObjectNode(name: 'footnoteReference' | 'inlineEquation' | 'crossReference') {
+  return Node.create({
+    name,
+    group: 'inline',
+    inline: true,
+    atom: true,
+    selectable: true,
+    addAttributes() {
+      return { payload: { default: {} } }
+    },
+    parseHTML() {
+      return [{ tag: `[data-v3-inline="${name}"]` }]
+    },
+    renderHTML({ HTMLAttributes }) {
+      const payload = HTMLAttributes.payload && typeof HTMLAttributes.payload === 'object'
+        ? HTMLAttributes.payload as Record<string, unknown>
+        : {}
+      const label = name === 'inlineEquation'
+        ? String(payload.latex || '公式')
+        : name === 'footnoteReference'
+          ? String(payload.label || payload.number || '注')
+          : String(payload.label || payload.targetText || '引用')
+      const { payload: _payload, ...domAttributes } = HTMLAttributes
+      return [name === 'inlineEquation' ? 'span' : 'sup', mergeAttributes(domAttributes, {
+        'data-v3-inline': name,
+        class: `v3-inline-object v3-inline-${name}`,
+        title: String(payload.title || payload.text || label)
+      }), name === 'inlineEquation' ? `$${label}$` : `[${label}]`]
+    }
+  })
+}
+
+function atomNode(name: 'figure' | 'pageBreak' | 'sectionBreak' | 'equationBlock' | 'tableOfContents') {
   return Node.create({
     name,
     group: 'block',
@@ -583,16 +638,52 @@ function atomNode(name: 'figure' | 'pageBreak' | 'equationBlock') {
     renderHTML({ HTMLAttributes }) {
       const payload = HTMLAttributes.payload && typeof HTMLAttributes.payload === 'object' ? HTMLAttributes.payload : {}
       const caption = String((payload as Record<string, unknown>).caption || '')
-      const label = name === 'pageBreak' ? '分页符' : name === 'figure' ? '图片/图表' : '公式'
+      const label = name === 'pageBreak' ? '分页符' : name === 'sectionBreak' ? '分节符' : name === 'figure' ? '图片/图表' : name === 'tableOfContents' ? '自动目录' : '公式'
       const { payload: _payload, ...domAttributes } = HTMLAttributes
+      const attributes = mergeAttributes(domAttributes, {
+        'data-v3-node': name,
+        'data-node-id': HTMLAttributes.nodeId || '',
+        class: `v3-object v3-object-${name}`
+      })
+      if (name === 'tableOfContents') {
+        const entries = Array.isArray((payload as Record<string, unknown>).entries)
+          ? (payload as Record<string, unknown>).entries as Array<Record<string, unknown>>
+          : []
+        return ['div', attributes,
+          ['strong', { class: 'v3-toc-title' }, '目录'],
+          ['div', { class: 'v3-toc-entries' }, ...entries.map((entry) => [
+            'div',
+            { class: 'v3-toc-entry', 'data-level': String(entry.level || 1) },
+            ['span', {}, String(entry.text || '未命名标题')],
+            ['span', { class: 'v3-toc-leader' }, ''],
+            ['span', { class: 'v3-toc-page' }, '自动']
+          ])]
+        ]
+      }
+      if (name === 'figure') {
+        const source = String((payload as Record<string, unknown>).src || (payload as Record<string, unknown>).url || '')
+        const widthPercent = Math.max(10, Math.min(100, Number((payload as Record<string, unknown>).widthPercent || 100)))
+        const alignment = ['left', 'center', 'right'].includes(String((payload as Record<string, unknown>).alignment))
+          ? String((payload as Record<string, unknown>).alignment)
+          : 'center'
+        const figureAttributes = mergeAttributes(attributes, {
+          'data-wrap': String((payload as Record<string, unknown>).wrap || 'inline'),
+          'data-alignment': alignment,
+          style: `width:${widthPercent}%;margin-left:${alignment === 'left' ? '0' : 'auto'};margin-right:${alignment === 'right' ? '0' : 'auto'}`
+        })
+        return ['figure', figureAttributes,
+          ...(source ? [['img', { src: source, alt: String((payload as Record<string, unknown>).alt || caption || '文档图片') }]] : [['div', { class: 'v3-figure-placeholder' }, '图片/图表源数据已保留']]),
+          ...(caption ? [['figcaption', {}, caption]] : [])
+        ]
+      }
+      if (name === 'equationBlock') {
+        const latex = String((payload as Record<string, unknown>).latex || (payload as Record<string, unknown>).source || '')
+        return ['div', attributes, latex ? `$$${latex}$$` : '公式']
+      }
       return [
         'div',
-        mergeAttributes(domAttributes, {
-          'data-v3-node': name,
-          'data-node-id': HTMLAttributes.nodeId || '',
-          class: `v3-object v3-object-${name}`
-        }),
-        name === 'pageBreak' ? '分页符' : `${label}${caption ? ` · ${caption}` : ''}`
+        attributes,
+        name === 'pageBreak' ? '分页符' : name === 'sectionBreak' ? `分节符 · ${String((payload as Record<string, unknown>).breakType || 'nextPage')}` : `${label}${caption ? ` · ${caption}` : ''}`
       ]
     }
   })
@@ -600,7 +691,12 @@ function atomNode(name: 'figure' | 'pageBreak' | 'equationBlock') {
 
 const FigureNode = atomNode('figure')
 const PageBreakNode = atomNode('pageBreak')
+const SectionBreakNode = atomNode('sectionBreak')
 const EquationBlockNode = atomNode('equationBlock')
+const TableOfContentsNode = atomNode('tableOfContents')
+const FootnoteReferenceNode = inlineObjectNode('footnoteReference')
+const InlineEquationNode = inlineObjectNode('inlineEquation')
+const CrossReferenceNode = inlineObjectNode('crossReference')
 
 function textNodes(content: Array<V3BlockNode | InlineNode> | undefined): JSONContent[] {
   if (!content) return []
@@ -609,6 +705,10 @@ function textNodes(content: Array<V3BlockNode | InlineNode> | undefined): JSONCo
       return [{ type: 'text', text: node.text || '', marks: node.marks as JSONContent['marks'] }]
     }
     if (node.type === 'hardBreak') return [{ type: 'hardBreak' }]
+    if (node.type === 'footnoteReference') return [{ type: 'footnoteReference', attrs: { payload: node.attrs || {} } }]
+    if (node.type === 'field' && node.attrs?.fieldKind === 'equation') return [{ type: 'inlineEquation', attrs: { payload: node.attrs } }]
+    if (node.type === 'field' && node.attrs?.fieldKind === 'crossReference') return [{ type: 'crossReference', attrs: { payload: node.attrs } }]
+    if (node.type === 'citation') return [{ type: 'crossReference', attrs: { payload: { ...(node.attrs || {}), referenceKind: 'citation' } } }]
     return []
   })
 }
@@ -696,7 +796,9 @@ function blockToJson(block: V3BlockNode, sectionId: string): JSONContent[] {
   if (block.type === 'figure') return [{ type: 'figure', attrs: { nodeId: block.id, sectionId, payload: block.attrs?.figure || block.attrs || {} } }]
   if (block.type === 'table') return [tableBlockToJson(block, sectionId)]
   if (block.type === 'pageBreak') return [{ type: 'pageBreak', attrs: { nodeId: block.id, sectionId } }]
+  if (block.type === 'sectionBreak') return [{ type: 'sectionBreak', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
   if (block.type === 'equationBlock') return [{ type: 'equationBlock', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
+  if (block.type === 'tableOfContents') return [{ type: 'tableOfContents', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
   if (block.type === 'bulletList' || block.type === 'orderedList') {
     const items = (block.content || []).filter((item): item is V3BlockNode => 'id' in item)
     return [{
@@ -721,6 +823,12 @@ function inlineFromJson(nodes: JSONContent[] | undefined): InlineNode[] {
   return (nodes || []).flatMap((node) => {
     if (node.type === 'text') return [{ type: 'text', text: node.text || '', marks: (node.marks || []) as InlineNode['marks'] } as InlineNode]
     if (node.type === 'hardBreak') return [{ type: 'hardBreak' } as InlineNode]
+    if (node.type === 'footnoteReference') return [{ type: 'footnoteReference', attrs: (node.attrs?.payload || {}) as Record<string, unknown> } as InlineNode]
+    if (node.type === 'inlineEquation') return [{ type: 'field', attrs: { ...((node.attrs?.payload || {}) as Record<string, unknown>), fieldKind: 'equation' } } as InlineNode]
+    if (node.type === 'crossReference') {
+      const payload = (node.attrs?.payload || {}) as Record<string, unknown>
+      return [{ type: payload.referenceKind === 'citation' ? 'citation' : 'field', attrs: { ...payload, fieldKind: payload.referenceKind === 'citation' ? undefined : 'crossReference' } } as InlineNode]
+    }
     return []
   })
 }
@@ -794,31 +902,57 @@ function blockFromJson(node: JSONContent): V3BlockNode | null {
   if (node.type === 'figure') return { id, type: 'figure', attrs: { figure: attrs.payload || {} } }
   if (node.type === 'table') return tableFromJson(node, id)
   if (node.type === 'pageBreak') return { id, type: 'pageBreak' }
+  if (node.type === 'sectionBreak') return { id, type: 'sectionBreak', attrs: (attrs.payload || {}) as Record<string, unknown> }
   if (node.type === 'equationBlock') return { id, type: 'equationBlock', attrs: (attrs.payload || {}) as Record<string, unknown> }
+  if (node.type === 'tableOfContents') return { id, type: 'tableOfContents', attrs: (attrs.payload || {}) as Record<string, unknown> }
   return null
 }
 
 export function tiptapToDocumentV3(base: DocumentV3, json: JSONContent): DocumentV3 {
   const next = structuredClone(base)
-  const sectionMap = new Map(next.sections.map((section) => [section.id, section]))
-  for (const section of next.sections) section.content = []
-  for (const node of json.content || []) {
-    const sectionId = String(node.attrs?.sectionId || next.sections[0]?.id || '')
-    let section = sectionMap.get(sectionId)
-    if (!section) {
-      section = {
-        id: sectionId || newNodeId('section'),
+  const templates = new Map(next.sections.map((section) => [section.id, section]))
+  const firstTemplate = next.sections[0]
+  const firstSection: SectionV3 = firstTemplate
+    ? { ...structuredClone(firstTemplate), content: [] }
+    : {
+        id: newNodeId('section'),
         breakType: 'nextPage',
-        layout: structuredClone(next.sections[0]?.layout),
-        headerFooter: structuredClone(next.sections[0]?.headerFooter),
+        layout: { pageSize: 'A4', orientation: 'portrait', marginTopMm: 25.4, marginRightMm: 25.4, marginBottomMm: 25.4, marginLeftMm: 31.8, columns: 1 },
+        headerFooter: { linkHeaderToPrevious: true, linkFooterToPrevious: true, differentFirstPage: false, differentOddEven: false, header: [], footer: [], firstPageHeader: [], firstPageFooter: [], evenPageHeader: [], evenPageFooter: [], pageNumber: { enabled: true, format: 'arabic', position: 'footer', alignment: 'center' } },
         content: []
       }
-      next.sections.push(section)
-      sectionMap.set(section.id, section)
+  const rebuilt: SectionV3[] = [firstSection]
+  let section = firstSection
+  let markerControlledSection = false
+  for (const node of json.content || []) {
+    if (node.type === 'sectionBreak') {
+      const payload = (node.attrs?.payload || {}) as Record<string, unknown>
+      const id = String(payload.nextSectionId || newNodeId('section'))
+      const existing = templates.get(id)
+      section = existing
+        ? { ...structuredClone(existing), breakType: (payload.breakType || existing.breakType) as SectionV3['breakType'], content: [] }
+        : {
+            ...structuredClone(section),
+            id,
+            breakType: (['continuous', 'nextPage', 'oddPage', 'evenPage'].includes(String(payload.breakType)) ? payload.breakType : 'nextPage') as SectionV3['breakType'],
+            content: []
+          }
+      rebuilt.push(section)
+      markerControlledSection = true
+      continue
+    }
+    const requestedSectionId = String(node.attrs?.sectionId || '')
+    if (!markerControlledSection && requestedSectionId && requestedSectionId !== section.id) {
+      const existing = templates.get(requestedSectionId)
+      section = existing
+        ? { ...structuredClone(existing), content: [] }
+        : { ...structuredClone(section), id: requestedSectionId, content: [] }
+      rebuilt.push(section)
     }
     const block = blockFromJson(node)
     if (block) section.content.push(block)
   }
+  next.sections = rebuilt
   return next
 }
 
@@ -844,7 +978,17 @@ export function documentV3ToText(doc: DocumentV3): string {
 export function documentV3ToTiptap(doc: DocumentV3): JSONContent {
   const json: JSONContent = {
     type: 'doc',
-    content: doc.sections.flatMap((section) => section.content.flatMap((block) => blockToJson(block, section.id)))
+    content: doc.sections.flatMap((section, index) => [
+      ...(index ? [{
+        type: 'sectionBreak',
+        attrs: {
+          nodeId: newNodeId('sectionBreak'),
+          sectionId: doc.sections[index - 1]?.id || null,
+          payload: { nextSectionId: section.id, breakType: section.breakType }
+        }
+      } as JSONContent] : []),
+      ...section.content.flatMap((block) => blockToJson(block, section.id))
+    ])
   }
   const seen = new Set<string>()
   const normalize = (node: JSONContent) => {
@@ -934,6 +1078,7 @@ export function createEditorKernel(options: {
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
       TextStyle,
+      LinkMark,
       FontSize,
       CharacterFormatting,
       Color,
@@ -954,7 +1099,12 @@ export function createEditorKernel(options: {
       StyledTableHeader,
       StyledTableCell,
       PageBreakNode,
-      EquationBlockNode
+      SectionBreakNode,
+      EquationBlockNode,
+      TableOfContentsNode,
+      FootnoteReferenceNode,
+      InlineEquationNode,
+      CrossReferenceNode
     ],
     onUpdate: ({ editor }) => {
       options.onUpdate?.(editor.getJSON())

@@ -274,6 +274,10 @@
     firstLineIndentEm: null as number | null,
     leftIndentEm: null as number | null,
     rightIndentEm: null as number | null,
+    keepWithNext: false,
+    keepLinesTogether: false,
+    pageBreakBefore: false,
+    tabStops: [] as Array<{ positionEm: number; alignment: string }>,
     spaceBeforePt: null as number | null,
     spaceAfterPt: null as number | null,
     styles: [] as Array<{ id: string; name: string }>
@@ -1062,6 +1066,10 @@
       firstLineIndentEm: (detail as any).firstLineIndentEm == null ? null : Number((detail as any).firstLineIndentEm),
       leftIndentEm: (detail as any).leftIndentEm == null ? null : Number((detail as any).leftIndentEm),
       rightIndentEm: (detail as any).rightIndentEm == null ? null : Number((detail as any).rightIndentEm),
+      keepWithNext: Boolean((detail as any).keepWithNext),
+      keepLinesTogether: Boolean((detail as any).keepLinesTogether),
+      pageBreakBefore: Boolean((detail as any).pageBreakBefore),
+      tabStops: Array.isArray((detail as any).tabStops) ? (detail as any).tabStops : [],
       spaceBeforePt: (detail as any).spaceBeforePt == null ? null : Number((detail as any).spaceBeforePt),
       spaceAfterPt: (detail as any).spaceAfterPt == null ? null : Number((detail as any).spaceAfterPt),
       styles: Array.isArray((detail as any).styles)

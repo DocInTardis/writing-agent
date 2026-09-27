@@ -65,6 +65,8 @@ export type EditorCommand =
   | 'indent'
   | 'outdent'
   | 'page-break'
+  | 'section-break-next'
+  | 'section-break-continuous'
   | 'link'
   | 'hr'
   | 'superscript'
@@ -101,6 +103,11 @@ export type EditorCommand =
   | `space-after:${string}`
   | `left-indent:${string}`
   | `right-indent:${string}`
+  | `first-indent:${string}`
+  | `keep-with-next:${string}`
+  | `keep-lines:${string}`
+  | `page-break-before:${string}`
+  | `tab-stop:${string}`
   | `border-color:${string}`
   | `shading-color:${string}`
   | `table-cell-bg:${string}`
