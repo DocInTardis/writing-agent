@@ -36,6 +36,7 @@ export type EditorCommand =
   | 'quote'
   | 'code'
   | 'image'
+  | 'diagram'
   | 'table'
   | 'table-row-before'
   | 'table-row-after'
@@ -74,6 +75,9 @@ export type EditorCommand =
   | 'math-inline'
   | 'math-block'
   | 'footnote'
+  | 'endnote'
+  | 'citation'
+  | 'bibliography'
   | 'toc'
   | 'caption'
   | 'cross-reference'
@@ -84,6 +88,9 @@ export type EditorCommand =
   | 'zoom-100'
   | 'find-replace'
   | 'proofread'
+  | 'add-comment'
+  | 'track-changes'
+  | 'review-revisions'
   | 'markdown-import'
   | 'markdown-export'
   | 'view-shortcuts'
@@ -99,6 +106,8 @@ export type EditorCommand =
   | `text-transform:${string}`
   | `font-weight:${string}`
   | `font-style:${string}`
+  | `font-variant:${string}`
+  | `text-shadow:${string}`
   | `space-before:${string}`
   | `space-after:${string}`
   | `left-indent:${string}`
@@ -112,6 +121,8 @@ export type EditorCommand =
   | `shading-color:${string}`
   | `table-cell-bg:${string}`
   | `table-cell-valign:${string}`
+  | `table-cell-border:${string}`
+  | `table-row-height:${string}`
   | `table-caption:${string}`
   | `table-align:${string}`
   | `table-width:${string}`

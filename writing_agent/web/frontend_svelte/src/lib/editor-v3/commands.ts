@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/core'
 import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model'
-import { NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
+import { AllSelection, NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state'
 
 export type CommandSource = 'user' | 'shortcut' | 'ai' | 'import'
 export type ReviewMode = 'direct' | 'suggest'
@@ -28,6 +28,7 @@ export interface CommandResult {
   affectedNodeIds: string[]
   warnings: string[]
   error?: string
+  proposal?: Record<string, unknown>
 }
 
 type CommandHandler = (editor: Editor, command: DocumentCommand<any>) => boolean
@@ -98,6 +99,32 @@ export function registeredDocumentCommands(): string[] {
   return [...registry.keys()].sort()
 }
 
+function selectCommandTarget(editor: Editor, target: CommandTarget): boolean {
+  if (target.kind === 'selection') {
+    if (target.from === undefined || target.to === undefined) return true
+    const from = Math.max(0, Math.min(editor.state.doc.content.size, target.from))
+    const to = Math.max(from, Math.min(editor.state.doc.content.size, target.to))
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, from, to)))
+    return true
+  }
+  if (target.kind === 'document') {
+    editor.view.dispatch(editor.state.tr.setSelection(new AllSelection(editor.state.doc)))
+    return true
+  }
+  const matches: Array<{ position: number; size: number }> = []
+  const wanted = target.kind === 'nodes' ? new Set(target.nodeIds) : null
+  const sectionId = target.kind === 'section' ? target.sectionId : ''
+  editor.state.doc.forEach((node, position) => {
+    const selected = wanted ? wanted.has(String(node.attrs?.nodeId || '')) : String(node.attrs?.sectionId || '') === sectionId
+    if (selected) matches.push({ position, size: node.nodeSize })
+  })
+  if (!matches.length || (wanted && matches.length !== wanted.size)) return false
+  const from = Math.min(...matches.map((item) => item.position))
+  const to = Math.max(...matches.map((item) => item.position + item.size))
+  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, Math.min(from + 1, to), Math.max(from + 1, to - 1))))
+  return true
+}
+
 export function executeDocumentCommand(editor: Editor, command: DocumentCommand): CommandResult {
   const handler = registry.get(command.type)
   if (!handler) {
@@ -111,17 +138,24 @@ export function executeDocumentCommand(editor: Editor, command: DocumentCommand)
     }
   }
   if (command.reviewMode === 'suggest' && command.source === 'ai') {
+    const proposal = {
+      command,
+      selection: { from: editor.state.selection.from, to: editor.state.selection.to },
+      documentVersion: Number(editor.state.doc.attrs?.version || 0)
+    }
+    window.dispatchEvent(new CustomEvent('wa-ai-command-proposal', { detail: proposal }))
     return {
-      ok: false,
+      ok: true,
       changed: false,
       commandId: command.id,
       affectedNodeIds: [],
-      warnings: ['AI suggestion transactions are not enabled yet.'],
-      error: 'review_mode_not_ready'
+      warnings: ['pending_user_review'],
+      proposal
     }
   }
   const before = editor.state.doc.content.size
   try {
+    if (!selectCommandTarget(editor, command.target)) throw new Error('command_target_not_found')
     const applied = handler(editor, command)
     return {
       ok: applied,
@@ -192,6 +226,12 @@ registerDocumentCommand('set_character_format', (editor, command) => {
     if (!['normal', 'italic'].includes(style)) return false
     attrs.fontStyle = style
   }
+  if ('fontVariant' in command.params) {
+    const variant = String(command.params.fontVariant || '')
+    if (!['normal', 'small-caps'].includes(variant)) return false
+    attrs.fontVariant = variant
+  }
+  if ('textShadow' in command.params) attrs.textShadow = String(command.params.textShadow || '') || null
   if (!Object.keys(attrs).length) return false
   return editor.chain().focus().setMark('textStyle', attrs).run()
 })
@@ -248,21 +288,29 @@ registerDocumentCommand('set_paragraph_format', (editor, command) => {
 })
 registerDocumentCommand('toggle_bullet_list', (editor) => editor.chain().focus().toggleBulletList().run())
 registerDocumentCommand('toggle_ordered_list', (editor) => editor.chain().focus().toggleOrderedList().run())
+registerDocumentCommand('list_indent', (editor) => editor.chain().focus().sinkListItem('listItem').run())
+registerDocumentCommand('list_outdent', (editor) => editor.chain().focus().liftListItem('listItem').run())
 registerDocumentCommand('toggle_blockquote', (editor) => editor.chain().focus().toggleBlockquote().run())
 registerDocumentCommand('toggle_code_block', (editor) => editor.chain().focus().toggleCodeBlock().run())
-registerDocumentCommand('insert_page_break', (editor) => editor.chain().focus().insertContent({ type: 'pageBreak', attrs: { nodeId: null } }).run())
+registerDocumentCommand('insert_page_break', (editor) => editor.chain().focus().insertContent([
+  { type: 'pageBreak', attrs: { nodeId: null } },
+  { type: 'paragraph', attrs: { nodeId: null, styleId: 'normal' } }
+]).run())
 registerDocumentCommand('insert_section_break', (editor, command) => {
   const breakType = ['continuous', 'nextPage', 'oddPage', 'evenPage'].includes(String(command.params.breakType))
     ? String(command.params.breakType)
     : 'nextPage'
-  return editor.chain().focus().insertContent({
-    type: 'sectionBreak',
-    attrs: {
-      nodeId: null,
-      sectionId: null,
-      payload: { nextSectionId: `section_${crypto.randomUUID().replace(/-/g, '')}`, breakType }
-    }
-  }).run()
+  return editor.chain().focus().insertContent([
+    {
+      type: 'sectionBreak',
+      attrs: {
+        nodeId: null,
+        sectionId: null,
+        payload: { nextSectionId: `section_${crypto.randomUUID().replace(/-/g, '')}`, breakType }
+      }
+    },
+    { type: 'paragraph', attrs: { nodeId: null, styleId: 'normal' } }
+  ]).run()
 })
 registerDocumentCommand('insert_figure', (editor, command) => editor.chain().focus().insertContent([
   {
@@ -293,7 +341,12 @@ registerDocumentCommand('update_figure', (editor, command) => {
         : 'center',
       wrap: ['inline', 'square'].includes(String(command.params.wrap ?? payload.wrap))
         ? String(command.params.wrap ?? payload.wrap)
-        : 'inline'
+        : 'inline',
+      spec: command.params.spec ?? payload.spec,
+      svg: command.params.svg ?? payload.svg,
+      src: command.params.src ?? payload.src,
+      editableSource: command.params.editableSource ?? payload.editableSource,
+      crop: command.params.crop ?? payload.crop
     }
   }).run()
 })
@@ -335,6 +388,21 @@ registerDocumentCommand('table_set_vertical_align', (editor, command) => editor.
   'verticalAlign',
   ['top', 'middle', 'bottom'].includes(String(command.params.alignment)) ? String(command.params.alignment) : 'top'
 ).run())
+registerDocumentCommand('table_set_cell_border', (editor, command) => editor.chain().focus()
+  .setCellAttribute('borderColor', String(command.params.color || '#64748b'))
+  .setCellAttribute('borderWidthPt', Math.max(0, Math.min(6, Number(command.params.widthPt || 0.75))))
+  .run())
+registerDocumentCommand('table_set_row_height', (editor, command) => {
+  const selection = editor.state.selection
+  for (let depth = selection.$from.depth; depth > 0; depth -= 1) {
+    if (selection.$from.node(depth).type.name !== 'tableRow') continue
+    const position = selection.$from.before(depth)
+    const node = selection.$from.node(depth)
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(position, undefined, { ...node.attrs, heightPx: Math.max(20, Math.min(500, Number(command.params.heightPx || 36))) }))
+    return true
+  }
+  return false
+})
 registerDocumentCommand('table_distribute_columns', (editor) => {
   const selection = editor.state.selection
   let tableDepth = -1
@@ -378,10 +446,10 @@ registerDocumentCommand('table_distribute_rows', (editor) => {
   return true
 })
 registerDocumentCommand('table_delete', (editor) => editor.chain().focus().deleteTable().run())
-registerDocumentCommand('insert_equation', (editor, command) => editor.chain().focus().insertContent({
-  type: 'equationBlock',
-  attrs: { nodeId: null, payload: { latex: String(command.params.latex || '') } }
-}).run())
+registerDocumentCommand('insert_equation', (editor, command) => editor.chain().focus().insertContent([
+  { type: 'equationBlock', attrs: { nodeId: null, payload: { latex: String(command.params.latex || '') } } },
+  { type: 'paragraph', attrs: { nodeId: null, styleId: 'normal' } }
+]).run())
 registerDocumentCommand('insert_inline_equation', (editor, command) => {
   const latex = String(command.params.latex || '').trim()
   if (!latex) return false
@@ -394,6 +462,23 @@ registerDocumentCommand('insert_footnote_reference', (editor, command) => {
   return insertInlineContent(editor, {
     type: 'footnoteReference',
     attrs: { payload: { noteId, label: String(command.params.label || ''), text } }
+  })
+})
+registerDocumentCommand('insert_endnote_reference', (editor, command) => {
+  const noteId = String(command.params.noteId || '').trim()
+  const text = String(command.params.text || '').trim()
+  if (!noteId || !text) return false
+  return insertInlineContent(editor, {
+    type: 'endnoteReference',
+    attrs: { payload: { noteId, label: String(command.params.label || ''), text } }
+  })
+})
+registerDocumentCommand('insert_citation', (editor, command) => {
+  const citationId = String(command.params.citationId || '').trim()
+  if (!citationId) return false
+  return insertInlineContent(editor, {
+    type: 'citationReference',
+    attrs: { payload: { ...command.params, citationId, label: String(command.params.label || citationId) } }
   })
 })
 registerDocumentCommand('insert_cross_reference', (editor, command) => {
@@ -424,12 +509,32 @@ registerDocumentCommand('update_table_of_contents', (editor) => {
       ...current.attrs,
       payload: { entries, updatedAt: Date.now() }
     }))
+registerDocumentCommand('update_equation', (editor, command) => editor.isActive('equationBlock') && editor.chain().focus().updateAttributes('equationBlock', {
+  payload: { ...(editor.getAttributes('equationBlock').payload || {}), latex: String(command.params.latex || '') }
+}).run())
     return true
   }
-  return editor.chain().focus().insertContent({
-    type: 'tableOfContents',
-    attrs: { nodeId: null, sectionId: null, payload: { entries, updatedAt: Date.now() } }
-  }).run()
+  return editor.chain().focus().insertContent([
+    { type: 'tableOfContents', attrs: { nodeId: null, sectionId: null, payload: { entries, updatedAt: Date.now() } } },
+    { type: 'paragraph', attrs: { nodeId: null, styleId: 'normal' } }
+  ]).run()
+})
+registerDocumentCommand('update_bibliography', (editor, command) => {
+  const entries = Array.isArray(command.params.entries) ? command.params.entries : []
+  let position = -1
+  editor.state.doc.forEach((node, offset) => {
+    if (position < 0 && node.type.name === 'bibliography') position = offset
+  })
+  if (position >= 0) {
+    const current = editor.state.doc.nodeAt(position)
+    if (!current) return false
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(position, undefined, { ...current.attrs, payload: { entries, updatedAt: Date.now() } }))
+    return true
+  }
+  return editor.chain().focus().insertContent([
+    { type: 'bibliography', attrs: { nodeId: null, sectionId: null, payload: { entries, updatedAt: Date.now() } } },
+    { type: 'paragraph', attrs: { nodeId: null, styleId: 'normal' } }
+  ]).run()
 })
 registerDocumentCommand('insert_horizontal_rule', (editor) => editor.chain().focus().setHorizontalRule().run())
 registerDocumentCommand('clear_formatting', (editor) => editor.chain().focus().unsetAllMarks().clearNodes().run())

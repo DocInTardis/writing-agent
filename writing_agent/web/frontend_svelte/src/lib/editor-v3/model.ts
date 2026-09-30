@@ -1,5 +1,13 @@
 export type JsonObject = Record<string, unknown>
 
+// Document V3 values may be wrapped in Svelte's reactive Proxy. The native
+// structuredClone API rejects Proxy objects, while the document schema is
+// deliberately JSON-only. Serialize first so every editing path receives a
+// detached, plain value regardless of whether it came from a store or $state.
+export function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
 export type StyleKind = 'paragraph' | 'character' | 'table'
 
 export interface StyleProperties {
@@ -278,7 +286,7 @@ export function createDocumentV3(title = '未命名文档'): DocumentV3 {
     id: makeId('doc'),
     title,
     metadata: {},
-    styles: structuredClone(DEFAULT_STYLES),
+    styles: cloneJson(DEFAULT_STYLES),
     numbering: [],
     sections: [
       {
@@ -343,7 +351,7 @@ function legacyBlockToV3(raw: JsonObject): V3BlockNode {
 }
 
 export function migrateLegacyDocIr(value: unknown): DocumentV3 {
-  if (isDocumentV3(value)) return structuredClone(value)
+  if (isDocumentV3(value)) return cloneJson(value)
   const legacy = value && typeof value === 'object' ? (value as JsonObject) : {}
   const doc = createDocumentV3(String(legacy.title || '未命名文档'))
   const sections = Array.isArray(legacy.sections) ? legacy.sections : []
@@ -394,4 +402,55 @@ export function resolvedStyleProperties(
   nextVisiting.add(styleId)
   const inherited = style.basedOn ? resolvedStyleProperties(doc, style.basedOn, nextVisiting) : {}
   return { ...inherited, ...style.properties }
+}
+
+export function refreshDocumentFields(document: DocumentV3): DocumentV3 {
+  const next = cloneJson(document)
+  const headings = new Map<string, { text: string; level: number }>()
+  const headingEntries: Array<{ id: string; text: string; level: number }> = []
+  const textOf = (content: Array<V3BlockNode | InlineNode> = []) => content.map((node) => node.type === 'text' ? node.text || '' : '').join('')
+  for (const section of next.sections) {
+    for (const block of section.content) {
+      if (block.type !== 'heading') continue
+      const entry = { id: block.id, text: textOf(block.content), level: Math.max(1, Math.min(6, Number(block.attrs?.level || 1))) }
+      headings.set(block.id, entry)
+      headingEntries.push(entry)
+    }
+  }
+  let figureNumber = 0
+  let tableNumber = 0
+  for (const section of next.sections) {
+    for (const block of section.content) {
+      if (block.type === 'tableOfContents') {
+        const previous = Array.isArray(block.attrs?.entries) ? block.attrs?.entries : []
+        block.attrs = { ...(block.attrs || {}), entries: headingEntries, updatedAt: JSON.stringify(previous) === JSON.stringify(headingEntries) ? block.attrs?.updatedAt : Date.now() }
+      }
+      if (block.type === 'figure') {
+        figureNumber += 1
+        const figure = block.attrs?.figure && typeof block.attrs.figure === 'object' ? block.attrs.figure as JsonObject : block.attrs || {}
+        figure.number = figureNumber
+        figure.displayCaption = `图 ${figureNumber}${figure.caption ? `　${String(figure.caption)}` : ''}`
+        block.attrs = { ...(block.attrs || {}), figure }
+      }
+      if (block.type === 'table') {
+        tableNumber += 1
+        const table = block.attrs?.table && typeof block.attrs.table === 'object' ? block.attrs.table as JsonObject : block.attrs || {}
+        table.number = tableNumber
+        table.displayCaption = `表 ${tableNumber}${table.caption ? `　${String(table.caption)}` : ''}`
+        block.attrs = { ...(block.attrs || {}), table }
+      }
+      for (const inline of block.content || []) {
+        if (!('attrs' in inline) || !inline.attrs) continue
+        if (inline.type === 'field' && inline.attrs.fieldKind === 'crossReference') {
+          const heading = headings.get(String(inline.attrs.targetId || ''))
+          if (heading) inline.attrs = { ...inline.attrs, targetText: heading.text, label: heading.text }
+        }
+      }
+    }
+  }
+  const footnotes = Array.isArray(next.notes.footnotes) ? next.notes.footnotes : []
+  const endnotes = Array.isArray(next.notes.endnotes) ? next.notes.endnotes : []
+  footnotes.forEach((item, index) => { if (item && typeof item === 'object') item.label = String(index + 1) })
+  endnotes.forEach((item, index) => { if (item && typeof item === 'object') item.label = String(index + 1) })
+  return next
 }

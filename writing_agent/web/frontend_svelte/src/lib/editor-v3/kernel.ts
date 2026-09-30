@@ -12,10 +12,21 @@ import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
 
-import { resolvedStyleProperties, type DocumentV3, type InlineNode, type SectionV3, type StyleDefinition, type V3BlockNode } from './model'
+import { cloneJson, resolvedStyleProperties, type DocumentV3, type InlineNode, type SectionV3, type StyleDefinition, type V3BlockNode } from './model'
 import type { DocumentLayout, LayoutPage } from '../engine/documentEngine'
 
 const paginationPluginKey = new PluginKey<DecorationSet>('rustPagination')
+
+function makePageRegionInteractive(element: HTMLElement, page: LayoutPage, region: 'header' | 'footer') {
+  element.dataset.pageRegion = region
+  element.dataset.sectionId = page.sectionId || ''
+  element.title = `双击编辑${region === 'header' ? '页眉' : '页脚'}`
+  element.addEventListener('dblclick', (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    window.dispatchEvent(new CustomEvent('wa-edit-page-region', { detail: { region, sectionId: page.sectionId || '', pageNumber: page.pageNumber } }))
+  })
+}
 
 function pageBoundary(page: LayoutPage, pageCount: number, nextPage?: LayoutPage, final = false) {
   const element = document.createElement('span')
@@ -27,17 +38,20 @@ function pageBoundary(page: LayoutPage, pageCount: number, nextPage?: LayoutPage
     const footerText = document.createElement('span')
     footerText.className = 'wa-page-footer-text'
     footerText.textContent = page.footerText
+    makePageRegionInteractive(footerText, page, 'footer')
     element.appendChild(footerText)
   }
   const footer = document.createElement('span')
   footer.className = 'wa-page-number'
   footer.style.textAlign = page.pageNumberAlignment || 'center'
   footer.textContent = page.pageNumberText ? `第 ${page.pageNumberText} 页，共 ${pageCount} 页` : ''
+  makePageRegionInteractive(footer, page, page.pageNumberPosition === 'header' ? 'header' : 'footer')
   element.appendChild(footer)
   if (nextPage?.headerText) {
     const headerText = document.createElement('span')
     headerText.className = 'wa-page-header-text'
     headerText.textContent = nextPage.headerText
+    makePageRegionInteractive(headerText, nextPage, 'header')
     element.appendChild(headerText)
   }
   return element
@@ -67,6 +81,7 @@ const RustPagination = Extension.create({
               header.className = 'wa-first-page-header'
               header.contentEditable = 'false'
               header.textContent = firstPage.headerText || ''
+              makePageRegionInteractive(header, firstPage, 'header')
               return header
             }, { side: -1, key: 'page-first-header' }))
           }
@@ -192,6 +207,16 @@ const tableCellStyleAttributes = {
     renderHTML: (attributes: Record<string, unknown>) => attributes.verticalAlign
       ? { style: `vertical-align:${attributes.verticalAlign}` }
       : {}
+  },
+  borderColor: {
+    default: null,
+    parseHTML: (element: HTMLElement) => element.style.borderColor || null,
+    renderHTML: (attributes: Record<string, unknown>) => attributes.borderColor ? { style: `border-color:${attributes.borderColor}` } : {}
+  },
+  borderWidthPt: {
+    default: null,
+    parseHTML: (element: HTMLElement) => Number.parseFloat(element.style.borderWidth) || null,
+    renderHTML: (attributes: Record<string, unknown>) => attributes.borderWidthPt ? { style: `border-width:${attributes.borderWidthPt}pt;border-style:solid` } : {}
   }
 }
 
@@ -307,7 +332,14 @@ const ParagraphFormatting = Extension.create({
         parseHTML: (element: HTMLElement) => element.style.backgroundColor || null,
         renderHTML: (attrs: Record<string, unknown>) => attrs.shadingColor ? { style: `background-color:${attrs.shadingColor}` } : {}
       },
-      tabStops: { default: null }
+      tabStops: {
+        default: null,
+        renderHTML: (attrs: Record<string, unknown>) => {
+          const stops = Array.isArray(attrs.tabStops) ? attrs.tabStops : []
+          const size = Number((stops[0] as Record<string, unknown> | undefined)?.positionEm || 8)
+          return { style: `tab-size:${Math.max(1, Math.min(32, size))}` }
+        }
+      }
     }
     return [{ types: ['paragraph', 'heading'], attributes }]
   }
@@ -472,6 +504,18 @@ const ReliableBlockKeyboard = Extension.create<{
             if (applied) event.preventDefault()
             return applied
           }
+          const ancestorNames = Array.from({ length: selection.$from.depth }, (_, index) => selection.$from.node(index + 1).type.name)
+          if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey && !ancestorNames.some((name) => name === 'tableCell' || name === 'tableHeader')) {
+            const inList = ancestorNames.includes('listItem')
+            if (inList) {
+              const applied = onCommand?.(event.shiftKey ? 'list_outdent' : 'list_indent') || false
+              if (applied) event.preventDefault()
+              return applied
+            }
+            event.preventDefault()
+            view.dispatch(view.state.tr.insertText('\t').scrollIntoView())
+            return true
+          }
           if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && selection.empty && selection.$from.parent.isTextblock) {
             const styleId = String(selection.$from.parent.attrs?.styleId || '')
             const applied = styleId ? onCommand?.('split_with_next_style', { styleId }) || false : false
@@ -558,6 +602,16 @@ const CharacterFormatting = Extension.create({
           default: null,
           parseHTML: (element) => element.style.fontStyle || null,
           renderHTML: (attributes) => attributes.fontStyle ? { style: `font-style:${attributes.fontStyle}` } : {}
+        },
+        fontVariant: {
+          default: null,
+          parseHTML: (element) => element.style.fontVariant || null,
+          renderHTML: (attributes) => attributes.fontVariant ? { style: `font-variant:${attributes.fontVariant}` } : {}
+        },
+        textShadow: {
+          default: null,
+          parseHTML: (element) => element.style.textShadow || null,
+          renderHTML: (attributes) => attributes.textShadow ? { style: `text-shadow:${attributes.textShadow}` } : {}
         }
       }
     }]
@@ -587,7 +641,7 @@ const LinkMark = Mark.create({
   }
 })
 
-function inlineObjectNode(name: 'footnoteReference' | 'inlineEquation' | 'crossReference') {
+function inlineObjectNode(name: 'footnoteReference' | 'endnoteReference' | 'citationReference' | 'inlineEquation' | 'crossReference') {
   return Node.create({
     name,
     group: 'inline',
@@ -606,7 +660,7 @@ function inlineObjectNode(name: 'footnoteReference' | 'inlineEquation' | 'crossR
         : {}
       const label = name === 'inlineEquation'
         ? String(payload.latex || '公式')
-        : name === 'footnoteReference'
+        : name === 'footnoteReference' || name === 'endnoteReference'
           ? String(payload.label || payload.number || '注')
           : String(payload.label || payload.targetText || '引用')
       const { payload: _payload, ...domAttributes } = HTMLAttributes
@@ -619,7 +673,7 @@ function inlineObjectNode(name: 'footnoteReference' | 'inlineEquation' | 'crossR
   })
 }
 
-function atomNode(name: 'figure' | 'pageBreak' | 'sectionBreak' | 'equationBlock' | 'tableOfContents') {
+function atomNode(name: 'figure' | 'pageBreak' | 'sectionBreak' | 'equationBlock' | 'tableOfContents' | 'bibliography') {
   return Node.create({
     name,
     group: 'block',
@@ -637,8 +691,8 @@ function atomNode(name: 'figure' | 'pageBreak' | 'sectionBreak' | 'equationBlock
     },
     renderHTML({ HTMLAttributes }) {
       const payload = HTMLAttributes.payload && typeof HTMLAttributes.payload === 'object' ? HTMLAttributes.payload : {}
-      const caption = String((payload as Record<string, unknown>).caption || '')
-      const label = name === 'pageBreak' ? '分页符' : name === 'sectionBreak' ? '分节符' : name === 'figure' ? '图片/图表' : name === 'tableOfContents' ? '自动目录' : '公式'
+      const caption = String((payload as Record<string, unknown>).displayCaption || (payload as Record<string, unknown>).caption || '')
+      const label = name === 'pageBreak' ? '分页符' : name === 'sectionBreak' ? '分节符' : name === 'figure' ? '图片/图表' : name === 'tableOfContents' ? '自动目录' : name === 'bibliography' ? '参考文献' : '公式'
       const { payload: _payload, ...domAttributes } = HTMLAttributes
       const attributes = mergeAttributes(domAttributes, {
         'data-v3-node': name,
@@ -660,6 +714,15 @@ function atomNode(name: 'figure' | 'pageBreak' | 'sectionBreak' | 'equationBlock
           ])]
         ]
       }
+      if (name === 'bibliography') {
+        const entries = Array.isArray((payload as Record<string, unknown>).entries)
+          ? (payload as Record<string, unknown>).entries as Array<Record<string, unknown>>
+          : []
+        return ['section', attributes,
+          ['strong', { class: 'v3-bibliography-title' }, '参考文献'],
+          ['ol', { class: 'v3-bibliography-entries' }, ...entries.map((entry) => ['li', { 'data-citation-id': String(entry.id || '') }, String(entry.text || entry.label || entry.id || '')])]
+        ]
+      }
       if (name === 'figure') {
         const source = String((payload as Record<string, unknown>).src || (payload as Record<string, unknown>).url || '')
         const widthPercent = Math.max(10, Math.min(100, Number((payload as Record<string, unknown>).widthPercent || 100)))
@@ -669,6 +732,7 @@ function atomNode(name: 'figure' | 'pageBreak' | 'sectionBreak' | 'equationBlock
         const figureAttributes = mergeAttributes(attributes, {
           'data-wrap': String((payload as Record<string, unknown>).wrap || 'inline'),
           'data-alignment': alignment,
+          'data-crop': String((payload as Record<string, unknown>).crop || 'none'),
           style: `width:${widthPercent}%;margin-left:${alignment === 'left' ? '0' : 'auto'};margin-right:${alignment === 'right' ? '0' : 'auto'}`
         })
         return ['figure', figureAttributes,
@@ -694,7 +758,10 @@ const PageBreakNode = atomNode('pageBreak')
 const SectionBreakNode = atomNode('sectionBreak')
 const EquationBlockNode = atomNode('equationBlock')
 const TableOfContentsNode = atomNode('tableOfContents')
+const BibliographyNode = atomNode('bibliography')
 const FootnoteReferenceNode = inlineObjectNode('footnoteReference')
+const EndnoteReferenceNode = inlineObjectNode('endnoteReference')
+const CitationReferenceNode = inlineObjectNode('citationReference')
 const InlineEquationNode = inlineObjectNode('inlineEquation')
 const CrossReferenceNode = inlineObjectNode('crossReference')
 
@@ -706,9 +773,10 @@ function textNodes(content: Array<V3BlockNode | InlineNode> | undefined): JSONCo
     }
     if (node.type === 'hardBreak') return [{ type: 'hardBreak' }]
     if (node.type === 'footnoteReference') return [{ type: 'footnoteReference', attrs: { payload: node.attrs || {} } }]
+    if (node.type === 'field' && node.attrs?.fieldKind === 'endnote') return [{ type: 'endnoteReference', attrs: { payload: node.attrs } }]
     if (node.type === 'field' && node.attrs?.fieldKind === 'equation') return [{ type: 'inlineEquation', attrs: { payload: node.attrs } }]
     if (node.type === 'field' && node.attrs?.fieldKind === 'crossReference') return [{ type: 'crossReference', attrs: { payload: node.attrs } }]
-    if (node.type === 'citation') return [{ type: 'crossReference', attrs: { payload: { ...(node.attrs || {}), referenceKind: 'citation' } } }]
+    if (node.type === 'citation') return [{ type: 'citationReference', attrs: { payload: node.attrs || {} } }]
     return []
   })
 }
@@ -744,7 +812,9 @@ function tableBlockToJson(block: V3BlockNode, sectionId: string): JSONContent {
           rowspan,
           colwidth: colwidth?.length ? colwidth : null,
           backgroundColor: value.backgroundColor ? String(value.backgroundColor) : null,
-          verticalAlign: value.verticalAlign ? String(value.verticalAlign) : null
+          verticalAlign: value.verticalAlign ? String(value.verticalAlign) : null,
+          borderColor: value.borderColor ? String(value.borderColor) : null,
+          borderWidthPt: value.borderWidthPt ? Number(value.borderWidthPt) : null
         })]
       })
       if (cells.length) {
@@ -799,6 +869,7 @@ function blockToJson(block: V3BlockNode, sectionId: string): JSONContent[] {
   if (block.type === 'sectionBreak') return [{ type: 'sectionBreak', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
   if (block.type === 'equationBlock') return [{ type: 'equationBlock', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
   if (block.type === 'tableOfContents') return [{ type: 'tableOfContents', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
+  if (block.type === 'bibliography') return [{ type: 'bibliography', attrs: { nodeId: block.id, sectionId, payload: block.attrs || {} } }]
   if (block.type === 'bulletList' || block.type === 'orderedList') {
     const items = (block.content || []).filter((item): item is V3BlockNode => 'id' in item)
     return [{
@@ -824,11 +895,13 @@ function inlineFromJson(nodes: JSONContent[] | undefined): InlineNode[] {
     if (node.type === 'text') return [{ type: 'text', text: node.text || '', marks: (node.marks || []) as InlineNode['marks'] } as InlineNode]
     if (node.type === 'hardBreak') return [{ type: 'hardBreak' } as InlineNode]
     if (node.type === 'footnoteReference') return [{ type: 'footnoteReference', attrs: (node.attrs?.payload || {}) as Record<string, unknown> } as InlineNode]
+    if (node.type === 'endnoteReference') return [{ type: 'field', attrs: { ...((node.attrs?.payload || {}) as Record<string, unknown>), fieldKind: 'endnote' } } as InlineNode]
     if (node.type === 'inlineEquation') return [{ type: 'field', attrs: { ...((node.attrs?.payload || {}) as Record<string, unknown>), fieldKind: 'equation' } } as InlineNode]
     if (node.type === 'crossReference') {
       const payload = (node.attrs?.payload || {}) as Record<string, unknown>
       return [{ type: payload.referenceKind === 'citation' ? 'citation' : 'field', attrs: { ...payload, fieldKind: payload.referenceKind === 'citation' ? undefined : 'crossReference' } } as InlineNode]
     }
+    if (node.type === 'citationReference') return [{ type: 'citation', attrs: (node.attrs?.payload || {}) as Record<string, unknown> } as InlineNode]
     return []
   })
 }
@@ -852,7 +925,9 @@ function tableFromJson(node: JSONContent, id: string): V3BlockNode {
     rowspan: Math.max(1, Number(cell.attrs?.rowspan || 1)),
     colwidth: Array.isArray(cell.attrs?.colwidth) ? cell.attrs?.colwidth : null,
     backgroundColor: cell.attrs?.backgroundColor || null,
-    verticalAlign: cell.attrs?.verticalAlign || null
+    verticalAlign: cell.attrs?.verticalAlign || null,
+    borderColor: cell.attrs?.borderColor || null,
+    borderWidthPt: cell.attrs?.borderWidthPt || null
   })))
   const rowHeights = rows.map((row) => Number(row.attrs?.heightPx) || null)
   return {
@@ -905,15 +980,16 @@ function blockFromJson(node: JSONContent): V3BlockNode | null {
   if (node.type === 'sectionBreak') return { id, type: 'sectionBreak', attrs: (attrs.payload || {}) as Record<string, unknown> }
   if (node.type === 'equationBlock') return { id, type: 'equationBlock', attrs: (attrs.payload || {}) as Record<string, unknown> }
   if (node.type === 'tableOfContents') return { id, type: 'tableOfContents', attrs: (attrs.payload || {}) as Record<string, unknown> }
+  if (node.type === 'bibliography') return { id, type: 'bibliography', attrs: (attrs.payload || {}) as Record<string, unknown> }
   return null
 }
 
 export function tiptapToDocumentV3(base: DocumentV3, json: JSONContent): DocumentV3 {
-  const next = structuredClone(base)
+  const next = cloneJson(base)
   const templates = new Map(next.sections.map((section) => [section.id, section]))
   const firstTemplate = next.sections[0]
   const firstSection: SectionV3 = firstTemplate
-    ? { ...structuredClone(firstTemplate), content: [] }
+    ? { ...cloneJson(firstTemplate), content: [] }
     : {
         id: newNodeId('section'),
         breakType: 'nextPage',
@@ -930,9 +1006,9 @@ export function tiptapToDocumentV3(base: DocumentV3, json: JSONContent): Documen
       const id = String(payload.nextSectionId || newNodeId('section'))
       const existing = templates.get(id)
       section = existing
-        ? { ...structuredClone(existing), breakType: (payload.breakType || existing.breakType) as SectionV3['breakType'], content: [] }
+        ? { ...cloneJson(existing), breakType: (payload.breakType || existing.breakType) as SectionV3['breakType'], content: [] }
         : {
-            ...structuredClone(section),
+            ...cloneJson(section),
             id,
             breakType: (['continuous', 'nextPage', 'oddPage', 'evenPage'].includes(String(payload.breakType)) ? payload.breakType : 'nextPage') as SectionV3['breakType'],
             content: []
@@ -945,8 +1021,8 @@ export function tiptapToDocumentV3(base: DocumentV3, json: JSONContent): Documen
     if (!markerControlledSection && requestedSectionId && requestedSectionId !== section.id) {
       const existing = templates.get(requestedSectionId)
       section = existing
-        ? { ...structuredClone(existing), content: [] }
-        : { ...structuredClone(section), id: requestedSectionId, content: [] }
+        ? { ...cloneJson(existing), content: [] }
+        : { ...cloneJson(section), id: requestedSectionId, content: [] }
       rebuilt.push(section)
     }
     const block = blockFromJson(node)
@@ -1076,7 +1152,7 @@ export function createEditorKernel(options: {
     content: documentV3ToTiptap(options.document),
     editorProps: { attributes: { spellcheck: 'true', autocapitalize: 'sentences' } },
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] }, link: false }),
       TextStyle,
       LinkMark,
       FontSize,
@@ -1102,7 +1178,10 @@ export function createEditorKernel(options: {
       SectionBreakNode,
       EquationBlockNode,
       TableOfContentsNode,
+      BibliographyNode,
       FootnoteReferenceNode,
+      EndnoteReferenceNode,
+      CitationReferenceNode,
       InlineEquationNode,
       CrossReferenceNode
     ],

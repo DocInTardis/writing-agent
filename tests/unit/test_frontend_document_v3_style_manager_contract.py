@@ -9,7 +9,7 @@ def test_style_manager_edits_document_v3_definitions_not_dom_css() -> None:
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
 
     assert 'aria-label="文档样式管理"' in editor
-    assert "const next = structuredClone(activeDocument)" in editor
+    assert "const next = cloneJson(activeDocument)" in editor
     assert "next.styles.findIndex" in editor
     assert "styleSheetForDocument(next)" in editor
     assert "documentV3.set(next)" in editor

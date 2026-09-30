@@ -1,4 +1,4 @@
-import type { DocumentV3, InlineNode, V3BlockNode } from '../editor-v3/model'
+import { cloneJson, type DocumentV3, type InlineNode, type V3BlockNode } from '../editor-v3/model'
 
 type LayoutMetrics = {
   pageCount: number
@@ -180,6 +180,8 @@ function documentV3LayoutInput(document: DocumentV3, layoutVersion: number) {
   const sourceIds: Record<string, string> = {}
   const sectionIds: Record<string, string> = {}
   const forcePageBreakBefore: string[] = []
+  const keepLinesTogether: string[] = []
+  const keepWithNext: string[] = []
   let forceNext = false
   for (const [sectionIndex, section] of document.sections.entries()) {
     if (sectionIndex > 0 && section.breakType !== 'continuous') forceNext = true
@@ -194,6 +196,8 @@ function documentV3LayoutInput(document: DocumentV3, layoutVersion: number) {
       sourceIds[rustId] = block.id
       sectionIds[rustId] = section.id
       if (forceNext || Boolean(block.attrs?.pageBreakBefore)) forcePageBreakBefore.push(rustId)
+      if (Boolean(block.attrs?.keepLinesTogether)) keepLinesTogether.push(rustId)
+      if (Boolean(block.attrs?.keepWithNext)) keepWithNext.push(rustId)
       forceNext = false
       blocks.push(converted)
     }
@@ -222,6 +226,9 @@ function documentV3LayoutInput(document: DocumentV3, layoutVersion: number) {
       lineHeight: 1.5,
       layoutVersion,
       forcePageBreakBefore,
+      keepLinesTogether,
+      keepWithNext,
+      widowOrphanLines: 2,
       sourceIds,
       sectionIds
     }
@@ -259,11 +266,57 @@ export function mirrorMarkdown(markdown: string, checkpoint: boolean): boolean {
 export async function paginateDocumentV3(document: DocumentV3, layoutVersion: number): Promise<DocumentLayout | null> {
   if (!editor && !(await initDocumentEngine())) return null
   if (!editor) return null
-  const input = documentV3LayoutInput(document, layoutVersion)
-  editor.syncJson(JSON.stringify(input.coreDocument))
-  const raw = editor.layoutProtocol(JSON.stringify(input.request))
-  const result = JSON.parse(raw) as DocumentLayout
+  const partials: DocumentLayout[] = []
+  for (const section of document.sections) {
+    const scoped: DocumentV3 = { ...document, sections: [section] }
+    const input = documentV3LayoutInput(scoped, layoutVersion)
+    editor.syncJson(JSON.stringify(input.coreDocument))
+    partials.push(JSON.parse(editor.layoutProtocol(JSON.stringify(input.request))) as DocumentLayout)
+  }
+  let pageOffset = 0
+  const result: DocumentLayout = {
+    protocolVersion: partials[0]?.protocolVersion || 1,
+    layoutVersion,
+    documentVersion: partials[partials.length - 1]?.documentVersion || 0,
+    pageCount: 0,
+    pages: [],
+    blockPage: {}
+  }
+  for (const [sectionIndex, partial] of partials.entries()) {
+    const breakType = document.sections[sectionIndex]?.breakType
+    const nextPageNumber = pageOffset + 1
+    const needsParityPage = sectionIndex > 0 && (
+      (breakType === 'oddPage' && nextPageNumber % 2 === 0) ||
+      (breakType === 'evenPage' && nextPageNumber % 2 === 1)
+    )
+    if (needsParityPage) {
+      const basis = partial.pages[0]
+      result.pages.push({
+        pageNumber: nextPageNumber,
+        width: basis?.width || 794,
+        height: basis?.height || 1123,
+        contentX: basis?.contentX || 0,
+        contentY: basis?.contentY || 0,
+        contentWidth: basis?.contentWidth || 794,
+        contentHeight: basis?.contentHeight || 1123,
+        usedHeight: 0,
+        blocks: [],
+        sectionId: document.sections[sectionIndex]?.id
+      })
+      pageOffset += 1
+    }
+    for (const page of partial.pages) {
+      page.pageNumber += pageOffset
+      for (const block of page.blocks) block.pageNumber = page.pageNumber
+      result.pages.push(page)
+    }
+    for (const [blockId, pageNumber] of Object.entries(partial.blockPage)) result.blockPage[blockId] = pageNumber + pageOffset
+    pageOffset += partial.pageCount
+  }
+  result.pageCount = result.pages.length
   const sections = new Map(document.sections.map((section) => [section.id, section]))
+  const sectionIndexes = new Map(document.sections.map((section, index) => [section.id, index]))
+  const pageInSection = new Map<string, number>()
   const plain = (blocks: V3BlockNode[]) => blocks.map((block) => textOf(block.content)).filter(Boolean).join(' · ')
   const formatPage = (value: number, format: string) => {
     if (format === 'lowerLetter' || format === 'upperLetter') {
@@ -286,11 +339,27 @@ export async function paginateDocumentV3(document: DocumentV3, layoutVersion: nu
     return String(value)
   }
   for (const page of result.pages) {
-    const section = sections.get(page.blocks[0]?.sectionId || '') || document.sections[0]
+    const section = sections.get(page.blocks[0]?.sectionId || page.sectionId || '') || document.sections[0]
     if (!section) continue
-    const definition = section.headerFooter
-    const first = page.pageNumber === 1
-    const even = page.pageNumber % 2 === 0
+    const sectionIndex = sectionIndexes.get(section.id) || 0
+    const definition = cloneJson(section.headerFooter)
+    if (sectionIndex > 0) {
+      const previous = document.sections[sectionIndex - 1]?.headerFooter
+      if (previous && definition.linkHeaderToPrevious) {
+        definition.header = cloneJson(previous.header)
+        definition.firstPageHeader = cloneJson(previous.firstPageHeader)
+        definition.evenPageHeader = cloneJson(previous.evenPageHeader)
+      }
+      if (previous && definition.linkFooterToPrevious) {
+        definition.footer = cloneJson(previous.footer)
+        definition.firstPageFooter = cloneJson(previous.firstPageFooter)
+        definition.evenPageFooter = cloneJson(previous.evenPageFooter)
+      }
+    }
+    const localPage = (pageInSection.get(section.id) || 0) + 1
+    pageInSection.set(section.id, localPage)
+    const first = localPage === 1
+    const even = localPage % 2 === 0
     const headerBlocks = first && definition.differentFirstPage
       ? definition.firstPageHeader
       : even && definition.differentOddEven ? definition.evenPageHeader : definition.header
@@ -303,7 +372,7 @@ export async function paginateDocumentV3(document: DocumentV3, layoutVersion: nu
     page.pageNumberPosition = definition.pageNumber.position
     page.pageNumberAlignment = definition.pageNumber.alignment
     if (definition.pageNumber.enabled) {
-      const value = (definition.pageNumber.startAt || 1) + page.pageNumber - 1
+      const value = (definition.pageNumber.startAt || 1) + localPage - 1
       page.pageNumberText = formatPage(value, definition.pageNumber.format)
     }
   }

@@ -2,11 +2,13 @@
   import { get } from 'svelte/store'
   import { onDestroy, onMount } from 'svelte'
   import { docId, docIrDirty, documentV3, pageSettings, pushToast, type PageSettings } from '../stores'
-  import type { HeaderFooterDefinition, V3BlockNode } from '../editor-v3/model'
+  import { cloneJson, type HeaderFooterDefinition, type V3BlockNode } from '../editor-v3/model'
 
   let open = $state(false)
   let loading = $state(false)
   let draft = $state<PageSettings>({ ...$pageSettings })
+  let activeSectionId = $state('')
+  let requestedRegion = $state<'header' | 'footer'>('header')
 
   function numberValue(value: unknown, fallback: number) {
     const parsed = Number(value)
@@ -26,9 +28,11 @@
     }] : []
   }
 
-  function fromDocument(): PageSettings | null {
-    const section = get(documentV3)?.sections[0]
+  function fromDocument(sectionId = activeSectionId): PageSettings | null {
+    const document = get(documentV3)
+    const section = document?.sections.find((item) => item.id === sectionId) || document?.sections[0]
     if (!section) return null
+    activeSectionId = section.id
     const layout = section.layout
     const headerFooter = section.headerFooter
     return {
@@ -44,6 +48,10 @@
       headerText: blockText(headerFooter.header),
       showFooter: headerFooter.footer.length > 0,
       footerText: blockText(headerFooter.footer),
+      firstPageHeaderText: blockText(headerFooter.firstPageHeader),
+      firstPageFooterText: blockText(headerFooter.firstPageFooter),
+      evenPageHeaderText: blockText(headerFooter.evenPageHeader),
+      evenPageFooterText: blockText(headerFooter.evenPageFooter),
       pageNumbers: headerFooter.pageNumber.enabled,
       pageNumberPosition: headerFooter.pageNumber.alignment,
       pageNumberArea: headerFooter.pageNumber.position,
@@ -85,6 +93,10 @@
         headerText: String(prefs.header_text || ''),
         showFooter: Boolean(prefs.include_footer ?? true),
         footerText: String(prefs.footer_text || ''),
+        firstPageHeaderText: String(prefs.first_page_header_text || ''),
+        firstPageFooterText: String(prefs.first_page_footer_text || ''),
+        evenPageHeaderText: String(prefs.even_page_header_text || ''),
+        evenPageFooterText: String(prefs.even_page_footer_text || ''),
         pageNumbers: Boolean(prefs.page_numbers ?? true),
         pageNumberPosition: ['left', 'center', 'right'].includes(String(prefs.page_number_position || ''))
           ? prefs.page_number_position
@@ -105,10 +117,18 @@
     }
   }
 
-  function show() {
+  function show(sectionId = '') {
+    if (sectionId) activeSectionId = sectionId
     open = true
     window.dispatchEvent(new CustomEvent('wa-editor-context', { detail: { kind: 'page' } }))
     void load()
+  }
+
+  function handlePageRegion(event: Event) {
+    const detail = (event as CustomEvent<{ sectionId?: string; region?: 'header' | 'footer' }>).detail || {}
+    requestedRegion = detail.region === 'footer' ? 'footer' : 'header'
+    show(String(detail.sectionId || ''))
+    setTimeout(() => document.querySelector<HTMLInputElement>(`[data-page-region="${requestedRegion}"]`)?.focus(), 0)
   }
 
   function close() {
@@ -120,8 +140,14 @@
     if (kind && kind !== 'page') open = false
   }
 
-  onMount(() => window.addEventListener('wa-editor-context', handleEditorContext))
-  onDestroy(() => window.removeEventListener('wa-editor-context', handleEditorContext))
+  onMount(() => {
+    window.addEventListener('wa-editor-context', handleEditorContext)
+    window.addEventListener('wa-edit-page-region', handlePageRegion)
+  })
+  onDestroy(() => {
+    window.removeEventListener('wa-editor-context', handleEditorContext)
+    window.removeEventListener('wa-edit-page-region', handlePageRegion)
+  })
 
   async function save() {
     if (!$docId) return
@@ -144,6 +170,10 @@
             header_text: draft.headerText,
             include_footer: draft.showFooter,
             footer_text: draft.footerText,
+            first_page_header_text: draft.firstPageHeaderText,
+            first_page_footer_text: draft.firstPageFooterText,
+            even_page_header_text: draft.evenPageHeaderText,
+            even_page_footer_text: draft.evenPageFooterText,
             page_numbers: draft.pageNumbers,
             page_number_position: draft.pageNumberPosition,
             page_number_area: draft.pageNumberArea,
@@ -159,8 +189,8 @@
       if (!response.ok) throw new Error(await response.text())
       documentV3.update((current) => {
         if (!current?.sections[0]) return current
-        const next = structuredClone(current)
-        const section = next.sections[0]
+        const next = cloneJson(current)
+        const section = next.sections.find((item) => item.id === activeSectionId) || next.sections[0]
         section.layout = {
           ...section.layout,
           pageSize: draft.pageSize === 'LETTER' ? 'Letter' : draft.pageSize === 'CUSTOM' ? 'custom' : draft.pageSize,
@@ -175,6 +205,10 @@
         const headerFooter: HeaderFooterDefinition = section.headerFooter
         headerFooter.header = draft.showHeader ? textBlocks(draft.headerText, 'header') : []
         headerFooter.footer = draft.showFooter ? textBlocks(draft.footerText, 'footer') : []
+        headerFooter.firstPageHeader = draft.differentFirstPage ? textBlocks(draft.firstPageHeaderText, 'first_header') : []
+        headerFooter.firstPageFooter = draft.differentFirstPage ? textBlocks(draft.firstPageFooterText, 'first_footer') : []
+        headerFooter.evenPageHeader = draft.differentOddEven ? textBlocks(draft.evenPageHeaderText, 'even_header') : []
+        headerFooter.evenPageFooter = draft.differentOddEven ? textBlocks(draft.evenPageFooterText, 'even_footer') : []
         headerFooter.differentFirstPage = draft.differentFirstPage
         headerFooter.differentOddEven = draft.differentOddEven
         headerFooter.linkHeaderToPrevious = draft.linkHeaderToPrevious
@@ -201,7 +235,7 @@
   }
 </script>
 
-<button class="ribbon-action" onclick={show}>页面设置</button>
+<button class="ribbon-action" onclick={() => show()}>页面设置</button>
 
 {#if open}
   <div class="page-setup-backdrop" role="presentation" onclick={close}></div>
@@ -224,9 +258,9 @@
       <fieldset class="wide">
         <legend>页眉与页脚</legend>
         <label class="check"><input type="checkbox" bind:checked={draft.showHeader} />显示页眉</label>
-        <input class="text" aria-label="页眉内容" placeholder="页眉内容" bind:value={draft.headerText} disabled={!draft.showHeader} />
+        <input class="text" data-page-region="header" aria-label="页眉内容" placeholder="页眉内容" bind:value={draft.headerText} disabled={!draft.showHeader} />
         <label class="check"><input type="checkbox" bind:checked={draft.showFooter} />显示页脚</label>
-        <input class="text" aria-label="页脚内容" placeholder="页脚内容" bind:value={draft.footerText} disabled={!draft.showFooter} />
+        <input class="text" data-page-region="footer" aria-label="页脚内容" placeholder="页脚内容" bind:value={draft.footerText} disabled={!draft.showFooter} />
         <label class="check"><input type="checkbox" bind:checked={draft.pageNumbers} />显示页码</label>
         <select aria-label="页码位置" bind:value={draft.pageNumberPosition} disabled={!draft.pageNumbers}>
           <option value="left">左侧</option><option value="center">居中</option><option value="right">右侧</option>
@@ -238,6 +272,12 @@
         <label class="check"><input type="checkbox" bind:checked={draft.differentOddEven} />奇偶页不同</label>
         <label class="check"><input type="checkbox" bind:checked={draft.linkHeaderToPrevious} />页眉链接前一节</label>
         <label class="check"><input type="checkbox" bind:checked={draft.linkFooterToPrevious} />页脚链接前一节</label>
+        {#if draft.differentFirstPage}
+          <label>首页页眉<input class="text" bind:value={draft.firstPageHeaderText} /></label><label>首页页脚<input class="text" bind:value={draft.firstPageFooterText} /></label>
+        {/if}
+        {#if draft.differentOddEven}
+          <label>偶数页页眉<input class="text" bind:value={draft.evenPageHeaderText} /></label><label>偶数页页脚<input class="text" bind:value={draft.evenPageFooterText} /></label>
+        {/if}
       </fieldset>
     </div>
     <footer><button class="btn ghost" onclick={close}>取消</button><button class="btn primary" onclick={save} disabled={loading}>{loading ? '保存中…' : '应用'}</button></footer>

@@ -204,6 +204,29 @@ def _table_cell_fill(cell: Any, color: str) -> None:
     shading.set(qn("w:fill"), value.upper())
 
 
+def _table_cell_border(cell: Any, color: str, width_pt: Any) -> None:
+    value = str(color or "").strip().lstrip("#")
+    if not re.fullmatch(r"[0-9A-Fa-f]{6}", value):
+        return
+    try:
+        size = max(2, min(48, int(float(width_pt or 0.75) * 8)))
+    except (TypeError, ValueError):
+        size = 6
+    tc_pr = cell._tc.get_or_add_tcPr()
+    borders = tc_pr.find(qn("w:tcBorders"))
+    if borders is None:
+        borders = OxmlElement("w:tcBorders")
+        tc_pr.append(borders)
+    for edge in ("top", "left", "bottom", "right"):
+        node = borders.find(qn(f"w:{edge}"))
+        if node is None:
+            node = OxmlElement(f"w:{edge}")
+            borders.append(node)
+        node.set(qn("w:val"), "single")
+        node.set(qn("w:sz"), str(size))
+        node.set(qn("w:color"), value.upper())
+
+
 def _table_span(value: Any, maximum: int | None = None) -> int:
     try:
         span = max(1, int(value or 1))
@@ -274,6 +297,7 @@ def _add_structured_table(doc: Document, payload: dict[str, Any]) -> Any | None:
                     for run in paragraph.runs:
                         run.bold = True
             _table_cell_fill(cell, str(raw_cell.get("backgroundColor") or ""))
+            _table_cell_border(cell, str(raw_cell.get("borderColor") or ""), raw_cell.get("borderWidthPt"))
             alignment = str(raw_cell.get("verticalAlign") or "top")
             cell.vertical_alignment = {
                 "top": WD_CELL_VERTICAL_ALIGNMENT.TOP,

@@ -310,3 +310,50 @@ def test_document_v3_command_api_persists_an_atomic_ai_edit() -> None:
         assert stored.doc_text == "# 绪论\n\n## 研究背景"
     finally:
         app_v2.store.delete(session.id)
+
+
+def test_ai_command_suggestion_is_preview_only_and_can_be_applied_idempotently() -> None:
+    document = migrate_doc_ir({"title": "AI 命令", "sections": [{"title": "第一章", "blocks": [{"type": "paragraph", "text": "原文", "id": "p1"}]}]})
+    registry = create_default_registry()
+    suggestion = DocumentCommand(
+        id="stable-command",
+        type="replace_text",
+        target=CommandTarget(kind="nodes", node_ids=["p1"]),
+        params={"text": "新文", "expected_version": 0, "allowed_node_ids": ["p1"]},
+        source="ai",
+        review_mode="suggest",
+    )
+    preview = registry.execute(document, suggestion)
+    assert preview.ok and not preview.changed and preview.document is None
+    assert preview.proposal and preview.proposal["before"][0]["content"][0]["text"] == "原文"
+    assert preview.proposal["after"][0]["content"][0]["text"] == "新文"
+    assert next(block for block in document.sections[0].content if block.id == "p1").content[0].text == "原文"
+
+    applied = registry.execute(document, suggestion.model_copy(update={"review_mode": "direct"}))
+    assert applied.ok and applied.changed and applied.document is not None
+    duplicate = registry.execute(applied.document, suggestion.model_copy(update={"review_mode": "direct", "params": {"text": "重复", "expected_version": 1}}))
+    assert duplicate.ok and not duplicate.changed and "duplicate_command_ignored" in duplicate.warnings
+
+
+def test_ai_command_rejects_version_conflict_and_scope_escape() -> None:
+    document = migrate_doc_ir({"sections": [{"blocks": [{"type": "paragraph", "text": "甲", "id": "a"}, {"type": "paragraph", "text": "乙", "id": "b"}]}]})
+    registry = create_default_registry()
+    conflict = registry.execute(document, DocumentCommand(type="replace_text", target=CommandTarget(kind="nodes", node_ids=["a"]), params={"text": "新", "expected_version": 9}, source="ai"))
+    assert conflict.error == "document_version_conflict"
+    escaped = registry.execute(document, DocumentCommand(type="replace_text", target=CommandTarget(kind="nodes", node_ids=["b"]), params={"text": "新", "allowed_node_ids": ["a"]}, source="ai"))
+    assert escaped.error == "target_outside_allowed_scope"
+
+
+def test_document_commands_cover_insert_move_delete_and_comments() -> None:
+    document = migrate_doc_ir({"sections": [{"blocks": [{"type": "paragraph", "text": "甲", "id": "a"}, {"type": "paragraph", "text": "乙", "id": "b"}]}]})
+    registry = create_default_registry()
+    inserted = registry.execute(document, DocumentCommand(type="insert_blocks", target=CommandTarget(kind="nodes", node_ids=["a"]), params={"placement": "after", "blocks": [{"id": "c", "type": "paragraph", "styleId": "normal", "content": [{"type": "text", "text": "丙"}]}]}))
+    assert inserted.ok and inserted.document is not None
+    moved = registry.execute(inserted.document, DocumentCommand(type="move_blocks", target=CommandTarget(kind="nodes", node_ids=["c"]), params={"anchor_id": "a", "placement": "before"}))
+    assert moved.ok and moved.document is not None
+    assert [block.id for block in moved.document.sections[0].content] == ["c", "a", "b"]
+    commented = registry.execute(moved.document, DocumentCommand(type="add_comment", target=CommandTarget(kind="nodes", node_ids=["a"]), params={"text": "检查此处"}))
+    assert commented.ok and commented.document is not None and commented.document.comments[0]["text"] == "检查此处"
+    deleted = registry.execute(commented.document, DocumentCommand(type="delete_blocks", target=CommandTarget(kind="nodes", node_ids=["b"])))
+    assert deleted.ok and deleted.document is not None
+    assert [block.id for block in deleted.document.sections[0].content] == ["c", "a"]

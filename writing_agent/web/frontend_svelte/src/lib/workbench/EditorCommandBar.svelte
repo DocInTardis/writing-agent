@@ -42,6 +42,7 @@
     spaceBeforePt?: number | null
     spaceAfterPt?: number | null
     styles?: Array<{ id: string; name: string }>
+    mixedFields?: string[]
   }
 
   let {
@@ -182,6 +183,8 @@
         <button class:active={editorToolbarState.tableCellBackground?.toLowerCase() === '#dbeafe'} class="cell-fill fill-blue" title="浅蓝底纹" aria-label="浅蓝底纹" onclick={() => command('table-cell-bg:#dbeafe')}></button>
         <button class:active={editorToolbarState.tableCellBackground?.toLowerCase() === '#fef3c7'} class="cell-fill fill-yellow" title="浅黄底纹" aria-label="浅黄底纹" onclick={() => command('table-cell-bg:#fef3c7')}></button>
         <button class:active={editorToolbarState.tableCellBackground?.toLowerCase() === '#dcfce7'} class="cell-fill fill-green" title="浅绿底纹" aria-label="浅绿底纹" onclick={() => command('table-cell-bg:#dcfce7')}></button>
+        <button title="设置单元格边框" onclick={() => command('table-cell-border:#64748b')}>边框</button>
+        <select aria-label="行高" onchange={(event) => command(`table-row-height:${event.currentTarget.value}`)}><option value="28">紧凑行</option><option value="36" selected>标准行</option><option value="48">宽松行</option><option value="64">高行</option></select>
       </div>
       <button class="table-delete" title="删除整个表格" onclick={() => command('table-delete')}>删除表格</button>
     </div>
@@ -200,6 +203,7 @@
       <div class="ribbon-group wide" aria-label="字体与样式">
         <div class="ribbon-row">
           <select aria-label="段落样式" value={`style:${editorToolbarState.styleId || 'normal'}`} onchange={(event) => command(event.currentTarget.value)}>
+            {#if editorToolbarState.mixedFields?.includes('styleId')}<option value="" disabled>混合样式</option>{/if}
             {#each editorToolbarState.styles || [] as style (style.id)}
               <option value={`style:${style.id}`}>{style.name}</option>
             {/each}
@@ -261,6 +265,11 @@
               <option value="none">原样</option><option value="uppercase">大写</option><option value="lowercase">小写</option><option value="capitalize">首字母大写</option>
             </select>
           </label>
+          <label>文字效果
+            <select onchange={(event) => command(event.currentTarget.value)}>
+              <option value="font-variant:normal">标准</option><option value="font-variant:small-caps">小型大写</option><option value="text-shadow:0 1px 1px rgba(0,0,0,.28)">阴影</option><option value="text-shadow:none">清除效果</option>
+            </select>
+          </label>
           <label>段前
             <input type="number" min="0" max="72" step="1" value={editorToolbarState.spaceBeforePt ?? 0} onchange={(event) => command(`space-before:${event.currentTarget.value}`)} />
           </label>
@@ -320,14 +329,20 @@
       <div class="ribbon-group action-group">
         <button class="ribbon-action" onclick={() => command('toc')} title="插入目录；再次使用可更新目录"><span>☷</span>目录</button>
         <button class="ribbon-action" onclick={() => command('footnote')}><span>¹</span>脚注</button>
+        <button class="ribbon-action" onclick={() => command('endnote')}><span>ⅰ</span>尾注</button>
         <button class="ribbon-action" onclick={() => command('caption')}><span>图1</span>题注</button>
         <button class="ribbon-action" onclick={() => command('cross-reference')}><span>↪</span>交叉引用</button>
         <button class="ribbon-action" onclick={() => command('math-inline')}><span>π</span>行内公式</button>
         <button class="ribbon-action" onclick={() => command('math-block')}><span>∫</span>公式块</button>
         <button class="ribbon-action" onclick={onOpenCitations}><Icon name="cite" size={17} />引文管理</button>
+        <button class="ribbon-action" onclick={() => command('citation')}><span>[1]</span>插入引文</button>
+        <button class="ribbon-action" onclick={() => command('bibliography')}><span>≣</span>参考文献</button>
       </div>
     {:else if activeTab === 'review'}
       <div class="ribbon-group action-group">
+        <button class="ribbon-action" onclick={() => command('add-comment')}><span>▣</span>新建批注</button>
+        <button class="ribbon-action" onclick={() => command('track-changes')}><span>Δ</span>修订模式</button>
+        <button class="ribbon-action" onclick={() => command('review-revisions')}><span>✓×</span>审阅修订</button>
         <button class="ribbon-action" onclick={() => command('find-replace')}><span>⌕</span>查找替换</button>
         <button class="ribbon-action" onclick={() => command('proofread')}><span>✓</span>基础校对</button>
         <button class:active={showPlagiarismPanel} class="ribbon-action" onclick={() => (showPlagiarismPanel = !showPlagiarismPanel)}><Icon name="shield" size={17} />查重</button>

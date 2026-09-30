@@ -1,4 +1,4 @@
-import type { DocumentV3, InlineNode, TextMark, V3BlockNode } from './model'
+import { cloneJson, type DocumentV3, type InlineNode, type TextMark, type V3BlockNode } from './model'
 
 export interface MarkdownExportResult {
   markdown: string
@@ -159,7 +159,7 @@ export function markdownToBlocks(markdown: string): V3BlockNode[] {
 }
 
 export function replaceDocumentContentFromMarkdown(document: DocumentV3, markdown: string, sourceName = ''): DocumentV3 {
-  const next = structuredClone(document)
+  const next = cloneJson(document)
   const first = next.sections[0]
   if (!first) return next
   first.content = markdownToBlocks(markdown)

@@ -352,6 +352,16 @@ impl WasmEditor {
             .iter()
             .filter_map(|id| uuid::Uuid::parse_str(id).ok())
             .collect();
+        let keep_lines_together: HashSet<_> = request
+            .keep_lines_together
+            .iter()
+            .filter_map(|id| uuid::Uuid::parse_str(id).ok())
+            .collect();
+        let keep_with_next: HashSet<_> = request
+            .keep_with_next
+            .iter()
+            .filter_map(|id| uuid::Uuid::parse_str(id).ok())
+            .collect();
         let config = LayoutConfig {
             page_width: content_width,
             page_height: content_height,
@@ -362,6 +372,9 @@ impl WasmEditor {
             },
             paged: true,
             force_page_break_before: forced,
+            keep_lines_together,
+            keep_with_next,
+            widow_orphan_lines: request.widow_orphan_lines.max(1),
         };
         let tree = self
             .layout_engine
@@ -560,6 +573,12 @@ struct LayoutProtocolRequest {
     #[serde(default)]
     force_page_break_before: Vec<String>,
     #[serde(default)]
+    keep_lines_together: Vec<String>,
+    #[serde(default)]
+    keep_with_next: Vec<String>,
+    #[serde(default = "default_widow_orphan_lines")]
+    widow_orphan_lines: usize,
+    #[serde(default)]
     source_ids: HashMap<String, String>,
     #[serde(default)]
     section_ids: HashMap<String, String>,
@@ -567,6 +586,7 @@ struct LayoutProtocolRequest {
 
 fn default_font_size() -> f32 { 14.0 }
 fn default_line_height() -> f32 { 1.6 }
+fn default_widow_orphan_lines() -> usize { 2 }
 
 fn layout_kind_name(kind: &LayoutKind) -> &'static str {
     match kind {

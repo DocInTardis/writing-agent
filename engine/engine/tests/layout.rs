@@ -185,3 +185,35 @@ fn explicit_page_break_starts_target_block_on_new_page() {
     assert_eq!(layout.pages.len(), 2);
     assert_eq!(layout.pages[1].blocks[0].block_id, second);
 }
+
+#[test]
+fn keep_lines_together_moves_a_fitting_paragraph_to_the_next_page() {
+    let mut doc = Document::new();
+    let lead = uuid::Uuid::new_v4();
+    let kept = uuid::Uuid::new_v4();
+    doc.blocks.push(Block::Paragraph { id: lead, content: vec![Inline::Text { value: Arc::from("占位内容".repeat(30)) }], dirty: false });
+    doc.blocks.push(Block::Paragraph { id: kept, content: vec![Inline::Text { value: Arc::from("必须同页的段落".repeat(20)) }], dirty: false });
+    let mut config = LayoutConfig { page_width: 180.0, page_height: 150.0, margin: 10.0, ..LayoutConfig::default() };
+    config.keep_lines_together.insert(kept);
+    let mut engine = LayoutEngine::new();
+    let layout = engine.layout(&doc, &config);
+    let kept_pages = layout.pages.iter().filter(|page| page.blocks.iter().any(|block| block.block_id == kept)).count();
+    assert_eq!(kept_pages, 1);
+}
+
+#[test]
+fn automatic_splits_respect_two_line_widow_orphan_rule() {
+    let mut doc = Document::new();
+    let id = uuid::Uuid::new_v4();
+    doc.blocks.push(Block::Paragraph { id, content: vec![Inline::Text { value: Arc::from("分页规则".repeat(120)) }], dirty: false });
+    let config = LayoutConfig { page_width: 180.0, page_height: 150.0, margin: 10.0, widow_orphan_lines: 2, ..LayoutConfig::default() };
+    let mut engine = LayoutEngine::new();
+    let layout = engine.layout(&doc, &config);
+    for page in layout.pages {
+        for block in page.blocks {
+            if block.block_id == id {
+                assert!(block.lines.len() >= 2);
+            }
+        }
+    }
+}

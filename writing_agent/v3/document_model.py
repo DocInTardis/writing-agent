@@ -110,7 +110,7 @@ class BlockNode(BaseModel):
 class PageLayout(BaseModel):
     model_config = STRICT_CONFIG
 
-    page_size: Literal["A4", "A3", "Letter", "custom"] = "A4"
+    page_size: Literal["A4", "A5", "A3", "Letter", "custom"] = "A4"
     width_mm: float | None = None
     height_mm: float | None = None
     orientation: Literal["portrait", "landscape"] = "portrait"
@@ -364,6 +364,14 @@ def to_plain_text(doc: DocumentV3) -> str:
             footnote_defs[note_id] = (str(item.get("label") or index), str(item.get("text") or ""))
 
     referenced_footnotes: list[str] = []
+    endnote_defs: dict[str, tuple[str, str]] = {}
+    raw_endnotes = doc.notes.get("endnotes") if isinstance(doc.notes, dict) else None
+    if isinstance(raw_endnotes, list):
+        for index, item in enumerate(raw_endnotes, start=1):
+            if isinstance(item, dict):
+                note_id = str(item.get("id") or f"endnote-{index}")
+                endnote_defs[note_id] = (str(item.get("label") or index), str(item.get("text") or ""))
+    referenced_endnotes: list[str] = []
 
     def inline_text(node: BlockNode) -> str:
         parts: list[str] = []
@@ -385,6 +393,12 @@ def to_plain_text(doc: DocumentV3) -> str:
                         parts.append(f"${str(child.attrs.get('latex') or '')}$")
                     elif kind == "crossReference":
                         parts.append(str(child.attrs.get("label") or child.attrs.get("targetText") or ""))
+                    elif kind == "endnote":
+                        note_id = str(child.attrs.get("noteId") or "")
+                        label, _ = endnote_defs.get(note_id, (str(child.attrs.get("label") or len(referenced_endnotes) + 1), str(child.attrs.get("text") or "")))
+                        if note_id and note_id not in referenced_endnotes:
+                            referenced_endnotes.append(note_id)
+                        parts.append(f"[endnote:{label}]")
                 elif child.type == "citation":
                     parts.append(str(child.attrs.get("label") or child.attrs.get("key") or ""))
             elif isinstance(child, BlockNode):
@@ -416,6 +430,11 @@ def to_plain_text(doc: DocumentV3) -> str:
             if block.type == "tableOfContents":
                 # The DOCX exporter builds a real TOC from heading structure.
                 continue
+            if block.type == "bibliography":
+                entries = block.attrs.get("entries") if isinstance(block.attrs, dict) else None
+                if isinstance(entries, list):
+                    lines.extend(str(item.get("text") or item.get("label") or "") for item in entries if isinstance(item, dict))
+                continue
             text = inline_text(block).strip()
             if not text:
                 continue
@@ -428,4 +447,8 @@ def to_plain_text(doc: DocumentV3) -> str:
         label, text = footnote_defs.get(note_id, (note_id, ""))
         if text:
             lines.append(f"[^{label}]: {text}")
+    for note_id in referenced_endnotes:
+        label, text = endnote_defs.get(note_id, (note_id, ""))
+        if text:
+            lines.append(f"[endnote:{label}]: {text}")
     return "\n\n".join(lines).strip()

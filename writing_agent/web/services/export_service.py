@@ -26,6 +26,146 @@ class ExportService:
     _SINGLE_DOCX_BACKEND_MODE = "single_parsed"
 
     @staticmethod
+    def _v3_region_text(session, region: str) -> str:
+        raw = getattr(session, "document_v3", None)
+        if not isinstance(raw, dict):
+            return ""
+        sections = raw.get("sections")
+        if not isinstance(sections, list) or not sections or not isinstance(sections[0], dict):
+            return ""
+        header_footer = sections[0].get("headerFooter") or sections[0].get("header_footer")
+        if not isinstance(header_footer, dict):
+            return ""
+        blocks = header_footer.get(region)
+        if not isinstance(blocks, list):
+            return ""
+
+        parts: list[str] = []
+
+        def collect(value) -> None:
+            if isinstance(value, dict):
+                text = value.get("text")
+                if isinstance(text, str) and text:
+                    parts.append(text)
+                for key in ("content", "children", "rows", "cells"):
+                    collect(value.get(key))
+            elif isinstance(value, list):
+                for item in value:
+                    collect(item)
+
+        collect(blocks)
+        return "".join(parts).strip()
+
+    @classmethod
+    def _render_lightweight_pdf(cls, text: str, pdf_path: Path, session) -> None:
+        """Render a dependency-light, multi-page PDF when office software is absent.
+
+        CairoSVG already brings cairocffi into the application runtime, so this
+        fallback adds no heavyweight browser or office-suite dependency.  It is
+        intentionally conservative: Unicode text, paragraphs, title emphasis,
+        headers, footers and live page numbers are preserved.
+        """
+        try:
+            import cairocffi as cairo
+        except Exception as exc:  # pragma: no cover - protected by dependency metadata
+            raise RuntimeError("cairocffi not available for lightweight PDF export") from exc
+
+        width, height = 595.28, 841.89  # A4 points
+        margin_x, margin_top, margin_bottom = 72.0, 72.0, 72.0
+        body_width = width - margin_x * 2
+        font_family = "Microsoft YaHei" if os.name == "nt" else "Noto Sans CJK SC"
+        measure_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 1, 1)
+        measure = cairo.Context(measure_surface)
+
+        def wrapped_lines(value: str, size: float) -> list[str]:
+            measure.select_font_face(font_family, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            measure.set_font_size(size)
+            value = str(value or "").replace("\t", "    ")
+            if not value:
+                return [""]
+            lines: list[str] = []
+            current = ""
+            for char in value:
+                candidate = current + char
+                if current and measure.text_extents(candidate)[4] > body_width:
+                    lines.append(current)
+                    current = char
+                else:
+                    current = candidate
+            lines.append(current)
+            return lines
+
+        paragraphs = str(text or "").replace("\r", "").split("\n")
+        rows: list[tuple[str, float, bool, float]] = []
+        first_content = True
+        for raw_line in paragraphs:
+            stripped = raw_line.strip()
+            if not stripped:
+                rows.append(("", 11.5, False, 9.0))
+                continue
+            heading = len(stripped) - len(stripped.lstrip("#"))
+            content = stripped[heading:].strip() if heading else stripped
+            is_title = first_content
+            size = 18.0 if is_title else (16.0 if heading == 1 else 14.0 if heading == 2 else 11.5)
+            bold = is_title or heading > 0
+            line_height = size * 1.6
+            for line in wrapped_lines(content, size):
+                rows.append((line, size, bold, line_height))
+            rows.append(("", 11.5, False, 6.0 if is_title or heading else 3.0))
+            first_content = False
+
+        usable_height = height - margin_top - margin_bottom
+        pages: list[list[tuple[str, float, bool, float]]] = [[]]
+        used = 0.0
+        for row in rows:
+            row_height = row[3]
+            if pages[-1] and used + row_height > usable_height:
+                pages.append([])
+                used = 0.0
+            pages[-1].append(row)
+            used += row_height
+        if not pages:
+            pages = [[]]
+
+        header = cls._v3_region_text(session, "header")
+        footer = cls._v3_region_text(session, "footer")
+        surface = cairo.PDFSurface(str(pdf_path), width, height)
+        context = cairo.Context(surface)
+        for page_index, page_rows in enumerate(pages, start=1):
+            context.set_source_rgb(1, 1, 1)
+            context.paint()
+            context.set_source_rgb(0.12, 0.14, 0.17)
+            if header:
+                context.select_font_face(font_family, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+                context.set_font_size(9.0)
+                context.move_to(margin_x, 38.0)
+                context.show_text(header)
+            y = margin_top
+            for line, size, bold, line_height in page_rows:
+                y += line_height
+                if not line:
+                    continue
+                context.select_font_face(
+                    font_family,
+                    cairo.FONT_SLANT_NORMAL,
+                    cairo.FONT_WEIGHT_BOLD if bold else cairo.FONT_WEIGHT_NORMAL,
+                )
+                context.set_font_size(size)
+                context.move_to(margin_x, y)
+                context.show_text(line)
+            context.select_font_face(font_family, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            context.set_font_size(9.0)
+            if footer:
+                context.move_to(margin_x, height - 35.0)
+                context.show_text(footer)
+            page_label = f"第 {page_index} 页，共 {len(pages)} 页"
+            extents = context.text_extents(page_label)
+            context.move_to((width - extents[4]) / 2, height - 35.0)
+            context.show_text(page_label)
+            context.show_page()
+        surface.finish()
+
+    @staticmethod
     def _compact_for_compare(text: str) -> str:
         return re.sub(r"\s+", "", str(text or ""))
 
@@ -239,7 +379,12 @@ class ExportService:
             tmp_docx_path = Path(tmp_docx.name)
         tmp_pdf_path = tmp_docx_path.with_suffix(".pdf")
         try:
-            app_v2._convert_docx_to_pdf(tmp_docx_path, tmp_pdf_path)
+            try:
+                app_v2._convert_docx_to_pdf(tmp_docx_path, tmp_pdf_path)
+            except RuntimeError as exc:
+                if "not available for PDF export" not in str(exc):
+                    raise
+                self._render_lightweight_pdf(base_text, tmp_pdf_path, session)
             with open(tmp_pdf_path, "rb") as f:
                 pdf_bytes = f.read()
             filename = f"{parsed.title or 'document'}.pdf"

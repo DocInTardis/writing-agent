@@ -1,6 +1,6 @@
 <script lang="ts">
   import { get } from 'svelte/store'
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, untrack } from 'svelte'
   import type { Editor, JSONContent } from '@tiptap/core'
   import { NodeSelection } from '@tiptap/pm/state'
   import { CellSelection } from '@tiptap/pm/tables'
@@ -12,7 +12,7 @@
     editorCommand,
     sourceText
   } from '../stores'
-  import { createNodeCommand, createShortcutCommand, createUserCommand, executeDocumentCommand } from '../editor-v3/commands'
+  import { createNodeCommand, createShortcutCommand, createUserCommand, executeDocumentCommand, type DocumentCommand } from '../editor-v3/commands'
   import {
     createEditorKernel,
     applyPaginationLayout,
@@ -24,8 +24,9 @@
     styleSheetForDocument,
     tiptapToDocumentV3
   } from '../editor-v3/kernel'
-  import { isDocumentV3, migrateLegacyDocIr, type DocumentV3, type StyleDefinition, type StyleProperties } from '../editor-v3/model'
+  import { cloneJson, isDocumentV3, migrateLegacyDocIr, refreshDocumentFields, type DocumentV3, type StyleDefinition, type StyleProperties } from '../editor-v3/model'
   import { documentV3ToMarkdown, replaceDocumentContentFromMarkdown } from '../editor-v3/markdown'
+  import { addDocumentComment, buildRevision, resolveDocumentComment, settleRevision, type DocumentRevision } from '../editor-v3/revisions'
   import { paginateDocumentV3 } from '../engine/documentEngine'
   import type { EditorCommand } from '../types'
 
@@ -50,7 +51,10 @@
 
   let host: HTMLDivElement
   let editor: Editor | null = null
-  let activeDocument: DocumentV3 | null = null
+  // Keep the canonical document reactive by reference but never wrap the
+  // JSON tree in a deep Proxy. ProseMirror updates and exporters expect a
+  // plain serializable object, and Svelte's Proxy cannot be cloned safely.
+  let activeDocument = $state.raw<DocumentV3 | null>(null)
   let styleElement: HTMLStyleElement | null = null
   let unsubscribeCommand = () => {}
   let unsubscribeDocIr = () => {}
@@ -86,6 +90,8 @@
   let paginationRevision = 0
   let pageCount = $state(1)
   let paginationState = $state<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
+  let composingText = false
+  let paginationPendingAfterComposition = false
   let resizeObserver: ResizeObserver | null = null
   let observedShellWidth = 0
   let findPanelVisible = $state(false)
@@ -122,19 +128,98 @@
   let creatingStyle = $state(false)
   let styleManagerNotice = $state('')
   let styleRevision = $state(0)
-  let referenceDialog = $state<'link' | 'equation' | 'footnote' | 'crossReference' | ''>('')
+  let referenceDialog = $state<'link' | 'equation' | 'blockEquation' | 'footnote' | 'endnote' | 'citation' | 'crossReference' | ''>('')
   let referenceHref = $state('https://')
   let referenceTitle = $state('')
   let referenceLatex = $state('')
   let referenceNoteText = $state('')
   let referenceTargetId = $state('')
+  let referenceCitationId = $state('')
   let figureDialogVisible = $state(false)
   let figureCaption = $state('')
   let figureAlt = $state('')
   let figureWidthPercent = $state(100)
   let figureAlignment = $state<'left' | 'center' | 'right'>('center')
   let figureWrap = $state<'inline' | 'square'>('inline')
+  let figureCrop = $state<'none' | 'fill' | 'cover'>('none')
+  let figureSpecText = $state('')
   let objectNotice = $state('')
+  let reviewPanelVisible = $state(false)
+  let trackChanges = $state(false)
+  let commentDraft = $state('')
+  let revisionTimer: ReturnType<typeof setTimeout> | null = null
+  let revisionBatchBefore: DocumentV3 | null = null
+  let suppressRevisionCapture = false
+  let aiProposals = $state<Array<{ command: DocumentCommand; selection: { from: number; to: number } }>>([])
+  let appliedEditable: boolean | null = null
+
+  function handleAiProposal(event: Event) {
+    const detail = (event as CustomEvent<{ command?: DocumentCommand; selection?: { from: number; to: number } }>).detail
+    if (!detail?.command || !detail.selection) return
+    aiProposals = [...aiProposals.filter((item) => item.command.id !== detail.command?.id), { command: detail.command, selection: detail.selection }]
+    reviewPanelVisible = true
+  }
+
+  function settleAiProposal(commandId: string, accept: boolean) {
+    const proposal = aiProposals.find((item) => item.command.id === commandId)
+    aiProposals = aiProposals.filter((item) => item.command.id !== commandId)
+    if (!accept || !proposal || !editor) return
+    editor.chain().focus().setTextSelection(proposal.selection).run()
+    executeDocumentCommand(editor, { ...proposal.command, reviewMode: 'direct' })
+  }
+
+  function flushTrackedRevision() {
+    if (revisionTimer) clearTimeout(revisionTimer)
+    revisionTimer = null
+    if (!revisionBatchBefore || !activeDocument) return
+    const revision = buildRevision(revisionBatchBefore, activeDocument)
+    revisionBatchBefore = null
+    if (!revision) return
+    activeDocument.revisions = [...activeDocument.revisions, revision]
+    documentV3.set(activeDocument)
+    docIrDirty.set(true)
+  }
+
+  function queueTrackedRevision(before: DocumentV3) {
+    revisionBatchBefore ||= cloneJson(before)
+    if (revisionTimer) clearTimeout(revisionTimer)
+    revisionTimer = setTimeout(flushTrackedRevision, 700)
+  }
+
+  function addCommentFromSelection() {
+    if (!editor || !activeDocument) return
+    const text = commentDraft.trim()
+    if (!text) return
+    const blocks = selectedBlocks(editor)
+    const { from, to } = editor.state.selection
+    const quote = editor.state.doc.textBetween(from, to, '\n', '\n')
+    activeDocument = addDocumentComment(activeDocument, blocks.map((block) => block.id), text, { from, to, quote })
+    documentV3.set(activeDocument)
+    docIrDirty.set(true)
+    commentDraft = ''
+    reviewPanelVisible = true
+  }
+
+  function settleComment(commentId: string, resolved: boolean) {
+    if (!activeDocument) return
+    activeDocument = resolveDocumentComment(activeDocument, commentId, resolved)
+    documentV3.set(activeDocument)
+    docIrDirty.set(true)
+  }
+
+  function settleTrackedRevision(revisionId: string, accept: boolean) {
+    if (!activeDocument) return
+    flushTrackedRevision()
+    suppressRevisionCapture = true
+    const next = settleRevision(activeDocument, revisionId, accept)
+    loadDocument(next)
+    suppressRevisionCapture = false
+    docIrDirty.set(true)
+  }
+
+  function documentRevisions(): DocumentRevision[] {
+    return (activeDocument?.revisions || []) as DocumentRevision[]
+  }
 
   async function importImageFile(event: Event) {
     const input = event.currentTarget as HTMLInputElement
@@ -180,18 +265,36 @@
     figureWidthPercent = Math.max(10, Math.min(100, Number(payload?.widthPercent || 100)))
     figureAlignment = (['left', 'center', 'right'].includes(String(payload?.alignment)) ? payload?.alignment : 'center') as typeof figureAlignment
     figureWrap = (['inline', 'square'].includes(String(payload?.wrap)) ? payload?.wrap : 'inline') as typeof figureWrap
+    figureCrop = (['none', 'fill', 'cover'].includes(String(payload?.crop)) ? payload?.crop : 'none') as typeof figureCrop
+    figureSpecText = payload?.editableSource && payload.spec ? JSON.stringify(payload.spec, null, 2) : ''
     figureDialogVisible = true
     return true
   }
 
-  function applyFigureSettings() {
+  async function applyFigureSettings() {
     if (!editor) return
+    let sourcePatch: Record<string, unknown> = {}
+    if (figureSpecText.trim()) {
+      try {
+        const spec = JSON.parse(figureSpecText) as Record<string, unknown>
+        const response = await fetch('/api/figure/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ spec }) })
+        if (!response.ok) throw new Error(await response.text())
+        const data = await response.json()
+        const svg = String(data.svg || '')
+        sourcePatch = { spec, svg, src: svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : '', editableSource: true }
+      } catch (error) {
+        objectNotice = `图形源数据无效：${error instanceof Error ? error.message : '未知错误'}`
+        return
+      }
+    }
     const result = executeDocumentCommand(editor, createUserCommand('update_figure', {
       caption: figureCaption,
       alt: figureAlt,
       widthPercent: figureWidthPercent,
       alignment: figureAlignment,
-      wrap: figureWrap
+      wrap: figureWrap,
+      crop: figureCrop,
+      ...sourcePatch
     }))
     if (result.ok) figureDialogVisible = false
   }
@@ -204,7 +307,9 @@
       referenceHref = String(attrs.href || 'https://')
       referenceTitle = String(attrs.title || '')
     } else if (kind === 'equation') referenceLatex = ''
-    else if (kind === 'footnote') referenceNoteText = ''
+    else if (kind === 'blockEquation') referenceLatex = editor.isActive('equationBlock') ? String((editor.getAttributes('equationBlock').payload as Record<string, unknown> | undefined)?.latex || '') : ''
+    else if (kind === 'footnote' || kind === 'endnote') referenceNoteText = ''
+    else if (kind === 'citation') referenceCitationId = citationEntries()[0]?.id || ''
     else if (kind === 'crossReference') referenceTargetId = outlineHeadings()[0]?.id || ''
   }
 
@@ -216,16 +321,26 @@
     } else if (referenceDialog === 'equation') {
       const result = executeDocumentCommand(editor, createUserCommand('insert_inline_equation', { latex: referenceLatex }))
       if (!result.ok) return
-    } else if (referenceDialog === 'footnote') {
+    } else if (referenceDialog === 'blockEquation') {
+      const type = editor.isActive('equationBlock') ? 'update_equation' : 'insert_equation'
+      const result = executeDocumentCommand(editor, createUserCommand(type, { latex: referenceLatex }))
+      if (!result.ok) return
+    } else if (referenceDialog === 'footnote' || referenceDialog === 'endnote') {
       const text = referenceNoteText.trim()
       if (!text || !activeDocument) return
-      const noteId = `footnote_${crypto.randomUUID().replace(/-/g, '')}`
+      const noteKind = referenceDialog === 'footnote' ? 'footnotes' : 'endnotes'
+      const noteId = `${referenceDialog}_${crypto.randomUUID().replace(/-/g, '')}`
       const notes = activeDocument.notes && typeof activeDocument.notes === 'object' ? activeDocument.notes : {}
-      const footnotes = Array.isArray(notes.footnotes) ? [...notes.footnotes] : []
-      const label = String(footnotes.length + 1)
-      footnotes.push({ id: noteId, label, text })
-      activeDocument.notes = { ...notes, footnotes }
-      const result = executeDocumentCommand(editor, createUserCommand('insert_footnote_reference', { noteId, label, text }))
+      const items = Array.isArray(notes[noteKind]) ? [...notes[noteKind] as unknown[]] : []
+      const label = String(items.length + 1)
+      items.push({ id: noteId, label, text })
+      activeDocument.notes = { ...notes, [noteKind]: items }
+      const result = executeDocumentCommand(editor, createUserCommand(referenceDialog === 'footnote' ? 'insert_footnote_reference' : 'insert_endnote_reference', { noteId, label, text }))
+      if (!result.ok) return
+    } else if (referenceDialog === 'citation') {
+      const citation = citationEntries().find((item) => item.id === referenceCitationId)
+      if (!citation) return
+      const result = executeDocumentCommand(editor, createUserCommand('insert_citation', { citationId: citation.id, label: citation.label, text: citation.text }))
       if (!result.ok) return
     } else if (referenceDialog === 'crossReference') {
       const target = outlineHeadings().find((heading) => heading.id === referenceTargetId)
@@ -239,6 +354,14 @@
     }
     referenceDialog = ''
     emitSelection()
+  }
+
+  function citationEntries() {
+    const raw = activeDocument?.citations || {}
+    return Object.entries(raw).map(([id, value]) => {
+      const item = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+      return { id, label: String(item.label || item.key || `[${id}]`), text: String(item.text || item.title || item.label || id) }
+    })
   }
 
   function refreshProofIssues() {
@@ -430,7 +553,7 @@
       visible: true,
       properties
     }
-    const next = structuredClone(activeDocument)
+    const next = cloneJson(activeDocument)
     const index = next.styles.findIndex((style) => style.id === definition.id)
     if (index >= 0) next.styles[index] = definition
     else next.styles.push(definition)
@@ -498,7 +621,7 @@
 
   function handlePageSettingsChanged() {
     const next = get(documentV3)
-    if (next && isDocumentV3(next)) loadDocument(structuredClone(next))
+    if (next && isDocumentV3(next)) loadDocument(cloneJson(next))
   }
 
   function handleEditorContext(event: Event) {
@@ -526,17 +649,30 @@
   }
 
   function schedulePagination(immediate = false) {
+    if (composingText && !immediate) {
+      paginationPendingAfterComposition = true
+      return
+    }
     if (paginationTimer) clearTimeout(paginationTimer)
     const revision = ++paginationRevision
     paginationTimer = setTimeout(async () => {
       if (!editor || !activeDocument || revision !== paginationRevision) return
       paginationState = 'loading'
       try {
+        const selected = editor.state.selection.$from.depth > 0 ? editor.state.selection.$from.node(1) : null
+        const anchorId = String(selected?.attrs?.nodeId || '')
+        const anchorBefore = anchorId ? shell.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(anchorId)}"]`)?.getBoundingClientRect().top : undefined
         const layout = await paginateDocumentV3(activeDocument, revision)
         if (!editor || revision !== paginationRevision) return
         pageCount = Math.max(1, layout?.pageCount || 1)
         paginationState = layout ? 'ready' : 'unavailable'
         applyPaginationLayout(editor, layout)
+        if (anchorId !== '' && anchorBefore !== undefined) {
+          requestAnimationFrame(() => {
+            const after = shell.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(anchorId)}"]`)?.getBoundingClientRect().top
+            if (after !== undefined && Math.abs(after - anchorBefore) > 1) window.scrollBy({ top: after - anchorBefore, behavior: 'auto' })
+          })
+        }
         if (shell) shell.dataset.pageCount = String(pageCount)
       } catch (error) {
         paginationState = 'error'
@@ -606,6 +742,19 @@
       event.preventDefault()
       slashMenuVisible = false
     }
+  }
+
+  function handleObjectDoubleClick(event: MouseEvent) {
+    if (!editor) return
+    const element = (event.target as Element | null)?.closest<HTMLElement>('[data-v3-node]')
+    if (!element) return
+    const nodeId = String(element.dataset.nodeId || '')
+    if (nodeId) selectBlock(editor, nodeId)
+    const type = String(element.dataset.v3Node || '')
+    if (type === 'figure') openFigureEditor()
+    else if (type === 'equationBlock') openReferenceDialog('blockEquation')
+    else if (type === 'tableOfContents') executeDocumentCommand(editor, createUserCommand('update_table_of_contents'))
+    else if (type === 'bibliography') executeDocumentCommand(editor, createUserCommand('update_bibliography', { entries: citationEntries() }))
   }
 
   function topLevelBlockElement(element: Element | null): HTMLElement | null {
@@ -817,6 +966,13 @@
     const cellAttrs = editor.isActive('tableHeader')
       ? editor.getAttributes('tableHeader')
       : editor.getAttributes('tableCell')
+    const textBlocks: Array<Record<string, unknown>> = []
+    editor.state.doc.nodesBetween(selection.from, selection.to || selection.from, (node) => {
+      if (node.isTextblock) textBlocks.push(node.attrs as Record<string, unknown>)
+    })
+    if (!textBlocks.length && selection.$from.parent.isTextblock) textBlocks.push(selection.$from.parent.attrs as Record<string, unknown>)
+    const mixedFields = ['styleId', 'textAlign', 'lineSpacing', 'firstLineIndentEm', 'leftIndentEm', 'rightIndentEm', 'spaceBeforePt', 'spaceAfterPt']
+      .filter((key) => new Set(textBlocks.map((attrs) => JSON.stringify(attrs[key] ?? null))).size > 1)
     ontoolbarstate?.({
       focused: editor.isFocused,
       readonly: !editor.isEditable,
@@ -857,7 +1013,8 @@
       tabStops: editor.getAttributes('heading').tabStops ?? editor.getAttributes('paragraph').tabStops ?? [],
       spaceBeforePt: editor.getAttributes('heading').spaceBeforePt ?? editor.getAttributes('paragraph').spaceBeforePt ?? null,
       spaceAfterPt: editor.getAttributes('heading').spaceAfterPt ?? editor.getAttributes('paragraph').spaceAfterPt ?? null,
-      styles: visibleStyles().map((style) => ({ id: style.id, name: style.name }))
+      styles: visibleStyles().map((style) => ({ id: style.id, name: style.name })),
+      mixedFields
     })
   }
 
@@ -900,7 +1057,9 @@
 
   function updateDocument(json: JSONContent) {
     if (!activeDocument) return
-    activeDocument = tiptapToDocumentV3(activeDocument, json)
+    const before = activeDocument
+    activeDocument = refreshDocumentFields(tiptapToDocumentV3(activeDocument, json))
+    if (trackChanges && !suppressRevisionCapture) queueTrackedRevision(before)
     if (editor) {
       const currentBlocks = selectedBlocks(editor)
       selectedBlocksCollapsed = currentBlocks.length > 0 && currentBlocks.every((block) => block.collapsed)
@@ -931,6 +1090,21 @@
       if (proofPanelVisible) refreshProofIssues()
       return
     }
+    if (command === 'add-comment') {
+      reviewPanelVisible = true
+      return
+    }
+    if (command === 'track-changes') {
+      if (trackChanges) flushTrackedRevision()
+      trackChanges = !trackChanges
+      reviewPanelVisible = true
+      return
+    }
+    if (command === 'review-revisions') {
+      flushTrackedRevision()
+      reviewPanelVisible = !reviewPanelVisible
+      return
+    }
     if (command === 'view-outline') {
       outlineVisible = !outlineVisible
       return
@@ -945,6 +1119,28 @@
     }
     if (command === 'image') {
       if (!openFigureEditor()) imageInput?.click()
+      return
+    }
+    if (command === 'diagram') {
+      const spec: Record<string, unknown> = commandParams.spec && typeof commandParams.spec === 'object'
+        ? commandParams.spec as Record<string, unknown>
+        : {}
+      const svg = String(commandParams.svg || '')
+      const src = svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : ''
+      executeDocumentCommand(editor, createUserCommand('insert_figure', {
+        ...spec,
+        spec,
+        svg,
+        src,
+        editableSource: true,
+        figureKind: String(commandParams.kind || spec.type || 'flow'),
+        caption: String(spec.caption || '图形'),
+        alt: String(spec.caption || '可编辑图形'),
+        widthPercent: 100,
+        alignment: 'center',
+        wrap: 'inline'
+      }))
+      emitSelection()
       return
     }
     if (command === 'view-shortcuts') {
@@ -968,8 +1164,25 @@
       openReferenceDialog('equation')
       return
     }
+    if (command === 'math-block') {
+      openReferenceDialog('blockEquation')
+      return
+    }
     if (command === 'footnote') {
       openReferenceDialog('footnote')
+      return
+    }
+    if (command === 'endnote') {
+      openReferenceDialog('endnote')
+      return
+    }
+    if (command === 'citation') {
+      openReferenceDialog('citation')
+      return
+    }
+    if (command === 'bibliography') {
+      executeDocumentCommand(editor, createUserCommand('update_bibliography', { entries: citationEntries() }))
+      emitSelection()
       return
     }
     if (command === 'cross-reference') {
@@ -1026,7 +1239,6 @@
       'page-break': 'insert_page_break',
       'section-break-next': 'insert_section_break',
       'section-break-continuous': 'insert_section_break',
-      'math-block': 'insert_equation',
       hr: 'insert_horizontal_rule',
       caption: 'apply_style'
     }
@@ -1059,6 +1271,12 @@
     } else if (command.startsWith('table-cell-valign:')) {
       type = 'table_set_vertical_align'
       params = { alignment: command.slice(18) }
+    } else if (command.startsWith('table-cell-border:')) {
+      type = 'table_set_cell_border'
+      params = { color: command.slice(18), widthPt: 0.75 }
+    } else if (command.startsWith('table-row-height:')) {
+      type = 'table_set_row_height'
+      params = { heightPx: Number(command.slice(17)) }
     } else if (command.startsWith('table-caption:')) {
       type = 'table_set_caption'
       params = { caption: command.slice(14) }
@@ -1078,10 +1296,15 @@
       type = 'set_paragraph_format'
       params = { firstLineIndentEm: 2 }
     } else if (command === 'indent' || command === 'outdent') {
+      if (editor.isActive('listItem')) {
+        type = command === 'indent' ? 'list_indent' : 'list_outdent'
+        params = {}
+      } else {
       const attrs = editor.getAttributes(editor.isActive('heading') ? 'heading' : 'paragraph')
       const current = Number(attrs.leftIndentEm || 0)
       type = 'set_paragraph_format'
       params = { leftIndentEm: Math.max(0, current + (command === 'indent' ? 1 : -1)) }
+      }
     } else if (command.startsWith('margin:')) {
       type = 'set_paragraph_format'
       params = { spaceBeforePt: 6, spaceAfterPt: 6 }
@@ -1097,6 +1320,12 @@
     } else if (command.startsWith('font-style:')) {
       type = 'set_character_format'
       params = { fontStyle: command.slice(11) }
+    } else if (command.startsWith('font-variant:')) {
+      type = 'set_character_format'
+      params = { fontVariant: command.slice(13) }
+    } else if (command.startsWith('text-shadow:')) {
+      type = 'set_character_format'
+      params = { textShadow: command.slice(12) === 'none' ? null : command.slice(12) }
     } else if (command.startsWith('space-before:')) {
       type = 'set_paragraph_format'
       params = { spaceBeforePt: Number(command.slice(13)) }
@@ -1172,7 +1401,7 @@
 
   onMount(() => {
     const stored = get(documentV3)
-    activeDocument = stored && isDocumentV3(stored) ? structuredClone(stored) : migrateLegacyDocIr(get(docIr))
+    activeDocument = stored && isDocumentV3(stored) ? cloneJson(stored) : migrateLegacyDocIr(get(docIr))
     documentV3.set(activeDocument)
     mountedLegacyRef = get(docIr)
     styleElement = document.createElement('style')
@@ -1214,6 +1443,7 @@
     resizeObserver.observe(shell)
     window.addEventListener('wa-page-settings-changed', handlePageSettingsChanged)
     window.addEventListener('wa-editor-context', handleEditorContext)
+    window.addEventListener('wa-ai-command-proposal', handleAiProposal)
     unsubscribeCommand = editorCommand.subscribe((command) => {
       if (!command || !editor) return
       if (typeof command === 'string') runLegacyCommand(command)
@@ -1229,8 +1459,13 @@
   })
 
   $effect(() => {
-    editor?.setEditable(!lockEditing)
-    emitToolbarState()
+    const editable = !lockEditing
+    if (appliedEditable === editable) return
+    appliedEditable = editable
+    untrack(() => {
+      if (editor && editor.isEditable !== editable) editor.setEditable(editable)
+      emitToolbarState()
+    })
   })
 
   onDestroy(() => {
@@ -1240,10 +1475,12 @@
     styleElement?.remove()
     if (clipboardErrorTimer) clearTimeout(clipboardErrorTimer)
     if (paginationTimer) clearTimeout(paginationTimer)
+    flushTrackedRevision()
     resizeObserver?.disconnect()
     stopBlockAutoScroll()
     window.removeEventListener('wa-page-settings-changed', handlePageSettingsChanged)
     window.removeEventListener('wa-editor-context', handleEditorContext)
+    window.removeEventListener('wa-ai-command-proposal', handleAiProposal)
   })
 </script>
 
@@ -1259,9 +1496,12 @@
   bind:this={shell}
   onpointermove={handleEditorPointerMove}
   onkeydowncapture={handleShellKeyDown}
+  ondblclick={handleObjectDoubleClick}
   onpointerleave={() => { if (!blockSelectionActive) blockHandleVisible = false }}
   onpointerup={handleBlockPointerUp}
   onpointercancel={handleBlockPointerUp}
+  oncompositionstart={() => { composingText = true }}
+  oncompositionend={() => { composingText = false; if (paginationPendingAfterComposition) { paginationPendingAfterComposition = false; schedulePagination() } }}
 >
   <input class="hidden-file-input" bind:this={markdownInput} type="file" accept=".md,.markdown,text/markdown,text/plain" onchange={importMarkdownFile} />
   <input class="hidden-file-input" bind:this={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" onchange={importImageFile} />
@@ -1325,6 +1565,33 @@
       {:else}<div class="proof-empty">未发现重复标点、多余空格、重复英文单词或超长句。</div>{/each}
     </aside>
   {/if}
+  {#if reviewPanelVisible}
+    <aside class="review-panel" aria-label="批注与修订">
+      <header><strong>批注与修订</strong><button aria-label="关闭批注与修订" onclick={() => (reviewPanelVisible = false)}>×</button></header>
+      <label class="track-toggle"><input type="checkbox" bind:checked={trackChanges} onchange={() => { if (!trackChanges) flushTrackedRevision() }} />记录后续修改</label>
+      <div class="comment-composer">
+        <textarea bind:value={commentDraft} rows="2" placeholder="为当前文字或块添加批注"></textarea>
+        <button onclick={addCommentFromSelection} disabled={!commentDraft.trim()}>添加批注</button>
+      </div>
+      <section><h3>批注</h3>
+        {#each activeDocument?.comments || [] as comment (String(comment.id))}
+          <article class:resolved={Boolean(comment.resolved)}><p>{String(comment.text || '')}</p><small>{String(comment.author || '用户')}</small><button onclick={() => settleComment(String(comment.id), !Boolean(comment.resolved))}>{comment.resolved ? '重新打开' : '解决'}</button></article>
+        {:else}<p class="review-empty">尚无批注。</p>{/each}
+      </section>
+      <section><h3>修订</h3>
+        {#each documentRevisions() as revision (revision.id)}
+          <article class:resolved={revision.status !== 'pending'}><p>{revision.summary}</p><small>{revision.author} · {new Date(revision.createdAt).toLocaleString()}</small>
+            {#if revision.status === 'pending'}<div><button onclick={() => settleTrackedRevision(revision.id, true)}>接受</button><button onclick={() => settleTrackedRevision(revision.id, false)}>拒绝</button></div>{:else}<span>{revision.status === 'accepted' ? '已接受' : '已拒绝'}</span>{/if}
+          </article>
+        {:else}<p class="review-empty">尚无修订记录。</p>{/each}
+      </section>
+      <section><h3>AI 修改建议</h3>
+        {#each aiProposals as proposal (proposal.command.id)}
+          <article><p>{proposal.command.type} · {proposal.command.target.kind}</p><small>等待确认，不会自动改动正文</small><div><button onclick={() => settleAiProposal(proposal.command.id, true)}>应用</button><button onclick={() => settleAiProposal(proposal.command.id, false)}>拒绝</button></div></article>
+        {:else}<p class="review-empty">没有待处理的 AI 建议。</p>{/each}
+      </section>
+    </aside>
+  {/if}
   {#if shortcutPanelVisible}
     <aside class="shortcut-panel" aria-label="编辑快捷键">
       <header><strong>编辑快捷键</strong><button aria-label="关闭快捷键" onclick={() => (shortcutPanelVisible = false)}>×</button></header>
@@ -1369,18 +1636,21 @@
     <div class="reference-dialog-backdrop" role="presentation">
       <form class="reference-dialog" aria-label="插入引用对象" onsubmit={(event) => { event.preventDefault(); applyReferenceDialog() }}>
         <header>
-          <strong>{referenceDialog === 'link' ? '插入链接' : referenceDialog === 'equation' ? '插入行内公式' : referenceDialog === 'footnote' ? '插入脚注' : '插入交叉引用'}</strong>
+          <strong>{referenceDialog === 'link' ? '插入链接' : referenceDialog === 'equation' ? '插入行内公式' : referenceDialog === 'blockEquation' ? '编辑公式块' : referenceDialog === 'footnote' ? '插入脚注' : referenceDialog === 'endnote' ? '插入尾注' : referenceDialog === 'citation' ? '插入引文' : '插入交叉引用'}</strong>
           <button type="button" aria-label="关闭引用对象窗口" onclick={() => (referenceDialog = '')}>×</button>
         </header>
         {#if referenceDialog === 'link'}
           <label>地址<input bind:value={referenceHref} placeholder="https://example.com 或 #书签" /></label>
           <label>提示文字<input bind:value={referenceTitle} placeholder="可选" /></label>
           <p>先选择文字再插入链接；光标位于已有链接中时可再次编辑。</p>
-        {:else if referenceDialog === 'equation'}
+        {:else if referenceDialog === 'equation' || referenceDialog === 'blockEquation'}
           <label>LaTeX<input bind:value={referenceLatex} placeholder="例如 E = mc^2" /></label>
-        {:else if referenceDialog === 'footnote'}
-          <label>脚注内容<textarea bind:value={referenceNoteText} rows="4"></textarea></label>
-          <p>脚注正文保存在 Document V3 的 notes 中，正文只保存稳定引用 ID。</p>
+        {:else if referenceDialog === 'footnote' || referenceDialog === 'endnote'}
+          <label>{referenceDialog === 'footnote' ? '脚注' : '尾注'}内容<textarea bind:value={referenceNoteText} rows="4"></textarea></label>
+          <p>注释正文保存在 Document V3 的 notes 中，正文只保存稳定引用 ID。</p>
+        {:else if referenceDialog === 'citation'}
+          <label>文献<select bind:value={referenceCitationId}>{#each citationEntries() as citation (citation.id)}<option value={citation.id}>{citation.label} {citation.text}</option>{/each}</select></label>
+          {#if !citationEntries().length}<p>请先在引文管理中添加文献。</p>{/if}
         {:else}
           <label>引用标题<select bind:value={referenceTargetId}>
             {#each outlineHeadings() as heading (heading.id)}
@@ -1395,13 +1665,15 @@
   {/if}
   {#if figureDialogVisible}
     <div class="reference-dialog-backdrop" role="presentation">
-      <form class="reference-dialog" aria-label="图片属性" onsubmit={(event) => { event.preventDefault(); applyFigureSettings() }}>
+      <form class="reference-dialog" aria-label="图片属性" onsubmit={(event) => { event.preventDefault(); void applyFigureSettings() }}>
         <header><strong>图片属性</strong><button type="button" aria-label="关闭图片属性" onclick={() => (figureDialogVisible = false)}>×</button></header>
         <label>题注<input bind:value={figureCaption} placeholder="例如：图 1 系统架构" /></label>
         <label>替代文字<input bind:value={figureAlt} placeholder="用于无障碍和导出" /></label>
         <label>宽度 {figureWidthPercent}%<input type="range" min="10" max="100" step="5" bind:value={figureWidthPercent} /></label>
         <label>对齐<select bind:value={figureAlignment}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label>
         <label>环绕<select bind:value={figureWrap}><option value="inline">嵌入型</option><option value="square">四周型</option></select></label>
+        <label>裁剪方式<select bind:value={figureCrop}><option value="none">完整显示</option><option value="fill">拉伸填充</option><option value="cover">裁剪填充</option></select></label>
+        {#if figureSpecText}<label>图形源数据<textarea bind:value={figureSpecText} rows="8" spellcheck="false"></textarea></label><p>修改 JSON 后应用，图形会重新渲染，仍保留可编辑源数据。</p>{/if}
         <footer><button type="button" onclick={() => (figureDialogVisible = false)}>取消</button><button class="primary" type="submit">应用</button></footer>
       </form>
     </div>
@@ -1606,6 +1878,21 @@
     background: #fff;
     box-shadow: 0 5px 18px rgba(38, 50, 66, .12);
   }
+  .review-panel { position: absolute; z-index: 12; top: 10px; left: calc(100% + 14px); box-sizing: border-box; display: grid; width: 300px; max-height: 78vh; gap: 10px; overflow: auto; padding: 12px; border: 1px solid #d5dce7; border-radius: 7px; background: #fff; color: #263244; box-shadow: 0 8px 28px rgba(32,45,64,.16); font-size: 12px; }
+  .review-panel > header { display: flex; align-items: center; justify-content: space-between; }
+  .review-panel > header button { border: 0; background: transparent; font-size: 19px; cursor: pointer; }
+  .track-toggle { display: flex; align-items: center; gap: 6px; color: #334155; }
+  .comment-composer { display: grid; gap: 6px; }
+  .comment-composer textarea { resize: vertical; }
+  .review-panel textarea, .review-panel button { box-sizing: border-box; padding: 6px 8px; border: 1px solid #ccd5e1; border-radius: 4px; background: #fff; color: inherit; font: inherit; }
+  .review-panel button { cursor: pointer; }
+  .review-panel section { display: grid; gap: 6px; border-top: 1px solid #e5e9ef; padding-top: 8px; }
+  .review-panel h3 { margin: 0; font-size: 12px; }
+  .review-panel article { display: grid; gap: 5px; padding: 8px; border: 1px solid #dce3ec; border-radius: 5px; background: #f8fafc; }
+  .review-panel article.resolved { opacity: .64; }
+  .review-panel article p, .review-panel article small { margin: 0; overflow-wrap: anywhere; }
+  .review-panel article small, .review-empty { color: #718096; }
+  .review-panel article div { display: flex; gap: 5px; }
   .shortcut-panel {
     position: absolute;
     z-index: 10;
@@ -1764,6 +2051,8 @@
   .structured-editor :global(.v3-object-figure[data-wrap="square"][data-alignment="left"]) { float: left; max-width: 52%; margin: 0 18px 12px 0; }
   .structured-editor :global(.v3-object-figure[data-wrap="square"][data-alignment="right"]) { float: right; max-width: 52%; margin: 0 0 12px 18px; }
   .structured-editor :global(.v3-object-figure img) { display: block; max-width: 100%; max-height: 560px; margin: 0 auto; object-fit: contain; }
+  .structured-editor :global(.v3-object-figure[data-crop="fill"] img) { width: 100%; height: 320px; object-fit: fill; }
+  .structured-editor :global(.v3-object-figure[data-crop="cover"] img) { width: 100%; height: 320px; object-fit: cover; }
   .structured-editor :global(.v3-object-figure figcaption) { margin-top: 8px; color: #586577; font-size: 12px; text-align: center; }
   .structured-editor :global(.v3-figure-placeholder) { padding: 24px; background: #f8fafc; }
   .structured-editor :global(.v3-object-tableOfContents) { display: grid; gap: 7px; padding: 16px 20px; background: #fff; text-align: left; }
@@ -1844,7 +2133,9 @@
   .structured-editor :global(.wa-page-header-text),
   .structured-editor :global(.wa-first-page-header) { display: block; color: #606975; text-align: center; }
   .structured-editor :global(.wa-page-header-text) { margin-top: 20px; }
-  .structured-editor :global(.wa-first-page-header) { margin-bottom: 18px; pointer-events: none; }
+  .structured-editor :global(.wa-first-page-header) { margin-bottom: 18px; }
+  .structured-editor :global([data-page-region]) { pointer-events: auto; cursor: text; }
+  .structured-editor :global([data-page-region]:hover) { background: rgba(37,99,235,.08); outline: 1px dashed rgba(37,99,235,.35); }
   .clipboard-error {
     position: sticky;
     bottom: 12px;

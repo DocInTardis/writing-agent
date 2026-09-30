@@ -34,6 +34,10 @@ export type PageSettings = {
   headerText: string
   showFooter: boolean
   footerText: string
+  firstPageHeaderText: string
+  firstPageFooterText: string
+  evenPageHeaderText: string
+  evenPageFooterText: string
   pageNumbers: boolean
   pageNumberPosition: 'left' | 'center' | 'right'
   pageNumberArea: 'header' | 'footer'
@@ -58,6 +62,10 @@ export const pageSettings = writable<PageSettings>({
   headerText: '',
   showFooter: false,
   footerText: '',
+  firstPageHeaderText: '',
+  firstPageFooterText: '',
+  evenPageHeaderText: '',
+  evenPageFooterText: '',
   pageNumbers: true,
   pageNumberPosition: 'center',
   pageNumberArea: 'footer',
@@ -96,6 +104,10 @@ export async function loadPageSettings() {
     headerText: String(prefs.header_text || ''),
     showFooter: Boolean(prefs.include_footer ?? current.showFooter),
     footerText: String(prefs.footer_text || ''),
+    firstPageHeaderText: String(prefs.first_page_header_text || ''),
+    firstPageFooterText: String(prefs.first_page_footer_text || ''),
+    evenPageHeaderText: String(prefs.even_page_header_text || ''),
+    evenPageFooterText: String(prefs.even_page_footer_text || ''),
     pageNumbers: Boolean(prefs.page_numbers ?? current.pageNumbers),
     pageNumberPosition: ['left', 'center', 'right'].includes(String(prefs.page_number_position || ''))
       ? prefs.page_number_position

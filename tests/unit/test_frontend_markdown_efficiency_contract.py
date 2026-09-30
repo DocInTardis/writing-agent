@@ -11,7 +11,7 @@ def test_markdown_is_interchange_not_document_source_of_truth() -> None:
     assert "export function markdownToBlocks" in markdown
     assert "export function replaceDocumentContentFromMarkdown" in markdown
     assert "export function documentV3ToMarkdown" in markdown
-    assert "const next = structuredClone(document)" in markdown
+    assert "const next = cloneJson(document)" in markdown
     assert "Document V3 继续保存页面和样式设置" in markdown
     assert "WRITING_AGENT_MODEL" in markdown
     for block_type in ("heading", "bulletList", "orderedList", "blockquote", "codeBlock", "horizontalRule", "pageBreak"):

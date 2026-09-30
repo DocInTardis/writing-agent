@@ -10,7 +10,7 @@
     open?: boolean
     docId?: string
     onclose?: () => void
-    oninsert?: (payload: { spec: Record<string, unknown> }) => void
+    oninsert?: (payload: { spec: Record<string, unknown>; svg: string; kind: Kind }) => void
   } = $props()
 
 
@@ -322,7 +322,7 @@
 
   function handleInsert() {
     if (!spec) return
-    oninsert?.({ spec })
+    oninsert?.({ spec, svg, kind })
   }
 
   async function copySvg() {

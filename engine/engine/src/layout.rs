@@ -23,6 +23,12 @@ pub struct LayoutConfig {
     /// document model, so pagination never has to infer manual breaks from
     /// rendered HTML.
     pub force_page_break_before: HashSet<Uuid>,
+    /// Text blocks that must remain on one page when they fit on a fresh page.
+    pub keep_lines_together: HashSet<Uuid>,
+    /// Blocks that should travel with their immediate successor when possible.
+    pub keep_with_next: HashSet<Uuid>,
+    /// Minimum lines kept at either side of an automatic page split.
+    pub widow_orphan_lines: usize,
 }
 
 impl Default for LayoutConfig {
@@ -34,6 +40,9 @@ impl Default for LayoutConfig {
             metrics: FontMetrics::default(),
             paged: true,
             force_page_break_before: HashSet::new(),
+            keep_lines_together: HashSet::new(),
+            keep_with_next: HashSet::new(),
+            widow_orphan_lines: 2,
         }
     }
 }
@@ -759,10 +768,26 @@ fn push_paginated_block(
     if config.force_page_break_before.contains(&block.block_id) && !current.blocks.is_empty() {
         start_next_page(pages, current);
     }
+    if current.height + block.height > max_height {
+        let move_previous = current
+            .blocks
+            .last()
+            .filter(|previous| config.keep_with_next.contains(&previous.block_id))
+            .cloned();
+        if let Some(previous) = move_previous {
+            current.blocks.pop();
+            current.height = (current.height - previous.height).max(0.0);
+            if !current.blocks.is_empty() {
+                start_next_page(pages, current);
+            }
+            current.height += previous.height;
+            current.blocks.push(previous);
+        }
+    }
     let line_height = (config.metrics.font_size * config.metrics.line_height).max(1.0);
-    let splittable = matches!(
+    let splittable = !config.keep_lines_together.contains(&block.block_id) && matches!(
         block.kind,
-        LayoutKind::Paragraph | LayoutKind::List | LayoutKind::Quote | LayoutKind::Code
+        LayoutKind::Paragraph | LayoutKind::List | LayoutKind::Quote | LayoutKind::Code | LayoutKind::Table
     ) && block.lines.len() > 1;
     if splittable && current.height + block.height > max_height {
         let mut line_index = 0usize;
@@ -774,6 +799,15 @@ fn push_paginated_block(
                 continue;
             }
             line_count = line_count.max(1).min(block.lines.len() - line_index);
+            let remaining = block.lines.len() - line_index;
+            let minimum = config.widow_orphan_lines.max(1);
+            if line_index == 0 && remaining > minimum && line_count < minimum && !current.blocks.is_empty() {
+                start_next_page(pages, current);
+                continue;
+            }
+            if remaining > line_count && remaining - line_count < minimum {
+                line_count = remaining.saturating_sub(minimum).max(1);
+            }
             let fragment_height = line_count as f32 * line_height;
             let fragment = std::sync::Arc::new(LayoutBlock {
                 block_id: block.block_id,

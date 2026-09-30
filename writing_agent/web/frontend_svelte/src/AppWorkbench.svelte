@@ -1,6 +1,6 @@
 ﻿<script lang="ts">
   import './AppWorkbench.css'
-  import { onMount } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import Editor from './lib/components/Editor.svelte'
   import DiagramCanvas from './lib/components/DiagramCanvas.svelte'
   import Toast from './lib/components/Toast.svelte'
@@ -88,6 +88,7 @@
     isLoading
   } from './lib/stores'
   import type { EditorCommand } from './lib/types'
+  import { migrateLegacyDocIr } from './lib/editor-v3/model'
   import type {
     BlockSession,
     FeedbackItem,
@@ -144,6 +145,9 @@
   let leftWidth = $state(46)
   let resizing = $state(false)
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+  let unsubscribeAutoSave = () => {}
+  let unsubscribeDocumentAutoSave = () => {}
+  let lastSavedDocumentV3Fingerprint = ''
   let partialSaveTimer = $state<ReturnType<typeof setTimeout> | null>(null)
   let partialSaveInFlight = $state(false)
   let partialSavedSnapshot = $state('')
@@ -157,7 +161,18 @@
   let librarySearch = $state('')
   let librarySelectAll = $state(false)
   let selectedLibraryCardId = $state('')
-  let filteredLibraryCards = $state<LibraryCard[]>([])
+  let filteredLibraryCards = $derived.by(() => {
+    const cards = buildLibraryCards({
+      sourceText: $sourceText,
+      wordCount: Number($wordCount || 0),
+      previewSnippet: metaPreviewSnippet(),
+      lastGraphMeta,
+      feedbackItems,
+      versionGroupCount: versionGroups.length
+    })
+    const query = librarySearch.trim()
+    return cards.filter((card) => cardMatchesSearch(card, query))
+  })
 
   let hideLibraryInfo = $state(false)
   let infoDrawerOpen = $state(false)
@@ -280,7 +295,8 @@
     tabStops: [] as Array<{ positionEm: number; alignment: string }>,
     spaceBeforePt: null as number | null,
     spaceAfterPt: null as number | null,
-    styles: [] as Array<{ id: string; name: string }>
+    styles: [] as Array<{ id: string; name: string }>,
+    mixedFields: [] as string[]
   })
   let queuedInstructionSeed = $state(0)
   let queuedGlobalInstructions = $state<QueuedInstruction[]>([])
@@ -480,22 +496,6 @@
     }
   }
 
-  $effect(() => {
-    const cards = buildLibraryCards({
-      sourceText: $sourceText,
-      wordCount: Number($wordCount || 0),
-      previewSnippet: metaPreviewSnippet(),
-      lastGraphMeta,
-      feedbackItems,
-      versionGroupCount: versionGroups.length
-    })
-    const query = librarySearch.trim()
-    filteredLibraryCards = cards.filter((card) => cardMatchesSearch(card, query))
-    if (!librarySelectAll && selectedLibraryCardId && !filteredLibraryCards.some((card) => card.id === selectedLibraryCardId)) {
-      selectedLibraryCardId = ''
-    }
-  })
-
   let topStatusLine = $derived(buildTopStatusLine())
   let qualityOverview = $derived(
     buildQualityOverview({
@@ -661,8 +661,7 @@
       const doc = textToDocIr(snapshot, currentTitle)
       if (doc) {
         const normalized = normalizeDocIrParagraphBlocks(doc)
-        docIr.set(normalized)
-        docIrDirty.set(false)
+        adoptCanonicalDocument(normalized)
       }
     }, 120)
   }
@@ -759,8 +758,7 @@
     sourceText.set(txt)
     if (finalDoc && typeof finalDoc === 'object') {
       const normalized = normalizeDocIrParagraphBlocks(finalDoc as Record<string, unknown>)
-      docIr.set(normalized)
-      docIrDirty.set(false)
+      adoptCanonicalDocument(normalized)
     } else {
       const currentTitle =
         $docIr && typeof $docIr === 'object'
@@ -769,8 +767,7 @@
       const doc = textToDocIr(txt, currentTitle)
       if (doc) {
         const normalized = normalizeDocIrParagraphBlocks(doc)
-        docIr.set(normalized)
-        docIrDirty.set(false)
+        adoptCanonicalDocument(normalized)
       } else {
         docIr.set(null)
         docIrDirty.set(true)
@@ -820,8 +817,7 @@
       if (token !== typingToken) return
       if (opts?.finalDocIr && typeof opts.finalDocIr === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(opts.finalDocIr as Record<string, unknown>)
-        docIr.set(normalized)
-        docIrDirty.set(false)
+        adoptCanonicalDocument(normalized)
       } else {
         scheduleDocIrRefresh(text, true)
       }
@@ -1015,12 +1011,19 @@
     return event || {}
   }
 
+  function scheduleAutoSave() {
+    if (!$docId || $generating) return
+    if (autoSaveTimer) clearTimeout(autoSaveTimer)
+    autoSaveTimer = setTimeout(() => {
+      saveDoc({ quiet: true }).catch(() => {})
+    }, 3000)
+  }
+
   function handleBlockEdit(event: any) {
     const payload = eventPayload(event)
     if (payload.docIr && typeof payload.docIr === 'object') {
       const normalized = normalizeDocIrParagraphBlocks(payload.docIr as Record<string, unknown>)
-      docIr.set(normalized)
-      docIrDirty.set(false)
+      adoptCanonicalDocument(normalized)
       lastSavedDocIr = normalized
     }
     if (payload.text) {
@@ -1030,6 +1033,10 @@
     if (payload.meta && payload.meta.action) {
       pushToast('块已更新', 'ok')
     }
+    // Formatting-only edits can leave the plain-text snapshot unchanged.
+    // Schedule from the canonical editor update as well as from sourceText so
+    // styles, tables, page fields and review metadata are never left unsaved.
+    scheduleAutoSave()
   }
 
   function handleToolbarState(event: any) {
@@ -1074,7 +1081,8 @@
       spaceAfterPt: (detail as any).spaceAfterPt == null ? null : Number((detail as any).spaceAfterPt),
       styles: Array.isArray((detail as any).styles)
         ? (detail as any).styles.map((style: any) => ({ id: String(style.id || ''), name: String(style.name || '') })).filter((style: any) => style.id && style.name)
-        : []
+        : [],
+      mixedFields: Array.isArray((detail as any).mixedFields) ? (detail as any).mixedFields.map(String) : []
     }
   }
 
@@ -1661,27 +1669,25 @@
     }
   }
 
-  function applyDocIrSnapshot(nextDoc: Record<string, unknown>) {
+  function adoptCanonicalDocument(nextDoc: Record<string, unknown>) {
     const normalized = normalizeDocIrParagraphBlocks(nextDoc)
     docIr.set(normalized)
     docIrDirty.set(false)
+    documentV3.set(migrateLegacyDocIr(normalized))
+    return normalized
+  }
+
+  function applyDocIrSnapshot(nextDoc: Record<string, unknown>) {
+    const normalized = adoptCanonicalDocument(nextDoc)
     lastSavedDocIr = normalized
     const nextText = docIrToMarkdown(normalized) || ''
     sourceText.set(nextText)
     lastSavedText = nextText
   }
 
-  $effect(() => {
-    if (!blockCandidates.length) {
-      if (activeCandidateIndex !== 0) activeCandidateIndex = 0
-      return
-    }
-    if (activeCandidateIndex >= blockCandidates.length) {
-      activeCandidateIndex = 0
-    }
-  })
-
-  let activeCandidate = $derived(blockCandidates[activeCandidateIndex] || null)
+  let activeCandidate = $derived(
+    blockCandidates[activeCandidateIndex < blockCandidates.length ? activeCandidateIndex : 0] || null
+  )
 
   const blockCache = new Map<string, any>()
 
@@ -1961,14 +1967,15 @@
       await loadLatestAiRate()
       if (data.doc_ir && typeof data.doc_ir === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
-        docIr.set(normalized)
-        docIrDirty.set(false)
+        adoptCanonicalDocument(normalized)
         lastSavedDocIr = normalized
       } else {
         docIr.set(null)
         lastSavedDocIr = null
       }
-      documentV3.set(data.document_v3 && typeof data.document_v3 === 'object' ? data.document_v3 : null)
+      const loadedDocumentV3 = data.document_v3 && typeof data.document_v3 === 'object' ? data.document_v3 : null
+      lastSavedDocumentV3Fingerprint = loadedDocumentV3 ? JSON.stringify(loadedDocumentV3) : ''
+      documentV3.set(loadedDocumentV3)
       loadVersionLog().catch(() => {})
     } catch (err) {
       pushToast(`加载失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
@@ -2326,7 +2333,11 @@
     const id = $docId
     if (!id) return false
     try {
-      if ($docIr && !$docIrDirty && lastSavedDocIr) {
+      // Document V3 is the canonical model for the professional editor.  The
+      // DocIR diff path is retained only for genuinely legacy documents; using
+      // it while V3 exists silently drops styles, tables, page setup, notes and
+      // review metadata because those features have no DocIR representation.
+      if (!$documentV3 && $docIr && !$docIrDirty && lastSavedDocIr) {
         const ops = buildDocIrOps(lastSavedDocIr, $docIr)
         if (ops && ops.length > 0) {
           const resp = await fetch(`/api/doc/${id}/doc_ir/ops`, {
@@ -2338,8 +2349,7 @@
             const data = await resp.json()
             if (data.doc_ir && typeof data.doc_ir === 'object') {
               const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
-              docIr.set(normalized)
-              docIrDirty.set(false)
+              adoptCanonicalDocument(normalized)
               lastSavedDocIr = normalized
             }
             if (data.text) {
@@ -2380,6 +2390,7 @@
       if (!response.ok) throw new Error((await response.text()) || response.statusText)
       lastSavedText = $sourceText
       partialSavedSnapshot = $sourceText
+      lastSavedDocumentV3Fingerprint = $documentV3 ? JSON.stringify($documentV3) : ''
       if (!$docIrDirty && $docIr) {
         lastSavedDocIr = $docIr
       } else {
@@ -3305,8 +3316,7 @@
       const data = await resp.json()
       if (data.doc_ir && typeof data.doc_ir === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
-        docIr.set(normalized)
-        docIrDirty.set(false)
+        adoptCanonicalDocument(normalized)
       }
     } catch {}
   }
@@ -3345,8 +3355,7 @@
       }
       if (data.doc_ir && typeof data.doc_ir === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
-        docIr.set(normalized)
-        docIrDirty.set(false)
+        adoptCanonicalDocument(normalized)
       } else if (text) {
         docIrDirty.set(true)
       }
@@ -3399,8 +3408,7 @@
       }
       if (data.doc_ir && typeof data.doc_ir === 'object') {
         const normalized = normalizeDocIrParagraphBlocks(data.doc_ir as Record<string, unknown>)
-        docIr.set(normalized)
-        docIrDirty.set(false)
+        adoptCanonicalDocument(normalized)
       } else if (revisedText) {
         docIrDirty.set(true)
       }
@@ -3447,36 +3455,32 @@
   }
 
   $effect(() => {
-    if ($sourceText && $sourceText !== lastSavedText && !$generating) {
-      if (autoSaveTimer) clearTimeout(autoSaveTimer)
-      autoSaveTimer = setTimeout(() => {
-        saveDoc().catch(() => {})
-      }, 3000)
-    }
-  })
-
-  $effect(() => {
+    let nextLocked = false
+    let nextReason = ''
     if (!isGenerationOrRenderBusy()) {
-      inlineEditLocked = false
-      inlineEditLockReason = ''
+      nextLocked = false
     } else if (!$generating) {
-      inlineEditLocked = true
-      inlineEditLockReason = '当前内容仍在渲染，请等待打字机输出结束后再修改。'
+      nextLocked = true
+      nextReason = '当前内容仍在渲染，请等待打字机输出结束后再修改。'
     } else {
       const keys = selectedSectionKeys()
       if (!keys.length) {
-        inlineEditLocked = true
-        inlineEditLockReason = '当前仍在生成。请先选择已完成章节下的段落块。'
+        nextLocked = true
+        nextReason = '当前仍在生成。请先选择已完成章节下的段落块。'
       } else {
         const waiting = keys.filter(
           (key) => !completedStreamingSections.includes(key) || activeStreamingSections.includes(key)
         )
-        inlineEditLocked = waiting.length > 0
-        inlineEditLockReason = inlineEditLocked
+        nextLocked = waiting.length > 0
+        nextReason = nextLocked
           ? '选中块所在章节仍在生成，请等待该章节完成后再修改。'
           : ''
       }
     }
+    untrack(() => {
+      if (inlineEditLocked !== nextLocked) inlineEditLocked = nextLocked
+      if (inlineEditLockReason !== nextReason) inlineEditLockReason = nextReason
+    })
   })
 
   onMount(() => {
@@ -3510,6 +3514,16 @@
     window.addEventListener('scroll', onViewportChange, true)
     window.addEventListener('keydown', handleGlobalKeydownCapture, true)
     window.addEventListener('keydown', handleInlineShortcut)
+    unsubscribeAutoSave = sourceText.subscribe((snapshot) => {
+      if (!snapshot || snapshot === lastSavedText || $generating) return
+      scheduleAutoSave()
+    })
+    unsubscribeDocumentAutoSave = documentV3.subscribe((snapshot) => {
+      if (!snapshot || $generating) return
+      const fingerprint = JSON.stringify(snapshot)
+      if (fingerprint === lastSavedDocumentV3Fingerprint) return
+      scheduleAutoSave()
+    })
     if (!$docId) {
       const id = readDocId()
       if (id) {
@@ -3525,6 +3539,8 @@
       window.removeEventListener('scroll', onViewportChange, true)
       window.removeEventListener('keydown', handleGlobalKeydownCapture, true)
       window.removeEventListener('keydown', handleInlineShortcut)
+      unsubscribeAutoSave()
+      unsubscribeDocumentAutoSave()
       if (autoSaveTimer) clearTimeout(autoSaveTimer)
       if (recentQueuedBadgeTimer) clearTimeout(recentQueuedBadgeTimer)
     }
@@ -4005,7 +4021,7 @@
   open={canvasOpen}
   docId={$docId}
   onclose={() => (canvasOpen = false)}
-  oninsert={(payload) => runEditorCommand('image', payload.spec)}
+  oninsert={(payload) => runEditorCommand('diagram', payload)}
 />
 
 <ErrorBoundary>

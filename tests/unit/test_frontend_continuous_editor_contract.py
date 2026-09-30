@@ -11,7 +11,8 @@ def test_editor_uses_one_continuous_editing_host() -> None:
 
     assert source.count('class="structured-editor"') == 1
     assert "createEditorKernel" in source
-    assert "editor?.setEditable(!lockEditing)" in source
+    assert "editor.isEditable !== editable" in source
+    assert "editor.setEditable(editable)" in source
     assert "new Editor({" in kernel
     assert "one-editor-per-page" not in kernel
 
