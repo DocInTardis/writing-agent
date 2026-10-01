@@ -401,7 +401,11 @@ export function resolvedStyleProperties(
   const nextVisiting = new Set(visiting)
   nextVisiting.add(styleId)
   const inherited = style.basedOn ? resolvedStyleProperties(doc, style.basedOn, nextVisiting) : {}
-  return { ...inherited, ...style.properties }
+  // Python/Pydantic serializes optional fields as null.  Null means "inherit"
+  // in the style model and must not erase a concrete value from the base
+  // style; false and zero remain intentional overrides.
+  const own = Object.fromEntries(Object.entries(style.properties || {}).filter(([, value]) => value !== null && value !== undefined)) as StyleProperties
+  return { ...inherited, ...own }
 }
 
 export function refreshDocumentFields(document: DocumentV3): DocumentV3 {

@@ -24,7 +24,7 @@
     styleSheetForDocument,
     tiptapToDocumentV3
   } from '../editor-v3/kernel'
-  import { cloneJson, isDocumentV3, migrateLegacyDocIr, refreshDocumentFields, type DocumentV3, type StyleDefinition, type StyleProperties } from '../editor-v3/model'
+  import { DEFAULT_STYLES, cloneJson, isDocumentV3, migrateLegacyDocIr, refreshDocumentFields, resolvedStyleProperties, type DocumentV3, type StyleDefinition, type StyleProperties } from '../editor-v3/model'
   import { documentV3ToMarkdown, replaceDocumentContentFromMarkdown } from '../editor-v3/markdown'
   import { addDocumentComment, buildRevision, resolveDocumentComment, settleRevision, type DocumentRevision } from '../editor-v3/revisions'
   import { paginateDocumentV3 } from '../engine/documentEngine'
@@ -119,12 +119,30 @@
   let managedNextStyle = $state('normal')
   let managedFontFamily = $state('')
   let managedFontSizePt: number | '' = $state('')
-  let managedBold = $state(false)
-  let managedItalic = $state(false)
+  type InheritedToggle = 'inherit' | 'on' | 'off'
+  let managedBold: InheritedToggle = $state('inherit')
+  let managedItalic: InheritedToggle = $state('inherit')
+  let managedUnderline: InheritedToggle = $state('inherit')
+  let managedColor = $state('')
+  let managedBackgroundColor = $state('')
+  let managedLetterSpacingPt: number | '' = $state('')
+  let managedTextTransform: '' | 'none' | 'uppercase' | 'lowercase' | 'capitalize' = $state('')
   let managedAlignment = $state<'left' | 'center' | 'right' | 'justify'>('left')
   let managedLineSpacing: number | '' = $state('')
+  let managedFirstLineIndentEm: number | '' = $state('')
+  let managedLeftIndentEm: number | '' = $state('')
+  let managedRightIndentEm: number | '' = $state('')
   let managedSpaceBeforePt: number | '' = $state('')
   let managedSpaceAfterPt: number | '' = $state('')
+  let managedOutlineLevel: number | '' = $state('')
+  let managedKeepWithNext: InheritedToggle = $state('inherit')
+  let managedKeepLinesTogether: InheritedToggle = $state('inherit')
+  let managedPageBreakBefore: InheritedToggle = $state('inherit')
+  let managedBorderColor = $state('')
+  let managedBorderWidthPt: number | '' = $state('')
+  let managedBorderStyle: '' | 'none' | 'solid' | 'dashed' | 'double' = $state('')
+  let managedShadingColor = $state('')
+  let managedTabStops = $state('')
   let creatingStyle = $state(false)
   let styleManagerNotice = $state('')
   let styleRevision = $state(0)
@@ -479,12 +497,29 @@
     managedNextStyle = style.nextStyle || 'normal'
     managedFontFamily = properties.fontFamily || ''
     managedFontSizePt = properties.fontSizePt ?? ''
-    managedBold = Boolean(properties.bold)
-    managedItalic = Boolean(properties.italic)
+    managedBold = toggleFromProperty(properties.bold)
+    managedItalic = toggleFromProperty(properties.italic)
+    managedUnderline = toggleFromProperty(properties.underline)
+    managedColor = properties.color || ''
+    managedBackgroundColor = properties.backgroundColor || ''
+    managedLetterSpacingPt = properties.letterSpacingPt ?? ''
+    managedTextTransform = properties.textTransform || ''
     managedAlignment = properties.alignment || 'left'
     managedLineSpacing = properties.lineSpacing ?? ''
+    managedFirstLineIndentEm = properties.firstLineIndentEm ?? ''
+    managedLeftIndentEm = properties.leftIndentEm ?? ''
+    managedRightIndentEm = properties.rightIndentEm ?? ''
     managedSpaceBeforePt = properties.spaceBeforePt ?? ''
     managedSpaceAfterPt = properties.spaceAfterPt ?? ''
+    managedOutlineLevel = properties.outlineLevel ?? ''
+    managedKeepWithNext = toggleFromProperty(properties.keepWithNext)
+    managedKeepLinesTogether = toggleFromProperty(properties.keepLinesTogether)
+    managedPageBreakBefore = toggleFromProperty(properties.pageBreakBefore)
+    managedBorderColor = properties.borderColor || ''
+    managedBorderWidthPt = properties.borderWidthPt ?? ''
+    managedBorderStyle = properties.borderStyle || ''
+    managedShadingColor = properties.shadingColor || ''
+    managedTabStops = (properties.tabStops || []).map((tab) => `${tab.positionEm}:${tab.alignment}`).join(', ')
     creatingStyle = false
     styleManagerNotice = ''
   }
@@ -500,12 +535,30 @@
     managedFontFamily = String(textAttrs.fontFamily || '')
     const fontSize = Number.parseFloat(String(textAttrs.fontSize || ''))
     managedFontSizePt = Number.isFinite(fontSize) ? fontSize * 0.75 : ''
-    managedBold = editor.isActive('bold')
-    managedItalic = editor.isActive('italic')
+    managedBold = editor.isActive('bold') ? 'on' : 'inherit'
+    managedItalic = editor.isActive('italic') ? 'on' : 'inherit'
+    managedUnderline = editor.isActive('underline') ? 'on' : 'inherit'
+    managedColor = String(textAttrs.color || '')
+    managedBackgroundColor = String(textAttrs.backgroundColor || '')
+    const letterSpacing = Number.parseFloat(String(textAttrs.letterSpacing || ''))
+    managedLetterSpacingPt = Number.isFinite(letterSpacing) ? letterSpacing * 0.75 : ''
+    managedTextTransform = (textAttrs.textTransform || '') as typeof managedTextTransform
     managedAlignment = (paragraphAttrs.textAlign || 'left') as typeof managedAlignment
     managedLineSpacing = paragraphAttrs.lineSpacing ?? ''
+    managedFirstLineIndentEm = paragraphAttrs.firstLineIndentEm ?? ''
+    managedLeftIndentEm = paragraphAttrs.leftIndentEm ?? ''
+    managedRightIndentEm = paragraphAttrs.rightIndentEm ?? ''
     managedSpaceBeforePt = paragraphAttrs.spaceBeforePt ?? ''
     managedSpaceAfterPt = paragraphAttrs.spaceAfterPt ?? ''
+    managedOutlineLevel = ''
+    managedKeepWithNext = 'inherit'
+    managedKeepLinesTogether = 'inherit'
+    managedPageBreakBefore = 'inherit'
+    managedBorderColor = paragraphAttrs.borderColor || ''
+    managedBorderWidthPt = paragraphAttrs.borderWidthPt ?? ''
+    managedBorderStyle = paragraphAttrs.borderStyle || ''
+    managedShadingColor = paragraphAttrs.shadingColor || ''
+    managedTabStops = ''
     creatingStyle = true
     styleManagerNotice = '正在基于当前段落创建样式。'
   }
@@ -523,6 +576,115 @@
     styleManagerNotice = message
   }
 
+  function toggleFromProperty(value: boolean | null | undefined): InheritedToggle {
+    return value == null ? 'inherit' : value ? 'on' : 'off'
+  }
+
+  function toggleProperty(value: InheritedToggle): boolean | undefined {
+    return value === 'inherit' ? undefined : value === 'on'
+  }
+
+  function numberProperty(value: number | ''): number | undefined {
+    if (value === '') return undefined
+    const result = Number(value)
+    return Number.isFinite(result) ? result : undefined
+  }
+
+  function parseTabStops(value: string): StyleProperties['tabStops'] | undefined {
+    const input = value.trim()
+    if (!input) return undefined
+    return input.split(',').map((raw) => {
+      const [positionText, alignmentText = 'left'] = raw.trim().split(':')
+      const positionEm = Number(positionText)
+      const alignment = alignmentText.trim() as 'left' | 'center' | 'right' | 'decimal'
+      if (!Number.isFinite(positionEm) || positionEm < 0 || !['left', 'center', 'right', 'decimal'].includes(alignment)) {
+        throw new Error(`无效制表位“${raw.trim()}”，请使用“位置:对齐”，例如 4:left。`)
+      }
+      return { positionEm, alignment }
+    })
+  }
+
+  function stylePropertiesFromForm(): StyleProperties {
+    const properties: StyleProperties = {
+      fontFamily: managedFontFamily.trim() || undefined,
+      fontSizePt: numberProperty(managedFontSizePt),
+      bold: toggleProperty(managedBold),
+      italic: toggleProperty(managedItalic),
+      underline: toggleProperty(managedUnderline),
+      color: managedColor || undefined,
+      backgroundColor: managedBackgroundColor || undefined,
+      letterSpacingPt: numberProperty(managedLetterSpacingPt),
+      textTransform: managedTextTransform || undefined,
+      alignment: managedAlignment,
+      lineSpacing: numberProperty(managedLineSpacing),
+      firstLineIndentEm: numberProperty(managedFirstLineIndentEm),
+      leftIndentEm: numberProperty(managedLeftIndentEm),
+      rightIndentEm: numberProperty(managedRightIndentEm),
+      spaceBeforePt: numberProperty(managedSpaceBeforePt),
+      spaceAfterPt: numberProperty(managedSpaceAfterPt),
+      outlineLevel: numberProperty(managedOutlineLevel),
+      keepWithNext: toggleProperty(managedKeepWithNext),
+      keepLinesTogether: toggleProperty(managedKeepLinesTogether),
+      pageBreakBefore: toggleProperty(managedPageBreakBefore),
+      borderColor: managedBorderColor || undefined,
+      borderWidthPt: numberProperty(managedBorderWidthPt),
+      borderStyle: managedBorderStyle || undefined,
+      shadingColor: managedShadingColor || undefined,
+      tabStops: parseTabStops(managedTabStops)
+    }
+    const ranges: Array<[keyof StyleProperties, number, number, string]> = [
+      ['fontSizePt', 6, 96, '字号'], ['letterSpacingPt', -5, 30, '字间距'],
+      ['lineSpacing', 0.8, 4, '行距'], ['firstLineIndentEm', -10, 20, '首行缩进'],
+      ['leftIndentEm', -10, 40, '左缩进'], ['rightIndentEm', -10, 40, '右缩进'],
+      ['spaceBeforePt', 0, 144, '段前'], ['spaceAfterPt', 0, 144, '段后'],
+      ['outlineLevel', 0, 9, '大纲级别'], ['borderWidthPt', 0, 12, '边框宽度']
+    ]
+    for (const [key, min, max, label] of ranges) {
+      const value = properties[key]
+      if (typeof value === 'number' && (value < min || value > max)) throw new Error(`${label}必须在 ${min}–${max} 之间。`)
+    }
+    if (properties.outlineLevel !== undefined && !Number.isInteger(properties.outlineLevel)) throw new Error('大纲级别必须是整数。')
+    for (const [value, label] of [[properties.color, '文字颜色'], [properties.backgroundColor, '文字底色'], [properties.borderColor, '边框颜色'], [properties.shadingColor, '段落底纹']] as const) {
+      if (value && !/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`${label}必须使用 #RRGGBB 格式。`)
+    }
+    return properties
+  }
+
+  function previewStyle(): string {
+    let properties: StyleProperties
+    try {
+      const own = stylePropertiesFromForm()
+      if (activeDocument) {
+        const previewDocument = cloneJson(activeDocument)
+        const definition: StyleDefinition = {
+          id: managedStyleId,
+          name: managedStyleName || '预览',
+          kind: 'paragraph',
+          basedOn: managedBasedOn || undefined,
+          nextStyle: managedNextStyle || 'normal',
+          visible: true,
+          properties: own
+        }
+        const index = previewDocument.styles.findIndex((style) => style.id === definition.id)
+        if (index >= 0) previewDocument.styles[index] = definition
+        else previewDocument.styles.push(definition)
+        properties = resolvedStyleProperties(previewDocument, definition.id)
+      } else properties = own
+    } catch { return '' }
+    return [
+      properties.fontFamily ? `font-family:${properties.fontFamily}` : '',
+      properties.fontSizePt ? `font-size:${properties.fontSizePt}pt` : '',
+      properties.bold === true ? 'font-weight:700' : properties.bold === false ? 'font-weight:400' : '',
+      properties.italic === true ? 'font-style:italic' : properties.italic === false ? 'font-style:normal' : '',
+      properties.underline === true ? 'text-decoration:underline' : properties.underline === false ? 'text-decoration:none' : '',
+      properties.color ? `color:${properties.color}` : '',
+      properties.backgroundColor ? `background-color:${properties.backgroundColor}` : '',
+      properties.alignment ? `text-align:${properties.alignment}` : '',
+      properties.lineSpacing ? `line-height:${properties.lineSpacing}` : '',
+      properties.firstLineIndentEm !== undefined ? `text-indent:${properties.firstLineIndentEm}em` : ''
+    ].filter(Boolean).join(';')
+  }
+
   function saveManagedStyle() {
     if (!activeDocument) return
     const name = managedStyleName.trim()
@@ -534,15 +696,12 @@
       styleManagerNotice = '样式不能继承自身。'
       return
     }
-    const properties: StyleProperties = {
-      fontFamily: managedFontFamily || undefined,
-      fontSizePt: managedFontSizePt === '' ? undefined : Number(managedFontSizePt),
-      bold: managedBold || undefined,
-      italic: managedItalic || undefined,
-      alignment: managedAlignment,
-      lineSpacing: managedLineSpacing === '' ? undefined : Number(managedLineSpacing),
-      spaceBeforePt: managedSpaceBeforePt === '' ? undefined : Number(managedSpaceBeforePt),
-      spaceAfterPt: managedSpaceAfterPt === '' ? undefined : Number(managedSpaceAfterPt)
+    let properties: StyleProperties
+    try {
+      properties = stylePropertiesFromForm()
+    } catch (error) {
+      styleManagerNotice = error instanceof Error ? error.message : String(error)
+      return
     }
     const definition: StyleDefinition = {
       id: managedStyleId,
@@ -572,8 +731,86 @@
     publishStyleChange(next, index >= 0 ? `已全局更新“${name}”。` : `已创建“${name}”。`)
   }
 
+  function duplicateManagedStyle() {
+    const source = activeDocument?.styles.find((style) => style.id === managedStyleId)
+    if (!source) return
+    beginCreateStyle()
+    managedStyleName = `${source.name} 副本`
+    managedBasedOn = source.basedOn || 'normal'
+    const properties = cloneJson(source.properties)
+    managedFontFamily = properties.fontFamily || ''
+    managedFontSizePt = properties.fontSizePt ?? ''
+    managedBold = toggleFromProperty(properties.bold)
+    managedItalic = toggleFromProperty(properties.italic)
+    managedUnderline = toggleFromProperty(properties.underline)
+    managedColor = properties.color || ''
+    managedBackgroundColor = properties.backgroundColor || ''
+    managedLetterSpacingPt = properties.letterSpacingPt ?? ''
+    managedTextTransform = properties.textTransform || ''
+    managedAlignment = properties.alignment || 'left'
+    managedLineSpacing = properties.lineSpacing ?? ''
+    managedFirstLineIndentEm = properties.firstLineIndentEm ?? ''
+    managedLeftIndentEm = properties.leftIndentEm ?? ''
+    managedRightIndentEm = properties.rightIndentEm ?? ''
+    managedSpaceBeforePt = properties.spaceBeforePt ?? ''
+    managedSpaceAfterPt = properties.spaceAfterPt ?? ''
+    managedOutlineLevel = properties.outlineLevel ?? ''
+    managedKeepWithNext = toggleFromProperty(properties.keepWithNext)
+    managedKeepLinesTogether = toggleFromProperty(properties.keepLinesTogether)
+    managedPageBreakBefore = toggleFromProperty(properties.pageBreakBefore)
+    managedBorderColor = properties.borderColor || ''
+    managedBorderWidthPt = properties.borderWidthPt ?? ''
+    managedBorderStyle = properties.borderStyle || ''
+    managedShadingColor = properties.shadingColor || ''
+    managedTabStops = (properties.tabStops || []).map((tab) => `${tab.positionEm}:${tab.alignment}`).join(', ')
+    styleManagerNotice = `正在复制“${source.name}”。`
+  }
+
+  function resetManagedStyle() {
+    const builtin = DEFAULT_STYLES.find((style) => style.id === managedStyleId)
+    if (!builtin || !activeDocument) {
+      styleManagerNotice = '只有内置样式可以恢复默认值。'
+      return
+    }
+    const next = cloneJson(activeDocument)
+    const index = next.styles.findIndex((style) => style.id === builtin.id)
+    if (index >= 0) next.styles[index] = cloneJson(builtin)
+    else next.styles.push(cloneJson(builtin))
+    publishStyleChange(next, `已恢复“${builtin.name}”的默认设置。`)
+    loadManagedStyle(builtin.id)
+  }
+
+  function deleteManagedStyle() {
+    if (!activeDocument) return
+    if (DEFAULT_STYLES.some((style) => style.id === managedStyleId)) {
+      styleManagerNotice = '内置样式不能删除，可以恢复默认值。'
+      return
+    }
+    const replacement = managedBasedOn && managedBasedOn !== managedStyleId ? managedBasedOn : 'normal'
+    const next = cloneJson(activeDocument)
+    next.styles = next.styles.filter((style) => style.id !== managedStyleId)
+    for (const style of next.styles) {
+      if (style.basedOn === managedStyleId) style.basedOn = replacement
+      if (style.nextStyle === managedStyleId) style.nextStyle = replacement
+    }
+    const reassign = (nodes: any[]) => {
+      for (const node of nodes || []) {
+        if (node?.styleId === managedStyleId) node.styleId = replacement
+        if (Array.isArray(node?.content)) reassign(node.content)
+      }
+    }
+    for (const section of next.sections) reassign(section.content)
+    publishStyleChange(next, '样式已删除，引用它的段落已安全改用父样式或正文。')
+    loadManagedStyle(replacement)
+    if (editor) loadDocument(next)
+  }
+
   function applyManagedStyle() {
     if (!editor) return
+    if (creatingStyle) {
+      saveManagedStyle()
+      if (creatingStyle) return
+    }
     executeDocumentCommand(editor, createUserCommand('apply_style', { styleId: managedStyleId }))
     emitSelection()
   }
@@ -973,12 +1210,18 @@
     if (!textBlocks.length && selection.$from.parent.isTextblock) textBlocks.push(selection.$from.parent.attrs as Record<string, unknown>)
     const mixedFields = ['styleId', 'textAlign', 'lineSpacing', 'firstLineIndentEm', 'leftIndentEm', 'rightIndentEm', 'spaceBeforePt', 'spaceAfterPt']
       .filter((key) => new Set(textBlocks.map((attrs) => JSON.stringify(attrs[key] ?? null))).size > 1)
+    const headingAttrs = editor.getAttributes('heading')
+    const paragraphAttrs = editor.getAttributes('paragraph')
+    const blockAttrs = editor.isActive('heading') ? headingAttrs : paragraphAttrs
+    const styleId = String(blockAttrs.styleId || 'normal')
+    const computedStyle = activeDocument ? resolvedStyleProperties(activeDocument, styleId) : {}
+    const textStyle = editor.getAttributes('textStyle')
     ontoolbarstate?.({
       focused: editor.isFocused,
       readonly: !editor.isEditable,
-      bold: editor.isActive('bold'),
-      italic: editor.isActive('italic'),
-      underline: editor.isActive('underline'),
+      bold: editor.isActive('bold') || Boolean(computedStyle.bold),
+      italic: editor.isActive('italic') || Boolean(computedStyle.italic),
+      underline: editor.isActive('underline') || Boolean(computedStyle.underline),
       strike: editor.isActive('strike'),
       hasSelection: !selection.empty,
       canUndo: editor.can().undo(),
@@ -996,23 +1239,23 @@
       tableCellBackground: String(cellAttrs.backgroundColor || ''),
       tableCellVerticalAlign: String(cellAttrs.verticalAlign || 'top'),
       blockType: editor.isActive('heading') ? 'heading' : 'paragraph',
-      headingLevel: editor.getAttributes('heading').level || null,
-      styleId: editor.getAttributes('heading').styleId || editor.getAttributes('paragraph').styleId || 'normal',
-      fontFamily: editor.getAttributes('textStyle').fontFamily || '',
-      fontSize: editor.getAttributes('textStyle').fontSize || '',
-      alignment: editor.getAttributes('heading').textAlign || editor.getAttributes('paragraph').textAlign || 'left',
-      lineSpacing: editor.getAttributes('heading').lineSpacing || editor.getAttributes('paragraph').lineSpacing || null,
-      letterSpacing: editor.getAttributes('textStyle').letterSpacing || '',
-      textTransform: editor.getAttributes('textStyle').textTransform || 'none',
-      firstLineIndentEm: editor.getAttributes('heading').firstLineIndentEm ?? editor.getAttributes('paragraph').firstLineIndentEm ?? null,
-      leftIndentEm: editor.getAttributes('heading').leftIndentEm ?? editor.getAttributes('paragraph').leftIndentEm ?? null,
-      rightIndentEm: editor.getAttributes('heading').rightIndentEm ?? editor.getAttributes('paragraph').rightIndentEm ?? null,
-      keepWithNext: Boolean(editor.getAttributes('heading').keepWithNext ?? editor.getAttributes('paragraph').keepWithNext),
-      keepLinesTogether: Boolean(editor.getAttributes('heading').keepLinesTogether ?? editor.getAttributes('paragraph').keepLinesTogether),
-      pageBreakBefore: Boolean(editor.getAttributes('heading').pageBreakBefore ?? editor.getAttributes('paragraph').pageBreakBefore),
-      tabStops: editor.getAttributes('heading').tabStops ?? editor.getAttributes('paragraph').tabStops ?? [],
-      spaceBeforePt: editor.getAttributes('heading').spaceBeforePt ?? editor.getAttributes('paragraph').spaceBeforePt ?? null,
-      spaceAfterPt: editor.getAttributes('heading').spaceAfterPt ?? editor.getAttributes('paragraph').spaceAfterPt ?? null,
+      headingLevel: headingAttrs.level || null,
+      styleId,
+      fontFamily: textStyle.fontFamily || computedStyle.fontFamily || '',
+      fontSize: textStyle.fontSize || (computedStyle.fontSizePt ? `${computedStyle.fontSizePt}pt` : ''),
+      alignment: blockAttrs.textAlign || computedStyle.alignment || 'left',
+      lineSpacing: blockAttrs.lineSpacing ?? computedStyle.lineSpacing ?? null,
+      letterSpacing: textStyle.letterSpacing || (computedStyle.letterSpacingPt !== undefined ? `${computedStyle.letterSpacingPt}pt` : ''),
+      textTransform: textStyle.textTransform || computedStyle.textTransform || 'none',
+      firstLineIndentEm: blockAttrs.firstLineIndentEm ?? computedStyle.firstLineIndentEm ?? null,
+      leftIndentEm: blockAttrs.leftIndentEm ?? computedStyle.leftIndentEm ?? null,
+      rightIndentEm: blockAttrs.rightIndentEm ?? computedStyle.rightIndentEm ?? null,
+      keepWithNext: Boolean(blockAttrs.keepWithNext ?? computedStyle.keepWithNext),
+      keepLinesTogether: Boolean(blockAttrs.keepLinesTogether ?? computedStyle.keepLinesTogether),
+      pageBreakBefore: Boolean(blockAttrs.pageBreakBefore ?? computedStyle.pageBreakBefore),
+      tabStops: blockAttrs.tabStops ?? computedStyle.tabStops ?? [],
+      spaceBeforePt: blockAttrs.spaceBeforePt ?? computedStyle.spaceBeforePt ?? null,
+      spaceAfterPt: blockAttrs.spaceAfterPt ?? computedStyle.spaceAfterPt ?? null,
       styles: visibleStyles().map((style) => ({ id: style.id, name: style.name })),
       mixedFields
     })
@@ -1617,19 +1860,47 @@
         <button onclick={beginCreateStyle}>基于当前格式新建</button>
       </div>
       <label>名称<input bind:value={managedStyleName} /></label>
+      <div class="style-preview" style={previewStyle()}><span>样式预览：中文正文与 English 123</span></div>
       <div class="style-grid">
         <label>基于<select bind:value={managedBasedOn}><option value="">无</option>{#each visibleStyles().filter((style) => style.id !== managedStyleId) as style}<option value={style.id}>{style.name}</option>{/each}</select></label>
         <label>后续段落<select bind:value={managedNextStyle}>{#each visibleStyles() as style}<option value={style.id}>{style.name}</option>{/each}</select></label>
         <label>字体<input bind:value={managedFontFamily} placeholder="继承" /></label>
         <label>字号 pt<input type="number" min="6" max="96" step="0.5" bind:value={managedFontSizePt} /></label>
+        <label>文字颜色<input bind:value={managedColor} placeholder="#000000；留空继承" /></label>
+        <label>文字底色<input bind:value={managedBackgroundColor} placeholder="#ffffff；留空继承" /></label>
+        <label>字间距 pt<input type="number" min="-5" max="30" step="0.1" bind:value={managedLetterSpacingPt} /></label>
+        <label>大小写<select bind:value={managedTextTransform}><option value="">继承</option><option value="none">无转换</option><option value="uppercase">大写</option><option value="lowercase">小写</option><option value="capitalize">首字母大写</option></select></label>
         <label>对齐<select bind:value={managedAlignment}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option><option value="justify">两端对齐</option></select></label>
         <label>行距<input type="number" min="0.8" max="4" step="0.05" bind:value={managedLineSpacing} /></label>
+        <label>首行缩进 em<input type="number" min="-10" max="20" step="0.5" bind:value={managedFirstLineIndentEm} /></label>
+        <label>左缩进 em<input type="number" min="-10" max="40" step="0.5" bind:value={managedLeftIndentEm} /></label>
+        <label>右缩进 em<input type="number" min="-10" max="40" step="0.5" bind:value={managedRightIndentEm} /></label>
         <label>段前 pt<input type="number" min="0" max="144" bind:value={managedSpaceBeforePt} /></label>
         <label>段后 pt<input type="number" min="0" max="144" bind:value={managedSpaceAfterPt} /></label>
+        <label>大纲级别<input type="number" min="0" max="9" step="1" bind:value={managedOutlineLevel} /></label>
+        <label>边框样式<select bind:value={managedBorderStyle}><option value="">继承</option><option value="none">无</option><option value="solid">实线</option><option value="dashed">虚线</option><option value="double">双线</option></select></label>
+        <label>边框颜色<input bind:value={managedBorderColor} placeholder="#000000；留空继承" /></label>
+        <label>边框宽度 pt<input type="number" min="0" max="12" step="0.25" bind:value={managedBorderWidthPt} /></label>
+        <label>段落底纹<input bind:value={managedShadingColor} placeholder="#ffffff；留空继承" /></label>
       </div>
-      <div class="style-flags"><label><input type="checkbox" bind:checked={managedBold} /> 加粗</label><label><input type="checkbox" bind:checked={managedItalic} /> 斜体</label></div>
+      <div class="style-grid style-toggles">
+        <label>加粗<select bind:value={managedBold}><option value="inherit">继承</option><option value="on">开启</option><option value="off">关闭</option></select></label>
+        <label>斜体<select bind:value={managedItalic}><option value="inherit">继承</option><option value="on">开启</option><option value="off">关闭</option></select></label>
+        <label>下划线<select bind:value={managedUnderline}><option value="inherit">继承</option><option value="on">开启</option><option value="off">关闭</option></select></label>
+        <label>与下段同页<select bind:value={managedKeepWithNext}><option value="inherit">继承</option><option value="on">开启</option><option value="off">关闭</option></select></label>
+        <label>段中不分页<select bind:value={managedKeepLinesTogether}><option value="inherit">继承</option><option value="on">开启</option><option value="off">关闭</option></select></label>
+        <label>段前分页<select bind:value={managedPageBreakBefore}><option value="inherit">继承</option><option value="on">开启</option><option value="off">关闭</option></select></label>
+      </div>
+      <label>制表位<input bind:value={managedTabStops} placeholder="例如 4:left, 12:decimal" /></label>
       {#if styleManagerNotice}<p>{styleManagerNotice}</p>{/if}
-      <footer><button onclick={applyManagedStyle}>应用到当前段落</button><button class="primary" onclick={saveManagedStyle}>保存并全局更新</button></footer>
+      <footer class="style-manager-footer">
+        <button onclick={duplicateManagedStyle}>复制</button>
+        <button onclick={resetManagedStyle}>恢复默认</button>
+        <button class="danger" onclick={deleteManagedStyle}>删除</button>
+        <span></span>
+        <button onclick={applyManagedStyle}>应用到所选段落</button>
+        <button class="primary" onclick={saveManagedStyle}>保存并全局更新</button>
+      </footer>
     </aside>
   {/if}
   {#if referenceDialog}
@@ -1911,8 +2182,8 @@
   .shortcut-panel dt { color: #253858; font-family: Consolas, monospace; }
   .shortcut-panel dd { margin: 0; color: #536174; }
   .shortcut-panel p { margin: 0; color: #7a8594; font-size: 11px; }
-  .style-manager { position: absolute; z-index: 11; top: 10px; right: 10px; box-sizing: border-box; width: 390px; padding: 13px; border: 1px solid #cfd7e2; border-radius: 7px; background: #fff; box-shadow: 0 10px 30px rgba(30, 43, 62, .18); color: #263244; font-size: 12px; }
-  .style-manager header, .style-manager footer, .style-manager-actions, .style-flags { display: flex; align-items: center; gap: 8px; }
+  .style-manager { position: absolute; z-index: 11; top: 10px; right: 10px; box-sizing: border-box; width: min(560px, calc(100% - 20px)); max-height: calc(100% - 20px); overflow: auto; padding: 13px; border: 1px solid #cfd7e2; border-radius: 7px; background: #fff; box-shadow: 0 10px 30px rgba(30, 43, 62, .18); color: #263244; font-size: 12px; }
+  .style-manager header, .style-manager footer, .style-manager-actions { display: flex; align-items: center; gap: 8px; }
   .style-manager header { justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
   .style-manager header button { border: 0; background: transparent; font-size: 19px; cursor: pointer; }
   .style-manager-actions select { flex: 1; }
@@ -1920,10 +2191,13 @@
   .style-manager input, .style-manager select, .style-manager button { box-sizing: border-box; min-height: 29px; border: 1px solid #cfd6e1; border-radius: 4px; background: #fff; color: #263244; }
   .style-manager button { padding: 4px 8px; cursor: pointer; }
   .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 9px; }
-  .style-flags label { display: flex; align-items: center; gap: 5px; }
-  .style-flags input { min-height: auto; }
+  .style-preview { box-sizing: border-box; min-height: 58px; margin-top: 10px; padding: 12px; overflow: hidden; border: 1px solid #dbe1e9; border-radius: 4px; background: #fff; }
+  .style-preview span { display: block; }
+  .style-toggles { margin-top: 6px; padding-top: 3px; border-top: 1px solid #edf0f4; }
   .style-manager p { margin: 8px 0 0; color: #28639e; }
-  .style-manager footer { justify-content: flex-end; margin-top: 12px; }
+  .style-manager footer { justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
+  .style-manager-footer span { flex: 1; }
+  .style-manager footer .danger { border-color: #d8a6a6; color: #a22323; }
   .style-manager footer .primary { border-color: #2468c8; background: #2468c8; color: #fff; }
   .markdown-dialog-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; background: rgba(20, 29, 43, .28); }
   .reference-dialog-backdrop { position: fixed; z-index: 31; inset: 0; display: grid; place-items: center; background: rgba(20, 29, 43, .28); }

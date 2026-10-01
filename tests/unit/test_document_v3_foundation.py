@@ -84,6 +84,63 @@ def test_registry_exposes_json_schema_for_ai_tools() -> None:
     assert "params" in schema["properties"]
 
 
+def test_ai_can_create_update_and_safely_delete_document_styles() -> None:
+    registry = create_default_registry()
+    document = migrate_doc_ir(_legacy_doc())
+    created = registry.execute(
+        document,
+        DocumentCommand(
+            type="upsert_style",
+            target=CommandTarget(kind="document"),
+            params={
+                "style": {
+                    "id": "thesis-body",
+                    "name": "论文正文",
+                    "kind": "paragraph",
+                    "basedOn": "normal",
+                    "nextStyle": "thesis-body",
+                    "visible": True,
+                    "properties": {
+                        "fontFamily": "Microsoft YaHei",
+                        "fontSizePt": 11,
+                        "bold": False,
+                        "firstLineIndentEm": 2,
+                        "keepLinesTogether": True,
+                    },
+                }
+            },
+            source="ai",
+        ),
+    )
+
+    assert created.ok and created.changed and created.document is not None
+    custom = next(style for style in created.document.styles if style.id == "thesis-body")
+    assert custom.properties.bold is False
+    assert custom.properties.keep_lines_together is True
+
+    applied = registry.execute(
+        created.document,
+        DocumentCommand(
+            type="apply_style",
+            target=CommandTarget(kind="nodes", node_ids=["paragraph-1"]),
+            params={"style_id": "thesis-body"},
+        ),
+    )
+    assert applied.ok and applied.document is not None
+    deleted = registry.execute(
+        applied.document,
+        DocumentCommand(
+            type="delete_style",
+            target=CommandTarget(kind="document"),
+            params={"style_id": "thesis-body", "replacement_style_id": "normal"},
+            source="ai",
+        ),
+    )
+    assert deleted.ok and deleted.document is not None
+    assert all(style.id != "thesis-body" for style in deleted.document.styles)
+    assert deleted.document.sections[0].content[1].style_id == "normal"
+
+
 def test_word_style_properties_round_trip_through_the_canonical_model() -> None:
     document = migrate_doc_ir(_legacy_doc())
     document.styles[-1].properties.shading_color = "#f5f7fa"

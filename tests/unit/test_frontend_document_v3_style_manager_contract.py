@@ -44,6 +44,31 @@ def test_toolbar_lists_document_styles_and_applies_them_through_registry() -> No
     assert "registerDocumentCommand('apply_style'" in commands
 
 
+def test_style_manager_exposes_complete_inherited_paragraph_formatting() -> None:
+    editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+    toolbar = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
+    kernel = (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
+
+    for token in (
+        "managedUnderline",
+        "managedLetterSpacingPt",
+        "managedFirstLineIndentEm",
+        "managedKeepWithNext",
+        "managedKeepLinesTogether",
+        "managedPageBreakBefore",
+        "managedTabStops",
+        "duplicateManagedStyle",
+        "deleteManagedStyle",
+        "resetManagedStyle",
+    ):
+        assert token in editor
+    assert "value=\"inherit\"" in editor
+    assert "resolvedStyleProperties(activeDocument, styleId)" in editor
+    assert 'aria-label="字号（磅）"' in toolbar
+    assert 'aria-label="行距倍数"' in toolbar
+    assert "p.bold !== undefined" in kernel
+
+
 def test_text_block_and_page_contexts_are_mutually_exclusive() -> None:
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
     page_setup = (FRONTEND / "workbench/PageSetupPanel.svelte").read_text(encoding="utf-8")

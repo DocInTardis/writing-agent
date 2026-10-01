@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .document_model import DocumentV3, iter_blocks, validate_unique_ids
+from .document_model import DocumentV3, StyleDefinition, iter_blocks, validate_unique_ids
 
 
 class CommandTarget(BaseModel):
@@ -248,6 +248,70 @@ def _set_paragraph_format(document: DocumentV3, command: DocumentCommand) -> tup
     return bool(changed), changed
 
 
+def _upsert_style(document: DocumentV3, command: DocumentCommand) -> tuple[bool, list[str]]:
+    if command.target.kind != "document":
+        raise ValueError("upsert_style requires a document target")
+    raw = command.params.get("style")
+    if not isinstance(raw, dict):
+        raise ValueError("style definition is required")
+    definition = StyleDefinition.model_validate(raw)
+    if not definition.id.strip() or not definition.name.strip():
+        raise ValueError("style id and name are required")
+    if definition.based_on == definition.id:
+        raise ValueError("style cannot inherit itself")
+    existing = {style.id: style for style in document.styles}
+    prospective = {**existing, definition.id: definition}
+    cursor = definition
+    visited: set[str] = set()
+    while cursor.based_on:
+        if cursor.id in visited or cursor.based_on == definition.id:
+            raise ValueError("style inheritance cycle")
+        visited.add(cursor.id)
+        parent = prospective.get(cursor.based_on)
+        if parent is None:
+            raise ValueError(f"unknown base style: {cursor.based_on}")
+        cursor = parent
+    if definition.next_style and definition.next_style not in prospective:
+        raise ValueError(f"unknown next style: {definition.next_style}")
+    index = next((i for i, style in enumerate(document.styles) if style.id == definition.id), -1)
+    if index >= 0:
+        if document.styles[index] == definition:
+            return False, []
+        document.styles[index] = definition
+    else:
+        document.styles.append(definition)
+    return True, []
+
+
+def _delete_style(document: DocumentV3, command: DocumentCommand) -> tuple[bool, list[str]]:
+    if command.target.kind != "document":
+        raise ValueError("delete_style requires a document target")
+    style_id = str(command.params.get("style_id") or "").strip()
+    protected = {"normal", "title", "subtitle", "quote", "caption", "code", *(f"heading-{level}" for level in range(1, 7))}
+    if not style_id:
+        raise ValueError("style_id is required")
+    if style_id in protected:
+        raise ValueError("built-in style cannot be deleted")
+    existing = next((style for style in document.styles if style.id == style_id), None)
+    if existing is None:
+        raise ValueError(f"unknown style: {style_id}")
+    replacement = str(command.params.get("replacement_style_id") or existing.based_on or "normal")
+    if replacement == style_id or replacement not in {style.id for style in document.styles}:
+        raise ValueError(f"unknown replacement style: {replacement}")
+    document.styles = [style for style in document.styles if style.id != style_id]
+    for style in document.styles:
+        if style.based_on == style_id:
+            style.based_on = replacement
+        if style.next_style == style_id:
+            style.next_style = replacement
+    affected: list[str] = []
+    for block in iter_blocks(document):
+        if block.style_id == style_id:
+            block.style_id = replacement
+            affected.append(block.id)
+    return True, affected
+
+
 def _replace_text(document: DocumentV3, command: DocumentCommand) -> tuple[bool, list[str]]:
     text = str(command.params.get("text") or "")
     changed: list[str] = []
@@ -396,6 +460,8 @@ def create_default_registry() -> DocumentCommandRegistry:
     registry = DocumentCommandRegistry()
     registry.register("apply_style", _apply_style)
     registry.register("set_paragraph_format", _set_paragraph_format)
+    registry.register("upsert_style", _upsert_style)
+    registry.register("delete_style", _delete_style)
     registry.register("replace_text", _replace_text)
     registry.register("replace_blocks", _replace_blocks)
     registry.register("insert_blocks", _insert_blocks)

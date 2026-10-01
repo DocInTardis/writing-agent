@@ -166,6 +166,235 @@ class ExportService:
         surface.finish()
 
     @staticmethod
+    def _apply_document_v3_styles(payload: bytes, session) -> bytes:
+        """Project canonical V3 paragraph styles into the generated Word file.
+
+        The legacy exporter remains responsible for complex document objects,
+        while this final pass makes the saved V3 style library authoritative for
+        paragraph appearance in Word.  Invalid or absent V3 data leaves the
+        already-valid DOCX untouched.
+        """
+        raw = getattr(session, "document_v3", None)
+        if not isinstance(raw, dict) or not isinstance(raw.get("styles"), list):
+            return payload
+        try:
+            from docx import Document
+            from docx.enum.style import WD_STYLE_TYPE
+            from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+            from docx.oxml import OxmlElement
+            from docx.oxml.ns import qn
+            from docx.shared import Pt, RGBColor
+        except Exception:
+            return payload
+
+        styles = [item for item in raw.get("styles", []) if isinstance(item, dict) and item.get("id")]
+        if not styles:
+            return payload
+        by_id = {str(item["id"]): item for item in styles}
+
+        def node_text(value) -> str:
+            if isinstance(value, dict):
+                return str(value.get("text") or "") + "".join(node_text(child) for child in value.get("content") or [])
+            if isinstance(value, list):
+                return "".join(node_text(child) for child in value)
+            return ""
+
+        def properties(style_id: str, visiting: set[str] | None = None) -> dict:
+            visiting = set(visiting or ())
+            if style_id in visiting:
+                return {}
+            visiting.add(style_id)
+            style = by_id.get(style_id, {})
+            inherited = properties(str(style.get("basedOn") or style.get("based_on") or ""), visiting) if (style.get("basedOn") or style.get("based_on")) else {}
+            raw_own = style.get("properties") if isinstance(style.get("properties"), dict) else {}
+            own = {key: value for key, value in raw_own.items() if value is not None}
+            return {**inherited, **own}
+
+        builtin_names = {
+            "normal": "Normal",
+            "title": "Title",
+            "subtitle": "Subtitle",
+            "quote": "Quote",
+            "caption": "Caption",
+            **{f"heading-{level}": f"Heading {level}" for level in range(1, 7)},
+        }
+        document = Document(io.BytesIO(payload))
+        v3_text_blocks: list[str] = []
+        for section in raw.get("sections") or []:
+            if not isinstance(section, dict):
+                continue
+            for block in section.get("content") or []:
+                if isinstance(block, dict) and block.get("type") in {"paragraph", "heading", "blockquote", "codeBlock"}:
+                    text = node_text(block).strip()
+                    if text:
+                        v3_text_blocks.append(text)
+        if v3_text_blocks and len(document.paragraphs) >= 2:
+            compact = lambda value: re.sub(r"\s+", "", str(value or ""))
+            first = compact(v3_text_blocks[0])
+            v3_intentionally_repeats = len(v3_text_blocks) > 1 and compact(v3_text_blocks[1]) == first
+            nonempty_paragraphs = [paragraph for paragraph in document.paragraphs if compact(paragraph.text)]
+            if not v3_intentionally_repeats and len(nonempty_paragraphs) >= 2 and compact(nonempty_paragraphs[0].text) == first and compact(nonempty_paragraphs[1].text) == first:
+                duplicate = nonempty_paragraphs[0]._element
+                duplicate.getparent().remove(duplicate)
+        word_names: dict[str, str] = {}
+        for item in styles:
+            style_id = str(item["id"])
+            preferred = builtin_names.get(style_id) or str(item.get("name") or style_id)
+            name = preferred
+            try:
+                word_style = document.styles[name]
+                if word_style.type != WD_STYLE_TYPE.PARAGRAPH:
+                    raise KeyError(name)
+            except KeyError:
+                suffix = 1
+                while True:
+                    try:
+                        document.styles[name]
+                        suffix += 1
+                        name = f"{preferred} ({suffix})"
+                    except KeyError:
+                        break
+                word_style = document.styles.add_style(name, WD_STYLE_TYPE.PARAGRAPH)
+            word_names[style_id] = name
+
+        alignments = {
+            "left": WD_ALIGN_PARAGRAPH.LEFT,
+            "center": WD_ALIGN_PARAGRAPH.CENTER,
+            "right": WD_ALIGN_PARAGRAPH.RIGHT,
+            "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+        }
+        tab_alignments = {
+            "left": WD_TAB_ALIGNMENT.LEFT,
+            "center": WD_TAB_ALIGNMENT.CENTER,
+            "right": WD_TAB_ALIGNMENT.RIGHT,
+            "decimal": WD_TAB_ALIGNMENT.DECIMAL,
+        }
+
+        def color(value):
+            token = str(value or "").strip().lstrip("#")
+            return RGBColor.from_string(token.upper()) if re.fullmatch(r"[0-9a-fA-F]{6}", token) else None
+
+        for item in styles:
+            style_id = str(item["id"])
+            word_style = document.styles[word_names[style_id]]
+            based_on = str(item.get("basedOn") or item.get("based_on") or "")
+            next_style = str(item.get("nextStyle") or item.get("next_style") or "")
+            if based_on in word_names and based_on != style_id:
+                word_style.base_style = document.styles[word_names[based_on]]
+            if next_style in word_names:
+                word_style.next_paragraph_style = document.styles[word_names[next_style]]
+            p = properties(style_id)
+            font = word_style.font
+            if p.get("fontFamily"):
+                font.name = str(p["fontFamily"])
+                font._element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), str(p["fontFamily"]))
+            if p.get("fontSizePt") is not None:
+                font.size = Pt(float(p["fontSizePt"]))
+            for key in ("bold", "italic", "underline"):
+                if key in p and p[key] is not None:
+                    setattr(font, key, bool(p[key]))
+            font_color = color(p.get("color"))
+            if font_color is not None:
+                font.color.rgb = font_color
+            if p.get("textTransform") == "uppercase":
+                font.all_caps = True
+            elif p.get("textTransform") == "none":
+                font.all_caps = False
+            if p.get("letterSpacingPt") is not None:
+                r_pr = word_style._element.get_or_add_rPr()
+                spacing = r_pr.find(qn("w:spacing"))
+                if spacing is None:
+                    spacing = OxmlElement("w:spacing")
+                    r_pr.append(spacing)
+                spacing.set(qn("w:val"), str(round(float(p["letterSpacingPt"]) * 20)))
+            fmt = word_style.paragraph_format
+            if p.get("alignment") in alignments:
+                fmt.alignment = alignments[p["alignment"]]
+            if p.get("lineSpacing") is not None:
+                fmt.line_spacing = float(p["lineSpacing"])
+            font_pt = float(p.get("fontSizePt") or 12)
+            if p.get("firstLineIndentEm") is not None:
+                fmt.first_line_indent = Pt(float(p["firstLineIndentEm"]) * font_pt)
+            if p.get("leftIndentEm") is not None:
+                fmt.left_indent = Pt(float(p["leftIndentEm"]) * font_pt)
+            if p.get("rightIndentEm") is not None:
+                fmt.right_indent = Pt(float(p["rightIndentEm"]) * font_pt)
+            if p.get("spaceBeforePt") is not None:
+                fmt.space_before = Pt(float(p["spaceBeforePt"]))
+            if p.get("spaceAfterPt") is not None:
+                fmt.space_after = Pt(float(p["spaceAfterPt"]))
+            if p.get("keepWithNext") is not None:
+                fmt.keep_with_next = bool(p["keepWithNext"])
+            if p.get("keepLinesTogether") is not None:
+                fmt.keep_together = bool(p["keepLinesTogether"])
+            if p.get("pageBreakBefore") is not None:
+                fmt.page_break_before = bool(p["pageBreakBefore"])
+            for tab in p.get("tabStops") or []:
+                if isinstance(tab, dict) and tab.get("alignment") in tab_alignments:
+                    fmt.tab_stops.add_tab_stop(Pt(float(tab.get("positionEm") or 0) * font_pt), tab_alignments[tab["alignment"]])
+            p_pr = word_style._element.get_or_add_pPr()
+            if p.get("outlineLevel") is not None:
+                outline = p_pr.find(qn("w:outlineLvl"))
+                if outline is None:
+                    outline = OxmlElement("w:outlineLvl")
+                outline.set(qn("w:val"), str(max(0, int(p["outlineLevel"]) - 1)))
+                if outline.getparent() is None:
+                    p_pr.append(outline)
+            shading = color(p.get("shadingColor") or p.get("backgroundColor"))
+            if shading is not None:
+                shd = p_pr.find(qn("w:shd"))
+                if shd is None:
+                    shd = OxmlElement("w:shd")
+                shd.set(qn("w:fill"), str(shading))
+                if shd.getparent() is None:
+                    p_pr.append(shd)
+            border_style = str(p.get("borderStyle") or "")
+            if border_style:
+                borders = p_pr.find(qn("w:pBdr"))
+                if borders is None:
+                    borders = OxmlElement("w:pBdr")
+                    p_pr.append(borders)
+                word_border = {"solid": "single", "dashed": "dashed", "double": "double", "none": "nil"}.get(border_style, "single")
+                border_color = str(p.get("borderColor") or "000000").lstrip("#")
+                border_size = max(0, round(float(p.get("borderWidthPt") or 0.5) * 8))
+                for side in ("top", "left", "bottom", "right"):
+                    edge = borders.find(qn(f"w:{side}"))
+                    if edge is None:
+                        edge = OxmlElement(f"w:{side}")
+                        borders.append(edge)
+                    edge.set(qn("w:val"), word_border)
+                    edge.set(qn("w:sz"), str(border_size))
+                    edge.set(qn("w:color"), border_color)
+
+        styled_blocks: list[tuple[str, str]] = []
+        def collect_blocks(nodes) -> None:
+            for node in nodes or []:
+                if not isinstance(node, dict):
+                    continue
+                style_id = str(node.get("styleId") or node.get("style_id") or "")
+                text = node_text(node).strip()
+                if style_id in word_names and text:
+                    styled_blocks.append((text, style_id))
+                content = node.get("content")
+                if isinstance(content, list) and node.get("type") in {"bulletList", "orderedList", "listItem"}:
+                    collect_blocks(content)
+        for section in raw.get("sections") or []:
+            if isinstance(section, dict):
+                collect_blocks(section.get("content") or [])
+
+        paragraph_index = 0
+        for text, style_id in styled_blocks:
+            wanted = re.sub(r"\s+", "", text)
+            for index in range(paragraph_index, len(document.paragraphs)):
+                if re.sub(r"\s+", "", document.paragraphs[index].text) == wanted:
+                    document.paragraphs[index].style = document.styles[word_names[style_id]]
+                    paragraph_index = index + 1
+                    break
+        output = io.BytesIO()
+        document.save(output)
+        return output.getvalue()
+
+    @staticmethod
     def _compact_for_compare(text: str) -> str:
         return re.sub(r"\s+", "", str(text or ""))
 
@@ -283,6 +512,7 @@ class ExportService:
         backend_mode = self._SINGLE_DOCX_BACKEND_MODE
         template_path = app_v2._resolve_export_template_path(session)
         payload = app_v2.docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
+        payload = self._apply_document_v3_styles(payload, session)
         payload, canonicalize_status = self._canonicalize_docx_payload(payload)
         issues = app_v2._validate_docx_bytes(payload)
         repair_strategy = "none"
@@ -299,6 +529,7 @@ class ExportService:
                 fallback_payload = app_v2.docx_exporter.build_from_parsed(
                     parsed, fmt, fallback_prefs, template_path=template_path or None
                 )
+                fallback_payload = self._apply_document_v3_styles(fallback_payload, session)
                 fallback_payload, fallback_canon = self._canonicalize_docx_payload(fallback_payload)
                 fallback_issues = app_v2._validate_docx_bytes(fallback_payload)
                 if not fallback_issues:
@@ -368,6 +599,7 @@ class ExportService:
         prefs = app_v2._export_prefs_from_session(session)
         template_path = app_v2._resolve_export_template_path(session)
         docx_bytes = app_v2.docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
+        docx_bytes = self._apply_document_v3_styles(docx_bytes, session)
         issues = app_v2._validate_docx_bytes(docx_bytes)
         if issues and self._docx_validation_enforce_enabled():
             raise app_v2.HTTPException(

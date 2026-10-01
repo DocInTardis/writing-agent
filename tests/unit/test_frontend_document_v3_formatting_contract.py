@@ -14,7 +14,11 @@ def test_style_library_has_required_builtin_styles_and_inheritance() -> None:
         assert "id: `heading-${level}`" in model
     assert "export function resolvedStyleProperties" in model
     assert "visiting.has(styleId)" in model
-    assert "{ ...inherited, ...style.properties }" in model
+    # Optional style fields arrive from Pydantic as null.  Null means
+    # "inherit", while false and zero are intentional overrides.
+    assert "Object.entries(style.properties || {}).filter" in model
+    assert "value !== null && value !== undefined" in model
+    assert "{ ...inherited, ...own }" in model
 
 
 def test_character_and_paragraph_formatting_share_command_registry() -> None:

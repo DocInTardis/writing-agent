@@ -109,6 +109,12 @@
   function command(value: string) {
     onRunEditorCommand(value as EditorCommand)
   }
+
+  function fontSizeNumber(value?: string): number {
+    const parsed = Number.parseFloat(String(value || ''))
+    if (!Number.isFinite(parsed)) return 12
+    return String(value).trim().toLowerCase().endsWith('px') ? Math.round(parsed * 0.75 * 2) / 2 : parsed
+  }
 </script>
 
 <div class="doc-toolbar word-ribbon">
@@ -217,11 +223,17 @@
             <option value="Arial">Arial</option>
             <option value="Times New Roman">Times New Roman</option>
           </select>
-          <select class="size-select" aria-label="字号" value={editorToolbarState.fontSize || '14px'} onchange={(event) => command(`size:${event.currentTarget.value}`)}>
-            <option value="10px">10</option><option value="12px">12</option><option value="14px">14</option>
-            <option value="16px">16</option><option value="18px">18</option><option value="22px">22</option>
-            <option value="28px">28</option><option value="36px">36</option>
-          </select>
+          <input
+            class="size-select"
+            aria-label="字号（磅）"
+            title="字号（磅），可直接输入任意值"
+            type="number"
+            min="1"
+            max="400"
+            step="0.5"
+            value={fontSizeNumber(editorToolbarState.fontSize)}
+            onchange={(event) => command(`size:${event.currentTarget.value}pt`)}
+          />
         </div>
         <div class="ribbon-row">
           <button class:active={editorToolbarState.bold} class="tool-btn glyph" title="加粗 Ctrl+B" onclick={() => command('bold')}><strong>B</strong></button>
@@ -246,9 +258,17 @@
           <button class="tool-btn align-glyph justify" title="两端对齐" onclick={() => command('align-justify')}>≡</button>
           <button class="tool-btn" title="减少缩进" onclick={() => command('outdent')}>←</button>
           <button class="tool-btn" title="增加缩进" onclick={() => command('indent')}>→</button>
-          <select class="line-select" aria-label="行距" value={String(editorToolbarState.lineSpacing || 1.5)} onchange={(event) => command(`line-height:${event.currentTarget.value}`)}>
-            <option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">2.0</option><option value="2.5">2.5</option>
-          </select>
+          <input
+            class="line-select"
+            aria-label="行距倍数"
+            title="行距倍数，可直接输入任意值"
+            type="number"
+            min="0.5"
+            max="10"
+            step="0.05"
+            value={Number(editorToolbarState.lineSpacing || 1.5)}
+            onchange={(event) => command(`line-height:${event.currentTarget.value}`)}
+          />
           <button class:active={showAdvancedToolbar} class="tool-btn" title="更多段落与字符格式" onclick={() => (showAdvancedToolbar = !showAdvancedToolbar)}>⋯</button>
         </div>
         <span class="ribbon-label">段落</span>
