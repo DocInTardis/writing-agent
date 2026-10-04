@@ -104,24 +104,11 @@
         <section class="feedback-panel ai-rate-panel">
           <div class="feedback-panel-head">
             <div>
-              <div class="panel-title">AI 率检测</div>
-              <div class="panel-sub">基于 burstiness、重复率、词汇熵、连接词密度等信号估计。</div>
+              <div class="panel-title">表达风险提示</div>
+              <div class="panel-sub">检查重复、句式单一等可读性信号。结果不能判断文字由谁创作。</div>
             </div>
           </div>
           <div class="feedback-form">
-            <div class="plagiarism-grid">
-              <label class="feedback-label" for="ai-rate-threshold">判定阈值</label>
-              <input
-                id="ai-rate-threshold"
-                type="number"
-                min="0.05"
-                max="0.95"
-                step="0.01"
-                bind:value={aiRateThreshold}
-                data-testid="ai-rate-threshold"
-              />
-              <span class="panel-sub">建议 0.65，结果仅作为风险提示</span>
-            </div>
             <div class="feedback-actions">
               <button
                 class="btn primary"
@@ -129,22 +116,20 @@
                 disabled={aiRateLoading}
                 data-testid="ai-rate-run"
               >
-                {aiRateLoading ? '检测中...' : '开始 AI 率检测'}
+                {aiRateLoading ? '检查中...' : '检查当前文档'}
               </button>
               {#if aiRateResult}
                 <span class="feedback-tip">
-                  估计 AI 率 {Math.round(Number(aiRateResult.ai_rate || 0) * 100)}%，
-                  风险 {String(aiRateResult.risk_level || '未知')}，
-                  置信度 {Math.round(Number(aiRateResult.confidence || 0) * 100)}%
+                  表达风险 {String(aiRateResult.risk_level || '未知')} · 指标分数 {Math.round(Number(aiRateResult.ai_rate || 0) * 100)}
                 </span>
               {/if}
             </div>
             {#if aiRateResult}
               <div class="plagiarism-item">
                 <div class="plagiarism-item-head">
-                  <span>阈值 {Math.round(Number(aiRateResult.threshold || 0.65) * 100)}%</span>
+                  <span>检查结果</span>
                   <span class:danger={Boolean(aiRateResult.suspected_ai)}>
-                    判定 {Boolean(aiRateResult.suspected_ai) ? '疑似AI生成' : '未超阈值'}
+                    {Boolean(aiRateResult.suspected_ai) ? '建议人工修改' : '未发现明显问题'}
                   </span>
                 </div>
                 <div class="plagiarism-item-metrics">
@@ -158,9 +143,16 @@
                     依据：{String(aiRateResult.evidence[0] || '')}
                   </div>
                 {/if}
-                <div class="panel-sub">{String(aiRateResult.note || '')}</div>
+                <div class="panel-sub">这些数值只用于定位需要润色的段落，不构成作者身份或学术结论。</div>
               </div>
             {/if}
+            <details>
+              <summary>高级设置</summary>
+              <div class="plagiarism-grid">
+                <label class="feedback-label" for="ai-rate-threshold">提示阈值</label>
+                <input id="ai-rate-threshold" type="number" min="0.05" max="0.95" step="0.01" bind:value={aiRateThreshold} data-testid="ai-rate-threshold" />
+              </div>
+            </details>
           </div>
         </section>
       {/if}
@@ -170,56 +162,18 @@
           <div class="feedback-panel-head">
             <div>
               <div class="panel-title">内容查重检测</div>
-              <div class="panel-sub">算法：n-gram + Winnowing + SimHash 混合评分，建议阈值 0.35。</div>
+              <div class="panel-sub">优先与资料库中已启用的来源比较，也可临时粘贴外部文本。</div>
             </div>
           </div>
           <div class="feedback-form">
-            <div class="plagiarism-grid">
-              <label class="feedback-label" for="plag-threshold">判定阈值</label>
-              <input
-                id="plag-threshold"
-                type="number"
-                min="0.05"
-                max="0.95"
-                step="0.01"
-                bind:value={plagiarismThreshold}
-                data-testid="plagiarism-threshold"
-              />
-              <label class="feedback-label" for="plag-docids">参考文档ID</label>
-              <input
-                id="plag-docids"
-                type="text"
-                bind:value={plagiarismReferenceDocIds}
-                placeholder="多个ID用逗号或空格分隔"
-                data-testid="plagiarism-docids"
-              />
-            </div>
-            <div class="feedback-row">
-              <span class="feedback-label">参考文本</span>
-              <textarea
-                bind:value={plagiarismReferenceText}
-                rows="4"
-                maxlength="30000"
-                placeholder="可粘贴外部资料、历史稿件或样本文本用于查重"
-                data-testid="plagiarism-text"
-              ></textarea>
-            </div>
             <div class="feedback-actions">
               <button
                 class="btn primary"
-                onclick={runPlagiarismCheck}
-                disabled={plagiarismLoading}
-                data-testid="plagiarism-run"
-              >
-                {plagiarismLoading ? '检测中...' : '开始查重'}
-              </button>
-              <button
-                class="btn ghost"
                 onclick={runPlagiarismLibraryScan}
                 disabled={plagiarismLibraryLoading}
                 data-testid="plagiarism-library-run"
               >
-                {plagiarismLibraryLoading ? '全库扫描中...' : '全库查重'}
+                {plagiarismLibraryLoading ? '比较中...' : '与资料库比较'}
               </button>
               {#if plagiarismResults.length > 0}
                 <span class="feedback-tip">
@@ -229,15 +183,29 @@
                 </span>
               {/if}
             </div>
+            <details>
+              <summary>临时来源与高级设置</summary>
+              <div class="plagiarism-grid">
+                <label class="feedback-label" for="plag-threshold">提示阈值</label>
+                <input id="plag-threshold" type="number" min="0.05" max="0.95" step="0.01" bind:value={plagiarismThreshold} data-testid="plagiarism-threshold" />
+                <label class="feedback-label" for="plag-docids">文档编号</label>
+                <input id="plag-docids" type="text" bind:value={plagiarismReferenceDocIds} placeholder="可选，多个编号用空格分隔" data-testid="plagiarism-docids" />
+              </div>
+              <div class="feedback-row">
+                <span class="feedback-label">临时参考文本</span>
+                <textarea bind:value={plagiarismReferenceText} rows="4" maxlength="30000" placeholder="粘贴不需要保存到资料库的文字" data-testid="plagiarism-text"></textarea>
+              </div>
+              <button class="btn ghost" onclick={runPlagiarismCheck} disabled={plagiarismLoading} data-testid="plagiarism-run">
+                {plagiarismLoading ? '比较中...' : '与临时来源比较'}
+              </button>
+            </details>
 
             {#if plagiarismLatestReport}
               <div class="plagiarism-report-actions">
                 <span class="panel-sub">
-                  报告ID {plagiarismLatestReport.report_id} · 来源 {plagiarismLatestReport.total_references} · 超阈值 {plagiarismLatestReport.flagged_count}
+                  已比较 {plagiarismLatestReport.total_references} 个来源 · 需留意 {plagiarismLatestReport.flagged_count} 个
                 </span>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('json')}>下载 JSON</button>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('md')}>下载 MD</button>
-                <button class="btn ghost" onclick={() => downloadPlagiarismReport('csv')}>下载 CSV</button>
+                <button class="btn ghost" onclick={() => downloadPlagiarismReport('md')}>导出报告</button>
               </div>
             {/if}
 
@@ -257,10 +225,10 @@
                       </span>
                     </div>
                     <div class="plagiarism-item-metrics">
-                      <span>Containment {Math.round((Number(row.metrics?.containment || 0)) * 100)}%</span>
-                      <span>Jaccard {Math.round((Number(row.metrics?.jaccard_resemblance || 0)) * 100)}%</span>
-                      <span>Winnowing {Math.round((Number(row.metrics?.winnowing_overlap || 0)) * 100)}%</span>
-                      <span>Longest {Number(row.metrics?.longest_match_chars || 0)} chars</span>
+                      <span>内容覆盖 {Math.round((Number(row.metrics?.containment || 0)) * 100)}%</span>
+                      <span>整体相似 {Math.round((Number(row.metrics?.jaccard_resemblance || 0)) * 100)}%</span>
+                      <span>连续片段 {Math.round((Number(row.metrics?.winnowing_overlap || 0)) * 100)}%</span>
+                      <span>最长相同 {Number(row.metrics?.longest_match_chars || 0)} 字</span>
                     </div>
                     {#if row.evidence && row.evidence.length > 0}
                       <div class="plagiarism-evidence">
@@ -280,7 +248,7 @@
           <div class="feedback-panel-head">
             <div>
               <div class="panel-title">用户满意度</div>
-              <div class="panel-sub">1 分最低，5 分最高；低分样本会进入学习池。</div>
+              <div class="panel-sub">记录这次使用感受，便于后续查看和改进。</div>
             </div>
           </div>
           <div class="feedback-form">

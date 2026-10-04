@@ -15,7 +15,7 @@
 
 
   type Kind = 'flow' | 'architecture' | 'er' | 'sequence' | 'state' | 'class' | 'gantt' | 'mindmap' | 'quadrant' | 'radar' | 'scatter' | 'heatmap' | 'funnel' | 'sankey' | 'swot' | 'timeline' | 'bar' | 'line' | 'pie'
-  type PanelMode = 'studio' | 'json' | 'history'
+  type PanelMode = 'studio' | 'history'
 
   const kindOptions: Array<{ value: Kind; label: string }> = [
     { value: 'flow', label: '流程图' },
@@ -45,9 +45,9 @@
       '问题发现 -> 原因定位 -> 修复验证 -> 发布回归'
     ],
     architecture: [
-      '????, ????, ??????, ????, ????, ????, ????, ????',
-      '???/???/???/???/??? ?????????????',
-      '??????????, ???, ??, ????, ????, ???, ????'
+      '用户端、桌面应用、业务服务、文档内核、模型接口、资料库',
+      '界面层、命令层、文档模型、布局引擎、导出层之间的依赖关系',
+      '本地优先架构：Tauri 壳、Svelte 界面、Python 服务、Rust 文档内核'
     ],
     er: [
       '电商系统：用户、订单、商品、支付',
@@ -144,7 +144,6 @@
   let error = $state('')
   let svg = $state('')
   let spec: Record<string, unknown> | null = $state(null)
-  let specText = $state('')
   let zoom = $state(1)
 
   let historyItems: Array<{
@@ -157,9 +156,8 @@
   }> = $state([])
 
   function panelTitle(mode: PanelMode) {
-    if (mode === 'json') return '规范编辑'
-    if (mode === 'history') return '历史画布'
-    return '智能画布'
+    if (mode === 'history') return '最近生成'
+    return '创建图表'
   }
 
   function closeCanvas() {
@@ -218,14 +216,6 @@
     return value as Record<string, unknown>
   }
 
-  function stringifySafe(value: unknown) {
-    return JSON.stringify(
-      value,
-      (_k, v) => (typeof v === 'string' ? v.replace(/\u0000/g, '') : v),
-      2
-    )
-  }
-
   function pushHistory(sourcePrompt: string, sourceKind: Kind, nextSpec: Record<string, unknown>, nextSvg: string) {
     historyItems = [
       {
@@ -251,7 +241,6 @@
     const nextSvg = String(fig.svg || '')
     svg = nextSvg
     spec = nextSpec
-    specText = stringifySafe(nextSpec)
     pushHistory(sourcePrompt, sourceKind, nextSpec, nextSvg)
   }
 
@@ -293,30 +282,11 @@
     await generateDiagram(`在当前图基础上优化：${ask}\n当前规范：${context}`)
   }
 
-  async function applySpecText() {
-    const raw = String(specText || '').trim()
-    if (!raw) return
-    loading = true
-    error = ''
-    try {
-      const parsed = ensureObject(JSON.parse(raw))
-      const parsedKind = normalizeKind(parsed.type)
-      kind = parsedKind
-      await renderSpec(parsed, '手动编辑规范', parsedKind)
-      panelMode = 'studio'
-    } catch (err) {
-      error = err instanceof Error ? err.message : '规范解析失败'
-    } finally {
-      loading = false
-    }
-  }
-
   function restoreHistory(item: { kind: Kind; prompt: string; spec: Record<string, unknown>; svg: string }) {
     kind = item.kind
     prompt = sanitizeDiagramPrompt(item.prompt)
     spec = item.spec
     svg = item.svg
-    specText = stringifySafe(item.spec)
     panelMode = 'studio'
   }
 
@@ -331,15 +301,6 @@
       await navigator.clipboard.writeText(svg)
     } catch {
       error = '复制 SVG 失败，请检查浏览器权限'
-    }
-  }
-
-  async function copySpec() {
-    if (!specText.trim()) return
-    try {
-      await navigator.clipboard.writeText(specText)
-    } catch {
-      error = '复制规范失败，请检查浏览器权限'
     }
   }
 
@@ -359,7 +320,6 @@
   function resetCanvas() {
     svg = ''
     spec = null
-    specText = ''
     optimizeInput = ''
     error = ''
     zoom = 1
@@ -382,13 +342,12 @@
     <section class="canvas-shell" aria-label="AI 画布系统">
       <header class="canvas-topbar">
         <div class="title-wrap">
-          <h3>AI 画布系统</h3>
-          <p>同页完成生成、修改、预览、插入，支持流程图、ER 图、时序图、状态图、类图、甘特图、思维导图、四象限、热力图、漏斗图、桑基图、SWOT图及多类统计图。</p>
+          <h3>图表</h3>
+          <p>描述内容，生成后可继续用自然语言修改并插入正文。</p>
         </div>
         <div class="top-actions">
-          <button class="btn ghost" onclick={() => (panelMode = 'studio')}>工作台</button>
-          <button class="btn ghost" onclick={() => (panelMode = 'json')}>JSON结构</button>
-          <button class="btn ghost" onclick={() => (panelMode = 'history')}>历史</button>
+          <button class="btn ghost" onclick={() => (panelMode = 'studio')}>创建</button>
+          <button class="btn ghost" onclick={() => (panelMode = 'history')}>最近生成</button>
           <button class="btn ghost" onclick={resetCanvas}>清空</button>
           <button class="close-btn" onclick={closeCanvas} aria-label="关闭">×</button>
         </div>
@@ -441,21 +400,6 @@
             </button>
           {/if}
 
-          {#if panelMode === 'json'}
-            <textarea
-              class="spec-editor"
-              rows="18"
-              bind:value={specText}
-              placeholder="可直接编辑 JSON 规范，例如：type=flow，caption=示例，data 包含 nodes/edges。"
-            ></textarea>
-            <div class="canvas-actions">
-              <button class="btn primary" onclick={applySpecText} disabled={loading || !specText.trim()}>
-                应用规范
-              </button>
-              <button class="btn ghost" onclick={copySpec} disabled={!specText.trim()}>复制规范</button>
-            </div>
-          {/if}
-
           {#if panelMode === 'history'}
             <div class="history-list">
               {#if historyItems.length === 0}
@@ -502,7 +446,7 @@
             {:else}
               <div class="placeholder">
                 <h4>画布预览区</h4>
-                <p>左侧输入描述后点击“生成图形”，或切换到 JSON 手动编辑规范。</p>
+                <p>选择图表类型，输入内容后即可生成。生成结果仍可继续修改。</p>
               </div>
             {/if}
           </div>
@@ -552,7 +496,7 @@
   .title-wrap p {
     margin: 0;
     font-size: 12px;
-    color: rgba(245, 243, 240, 0.78);
+    color: #57534e;
   }
 
   .top-actions {
@@ -592,7 +536,7 @@
   .panel-title {
     font-size: 13px;
     font-weight: 700;
-    color: #f5f3f0;
+    color: #1c1917;
   }
 
   .kind-grid {
@@ -629,8 +573,7 @@
     background: rgba(248, 250, 252, 0.95);
   }
 
-  .prompt-box,
-  .spec-editor {
+  .prompt-box {
     border: 1px solid rgba(148, 163, 184, 0.32);
     border-radius: 12px;
     padding: 10px 12px;
@@ -642,12 +585,6 @@
 
   .prompt-box.mini {
     min-height: 72px;
-  }
-
-  .spec-editor {
-    min-height: 320px;
-    font-family: Consolas, "Courier New", monospace;
-    font-size: 12px;
   }
 
   .canvas-actions {
@@ -673,11 +610,11 @@
   }
 
   .history-item > div:nth-child(2) {
-    color: rgba(245, 243, 240, 0.8);
+    color: #57534e;
   }
 
   .history-item > div:nth-child(3) {
-    color: rgba(245, 243, 240, 0.62);
+    color: #78716c;
     font-size: 11px;
   }
 
@@ -743,7 +680,7 @@
     display: grid;
     place-content: center;
     text-align: center;
-    color: rgba(245, 243, 240, 0.74);
+    color: #78716c;
     gap: 8px;
   }
 
@@ -771,8 +708,9 @@
   }
 
   .btn.ghost {
-    background: rgba(250, 249, 247, 0.08);
-    color: #f5f3f0;
+    background: #f5f5f4;
+    color: #292524;
+    border: 1px solid #e7e5e4;
   }
 
   .btn:disabled {
@@ -791,7 +729,7 @@
 
   .empty {
     font-size: 12px;
-    color: rgba(245, 243, 240, 0.7);
+    color: #78716c;
     padding: 10px;
     border: 1px dashed rgba(231, 229, 228, 1);
     border-radius: 10px;

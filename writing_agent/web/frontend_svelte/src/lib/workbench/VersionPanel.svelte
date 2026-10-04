@@ -28,8 +28,8 @@
   <div class="panel-card version-panel">
     <div class="panel-header">
       <div>
-        <div class="panel-title">版本树</div>
-        <div class="panel-sub">自动小版本 · 手动大版本</div>
+        <div class="panel-title">版本记录</div>
+        <div class="panel-sub">自动保存可恢复，也可以手动标记重要版本</div>
       </div>
       <button class="icon-btn" onclick={onRefresh} title="刷新">刷新</button>
     </div>
@@ -51,7 +51,7 @@
               <div class="version-title">
                 <span>{group.major?.message || '未命名'}</span>
                 <span class={`badge ${group.major?.kind === 'major' ? 'major' : 'minor'}`}>
-                  {group.major?.kind === 'major' ? '大版本' : '小版本'}
+                  {group.major?.kind === 'major' ? '手动版本' : '自动保存'}
                 </span>
               </div>
               <div class="version-meta">
@@ -62,7 +62,7 @@
                 <div class="version-summary">{formatVersionSummary(group.major?.summary)}</div>
               {/if}
               <div class="version-actions">
-                <button class="btn ghost" onclick={() => onCheckout(group.major?.version_id)} disabled={group.major?.is_current}>切换</button>
+                <button class="btn ghost" onclick={() => onCheckout(group.major?.version_id)} disabled={group.major?.is_current}>恢复</button>
                 <button class="btn ghost" onclick={() => onCompare(group.major?.version_id)} disabled={group.major?.is_current}>对比</button>
               </div>
             </div>
@@ -78,7 +78,7 @@
                       <div class="minor-meta">{formatVersionTime(v.timestamp)}</div>
                     </div>
                     <div class="minor-actions">
-                      <button class="btn ghost" onclick={() => onCheckout(v.version_id)} disabled={v.is_current}>切换</button>
+                      <button class="btn ghost" onclick={() => onCheckout(v.version_id)} disabled={v.is_current}>恢复</button>
                       <button class="btn ghost" onclick={() => onCompare(v.version_id)} disabled={v.is_current}>对比</button>
                     </div>
                   </div>

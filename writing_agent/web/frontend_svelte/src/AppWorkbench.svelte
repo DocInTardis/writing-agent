@@ -5,12 +5,10 @@
   import DiagramCanvas from './lib/components/DiagramCanvas.svelte'
   import Toast from './lib/components/Toast.svelte'
   import Icon from './lib/components/Icon.svelte'
-  import DocList from './lib/components/DocList.svelte'
   import LoadingSkeleton from './lib/components/LoadingSkeleton.svelte'
   import ProgressBar from './lib/components/ProgressBar.svelte'
   import ErrorBoundary from './lib/components/ErrorBoundary.svelte'
   import CitationManager from './lib/components/CitationManager.svelte'
-  import PerformanceMetrics from './lib/components/PerformanceMetrics.svelte'
   import { textToDocIr, docIrToMarkdown } from './lib/utils/markdown'
   import {
     buildGenerateRequestPayload,
@@ -178,9 +176,7 @@
 
   let hideLibraryInfo = $state(false)
   let infoDrawerOpen = $state(false)
-  let showDocList = $state(false)
   let showCitations = $state(false)
-  let showPerformanceMetrics = $state(false)
   let showVersions = $state(false)
   let showFeedbackPanel = $state(false)
   let feedbackItems = $state<FeedbackItem[]>([])
@@ -2608,11 +2604,6 @@
     window.location.href = `/download/${$docId}.pdf`
   }
 
-  function handleDocSelect(selectedDocId: string) {
-    showDocList = false
-    window.location.href = `/workbench/${selectedDocId}`
-  }
-
   async function exportDocx() {
     if (!$docId) return
     const ready = await preflightExport('docx')
@@ -4063,9 +4054,7 @@
 
 <ErrorBoundary>
   <Toast />
-  <DocList bind:visible={showDocList} onSelect={handleDocSelect} />
   <CitationManager bind:visible={showCitations} />
-  <PerformanceMetrics bind:visible={showPerformanceMetrics} />
 </ErrorBoundary>
 
 

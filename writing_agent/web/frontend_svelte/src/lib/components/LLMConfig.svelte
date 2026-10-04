@@ -7,19 +7,25 @@
   let config: any = { active_provider_id: '', providers: [] }
   let editing: any = null
   let testing = false
+  let loading = false
+  let loadError = ''
 
   async function load() {
-    const [presetsResp, configResp] = await Promise.all([
-      fetch('/api/llm/presets'),
-      fetch('/api/llm/config')
-    ])
-    if (presetsResp.ok) {
-      const d = await presetsResp.json()
-      presets = d.presets || {}
-    }
-    if (configResp.ok) {
-      const d = await configResp.json()
-      config = d.config || { active_provider_id: '', providers: [] }
+    loading = true
+    loadError = ''
+    try {
+      const [presetsResp, configResp] = await Promise.all([
+        fetch('/api/llm/presets'),
+        fetch('/api/llm/config')
+      ])
+      if (!presetsResp.ok || !configResp.ok) throw new Error('无法读取模型配置')
+      const [presetData, configData] = await Promise.all([presetsResp.json(), configResp.json()])
+      presets = presetData.presets || {}
+      config = configData.config || { active_provider_id: '', providers: [] }
+    } catch (error) {
+      loadError = error instanceof Error ? error.message : '无法读取模型配置'
+    } finally {
+      loading = false
     }
   }
 
@@ -100,6 +106,8 @@
       const d = await resp.json()
       config = d.config
       pushToast('已切换模型', 'ok')
+    } else {
+      pushToast('切换失败，请检查该配置是否可用', 'bad')
     }
   }
 
@@ -108,23 +116,28 @@
     testing = true
     const payload = { ...editing }
     delete payload._existing
-    const resp = await fetch('/api/llm/config/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    testing = false
-    const d = await resp.json()
-    if (d.ok) {
-      pushToast('连接成功: ' + (d.response_preview || 'OK'), 'ok')
-    } else {
-      pushToast('连接失败: ' + (d.error || 'Unknown'), 'bad')
+    try {
+      const resp = await fetch('/api/llm/config/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const d = await resp.json().catch(() => ({}))
+      if (resp.ok && d.ok) {
+        pushToast('连接成功', 'ok')
+      } else {
+        pushToast('连接失败: ' + (d.error || d.detail || `HTTP ${resp.status}`), 'bad')
+      }
+    } catch (error) {
+      pushToast(`连接失败: ${error instanceof Error ? error.message : '网络错误'}`, 'bad')
+    } finally {
+      testing = false
     }
   }
 
   function activeLabel() {
     const active = config.providers.find((p: any) => p.provider_id === config.active_provider_id)
-    return active?.label || active?.provider_id || '默认环境模型'
+    return active?.label || active?.provider_id || '配置模型'
   }
 
   function presetModels(pid: string) {
@@ -153,11 +166,13 @@
 </script>
 
 <button class="btn ghost icon-btn-text" onclick={handleOpen} title="模型配置">
-  <span style="font-size:12px">🤖 {activeLabel()}</span>
+  <span style="font-size:12px">模型 · {activeLabel()}</span>
 </button>
 
 <Modal {open} title="AI 模型配置" onClose={() => { open = false; editing = null; }}>
   {#if !editing}
+    {#if loading}<div class="llm-empty">正在读取配置…</div>{/if}
+    {#if loadError}<div class="llm-error">{loadError}<button class="btn small ghost" onclick={load}>重试</button></div>{/if}
     <div class="llm-list">
       {#each config.providers as p}
         <div class="llm-item" class:active={p.provider_id === config.active_provider_id}>
@@ -177,7 +192,7 @@
         </div>
       {/each}
       {#if config.providers.length === 0}
-        <div class="llm-empty">尚未配置任何模型。点击下方按钮添加。</div>
+        <div class="llm-empty">尚未配置模型。编辑功能不受影响；需要 AI 时再添加自己的 API。</div>
       {/if}
     </div>
     <div class="llm-footer">
@@ -201,6 +216,7 @@
         {#if editing._existing}
           <small>留空则保留已保存的密钥</small>
         {/if}
+        <small>密钥仅保存在本机当前用户的加密存储中。</small>
       </label>
 
       <label>
@@ -293,6 +309,17 @@
     color: #999;
     font-size: 13px;
     padding: 20px;
+  }
+  .llm-error {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: #991b1b;
+    background: #fef2f2;
   }
   .llm-footer {
     display: flex;

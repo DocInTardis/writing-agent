@@ -1,4 +1,4 @@
-import type { Citation, VerifyDebugCache, VerifyDebugLevel } from './citationTypes'
+import type { Citation } from './citationTypes'
 
 export function normalizeItems(items: unknown): Citation[] {
   if (!Array.isArray(items)) return []
@@ -29,51 +29,6 @@ export function normalizeResolveItem(item: unknown): Citation | null {
   }
   if (!next.title) return null
   return next
-}
-
-export function normalizeVerifyDebugLevel(value: unknown): VerifyDebugLevel {
-  const raw = String(value || '').trim().toLowerCase()
-  if (raw === 'full') return 'full'
-  if (raw === 'strict') return 'strict'
-  return 'safe'
-}
-
-export function toSafeInt(value: unknown): number {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 0
-  return Math.max(0, Math.round(n))
-}
-
-export function toSafeFloat(value: unknown): number {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 0
-  return Math.max(0, n)
-}
-
-export function cacheLookupCount(cache: VerifyDebugCache): number {
-  return toSafeInt(cache.hit) + toSafeInt(cache.miss)
-}
-
-export function cacheHitRate(cache: VerifyDebugCache): number {
-  const total = cacheLookupCount(cache)
-  if (total <= 0) return 0
-  return toSafeInt(cache.hit) / total
-}
-
-export function cacheEvictRate(cache: VerifyDebugCache): number {
-  const sets = toSafeInt(cache.set)
-  if (sets <= 0) return 0
-  return toSafeInt(cache.evicted) / sets
-}
-
-export function formatRate(value: number): string {
-  const clamped = Math.max(0, Math.min(1, Number(value) || 0))
-  return `${(clamped * 100).toFixed(1)}%`
-}
-
-export function averageNumber(values: number[]): number {
-  if (!values.length) return 0
-  return values.reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0) / values.length
 }
 
 export function formatCitation(cite: Citation, style: 'apa' | 'mla' | 'gb'): string {
