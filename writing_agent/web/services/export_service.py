@@ -286,6 +286,52 @@ class ExportService:
         collect(blocks)
         return "".join(parts).strip()
 
+    @staticmethod
+    def _lightweight_pdf_layout(session) -> dict[str, float | str | bool | int]:
+        """Resolve the first Document V3 section into PDF point geometry."""
+        raw = getattr(session, "document_v3", None)
+        section = {}
+        if isinstance(raw, dict):
+            sections = raw.get("sections")
+            if isinstance(sections, list) and sections and isinstance(sections[0], dict):
+                section = sections[0]
+        layout = section.get("layout") if isinstance(section.get("layout"), dict) else {}
+        page_size = str(layout.get("pageSize") or layout.get("page_size") or "A4").upper()
+        known_mm = {
+            "A3": (297.0, 420.0),
+            "A4": (210.0, 297.0),
+            "A5": (148.0, 210.0),
+            "LETTER": (215.9, 279.4),
+        }
+        width_mm, height_mm = known_mm.get(page_size, (210.0, 297.0))
+        if page_size == "CUSTOM":
+            width_mm = float(layout.get("widthMm") or layout.get("width_mm") or width_mm)
+            height_mm = float(layout.get("heightMm") or layout.get("height_mm") or height_mm)
+        orientation = str(layout.get("orientation") or "portrait").lower()
+        if orientation == "landscape" and width_mm < height_mm:
+            width_mm, height_mm = height_mm, width_mm
+        elif orientation != "landscape" and width_mm > height_mm:
+            width_mm, height_mm = height_mm, width_mm
+
+        millimetre = 72.0 / 25.4
+        header_footer = section.get("headerFooter") or section.get("header_footer")
+        header_footer = header_footer if isinstance(header_footer, dict) else {}
+        page_number = header_footer.get("pageNumber") or header_footer.get("page_number")
+        page_number = page_number if isinstance(page_number, dict) else {}
+        return {
+            "width": width_mm * millimetre,
+            "height": height_mm * millimetre,
+            "margin_left": float(layout.get("marginLeftMm") or layout.get("margin_left_mm") or 25.4) * millimetre,
+            "margin_right": float(layout.get("marginRightMm") or layout.get("margin_right_mm") or 25.4) * millimetre,
+            "margin_top": float(layout.get("marginTopMm") or layout.get("margin_top_mm") or 25.4) * millimetre,
+            "margin_bottom": float(layout.get("marginBottomMm") or layout.get("margin_bottom_mm") or 25.4) * millimetre,
+            "page_number_enabled": bool(page_number.get("enabled", True)),
+            "page_number_start": max(1, int(page_number.get("startAt") or page_number.get("start_at") or 1)),
+            "page_number_format": str(page_number.get("format") or "arabic"),
+            "page_number_position": str(page_number.get("position") or "footer"),
+            "page_number_alignment": str(page_number.get("alignment") or "center"),
+        }
+
     @classmethod
     def _render_lightweight_pdf(cls, text: str, pdf_path: Path, session) -> None:
         """Render a dependency-light, multi-page PDF when office software is absent.
@@ -300,9 +346,14 @@ class ExportService:
         except Exception as exc:  # pragma: no cover - protected by dependency metadata
             raise RuntimeError("cairocffi not available for lightweight PDF export") from exc
 
-        width, height = 595.28, 841.89  # A4 points
-        margin_x, margin_top, margin_bottom = 72.0, 72.0, 72.0
-        body_width = width - margin_x * 2
+        layout = cls._lightweight_pdf_layout(session)
+        width = float(layout["width"])
+        height = float(layout["height"])
+        margin_left = float(layout["margin_left"])
+        margin_right = float(layout["margin_right"])
+        margin_top = float(layout["margin_top"])
+        margin_bottom = float(layout["margin_bottom"])
+        body_width = max(72.0, width - margin_left - margin_right)
         font_family = "Microsoft YaHei" if os.name == "nt" else "Noto Sans CJK SC"
         measure_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 1, 1)
         measure = cairo.Context(measure_surface)
@@ -359,6 +410,43 @@ class ExportService:
 
         header = cls._v3_region_text(session, "header")
         footer = cls._v3_region_text(session, "footer")
+
+        def roman(value: int) -> str:
+            numerals = ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"))
+            result = ""
+            for unit, symbol in numerals:
+                while value >= unit:
+                    result += symbol
+                    value -= unit
+            return result
+
+        def page_value(value: int) -> str:
+            number_format = str(layout["page_number_format"])
+            if number_format == "lowerRoman":
+                return roman(value).lower()
+            if number_format == "upperRoman":
+                return roman(value)
+            if number_format in {"lowerLetter", "upperLetter"}:
+                label = ""
+                current = value
+                while current:
+                    current, remainder = divmod(current - 1, 26)
+                    label = chr(65 + remainder) + label
+                return label.lower() if number_format == "lowerLetter" else label
+            return str(value)
+
+        def draw_aligned(value: str, y: float, alignment: str) -> None:
+            if not value:
+                return
+            extents = context.text_extents(value)
+            x = margin_left
+            if alignment == "right":
+                x = width - margin_right - extents[4]
+            elif alignment == "center":
+                x = (width - extents[4]) / 2
+            context.move_to(x, y)
+            context.show_text(value)
+
         surface = cairo.PDFSurface(str(pdf_path), width, height)
         context = cairo.Context(surface)
         for page_index, page_rows in enumerate(pages, start=1):
@@ -368,8 +456,7 @@ class ExportService:
             if header:
                 context.select_font_face(font_family, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
                 context.set_font_size(9.0)
-                context.move_to(margin_x, 38.0)
-                context.show_text(header)
+                draw_aligned(header, max(18.0, margin_top * 0.55), "left")
             y = margin_top
             for line, size, bold, line_height in page_rows:
                 y += line_height
@@ -381,17 +468,18 @@ class ExportService:
                     cairo.FONT_WEIGHT_BOLD if bold else cairo.FONT_WEIGHT_NORMAL,
                 )
                 context.set_font_size(size)
-                context.move_to(margin_x, y)
+                context.move_to(margin_left, y)
                 context.show_text(line)
             context.select_font_face(font_family, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
             context.set_font_size(9.0)
+            footer_y = height - max(18.0, margin_bottom * 0.45)
             if footer:
-                context.move_to(margin_x, height - 35.0)
-                context.show_text(footer)
-            page_label = f"第 {page_index} 页，共 {len(pages)} 页"
-            extents = context.text_extents(page_label)
-            context.move_to((width - extents[4]) / 2, height - 35.0)
-            context.show_text(page_label)
+                draw_aligned(footer, footer_y, "left")
+            if bool(layout["page_number_enabled"]):
+                displayed_page = int(layout["page_number_start"]) + page_index - 1
+                page_label = f"第 {page_value(displayed_page)} 页，共 {len(pages)} 页"
+                page_y = max(18.0, margin_top * 0.55) if layout["page_number_position"] == "header" else footer_y
+                draw_aligned(page_label, page_y, str(layout["page_number_alignment"]))
             context.show_page()
         surface.finish()
 

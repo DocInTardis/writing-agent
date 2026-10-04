@@ -32,6 +32,44 @@ def test_lightweight_pdf_fallback_writes_unicode_pdf(tmp_path) -> None:
     assert payload.rstrip().endswith(b"%%EOF")
 
 
+def test_lightweight_pdf_uses_document_v3_page_geometry_and_numbering() -> None:
+    session = SimpleNamespace(
+        document_v3={
+            "sections": [
+                {
+                    "layout": {
+                        "pageSize": "A5",
+                        "orientation": "landscape",
+                        "marginTopMm": 20,
+                        "marginRightMm": 15,
+                        "marginBottomMm": 18,
+                        "marginLeftMm": 25,
+                    },
+                    "headerFooter": {
+                        "pageNumber": {
+                            "enabled": True,
+                            "startAt": 3,
+                            "format": "upperRoman",
+                            "position": "header",
+                            "alignment": "right",
+                        }
+                    },
+                }
+            ]
+        }
+    )
+
+    layout = ExportService._lightweight_pdf_layout(session)
+
+    assert round(float(layout["width"]), 2) == 595.28
+    assert round(float(layout["height"]), 2) == 419.53
+    assert round(float(layout["margin_left"]), 2) == 70.87
+    assert layout["page_number_start"] == 3
+    assert layout["page_number_format"] == "upperRoman"
+    assert layout["page_number_position"] == "header"
+    assert layout["page_number_alignment"] == "right"
+
+
 def test_document_v3_custom_style_is_projected_into_word_docx() -> None:
     document = Document()
     document.add_paragraph("需要按样式导出的正文")
