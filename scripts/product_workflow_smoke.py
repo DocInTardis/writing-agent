@@ -202,11 +202,39 @@ def main() -> int:
         assert docx.startswith(b"PK") and len(docx) > 5_000, "DOCX export is not a valid OOXML archive"
         assert pdf.startswith(b"%PDF-") and len(pdf) > 1_000, "PDF export is not a valid PDF"
 
+        # The material library is independent from document import: upload,
+        # preview, AI opt-in, recycle, restore, and permanent deletion all use
+        # the production API without replacing the current document.
+        before_material_upload = _require(client.get(f"/api/doc/{doc_id}"), "document before material upload").json()["document_v3"]
+        material = _require(
+            client.post(
+                "/api/library/upload",
+                files={"file": ("训练依据.md", "# 训练依据\n\n渐进负荷需要结合恢复状态。".encode("utf-8"), "text/markdown")},
+            ),
+            "material upload",
+        ).json()["item"]
+        material_id = material["doc_id"]
+        listed = _require(client.get("/api/library/items?status=all"), "material list").json()["items"]
+        assert any(item["doc_id"] == material_id for item in listed)
+        preview = _require(client.get(f"/api/library/item/{material_id}"), "material preview").json()
+        assert "渐进负荷" in preview["text"]
+        approved = _require(client.post(f"/api/library/item/{material_id}/approve"), "material approve").json()
+        assert approved["item"]["status"] == "approved"
+        trashed = _require(client.post(f"/api/library/item/{material_id}/trash"), "material trash").json()
+        assert trashed["item"]["status"] == "trashed"
+        restored = _require(client.post(f"/api/library/item/{material_id}/restore"), "material restore").json()
+        assert restored["item"]["status"] == "pending"
+        _require(client.post(f"/api/library/item/{material_id}/trash"), "material second trash")
+        _require(client.delete(f"/api/library/item/{material_id}"), "material delete")
+        after_material_upload = _require(client.get(f"/api/doc/{doc_id}"), "document after material upload").json()["document_v3"]
+        assert before_material_upload == after_material_upload, "material upload unexpectedly replaced document content"
+
         print("PASS deterministic product workflow")
         print(f"  generated structured blocks: {len(blocks)}")
         print("  human edit + AI command + block move: pass")
         print("  A5 setup + page number start 3 + persistence reload: pass")
         print(f"  DOCX/PDF export: {len(docx)} / {len(pdf)} bytes")
+        print("  material upload/preview/AI opt-in/recycle/delete: pass")
         print("  external model calls: 0; test-provider cost: 0")
     return 0
 

@@ -7,7 +7,6 @@
     sizeKb,
     wordCount,
     selectedCount,
-    routeId,
     onClose,
     onSwitchToEditor,
     onClearSelection
@@ -17,7 +16,6 @@
     sizeKb: number
     wordCount: number
     selectedCount: number
-    routeId: string
     onClose: () => void
     onSwitchToEditor: () => void
     onClearSelection: () => void
@@ -40,11 +38,10 @@
     </div>
     <div class="meta-list">
       <div><span>名称</span><strong>{title}</strong></div>
-      <div><span>类型</span><strong>text/markdown</strong></div>
-      <div><span>大小</span><strong>{sizeKb} KB</strong></div>
+      <div><span>类型</span><strong>Document V3 结构化文档</strong></div>
+      <div><span>文本大小</span><strong>约 {sizeKb} KB</strong></div>
       <div><span>词数</span><strong>{wordCount}</strong></div>
       <div><span>选区</span><strong>{selectedCount || 0}</strong></div>
-      <div><span>路由</span><strong>{routeId || '默认'}</strong></div>
     </div>
     <div class="meta-actions">
       <button class="btn ghost icon-btn-text" onclick={onSwitchToEditor}>

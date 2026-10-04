@@ -67,14 +67,14 @@ export type LibraryCard = {
   id: string
   title: string
   summary: string
-  status: 'synced' | 'draft' | 'review'
+  status: 'pending' | 'approved' | 'trashed'
   status_label: string
   kind_label: string
-  tone: 'azure' | 'gold' | 'violet' | 'teal'
   tags: string[]
   updated_at: number
   size_label: string
-  action: 'editor' | 'citation' | 'metrics' | 'version' | 'assistant' | 'upload'
+  source_name: string
+  char_count: number
 }
 
 export type FeedbackItem = {

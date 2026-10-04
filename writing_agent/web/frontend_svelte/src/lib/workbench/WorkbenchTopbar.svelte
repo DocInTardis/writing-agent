@@ -2,13 +2,10 @@
   import Icon from '../components/Icon.svelte'
   import LLMConfig from '../components/LLMConfig.svelte'
   import Settings from '../components/Settings.svelte'
-  import type { QualityOverview, WorkspaceMode } from './types'
+  import type { WorkspaceMode } from './types'
 
   let {
     workspaceMode,
-    qualityOverview,
-    wordCount,
-    routeId,
     topStatusLine,
     onSwitchMode,
     onSave,
@@ -17,9 +14,6 @@
     onToggleInfo
   }: {
     workspaceMode: WorkspaceMode
-    qualityOverview: QualityOverview
-    wordCount: number
-    routeId: string
     topStatusLine: string
     onSwitchMode: (mode: WorkspaceMode) => void
     onSave: () => void

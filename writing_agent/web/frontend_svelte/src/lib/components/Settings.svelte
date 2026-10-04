@@ -1,190 +1,140 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Modal from './Modal.svelte'
   import { docId, pushToast } from '../stores'
 
-  let open = false
-  let expandOutline = false
-  let targetChars: number | '' = ''
-  let styleTone = ''
-  let citationsRequired = false
-  let outputFormat = 'markdown'
-  let formattingJson = ''
-  let prefsJson = ''
+  let open = $state(false)
+  let loading = $state(false)
+  let saving = $state(false)
+  let purpose = $state('')
+  let audience = $state('')
+  let voice = $state('')
+  let targetMode = $state<'chars' | 'pages'>('chars')
+  let targetValue: number | '' = $state('')
+  let expandOutline = $state(false)
+  let citationsRequired = $state(false)
+  let minReferenceCount = $state(0)
+  let includeToc = $state(true)
+  let extraRequirements = $state('')
+  let loadedFormatting = $state<Record<string, unknown>>({})
+  let loadedPrefs = $state<Record<string, unknown>>({})
 
   async function loadSettings() {
     const id = $docId
     if (!id) return
-    const resp = await fetch(`/api/doc/${id}`)
-    if (!resp.ok) return
-    const data = await resp.json()
-    const prefs = data.generation_prefs || {}
-    const formatting = data.formatting || {}
-    expandOutline = Boolean(prefs.expand_outline)
-    targetChars = prefs.target_chars ? Number(prefs.target_chars) : ''
-    styleTone = String(formatting.style || '')
-    citationsRequired = Boolean(prefs.citations_required)
-    outputFormat = String(prefs.output_format || 'markdown')
-    formattingJson = JSON.stringify(formatting, null, 2)
-    prefsJson = JSON.stringify(prefs, null, 2)
+    loading = true
+    try {
+      const resp = await fetch(`/api/doc/${id}`)
+      if (!resp.ok) throw new Error(await resp.text() || '设置读取失败')
+      const data = await resp.json()
+      loadedFormatting = { ...(data.formatting || {}) }
+      loadedPrefs = { ...(data.generation_prefs || {}) }
+      purpose = String(loadedPrefs.purpose || '')
+      audience = String(loadedPrefs.audience || '')
+      voice = String(loadedPrefs.voice || loadedFormatting.style || '')
+      targetMode = loadedPrefs.target_length_mode === 'pages' ? 'pages' : 'chars'
+      const value = Number(loadedPrefs.target_length_value || loadedPrefs.target_char_count || 0)
+      targetValue = value > 0 ? value : ''
+      expandOutline = Boolean(loadedPrefs.expand_outline)
+      citationsRequired = Boolean(loadedPrefs.citations_required)
+      minReferenceCount = Math.max(0, Number(loadedPrefs.min_reference_count || 0))
+      includeToc = loadedPrefs.include_toc !== false
+      extraRequirements = String(loadedPrefs.extra_requirements || '')
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : '设置读取失败', 'bad')
+    } finally {
+      loading = false
+    }
   }
 
   async function saveSettings() {
     const id = $docId
-    if (!id) return
-    let formatting = {}
-    let generation = {}
-    try {
-      formatting = formattingJson.trim() ? JSON.parse(formattingJson) : {}
-      generation = prefsJson.trim() ? JSON.parse(prefsJson) : {}
-    } catch {
-      pushToast('高级设置 JSON 解析失败，请检查格式。', 'bad')
+    if (!id || saving) return
+    const numericTarget = Number(targetValue || 0)
+    if (numericTarget < 0 || (targetMode === 'pages' && numericTarget > 1000) || (targetMode === 'chars' && numericTarget > 1_000_000)) {
+      pushToast('目标篇幅超出合理范围。', 'bad')
       return
     }
-
-    const payload: any = {
-      generation_prefs: {
-        ...generation,
+    saving = true
+    try {
+      const generationPrefs: Record<string, unknown> = {
+        ...loadedPrefs,
+        purpose: purpose.trim(),
+        audience: audience.trim(),
+        voice: voice.trim(),
+        target_length_mode: numericTarget > 0 ? targetMode : '',
+        target_length_value: numericTarget,
+        target_char_count: targetMode === 'chars' ? numericTarget : 0,
+        target_page_count: targetMode === 'pages' ? numericTarget : 0,
+        target_length_confirmed: numericTarget > 0,
         expand_outline: expandOutline,
         citations_required: citationsRequired,
-        output_format: outputFormat
-      },
-      formatting: {
-        ...formatting,
-        style: styleTone
+        min_reference_count: Math.max(0, Math.round(minReferenceCount)),
+        include_toc: includeToc,
+        extra_requirements: extraRequirements.trim()
       }
+      const resp = await fetch(`/api/doc/${id}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generation_prefs: generationPrefs, formatting: loadedFormatting })
+      })
+      if (!resp.ok) throw new Error(await resp.text() || '设置保存失败')
+      loadedPrefs = generationPrefs
+      pushToast('写作偏好已保存。', 'ok')
+      open = false
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : '设置保存失败', 'bad')
+    } finally {
+      saving = false
     }
-    if (targetChars) payload.generation_prefs.target_chars = Number(targetChars)
-
-    await fetch(`/api/doc/${id}/settings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    pushToast('设置已保存', 'ok')
-    open = false
   }
 
   function handleOpen() {
     open = true
-    loadSettings().catch(() => {})
+    void loadSettings()
   }
 </script>
 
 <button class="btn ghost" onclick={handleOpen}>设置</button>
 
-<Modal {open} title="生成设置" onClose={() => (open = false)}>
-  <div class="settings-row">
-    <label>
-      <input type="checkbox" bind:checked={expandOutline} />
-      扩展大纲
-    </label>
-  </div>
-  <div class="settings-row">
-    <label>
-      <input type="checkbox" bind:checked={citationsRequired} />
-      需要引用
-    </label>
-  </div>
-  <div class="settings-row">
-    <label for="targetChars">目标字数</label>
-    <input id="targetChars" type="number" min="100" max="10000" bind:value={targetChars} placeholder="例如 1000" />
-  </div>
-  <div class="settings-row">
-    <label for="styleTone">风格/语气</label>
-    <input id="styleTone" type="text" bind:value={styleTone} placeholder="例如：正式、简洁、适度营销" />
-  </div>
-  <div class="settings-row">
-    <label for="outputFormat">输出格式</label>
-    <select id="outputFormat" bind:value={outputFormat}>
-      <option value="markdown">Markdown 文档</option>
-      <option value="plain">纯文本</option>
-    </select>
-  </div>
+<Modal {open} title="写作偏好" onClose={() => (open = false)}>
+  {#if loading}
+    <div class="loading">正在读取设置…</div>
+  {:else}
+    <div class="settings-grid">
+      <label><span>文档用途</span><input bind:value={purpose} placeholder="例如：毕业论文、项目报告" /></label>
+      <label><span>目标读者</span><input bind:value={audience} placeholder="例如：评审教师、普通读者" /></label>
+      <label><span>语言风格</span><input bind:value={voice} placeholder="例如：正式、简洁、客观" /></label>
+      <div class="target-row">
+        <label><span>目标篇幅</span><input type="number" min="0" bind:value={targetValue} placeholder="不限制" /></label>
+        <label class="unit"><span>单位</span><select bind:value={targetMode}><option value="chars">字</option><option value="pages">页</option></select></label>
+      </div>
+      <label class="check"><input type="checkbox" bind:checked={expandOutline} /><span>生成时扩展已有大纲</span></label>
+      <label class="check"><input type="checkbox" bind:checked={includeToc} /><span>长文包含目录</span></label>
+      <div class="citation-row">
+        <label class="check"><input type="checkbox" bind:checked={citationsRequired} /><span>要求引用资料来源</span></label>
+        {#if citationsRequired}<label class="count"><span>最少</span><input type="number" min="0" max="200" bind:value={minReferenceCount} /><span>条</span></label>{/if}
+      </div>
+      <label><span>其他要求</span><textarea rows="3" bind:value={extraRequirements} placeholder="只填写长期适用于本文档的要求"></textarea></label>
+    </div>
 
-  <div class="settings-section">
-    <div class="section-title">高级设置（可改所有默认值）</div>
-    <label for="formattingJson">格式配置（formatting）</label>
-    <textarea id="formattingJson" rows="6" bind:value={formattingJson}></textarea>
-    <label for="prefsJson">生成偏好（generation_prefs）</label>
-    <textarea id="prefsJson" rows="6" bind:value={prefsJson}></textarea>
-  </div>
+    <details class="shortcut-settings">
+      <summary>编辑快捷键</summary>
+      <dl>
+        <dt>Ctrl / ⌘ + Alt + 0–3</dt><dd>正文或标题 1–3</dd>
+        <dt>Alt + Shift + ↑ / ↓</dt><dd>移动当前块</dd>
+        <dt>Ctrl / ⌘ + Shift + Space</dt><dd>选择当前块</dd>
+        <dt>Esc / Enter</dt><dd>退出块选择</dd>
+      </dl>
+      <p>输入法组合输入期间不会接管这些快捷键。</p>
+    </details>
 
-  <details class="shortcut-settings">
-    <summary>编辑快捷键</summary>
-    <dl>
-      <dt>Ctrl / ⌘ + Alt + 0</dt><dd>正文</dd>
-      <dt>Ctrl / ⌘ + Alt + 1–3</dt><dd>标题 1–3</dd>
-      <dt>Alt + Shift + ↑ / ↓</dt><dd>移动段落或所选块</dd>
-      <dt>Ctrl / ⌘ + Shift + Space</dt><dd>选择当前块</dd>
-      <dt>↑ / ↓（块选择）</dt><dd>选择相邻块</dd>
-      <dt>Esc / Enter（块选择）</dt><dd>回到文字编辑</dd>
-    </dl>
-    <p>输入法组合输入期间不会接管这些按键。</p>
-  </details>
-
-  <div class="settings-actions">
-    <button class="btn primary" onclick={saveSettings}>保存</button>
-    <button class="btn ghost" onclick={() => (open = false)}>取消</button>
-  </div>
+    <div class="settings-actions">
+      <button class="btn ghost" onclick={() => (open = false)}>取消</button>
+      <button class="btn primary" disabled={saving} onclick={saveSettings}>{saving ? '保存中…' : '保存'}</button>
+    </div>
+  {/if}
 </Modal>
 
 <style>
-  .settings-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-    font-size: 13px;
-  }
-
-  .settings-row input[type='number'] {
-    width: 120px;
-    padding: 6px 8px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-  }
-
-  .settings-row input[type='text'],
-  .settings-row select {
-    width: 220px;
-    padding: 6px 8px;
-    border: 1px solid rgba(90, 70, 45, 0.18);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.9);
-  }
-
-  .settings-section {
-    margin-top: 16px;
-    display: grid;
-    gap: 8px;
-    font-size: 12px;
-  }
-
-  .settings-section textarea {
-    width: 100%;
-    border: 1px solid rgba(90, 70, 45, 0.18);
-    border-radius: 10px;
-    padding: 8px 10px;
-    background: rgba(255, 255, 255, 0.85);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-    font-size: 12px;
-  }
-
-  .section-title {
-    font-weight: 600;
-    color: #5b4a33;
-  }
-
-  .settings-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    margin-top: 12px;
-  }
-  .shortcut-settings { margin-top: 14px; color: #4f5d70; font-size: 12px; }
-  .shortcut-settings summary { cursor: pointer; font-weight: 600; }
-  .shortcut-settings dl { display: grid; grid-template-columns: 1.6fr 1fr; gap: 6px 10px; margin: 10px 0; }
-  .shortcut-settings dt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  .shortcut-settings dd { margin: 0; }
-  .shortcut-settings p { margin: 0; color: #7a8594; }
+  .loading { padding: 30px; color: #7a8493; text-align: center; }.settings-grid { display: grid; gap: 13px; }.settings-grid > label, .target-row label { display: grid; gap: 5px; color: #596579; font-size: 12px; }.settings-grid input, .settings-grid select, .settings-grid textarea { box-sizing: border-box; width: 100%; min-height: 34px; padding: 7px 9px; border: 1px solid #d7dce4; border-radius: 6px; background: #fff; color: #273142; font: inherit; outline: none; }.settings-grid input:focus, .settings-grid select:focus, .settings-grid textarea:focus { border-color: #7ba8df; }.target-row { display: grid; grid-template-columns: 1fr 100px; gap: 10px; }.check { display: flex !important; align-items: center; gap: 8px !important; }.check input { width: 15px; min-height: 15px; }.citation-row { display: flex; min-height: 34px; align-items: center; justify-content: space-between; }.count { display: flex; align-items: center; gap: 5px; color: #697386; font-size: 12px; }.count input { width: 64px; }.shortcut-settings { margin-top: 16px; color: #596579; font-size: 12px; }.shortcut-settings summary { cursor: pointer; }.shortcut-settings dl { display: grid; grid-template-columns: 1.4fr 1fr; gap: 6px 12px; }.shortcut-settings dt { font-family: ui-monospace, Consolas, monospace; }.shortcut-settings dd { margin: 0; }.settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 </style>

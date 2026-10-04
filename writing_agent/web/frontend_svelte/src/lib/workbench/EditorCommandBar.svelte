@@ -51,10 +51,6 @@
   }
 
   let {
-    libraryViewMode = $bindable<'grid' | 'masonry' | 'list'>('grid'),
-    librarySearch,
-    librarySelectAll = $bindable(false),
-    filteredCount,
     showAdvancedToolbar = $bindable(false),
     showAiRatePanel = $bindable(false),
     showPlagiarismPanel = $bindable(false),
@@ -75,10 +71,6 @@
     onStop,
     onResume
   }: {
-    libraryViewMode: 'grid' | 'masonry' | 'list'
-    librarySearch: string
-    librarySelectAll: boolean
-    filteredCount: number
     showAdvancedToolbar: boolean
     showAiRatePanel: boolean
     showPlagiarismPanel: boolean

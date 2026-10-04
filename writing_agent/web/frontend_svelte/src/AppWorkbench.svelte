@@ -21,10 +21,11 @@
   } from './lib/utils/ai_payload'
   import { buildDocIrOps } from './lib/workbench/docIrOps'
   import {
-    buildLibraryCards,
     cardMatchesSearch,
     estimateKb,
-    guessDocTitle
+    guessDocTitle,
+    libraryCardFromApi,
+    type LibraryApiItem
   } from './lib/workbench/libraryCards'
   import AssistantSheet from './lib/workbench/AssistantSheet.svelte'
   import ConfirmDialog from './lib/workbench/ConfirmDialog.svelte'
@@ -157,21 +158,22 @@
   let lastGraphMeta = $state<GraphMeta | null>(null)
   let surfaceTab = $state<WorkbenchSurface>('editor')
   let workspaceMode = $state<WorkspaceMode>('editor')
-  let libraryViewMode = $state<'grid' | 'masonry' | 'list'>('grid')
+  let libraryViewMode = $state<'grid' | 'list'>('grid')
   let librarySearch = $state('')
-  let librarySelectAll = $state(false)
+  let libraryStatusFilter = $state<'active' | 'pending' | 'approved' | 'trashed'>('active')
+  let libraryCards = $state<LibraryCard[]>([])
+  let libraryLoading = $state(false)
+  let libraryError = $state('')
   let selectedLibraryCardId = $state('')
+  let libraryPreviewText = $state('')
   let filteredLibraryCards = $derived.by(() => {
-    const cards = buildLibraryCards({
-      sourceText: $sourceText,
-      wordCount: Number($wordCount || 0),
-      previewSnippet: metaPreviewSnippet(),
-      lastGraphMeta,
-      feedbackItems,
-      versionGroupCount: versionGroups.length
-    })
     const query = librarySearch.trim()
-    return cards.filter((card) => cardMatchesSearch(card, query))
+    return libraryCards.filter((card) => {
+      const statusMatches = libraryStatusFilter === 'active'
+        ? card.status !== 'trashed'
+        : card.status === libraryStatusFilter
+      return statusMatches && cardMatchesSearch(card, query)
+    })
   })
 
   let hideLibraryInfo = $state(false)
@@ -397,9 +399,11 @@
   function switchWorkspaceMode(mode: WorkspaceMode) {
     workspaceMode = mode
     if (mode === 'library') {
-      showDocList = true
+      void loadLibraryItems()
     }
-    if (mode !== 'collab') {
+    if (mode === 'collab') {
+      setAssistantOpen(true)
+    } else {
       setAssistantOpen(false)
     }
     if (mode === 'editor') {
@@ -454,45 +458,83 @@
     const parts: string[] = []
     parts.push($docStatus || '未加载')
     parts.push(`${Math.max(0, Number($wordCount || 0))} 词`)
-    if (lastGraphMeta?.route_id || lastGraphMeta?.route_entry || lastGraphMeta?.engine) {
-      parts.push(
-        `路由 ${lastGraphMeta?.route_id || '默认'}/${lastGraphMeta?.route_entry || 'planner'} · ${lastGraphMeta?.engine || 'legacy'}`
-      )
-    }
-    if (feedbackItems.length > 0) {
-      parts.push(`满意度 ${feedbackItems[0].rating}/5`)
-    }
-    if (plagiarismResults.length > 0) {
-      parts.push(`查重峰值 ${Math.round(plagiarismMaxScore * 100)}%`)
-    }
     return parts.join(' · ')
   }
 
-  function openLibraryCard(card: LibraryCard) {
+  async function loadLibraryItems() {
+    libraryLoading = true
+    libraryError = ''
+    try {
+      const resp = await fetch('/api/library/items?status=all')
+      if (!resp.ok) throw new Error(await resp.text() || '资料读取失败')
+      const payload = await resp.json()
+      libraryCards = Array.isArray(payload?.items)
+        ? payload.items.map((item: LibraryApiItem) => libraryCardFromApi(item)).filter((item: LibraryCard) => item.id)
+        : []
+      if (selectedLibraryCardId && !libraryCards.some((item) => item.id === selectedLibraryCardId)) {
+        selectedLibraryCardId = ''
+        libraryPreviewText = ''
+      }
+    } catch (error) {
+      libraryError = error instanceof Error ? error.message : '资料读取失败'
+    } finally {
+      libraryLoading = false
+    }
+  }
+
+  async function openLibraryCard(card: LibraryCard) {
+    switchWorkspaceMode('library')
+    if (selectedLibraryCardId === card.id) {
+      selectedLibraryCardId = ''
+      libraryPreviewText = ''
+      return
+    }
     selectedLibraryCardId = card.id
-    if (card.action === 'editor') {
-      switchSurface('editor')
-      return
+    libraryPreviewText = '正在读取预览…'
+    try {
+      const resp = await fetch(`/api/library/item/${encodeURIComponent(card.id)}`)
+      if (!resp.ok) throw new Error(await resp.text() || '资料预览失败')
+      const payload = await resp.json()
+      libraryPreviewText = String(payload?.text || '').slice(0, 20_000)
+    } catch (error) {
+      libraryPreviewText = error instanceof Error ? error.message : '资料预览失败'
     }
-    if (card.action === 'citation') {
-      showCitations = true
-      return
+  }
+
+  async function updateLibraryStatus(id: string, action: 'approve' | 'trash' | 'restore') {
+    try {
+      const resp = await fetch(`/api/library/item/${encodeURIComponent(id)}/${action}`, { method: 'POST' })
+      if (!resp.ok) throw new Error(await resp.text() || '资料状态更新失败')
+      await loadLibraryItems()
+      const labels = { approve: '资料已启用，后续 AI 可检索其内容。', trash: '资料已移到回收站。', restore: '资料已恢复。' }
+      pushToast(labels[action], 'ok')
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : '资料状态更新失败', 'bad')
     }
-    if (card.action === 'metrics') {
-      showPerformanceMetrics = true
-      return
+  }
+
+  async function deleteLibraryItem(id: string) {
+    if (!window.confirm('永久删除这份资料及其本地副本？此操作不可撤销。')) return
+    try {
+      const resp = await fetch(`/api/library/item/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!resp.ok) throw new Error(await resp.text() || '资料删除失败')
+      selectedLibraryCardId = ''
+      libraryPreviewText = ''
+      await loadLibraryItems()
+      pushToast('资料已永久删除。', 'ok')
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : '资料删除失败', 'bad')
     }
-    if (card.action === 'version') {
-      void openVersions()
-      return
-    }
-    if (card.action === 'assistant') {
-      switchWorkspaceMode('collab')
-      setAssistantOpen(true)
-      return
-    }
-    if (card.action === 'upload') {
-      triggerLibraryUpload()
+  }
+
+  async function copyLibraryExcerpt() {
+    const text = libraryPreviewText.trim()
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      pushToast('资料摘录已复制。', 'ok')
+    } catch {
+      pushToast('无法访问系统剪贴板。', 'bad')
     }
   }
 
@@ -2726,6 +2768,15 @@
     return String(file?.type || '').startsWith('image/') || /\.(png|jpe?g|gif|bmp|webp|svg)$/i.test(name)
   }
 
+  function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(reader.error || new Error('图片读取失败'))
+      reader.readAsDataURL(file)
+    })
+  }
+
   async function uploadAsset(
     file: File,
     opts?: { source?: 'assistant' | 'inline-image'; targetIds?: string[] }
@@ -2740,35 +2791,28 @@
       return
     }
     try {
-      pushToast(isImage ? '正在上传图片...' : '正在上传文件...', 'info')
-      const resp = await fetch(`/api/doc/${$docId}/upload`, {
+      if (source === 'inline-image') {
+        if (file.size > 10 * 1024 * 1024) throw new Error('插入文档的图片不能超过 10 MB。')
+        const dataUrl = await readFileAsDataUrl(file)
+        const caption = file.name.replace(/\.[^.]+$/, '')
+        runEditorCommand('image', { caption, source: dataUrl, filename: file.name })
+        pushToast('图片已插入文档。', 'ok')
+        return
+      }
+
+      pushToast('正在添加到资料库…', 'info')
+      const resp = await fetch('/api/library/upload', {
         method: 'POST',
         body: form
       })
       if (!resp.ok) throw new Error(await resp.text())
       const data = await resp.json()
-      const uploadKind = String(data.kind || '')
-      if (source === 'inline-image' && isImage) {
-        const caption = file.name.replace(/\.[^.]+$/, '')
-        runEditorCommand('image', {
-          caption,
-          source: String(data.url || data.path || data.asset_url || file.name),
-          filename: file.name
-        })
-        pushToast('图片上传成功，已插入选中内容后。', 'ok')
-        appendChat('system', `已插入图片：${file.name}`)
-        return
-      }
-      if (uploadKind === 'template') {
-        pushToast('模板文件上传成功，已解析结构。', 'ok')
-        appendChat('system', `模板已上传并解析：${file.name}`)
-      } else {
-        const msg = isImage
-          ? '图片已上传到资料库。若要插入正文，请选中段落后点击“插图”。'
-          : '文件上传成功，已纳入资料库。'
-        pushToast(msg, 'ok')
-        appendChat('system', `${msg}（${file.name}）`)
-      }
+      await loadLibraryItems()
+      const item = data?.item ? libraryCardFromApi(data.item) : null
+      if (item?.id) await openLibraryCard(item)
+      const msg = '资料已添加。确认内容后，可选择“启用给 AI”。'
+      pushToast(msg, 'ok')
+      if (source === 'assistant') appendChat('system', `${msg}（${file.name}）`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : '上传失败'
       pushToast(msg, 'bad')
@@ -3528,7 +3572,7 @@
       const id = readDocId()
       if (id) {
         docId.set(id)
-        loadDoc().then(() => Promise.all([loadChat(), loadThoughts(), loadFeedback()])).catch(() => {})
+        loadDoc().then(() => Promise.all([loadChat(), loadThoughts(), loadFeedback(), loadLibraryItems()])).catch(() => {})
       }
     }
     return () => {
@@ -3550,9 +3594,6 @@
 <main class="app" class:dark={$darkMode}>
   <WorkbenchTopbar
     {workspaceMode}
-    {qualityOverview}
-    wordCount={Number($wordCount || 0)}
-    routeId={lastGraphMeta?.route_id || '默认'}
     {topStatusLine}
     onSwitchMode={switchWorkspaceMode}
     onSave={saveDoc}
@@ -3565,40 +3606,37 @@
     <LibraryRail
       {workspaceMode}
       bind:librarySearch
-      bind:librarySelectAll
       bind:selectedLibraryCardId
-      {libraryViewMode}
-      {filteredLibraryCards}
+      cards={filteredLibraryCards}
       onUpload={triggerLibraryUpload}
       onOpenCard={openLibraryCard}
       onSwitchMode={switchWorkspaceMode}
-      onOpenCanvas={() => (canvasOpen = true)}
       onOpenCitations={() => (showCitations = true)}
       onOpenAssistant={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}
-      onOpenMetrics={() => (showPerformanceMetrics = true)}
     />
 
     <section class="doc-area">
       {#if workspaceMode === 'library'}
         <LibraryModeStage
           bind:libraryViewMode
-          {librarySearch}
-          {filteredLibraryCards}
-          {librarySelectAll}
-          {selectedLibraryCardId}
+          bind:statusFilter={libraryStatusFilter}
+          cards={filteredLibraryCards}
+          loading={libraryLoading}
+          error={libraryError}
+          selectedId={selectedLibraryCardId}
+          previewText={libraryPreviewText}
           onUpload={triggerLibraryUpload}
-          onOpenCitations={() => (showCitations = true)}
-          onOpenVersions={openVersions}
           onOpenCard={openLibraryCard}
           onDrop={handleLibraryDrop}
+          onApprove={(id) => updateLibraryStatus(id, 'approve')}
+          onTrash={(id) => updateLibraryStatus(id, 'trash')}
+          onRestore={(id) => updateLibraryStatus(id, 'restore')}
+          onDelete={deleteLibraryItem}
+          onCopyExcerpt={copyLibraryExcerpt}
           onBack={() => switchWorkspaceMode('editor')}
         />
       {:else}
       <EditorCommandBar
-        bind:libraryViewMode
-        {librarySearch}
-        bind:librarySelectAll
-        filteredCount={filteredLibraryCards.length}
         bind:showAdvancedToolbar
         bind:showAiRatePanel
         bind:showPlagiarismPanel
@@ -3706,7 +3744,6 @@
       sizeKb={estimateKb($sourceText)}
       wordCount={Number($wordCount || 0)}
       selectedCount={selectedBlockIds.length}
-      routeId={lastGraphMeta?.route_id || '默认'}
       onClose={closeInfoDrawer}
       onSwitchToEditor={() => switchWorkspaceMode('editor')}
       onClearSelection={() => { selectedBlockId = ''; selectedBlockIds = []; selectedBlocks = []; }}

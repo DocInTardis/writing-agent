@@ -170,6 +170,42 @@ async function main() {
     // Headless browsers heavily throttle the cosmetic 800 ms splash timer.
     // Removing only this non-product overlay keeps pointer hit-testing honest.
     await evaluate("document.getElementById('app-loading')?.classList.add('done')")
+
+    // Verify that the material surface renders persisted API data rather than
+    // the former synthetic route/version cards.
+    await evaluate(`fetch('/api/library/from_doc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: '自动验收资料', text: '资料预览正文：渐进负荷与恢复。', status: 'pending', source_id: 'editor-matrix-material' })
+    }).then((response) => { if (!response.ok) throw new Error('material fixture failed') })`, true)
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === '资料')?.click()`)
+    const libraryDeadline = Date.now() + 10_000
+    while (Date.now() < libraryDeadline) {
+      if (await evaluate(`document.body.innerText.includes('自动验收资料')`)) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    assert(await evaluate(`document.body.innerText.includes('自动验收资料')`), 'material library did not render persisted items')
+    assert(!await evaluate(`document.body.innerText.includes('路由与上下文策略')`), 'synthetic material cards are still visible')
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.includes('自动验收资料'))?.click()`)
+    const previewDeadline = Date.now() + 10_000
+    while (Date.now() < previewDeadline) {
+      if (await evaluate(`document.body.innerText.includes('资料预览正文：渐进负荷与恢复。')`)) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    assert(await evaluate(`document.body.innerText.includes('资料预览正文：渐进负荷与恢复。')`), 'material preview was not loaded')
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === '启用给 AI')?.click()`)
+    const approvedDeadline = Date.now() + 10_000
+    while (Date.now() < approvedDeadline) {
+      if (await evaluate(`document.body.innerText.includes('已用于 AI')`)) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    assert(await evaluate(`document.body.innerText.includes('已用于 AI')`), 'material AI opt-in status was not rendered')
+    await evaluate(`document.querySelector('.primary-nav button')?.click()`)
+    const documentDeadline = Date.now() + 10_000
+    while (Date.now() < documentDeadline) {
+      if (await evaluate("Boolean(document.querySelector('.structured-editor .ProseMirror'))")) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
     await evaluate("document.querySelector('.structured-editor .ProseMirror').focus()")
 
     async function key(key, code = key, modifiers = 0) {
@@ -311,6 +347,7 @@ async function main() {
     assert(!state.selectedText.includes('第二段正文'), 'triple click leaked into the preceding paragraph')
 
     console.log('PASS editor behavior matrix')
+    console.log('  persisted material list/preview/AI opt-in: pass')
     console.log('  IME composition and commit: pass')
     console.log('  paragraph split and soft break: pass')
     console.log('  keyboard cross-block navigation: pass')

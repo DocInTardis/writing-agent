@@ -1,6 +1,7 @@
-﻿<script lang="ts">
+<script lang="ts">
   import Icon from './Icon.svelte'
   import { instruction, chat, thoughtLog } from '../stores'
+
   let {
     variant = 'panel' as 'panel' | 'assistant',
     onsend,
@@ -11,7 +12,7 @@
     onupload?: (payload: { file: File }) => void
   } = $props()
 
-  let showThoughts = $state(true)
+  let showActivity = $state(false)
   let uploadInput: HTMLInputElement | null = null
 
   function handleSend() {
@@ -19,347 +20,75 @@
     if (!text) return
     onsend?.(text)
     instruction.set('')
-    tickScroll()
+    queueMicrotask(() => document.querySelector('.chat-history')?.scrollTo({ top: 999999 }))
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault()
       handleSend()
     }
   }
 
-  function toggleThoughts() {
-    showThoughts = !showThoughts
-    tickScroll()
-  }
-
-  function tickScroll() {
-    queueMicrotask(() => {
-      const el = document.querySelector('.chat-history')
-      if (el) el.scrollTop = el.scrollHeight
-      const thoughts = document.querySelector('.thought-list')
-      if (thoughts) thoughts.scrollTop = thoughts.scrollHeight
-    })
-  }
-
-  function triggerUpload() {
-    uploadInput?.click()
-  }
-
   function handleUploadChange(event: Event) {
-    const input = event.currentTarget as HTMLInputElement | null
-    const file = input?.files?.[0]
-    if (!file) return
-    onupload?.({ file })
-    if (input) input.value = ''
+    const input = event.currentTarget as HTMLInputElement
+    const file = input.files?.[0]
+    if (file) onupload?.({ file })
+    input.value = ''
   }
 </script>
 
 <div class={`chat-shell ${variant}`}>
-  {#if variant === 'assistant'}
-    <div class="assistant-header">
-      <div class="assistant-title">
-        <span class="assistant-dot"><Icon name="spark" size={12} /></span>
-        智能助手
-      </div>
-      <button class="assistant-toggle" onclick={toggleThoughts}>
-        {showThoughts ? '隐藏思考' : '思考链'}
-      </button>
-    </div>
-  {:else}
-    <div class="panel-title">对话写作</div>
-  {/if}
+  <div class="chat-tools">
+    <span>针对当前文档提出修改要求；发送前不会改动正文。</span>
+    {#if $thoughtLog.length > 0}
+      <button onclick={() => (showActivity = !showActivity)}>{showActivity ? '收起记录' : `运行记录 ${$thoughtLog.length}`}</button>
+    {/if}
+  </div>
 
-  {#if showThoughts}
-    <div class="thoughts">
-      <div class="thoughts-title">思考链</div>
-      <div class="thought-list">
-        {#each $thoughtLog as t}
-          <div class="thought-item">
-            <div class="thought-meta">
-              <span class="label">{t.label}</span>
-              <span class="time">{t.time}</span>
-            </div>
-            <div class="detail">{t.detail}</div>
-          </div>
-        {/each}
-      </div>
+  {#if showActivity}
+    <div class="activity" aria-label="运行记录">
+      {#each $thoughtLog as item}
+        <div><strong>{item.label}</strong><span>{item.time}</span><p>{item.detail}</p></div>
+      {/each}
     </div>
   {/if}
 
   <div class="chat-history">
-    {#each $chat as m}
-      <div class="chat-msg {m.role}">
-        <div class="chat-bubble">{m.text}</div>
+    {#if $chat.length === 0}
+      <div class="chat-empty">
+        <strong>可以直接说你想改什么</strong>
+        <span>例如：压缩这段、检查论证、根据资料补充引用。</span>
       </div>
-    {/each}
+    {:else}
+      {#each $chat as message}
+        <div class={`chat-msg ${message.role}`}><div class="chat-bubble">{message.text}</div></div>
+      {/each}
+    {/if}
   </div>
-  <div class="composer-tools">
-    <button class="attach-btn" onclick={triggerUpload}>
-      <Icon name="upload" size={13} className="btn-icon" />
-      <span>上传内容</span>
-    </button>
-    <span class="composer-tip">支持图片与文档</span>
+
+  <div class="composer-shell">
+    <textarea rows="4" bind:value={$instruction} onkeydown={handleKeydown} placeholder="描述修改要求；Shift+Enter 换行"></textarea>
+    <div class="composer-actions">
+      <button class="attach" onclick={() => uploadInput?.click()} title="添加到资料库">
+        <Icon name="upload" size={14} /><span>添加资料</span>
+      </button>
+      <span>Enter 发送</span>
+      <button class="send" onclick={handleSend} disabled={!$instruction.trim()}><Icon name="play" size={14} /><span>发送</span></button>
+    </div>
   </div>
-  <div class="composer">
-    <textarea
-      rows="3"
-      bind:value={$instruction}
-      onkeydown={handleKeydown}
-      placeholder="输入需求或修改指令"
-    ></textarea>
-    <button class="send-btn" onclick={handleSend}>
-      <Icon name="play" size={14} className="btn-icon" />
-      <span>发送</span>
-    </button>
-  </div>
-  <input
-    class="hidden-input"
-    type="file"
-    accept="image/*,.doc,.docx,.pdf,.txt,.md,.html,.htm,.ppt,.pptx,.xls,.xlsx,.csv,.json"
-    bind:this={uploadInput}
-    onchange={handleUploadChange}
-  />
+  <input class="hidden-input" type="file" accept="image/*,.doc,.docx,.pdf,.txt,.md,.html,.htm,.ppt,.pptx,.xls,.xlsx,.csv,.json" bind:this={uploadInput} onchange={handleUploadChange} />
 </div>
 
 <style>
-  .chat-shell {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .chat-shell.assistant {
-    width: 360px;
-    height: 560px;
-    padding: 14px;
-    border-radius: 22px;
-    background: #faf9f7;
-    border: 1px solid rgba(231, 229, 228, 1);
-    box-shadow:
-      0 24px 54px rgba(0, 0, 0, 0.01),
-      none;
-    
-  }
-
-  .assistant-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 2px 2px 4px;
-  }
-
-  .assistant-title {
-    font-size: 13px;
-    letter-spacing: 0.03em;
-    color: rgba(168, 162, 158, 0.94);
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .assistant-dot {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    color: #86efac;
-    background: rgba(22, 163, 74, 0.18);
-    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .assistant-toggle {
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(245, 243, 240, 0.74);
-    color: rgba(210, 225, 248, 0.88);
-    padding: 5px 9px;
-    border-radius: 999px;
-    font-size: 11px;
-    cursor: pointer;
-  }
-
-  .assistant-toggle:hover {
-    border-color: rgba(217, 119, 6, 0.3);
-    background: rgba(245, 243, 240, 0.84);
-  }
-
-  .panel-title {
-    font-weight: 600;
-  }
-
-  .thoughts {
-    padding: 10px;
-    border-radius: 14px;
-    border: 1px dashed rgba(231, 229, 228, 1);
-    background: rgba(245, 243, 240, 0.74);
-  }
-
-  .thoughts-title {
-    font-size: 12px;
-    color: rgba(168, 162, 158, 0.76);
-    margin-bottom: 6px;
-  }
-
-  .thought-list {
-    max-height: 132px;
-    overflow: auto;
-    display: grid;
-    gap: 8px;
-  }
-
-  .thought-item {
-    background: rgba(245, 243, 240, 0.84);
-    border-radius: 10px;
-    border: 1px solid rgba(149, 175, 214, 0.24);
-    padding: 8px 10px;
-    font-size: 12px;
-    box-shadow: none;
-  }
-
-  .thought-meta {
-    display: flex;
-    justify-content: space-between;
-    color: rgba(168, 162, 158, 0.75);
-    margin-bottom: 4px;
-  }
-
-  .detail {
-    color: #1c1917;
-    white-space: pre-wrap;
-  }
-
-  .chat-history {
-    flex: 1;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-right: 4px;
-  }
-
-  .chat-msg {
-    display: flex;
-  }
-
-  .chat-msg.user {
-    justify-content: flex-end;
-  }
-
-  .chat-bubble {
-    max-width: 86%;
-    padding: 9px 12px;
-    border-radius: 13px;
-    border: 1px solid rgba(149, 176, 216, 0.24);
-    background: rgba(19, 33, 59, 0.84);
-    color: rgba(168, 162, 158, 0.92);
-    font-size: 12px;
-    line-height: 1.45;
-    box-shadow: 0 10px 16px rgba(0, 0, 0, 0.01);
-  }
-
-  .chat-msg.user .chat-bubble {
-    border-color: rgba(172, 208, 255, 0.6);
-    background: linear-gradient(132deg, rgba(217, 119, 6, 0.94), rgba(217, 119, 6, 0.9));
-    color: #fff;
-    box-shadow: 0 12px 18px rgba(217, 119, 6, 0.3);
-  }
-
-  .composer {
-    display: flex;
-    gap: 8px;
-    align-items: stretch;
-  }
-
-  .composer-tools {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .attach-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid rgba(231, 229, 228, 1);
-    background: rgba(23, 36, 63, 0.82);
-    color: rgba(168, 162, 158, 0.9);
-    border-radius: 10px;
-    padding: 7px 10px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .attach-btn:hover {
-    border-color: rgba(160, 205, 255, 0.62);
-    background: rgba(36, 53, 89, 0.88);
-  }
-
-  .composer-tip {
-    font-size: 11px;
-    color: rgba(182, 200, 230, 0.72);
-  }
-
-  .composer textarea {
-    flex: 1;
-    border: 1px solid rgba(151, 179, 218, 0.28);
-    border-radius: 12px;
-    padding: 10px;
-    font-size: 12px;
-    line-height: 1.45;
-    background: rgba(14, 24, 45, 0.86);
-    color: #1c1917;
-    outline: none;
-  }
-
-  .composer textarea::placeholder {
-    color: rgba(168, 162, 158, 0.72);
-  }
-
-  .composer textarea:focus {
-    border-color: rgba(217, 119, 6, 0.2);
-    box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
-  }
-
-  .send-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid rgba(177, 208, 255, 0.54);
-    background: linear-gradient(132deg, rgba(217, 119, 6, 0.96), rgba(217, 119, 6, 0.92));
-    color: #fff;
-    border-radius: 12px;
-    padding: 0 15px;
-    min-width: 56px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 12px 20px rgba(217, 119, 6, 0.28);
-  }
-
-  .send-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 14px 24px rgba(217, 119, 6, 0.34);
-  }
-
-  .btn-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-  }
-
-  .hidden-input {
-    display: none;
-  }
-
-  @media (max-width: 900px) {
-    .chat-shell.assistant {
-      width: min(360px, calc(100vw - 24px));
-      height: min(560px, calc(100vh - 110px));
-      border-radius: 18px;
-    }
-  }
+  .chat-shell { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; color: #273142; }
+  .chat-shell.assistant { box-sizing: border-box; width: 390px; height: min(620px, calc(100vh - 120px)); padding: 0; background: #fff; }
+  .chat-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #7a8493; font-size: 11px; }.chat-tools button { flex: none; padding: 4px 7px; border: 0; border-radius: 5px; background: #f0f2f5; color: #596579; cursor: pointer; font: inherit; }
+  .activity { max-height: 150px; overflow: auto; padding: 9px; border: 1px solid #e3e6eb; border-radius: 7px; background: #fafbfc; }.activity > div { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 5px; font-size: 11px; }.activity strong { color: #455064; }.activity span { color: #9aa1ab; }.activity p { grid-column: 1 / -1; margin: 0; color: #687386; line-height: 1.45; white-space: pre-wrap; }
+  .chat-history { display: flex; min-height: 180px; flex: 1; flex-direction: column; gap: 8px; overflow: auto; padding: 4px 2px; }.chat-empty { display: grid; flex: 1; place-content: center; gap: 6px; color: #7b8491; text-align: center; }.chat-empty strong { color: #4c5767; font-size: 13px; }.chat-empty span { font-size: 11px; }
+  .chat-msg { display: flex; }.chat-msg.user { justify-content: flex-end; }.chat-bubble { max-width: 86%; padding: 9px 11px; border: 1px solid #e0e4e9; border-radius: 8px; background: #f6f7f9; color: #3a4555; font-size: 12px; line-height: 1.55; white-space: pre-wrap; }.chat-msg.user .chat-bubble { border-color: #2468c8; background: #2468c8; color: #fff; }
+  .composer-shell { padding: 8px; border: 1px solid #d8dde5; border-radius: 9px; background: #fff; }.composer-shell:focus-within { border-color: #7ba8df; box-shadow: 0 0 0 2px rgba(36,104,200,.09); }.composer-shell textarea { box-sizing: border-box; width: 100%; resize: none; border: 0; background: transparent; color: #273142; outline: none; font: inherit; font-size: 13px; line-height: 1.5; }.composer-shell textarea::placeholder { color: #9aa1ab; }
+  .composer-actions { display: flex; align-items: center; gap: 8px; margin-top: 5px; }.composer-actions > span { margin-left: auto; color: #9aa1ab; font-size: 10px; }.composer-actions button { display: inline-flex; min-height: 29px; align-items: center; gap: 6px; padding: 0 9px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 11px; }.attach { border: 0; background: #f0f2f5; color: #596579; }.send { border: 1px solid #2468c8; background: #2468c8; color: #fff; }.send:disabled { opacity: .45; cursor: default; }
+  .hidden-input { display: none; }
+  @media (max-width: 900px) { .chat-shell.assistant { width: min(390px, calc(100vw - 24px)); } }
 </style>

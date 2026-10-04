@@ -1,122 +1,73 @@
-import type { FeedbackItem, GraphMeta, LibraryCard } from './types'
-import { summarizeGraphMeta } from './metadata'
+import type { LibraryCard } from './types'
 
-export type BuildLibraryCardsInput = {
-  sourceText: string
-  wordCount: number
-  previewSnippet: string
-  lastGraphMeta: GraphMeta | null
-  feedbackItems: FeedbackItem[]
-  versionGroupCount: number
+export type LibraryApiItem = {
+  doc_id?: string
+  title?: string
+  status?: string
+  source?: string
+  source_name?: string
+  char_count?: number
+  created_at?: string
+  updated_at?: string
 }
 
-export function guessDocTitle(text: string) {
-  const src = String(text || '')
-  const m = src.match(/^\s*#\s+(.+)$/m)
-  if (m && m[1]) return m[1].trim()
-  return '未命名文档'
+const STATUS_LABELS: Record<LibraryCard['status'], string> = {
+  pending: '待启用',
+  approved: '已用于 AI',
+  trashed: '回收站'
 }
 
-export function estimateKb(text: string) {
-  const chars = String(text || '').length
-  const bytes = chars * 2
-  return Math.max(1, Math.round(bytes / 1024))
+export function normalizeLibraryStatus(value: unknown): LibraryCard['status'] {
+  const status = String(value || '').trim().toLowerCase()
+  if (status === 'approved' || status === 'trashed') return status
+  return 'pending'
+}
+
+export function libraryCardFromApi(item: LibraryApiItem): LibraryCard {
+  const sourceName = String(item.source_name || '').trim()
+  const title = String(item.title || '').trim() || sourceName.replace(/\.[^.]+$/, '') || '未命名资料'
+  const status = normalizeLibraryStatus(item.status)
+  const charCount = Math.max(0, Number(item.char_count || 0))
+  const updated = Date.parse(String(item.updated_at || item.created_at || ''))
+  const extension = sourceName.includes('.') ? sourceName.split('.').pop()?.toUpperCase() || '文本' : '文本'
+  return {
+    id: String(item.doc_id || ''),
+    title,
+    summary: sourceName || `${charCount.toLocaleString()} 字符的文本资料`,
+    status,
+    status_label: STATUS_LABELS[status],
+    kind_label: extension,
+    tags: [String(item.source || 'upload') === 'upload' ? '本地上传' : '生成内容'],
+    updated_at: Number.isFinite(updated) ? updated : Date.now(),
+    size_label: charCount > 0 ? `${charCount.toLocaleString()} 字符` : '未提取文字',
+    source_name: sourceName,
+    char_count: charCount
+  }
 }
 
 export function formatLibraryCardTime(ts: number) {
-  const now = Date.now()
-  const diff = Math.max(0, now - Number(ts || 0))
+  const diff = Math.max(0, Date.now() - Number(ts || 0))
   const minute = 60 * 1000
   const hour = 60 * minute
   const day = 24 * hour
-  if (diff < minute) return '刚刚更新'
+  if (diff < minute) return '刚刚'
   if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
   if (diff < day) return `${Math.floor(diff / hour)} 小时前`
-  return `${Math.floor(diff / day)} 天前`
-}
-
-export function buildLibraryCards(input: BuildLibraryCardsInput): LibraryCard[] {
-  const now = Date.now()
-  const docTitle = guessDocTitle(input.sourceText)
-  const wordLabel = `${Math.max(1, Number(input.wordCount || 0))} 词`
-  const routeLabel = input.lastGraphMeta?.route_id ? `路由:${input.lastGraphMeta.route_id}` : '路由:default'
-  const feedbackLabel =
-    input.feedbackItems.length > 0 ? `满意度 ${input.feedbackItems[0].rating}/5` : '待收集反馈'
-  return [
-    {
-      id: 'doc-main',
-      title: docTitle,
-      summary: input.previewSnippet || '当前文档正文摘要',
-      status: 'draft',
-      status_label: '草稿',
-      kind_label: '正文',
-      tone: 'azure',
-      tags: ['当前文档', routeLabel, feedbackLabel],
-      updated_at: now - 2 * 60 * 1000,
-      size_label: wordLabel,
-      action: 'editor'
-    },
-    {
-      id: 'route-context',
-      title: '路由与上下文策略',
-      summary: input.lastGraphMeta ? summarizeGraphMeta(input.lastGraphMeta) : '默认图路由生效，可用于追踪生成链路。',
-      status: 'synced',
-      status_label: '已同步',
-      kind_label: '策略',
-      tone: 'teal',
-      tags: ['图路由', '上下文窗口', '可追踪'],
-      updated_at: now - 17 * 60 * 1000,
-      size_label: '策略卡',
-      action: 'metrics'
-    },
-    {
-      id: 'citation-kit',
-      title: '引用与证据包',
-      summary: '维护引用、脚注与来源一致性，导出前建议先核验。',
-      status: 'review',
-      status_label: '待核验',
-      kind_label: '引用',
-      tone: 'gold',
-      tags: ['引用', '脚注', '导出检查'],
-      updated_at: now - 48 * 60 * 1000,
-      size_label: '证据集',
-      action: 'citation'
-    },
-    {
-      id: 'version-archive',
-      title: '版本归档',
-      summary:
-        input.versionGroupCount > 0
-          ? `已记录 ${input.versionGroupCount} 组版本，可随时回退。`
-          : '尚未创建版本，建议在关键阶段手动归档。',
-      status: input.versionGroupCount > 0 ? 'synced' : 'draft',
-      status_label: input.versionGroupCount > 0 ? '已同步' : '草稿',
-      kind_label: '版本',
-      tone: 'violet',
-      tags: ['回滚', '对比', '里程碑'],
-      updated_at: now - 2 * 60 * 60 * 1000,
-      size_label: `${input.versionGroupCount} 组`,
-      action: 'version'
-    },
-    {
-      id: 'asset-upload',
-      title: '上传新素材',
-      summary: '支持图片、文档、模板上传，自动纳入资料库并可插入正文。',
-      status: 'draft',
-      status_label: '待上传',
-      kind_label: '素材',
-      tone: 'azure',
-      tags: ['图片', '文档', '模板'],
-      updated_at: now - 8 * 60 * 60 * 1000,
-      size_label: '上传入口',
-      action: 'upload'
-    }
-  ]
+  if (diff < 30 * day) return `${Math.floor(diff / day)} 天前`
+  return new Date(ts).toLocaleDateString('zh-CN')
 }
 
 export function cardMatchesSearch(card: LibraryCard, query: string) {
-  if (!query) return true
-  const q = query.toLowerCase()
-  const haystack = `${card.title} ${card.summary} ${card.tags.join(' ')}`.toLowerCase()
-  return haystack.includes(q)
+  const q = String(query || '').trim().toLowerCase()
+  if (!q) return true
+  return `${card.title} ${card.summary} ${card.kind_label} ${card.tags.join(' ')}`.toLowerCase().includes(q)
+}
+
+export function guessDocTitle(text: string) {
+  const match = String(text || '').match(/^\s*#\s+(.+)$/m)
+  return match?.[1]?.trim() || '未命名文档'
+}
+
+export function estimateKb(text: string) {
+  return Math.max(1, Math.round(String(text || '').length * 2 / 1024))
 }
