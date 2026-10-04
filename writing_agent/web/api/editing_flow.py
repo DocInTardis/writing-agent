@@ -154,7 +154,7 @@ async def document_v3_command(doc_id: str, request: Request) -> dict:
         raise app_v2.HTTPException(status_code=status, detail=result.error or "command failed")
     if result.changed and result.document is not None:
         session.document_v3 = result.document.model_dump(mode="json", by_alias=True)
-        session.doc_text = to_plain_text(result.document)
+        session.doc_text = to_plain_text(result.document, include_resource_data=False)
         app_v2.store.put(session)
     return result.model_dump(mode="json", by_alias=True, exclude_none=True)
 

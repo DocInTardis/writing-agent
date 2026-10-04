@@ -6,12 +6,11 @@ This module belongs to `writing_agent.web.services` in the writing-agent codebas
 from __future__ import annotations
 
 import logging
-logger = logging.getLogger(__name__)
-
 import io
 import os
 import re
 import tempfile
+from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -21,9 +20,240 @@ from fastapi.responses import Response, StreamingResponse
 
 from .base import app_v2_module
 
+logger = logging.getLogger(__name__)
+
 
 class ExportService:
     _SINGLE_DOCX_BACKEND_MODE = "single_parsed"
+
+    @staticmethod
+    def _unchanged_imported_docx(session) -> bytes | None:
+        """Return the original DOCX when its canonical V3 content is unchanged."""
+        expected = str(getattr(session, "import_source_fingerprint", "") or "")
+        raw_v3 = getattr(session, "document_v3", None)
+        if not expected or not isinstance(raw_v3, dict):
+            return None
+        try:
+            from writing_agent.v3.docx_import import document_v3_fingerprint
+
+            if document_v3_fingerprint(raw_v3) != expected:
+                return None
+            app_v2 = app_v2_module()
+            source_path = app_v2.store.source_document_path(session.id)
+            return source_path.read_bytes() if source_path is not None else None
+        except Exception as exc:
+            logger.warning("Could not use lossless imported-DOCX export for %s: %s", session.id, exc)
+            return None
+
+    @staticmethod
+    def _patched_imported_docx(session) -> bytes | None:
+        """Apply editable V3 paragraph/table changes onto the original Word package.
+
+        This preserves cover art, fields, section breaks, drawing anchors and
+        other OOXML details that a text-first rebuild cannot reproduce.
+        """
+        raw_v3 = getattr(session, "document_v3", None)
+        if not isinstance(raw_v3, dict) or not str(getattr(session, "import_source_fingerprint", "") or ""):
+            return None
+        app_v2 = app_v2_module()
+        source_path = app_v2.store.source_document_path(session.id)
+        if source_path is None:
+            return None
+        try:
+            from docx import Document
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.oxml import OxmlElement
+            from docx.shared import Pt, RGBColor
+            from writing_agent.v3 import DocumentV3
+
+            model = DocumentV3.model_validate(raw_v3)
+            document = Document(str(source_path))
+            original_paragraphs = list(document.paragraphs)
+            original_tables = list(document.tables)
+            styles = {style.id: style for style in model.styles}
+
+            def inline_text(block) -> str:
+                pieces: list[str] = []
+                for node in block.content:
+                    node_type = getattr(node, "type", "")
+                    if node_type == "text":
+                        pieces.append(str(getattr(node, "text", "") or ""))
+                    elif node_type == "hardBreak":
+                        pieces.append("\n")
+                return "".join(pieces)
+
+            def apply_inline(paragraph, block) -> None:
+                desired = inline_text(block)
+                if paragraph.text == desired:
+                    return
+                preserved_drawings = [
+                    deepcopy(node)
+                    for node in paragraph._p.xpath(".//w:drawing | .//w:pict")
+                ]
+                p_pr = paragraph._p.pPr
+                for child in list(paragraph._p):
+                    if child is not p_pr:
+                        paragraph._p.remove(child)
+                for node in block.content:
+                    node_type = getattr(node, "type", "")
+                    if node_type == "hardBreak":
+                        paragraph.add_run().add_break()
+                        continue
+                    if node_type != "text":
+                        continue
+                    run = paragraph.add_run(str(getattr(node, "text", "") or ""))
+                    for mark in list(getattr(node, "marks", []) or []):
+                        mark_type = str(mark.get("type") or "")
+                        attrs = mark.get("attrs") if isinstance(mark.get("attrs"), dict) else {}
+                        if mark_type == "bold":
+                            run.bold = True
+                        elif mark_type == "italic":
+                            run.italic = True
+                        elif mark_type == "underline":
+                            run.underline = True
+                        elif mark_type == "strike":
+                            run.font.strike = True
+                        elif mark_type == "subscript":
+                            run.font.subscript = True
+                        elif mark_type == "superscript":
+                            run.font.superscript = True
+                        elif mark_type == "textStyle":
+                            if attrs.get("fontFamily"):
+                                run.font.name = str(attrs["fontFamily"])
+                            size = str(attrs.get("fontSize") or "").removesuffix("pt")
+                            try:
+                                if size:
+                                    run.font.size = Pt(float(size))
+                            except ValueError:
+                                pass
+                            color = str(attrs.get("color") or "").lstrip("#")
+                            if re.fullmatch(r"[0-9A-Fa-f]{6}", color):
+                                run.font.color.rgb = RGBColor.from_string(color.upper())
+                for drawing in preserved_drawings:
+                    paragraph.add_run()._r.append(drawing)
+
+            def apply_paragraph_format(paragraph, block) -> None:
+                style = styles.get(str(block.style_id or ""))
+                if style is not None:
+                    for candidate in (style.name, style.id):
+                        try:
+                            paragraph.style = candidate
+                            break
+                        except (KeyError, ValueError):
+                            continue
+                attrs = block.attrs or {}
+                alignment = str(attrs.get("textAlign") or "")
+                paragraph.alignment = {
+                    "left": WD_ALIGN_PARAGRAPH.LEFT,
+                    "center": WD_ALIGN_PARAGRAPH.CENTER,
+                    "right": WD_ALIGN_PARAGRAPH.RIGHT,
+                    "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+                }.get(alignment, paragraph.alignment)
+                fmt = paragraph.paragraph_format
+                numeric_fields = {
+                    "spaceBeforePt": "space_before",
+                    "spaceAfterPt": "space_after",
+                }
+                for key, attr_name in numeric_fields.items():
+                    if attrs.get(key) is not None:
+                        setattr(fmt, attr_name, Pt(float(attrs[key])))
+                if attrs.get("lineSpacing") is not None:
+                    fmt.line_spacing = float(attrs["lineSpacing"])
+                for key, attr_name in (("keepWithNext", "keep_with_next"), ("keepLinesTogether", "keep_together"), ("pageBreakBefore", "page_break_before")):
+                    if attrs.get(key) is not None:
+                        setattr(fmt, attr_name, bool(attrs[key]))
+
+            def iter_main_blocks(blocks):
+                for block in blocks:
+                    if block.type in {"paragraph", "heading"}:
+                        yield block
+                    elif block.type in {"bulletList", "orderedList", "listItem", "blockquote"}:
+                        yield from iter_main_blocks([item for item in block.content if hasattr(item, "type")])
+
+            paragraph_blocks = [block for section in model.sections for block in iter_main_blocks(section.content)]
+            def iter_all_blocks(blocks):
+                for block in blocks:
+                    yield block
+                    children = getattr(block, "content", [])
+                    yield from iter_all_blocks([item for item in children if hasattr(item, "content")])
+
+            represented_now: set[int] = {
+                int(block.attrs["sourceParagraphIndex"])
+                for section in model.sections
+                for block in iter_all_blocks(section.content)
+                if isinstance(block.attrs.get("sourceParagraphIndex"), int)
+            }
+            for block in paragraph_blocks:
+                source_index = block.attrs.get("sourceParagraphIndex")
+                if isinstance(source_index, int) and 0 <= source_index < len(original_paragraphs):
+                    paragraph = original_paragraphs[source_index]
+                    apply_inline(paragraph, block)
+                    apply_paragraph_format(paragraph, block)
+
+            represented_before = {
+                int(value)
+                for value in list(model.metadata.get("representedParagraphs") or [])
+                if isinstance(value, int) or str(value).isdigit()
+            }
+            for source_index in sorted(represented_before - represented_now, reverse=True):
+                if 0 <= source_index < len(original_paragraphs):
+                    element = original_paragraphs[source_index]._p
+                    element.getparent().remove(element)
+
+            # New paragraphs have no source index. Insert them relative to the
+            # nearest imported paragraph so editor order remains deterministic.
+            for position, block in enumerate(paragraph_blocks):
+                if isinstance(block.attrs.get("sourceParagraphIndex"), int):
+                    continue
+                next_source = next(
+                    (
+                        candidate.attrs.get("sourceParagraphIndex")
+                        for candidate in paragraph_blocks[position + 1 :]
+                        if isinstance(candidate.attrs.get("sourceParagraphIndex"), int)
+                    ),
+                    None,
+                )
+                new_p = OxmlElement("w:p")
+                if isinstance(next_source, int) and 0 <= next_source < len(original_paragraphs):
+                    original_paragraphs[next_source]._p.addprevious(new_p)
+                else:
+                    body = document.element.body
+                    sect_pr = body.sectPr
+                    if sect_pr is not None:
+                        sect_pr.addprevious(new_p)
+                    else:
+                        body.append(new_p)
+                from docx.text.paragraph import Paragraph
+
+                paragraph = Paragraph(new_p, document)
+                apply_inline(paragraph, block)
+                apply_paragraph_format(paragraph, block)
+
+            for section in model.sections:
+                for block in section.content:
+                    if block.type != "table":
+                        continue
+                    source_index = block.attrs.get("sourceTableIndex")
+                    if not isinstance(source_index, int) or not 0 <= source_index < len(original_tables):
+                        continue
+                    raw_table = block.attrs.get("table") if isinstance(block.attrs.get("table"), dict) else {}
+                    cells = raw_table.get("cells") if isinstance(raw_table.get("cells"), list) else []
+                    table = original_tables[source_index]
+                    for row_index, row in enumerate(cells):
+                        if row_index >= len(table.rows) or not isinstance(row, list):
+                            continue
+                        for cell_index, cell in enumerate(row):
+                            if cell_index < len(table.rows[row_index].cells) and isinstance(cell, dict):
+                                desired = str(cell.get("text") or "")
+                                if table.rows[row_index].cells[cell_index].text != desired:
+                                    table.rows[row_index].cells[cell_index].text = desired
+
+            output = io.BytesIO()
+            document.save(output)
+            return ExportService._apply_document_v3_styles(output.getvalue(), session)
+        except Exception as exc:
+            logger.warning("Could not patch imported DOCX for %s: %s", session.id, exc)
+            return None
 
     @staticmethod
     def _v3_region_text(session, region: str) -> str:
@@ -219,6 +449,72 @@ class ExportService:
             **{f"heading-{level}": f"Heading {level}" for level in range(1, 7)},
         }
         document = Document(io.BytesIO(payload))
+        numbering_definitions = [item for item in raw.get("numbering", []) if isinstance(item, dict) and item.get("id")]
+        word_num_ids: dict[str, int] = {}
+        if numbering_definitions:
+            numbering_root = document.part.numbering_part.element
+            abstract_ids = [int(value) for value in numbering_root.xpath("./w:abstractNum/@w:abstractNumId") if str(value).isdigit()]
+            number_ids = [int(value) for value in numbering_root.xpath("./w:num/@w:numId") if str(value).isdigit()]
+            next_abstract_id = max(abstract_ids, default=-1) + 1
+            next_num_id = max(number_ids, default=0) + 1
+            format_names = {
+                "bullet": "bullet",
+                "decimal": "decimal",
+                "lowerLetter": "lowerLetter",
+                "upperLetter": "upperLetter",
+                "lowerRoman": "lowerRoman",
+                "upperRoman": "upperRoman",
+            }
+            for definition in numbering_definitions:
+                abstract_id = next_abstract_id
+                num_id = next_num_id
+                next_abstract_id += 1
+                next_num_id += 1
+                abstract = OxmlElement("w:abstractNum")
+                abstract.set(qn("w:abstractNumId"), str(abstract_id))
+                multi = OxmlElement("w:multiLevelType")
+                multi.set(qn("w:val"), "multilevel")
+                abstract.append(multi)
+                for raw_level in sorted((level for level in definition.get("levels", []) if isinstance(level, dict)), key=lambda level: int(level.get("level") or 0)):
+                    level_index = max(0, min(8, int(raw_level.get("level") or 0)))
+                    level = OxmlElement("w:lvl")
+                    level.set(qn("w:ilvl"), str(level_index))
+                    start = OxmlElement("w:start")
+                    start.set(qn("w:val"), str(max(1, int(raw_level.get("startAt") or 1))))
+                    level.append(start)
+                    num_fmt = OxmlElement("w:numFmt")
+                    num_fmt.set(qn("w:val"), format_names.get(str(raw_level.get("format") or "decimal"), "decimal"))
+                    level.append(num_fmt)
+                    level_text = OxmlElement("w:lvlText")
+                    level_text.set(qn("w:val"), str(raw_level.get("bulletChar") or raw_level.get("text") or f"%{level_index + 1}."))
+                    level.append(level_text)
+                    suffix = OxmlElement("w:suff")
+                    suffix.set(qn("w:val"), "tab")
+                    level.append(suffix)
+                    paragraph_properties = OxmlElement("w:pPr")
+                    tabs = OxmlElement("w:tabs")
+                    tab = OxmlElement("w:tab")
+                    tab.set(qn("w:val"), "num")
+                    font_pt = 12.0
+                    left_twips = round(float(raw_level.get("leftIndentEm") or 0) * font_pt * 20)
+                    hanging_twips = round(float(raw_level.get("hangingIndentEm") or 0) * font_pt * 20)
+                    tab.set(qn("w:pos"), str(max(0, left_twips)))
+                    tabs.append(tab)
+                    paragraph_properties.append(tabs)
+                    indent = OxmlElement("w:ind")
+                    indent.set(qn("w:left"), str(max(0, left_twips)))
+                    indent.set(qn("w:hanging"), str(max(0, hanging_twips)))
+                    paragraph_properties.append(indent)
+                    level.append(paragraph_properties)
+                    abstract.append(level)
+                numbering_root.append(abstract)
+                number = OxmlElement("w:num")
+                number.set(qn("w:numId"), str(num_id))
+                abstract_ref = OxmlElement("w:abstractNumId")
+                abstract_ref.set(qn("w:val"), str(abstract_id))
+                number.append(abstract_ref)
+                numbering_root.append(number)
+                word_num_ids[str(definition["id"])] = num_id
         v3_text_blocks: list[str] = []
         for section in raw.get("sections") or []:
             if not isinstance(section, dict):
@@ -333,6 +629,22 @@ class ExportService:
                 if isinstance(tab, dict) and tab.get("alignment") in tab_alignments:
                     fmt.tab_stops.add_tab_stop(Pt(float(tab.get("positionEm") or 0) * font_pt), tab_alignments[tab["alignment"]])
             p_pr = word_style._element.get_or_add_pPr()
+            numbering_id = str(p.get("numberingId") or "")
+            if numbering_id in word_num_ids:
+                num_pr = p_pr.find(qn("w:numPr"))
+                if num_pr is None:
+                    num_pr = OxmlElement("w:numPr")
+                    p_pr.append(num_pr)
+                ilvl = num_pr.find(qn("w:ilvl"))
+                if ilvl is None:
+                    ilvl = OxmlElement("w:ilvl")
+                    num_pr.append(ilvl)
+                ilvl.set(qn("w:val"), str(max(0, min(8, int(p.get("numberingLevel") or 0)))))
+                num_id = num_pr.find(qn("w:numId"))
+                if num_id is None:
+                    num_id = OxmlElement("w:numId")
+                    num_pr.append(num_id)
+                num_id.set(qn("w:val"), str(word_num_ids[numbering_id]))
             if p.get("outlineLevel") is not None:
                 outline = p_pr.find(qn("w:outlineLvl"))
                 if outline is None:
@@ -366,28 +678,49 @@ class ExportService:
                     edge.set(qn("w:sz"), str(border_size))
                     edge.set(qn("w:color"), border_color)
 
-        styled_blocks: list[tuple[str, str]] = []
-        def collect_blocks(nodes) -> None:
+        styled_blocks: list[tuple[str, str, str, int]] = []
+        def collect_blocks(nodes, inherited_numbering_id: str = "", inherited_level: int = 0) -> None:
             for node in nodes or []:
                 if not isinstance(node, dict):
                     continue
                 style_id = str(node.get("styleId") or node.get("style_id") or "")
+                attrs = node.get("attrs") if isinstance(node.get("attrs"), dict) else {}
+                numbering_id = str(attrs.get("numberingId") or attrs.get("numbering_id") or inherited_numbering_id)
+                numbering_level = max(0, min(8, int(attrs.get("numberingLevel") or attrs.get("numbering_level") or inherited_level)))
                 text = node_text(node).strip()
-                if style_id in word_names and text:
-                    styled_blocks.append((text, style_id))
+                if text and (style_id in word_names or numbering_id in word_num_ids) and node.get("type") not in {"bulletList", "orderedList", "listItem"}:
+                    styled_blocks.append((text, style_id, numbering_id, numbering_level))
                 content = node.get("content")
                 if isinstance(content, list) and node.get("type") in {"bulletList", "orderedList", "listItem"}:
-                    collect_blocks(content)
+                    collect_blocks(content, numbering_id, numbering_level)
         for section in raw.get("sections") or []:
             if isinstance(section, dict):
                 collect_blocks(section.get("content") or [])
 
         paragraph_index = 0
-        for text, style_id in styled_blocks:
+        for text, style_id, numbering_id, numbering_level in styled_blocks:
             wanted = re.sub(r"\s+", "", text)
             for index in range(paragraph_index, len(document.paragraphs)):
                 if re.sub(r"\s+", "", document.paragraphs[index].text) == wanted:
-                    document.paragraphs[index].style = document.styles[word_names[style_id]]
+                    paragraph = document.paragraphs[index]
+                    if style_id in word_names:
+                        paragraph.style = document.styles[word_names[style_id]]
+                    if numbering_id in word_num_ids:
+                        p_pr = paragraph._p.get_or_add_pPr()
+                        num_pr = p_pr.find(qn("w:numPr"))
+                        if num_pr is None:
+                            num_pr = OxmlElement("w:numPr")
+                            p_pr.append(num_pr)
+                        ilvl = num_pr.find(qn("w:ilvl"))
+                        if ilvl is None:
+                            ilvl = OxmlElement("w:ilvl")
+                            num_pr.append(ilvl)
+                        ilvl.set(qn("w:val"), str(numbering_level))
+                        num_id = num_pr.find(qn("w:numId"))
+                        if num_id is None:
+                            num_id = OxmlElement("w:numId")
+                            num_pr.append(num_id)
+                        num_id.set(qn("w:val"), str(word_num_ids[numbering_id]))
                     paragraph_index = index + 1
                     break
         output = io.BytesIO()
@@ -397,6 +730,19 @@ class ExportService:
     @staticmethod
     def _compact_for_compare(text: str) -> str:
         return re.sub(r"\s+", "", str(text or ""))
+
+    @staticmethod
+    def _document_v3_export_text(session, fallback: str) -> str:
+        raw = getattr(session, "document_v3", None)
+        if not isinstance(raw, dict):
+            return fallback
+        try:
+            from writing_agent.v3 import DocumentV3
+            from writing_agent.v3.document_model import to_plain_text
+
+            return to_plain_text(DocumentV3.model_validate(raw), include_resource_data=True) or fallback
+        except Exception:
+            return fallback
 
     @staticmethod
     def _canonicalize_docx_payload(payload: bytes) -> tuple[bytes, str]:
@@ -472,12 +818,35 @@ class ExportService:
         use_autofix = bool(app_v2._strict_doc_format_enabled(session))
         quality = app_v2._export_quality_report(session, base_text, auto_fix=use_autofix)
         app_v2._raise_export_blocking_error(quality)
+        original_payload = self._unchanged_imported_docx(session)
+        imported_payload = original_payload or self._patched_imported_docx(session)
+        if imported_payload is not None:
+            issues = app_v2._validate_docx_bytes(imported_payload)
+            if issues and self._docx_validation_enforce_enabled():
+                raise app_v2.HTTPException(status_code=500, detail=f"DOCX导出失败：原文档结构校验未通过（{';'.join(issues[:4])}）")
+            filename = str(getattr(session, "import_source_name", "") or session.title or "document.docx")
+            if not filename.lower().endswith(".docx"):
+                filename += ".docx"
+            filename = re.sub(r'[\r\n"]+', "", filename)
+            safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", filename) or "document.docx"
+            quoted = quote(filename, safe="")
+            return StreamingResponse(
+                io.BytesIO(imported_payload),
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{safe_name}"; filename*=UTF-8\'\'{quoted}',
+                    "X-Docx-Export-Backend": "lossless_import_roundtrip" if original_payload is not None else "structured_import_patch",
+                    "X-Docx-Style-Path": "source_document" if original_payload is not None else "source_document_patch",
+                    "X-Docx-Validation": "warning" if issues else "ok",
+                },
+            )
         fixed_text = str(quality.get("fixed_text") or base_text)
         if fixed_text and fixed_text != base_text:
             base_text = fixed_text
             if app_v2._persist_export_autofix_enabled():
                 app_v2._set_doc_text(session, fixed_text)
                 app_v2.store.put(session)
+        base_text = self._document_v3_export_text(session, base_text)
         doc_ir = None
         if session.doc_ir:
             try:
@@ -579,7 +948,8 @@ class ExportService:
         session = app_v2.store.get(doc_id)
         if session is None:
             raise app_v2.HTTPException(status_code=404, detail="document not found")
-        base_text = app_v2._safe_doc_text(session)
+        original_docx = self._unchanged_imported_docx(session) or self._patched_imported_docx(session)
+        base_text = self._document_v3_export_text(session, app_v2._safe_doc_text(session))
         doc_ir = None
         if session.doc_ir:
             try:
@@ -598,8 +968,9 @@ class ExportService:
         fmt = app_v2._formatting_from_session(session)
         prefs = app_v2._export_prefs_from_session(session)
         template_path = app_v2._resolve_export_template_path(session)
-        docx_bytes = app_v2.docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
-        docx_bytes = self._apply_document_v3_styles(docx_bytes, session)
+        docx_bytes = original_docx or app_v2.docx_exporter.build_from_parsed(parsed, fmt, prefs, template_path=template_path or None)
+        if original_docx is None:
+            docx_bytes = self._apply_document_v3_styles(docx_bytes, session)
         issues = app_v2._validate_docx_bytes(docx_bytes)
         if issues and self._docx_validation_enforce_enabled():
             raise app_v2.HTTPException(

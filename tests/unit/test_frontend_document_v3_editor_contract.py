@@ -48,7 +48,9 @@ def test_export_flushes_current_editor_state_before_preflight() -> None:
 def test_context_toolbar_requires_a_real_selection() -> None:
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
 
-    assert "const exposedBlocks = empty ? [] : blocks" in editor
+    assert "const exposedBlocks = blockSelectionActive ? blocks : []" in editor
+    assert "selectionToolbarVisible = !empty" in editor
+    assert "&& !blockSelectionActive" in editor
     assert "blocks: exposedBlocks.map" in editor
     assert "instanceof CellSelection" in editor
 

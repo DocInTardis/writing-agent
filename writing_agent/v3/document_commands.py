@@ -203,6 +203,21 @@ def _apply_style(document: DocumentV3, command: DocumentCommand) -> tuple[bool, 
     style_id = str(command.params.get("style_id") or "").strip()
     if style_id not in {style.id for style in document.styles}:
         raise ValueError(f"unknown style: {style_id}")
+    styles = {style.id: style for style in document.styles}
+
+    def resolved_properties(current_id: str, visiting: set[str] | None = None) -> dict[str, Any]:
+        visiting = set(visiting or ())
+        if current_id in visiting or current_id not in styles:
+            return {}
+        visiting.add(current_id)
+        current = styles[current_id]
+        inherited = resolved_properties(current.based_on, visiting) if current.based_on else {}
+        own = current.properties.model_dump(by_alias=True, exclude_none=True)
+        return {**inherited, **own}
+
+    style_properties = resolved_properties(style_id)
+    numbering_id = str(style_properties.get("numberingId") or "")
+    numbering_level = int(style_properties.get("numberingLevel") or 0)
     changed: list[str] = []
     for block in _target_blocks(document, command):
         if block.type not in {"paragraph", "heading", "blockquote", "listItem"}:
@@ -215,6 +230,9 @@ def _apply_style(document: DocumentV3, command: DocumentCommand) -> tuple[bool, 
             elif style_id == "normal" and block.type == "heading":
                 block.type = "paragraph"
                 block.attrs.pop("level", None)
+            if numbering_id:
+                block.attrs["numberingId"] = numbering_id
+                block.attrs["numberingLevel"] = max(0, min(8, numbering_level))
             changed.append(block.id)
     return bool(changed), changed
 
@@ -231,6 +249,13 @@ def _set_paragraph_format(document: DocumentV3, command: DocumentCommand) -> tup
         "keep_with_next",
         "keep_lines_together",
         "page_break_before",
+        "border_color",
+        "border_width_pt",
+        "border_style",
+        "shading_color",
+        "tab_stops",
+        "numbering_id",
+        "numbering_level",
     }
     patch = {key: deepcopy(value) for key, value in command.params.items() if key in allowed}
     if not patch:
@@ -244,6 +269,67 @@ def _set_paragraph_format(document: DocumentV3, command: DocumentCommand) -> tup
         before = deepcopy(direct)
         direct.update(patch)
         if direct != before:
+            changed.append(block.id)
+    return bool(changed), changed
+
+
+def _upsert_numbering(document: DocumentV3, command: DocumentCommand) -> tuple[bool, list[str]]:
+    if command.target.kind != "document":
+        raise ValueError("upsert_numbering requires a document target")
+    raw = command.params.get("numbering")
+    if not isinstance(raw, dict):
+        raise ValueError("numbering definition is required")
+    numbering_id = str(raw.get("id") or "").strip()
+    name = str(raw.get("name") or "").strip()
+    levels = raw.get("levels")
+    if not numbering_id or not name or not isinstance(levels, list) or not levels:
+        raise ValueError("numbering id, name and levels are required")
+    normalized_levels: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    formats = {"bullet", "decimal", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman"}
+    for raw_level in levels:
+        if not isinstance(raw_level, dict):
+            raise ValueError("numbering level must be an object")
+        level = int(raw_level.get("level", -1))
+        number_format = str(raw_level.get("format") or "")
+        if level < 0 or level > 8 or level in seen or number_format not in formats:
+            raise ValueError("invalid or duplicate numbering level")
+        seen.add(level)
+        normalized_levels.append(
+            {
+                "level": level,
+                "format": number_format,
+                "text": str(raw_level.get("text") or ("•" if number_format == "bullet" else f"%{level + 1}.")),
+                "startAt": max(1, int(raw_level.get("startAt") or 1)),
+                "leftIndentEm": max(0.0, float(raw_level.get("leftIndentEm") or 0)),
+                "hangingIndentEm": max(0.0, float(raw_level.get("hangingIndentEm") or 0)),
+                **({"bulletChar": str(raw_level.get("bulletChar") or raw_level.get("text") or "•")} if number_format == "bullet" else {}),
+            }
+        )
+    definition = {"id": numbering_id, "name": name, "levels": sorted(normalized_levels, key=lambda item: item["level"])}
+    index = next((idx for idx, item in enumerate(document.numbering) if str(item.get("id") or "") == numbering_id), -1)
+    if index >= 0:
+        if document.numbering[index] == definition:
+            return False, []
+        document.numbering[index] = definition
+    else:
+        document.numbering.append(definition)
+    return True, []
+
+
+def _apply_numbering(document: DocumentV3, command: DocumentCommand) -> tuple[bool, list[str]]:
+    numbering_id = str(command.params.get("numbering_id") or "").strip()
+    level = max(0, min(8, int(command.params.get("level") or 0)))
+    if numbering_id not in {str(item.get("id") or "") for item in document.numbering}:
+        raise ValueError(f"unknown numbering: {numbering_id}")
+    changed: list[str] = []
+    for block in _target_blocks(document, command):
+        if block.type not in {"paragraph", "heading", "listItem", "bulletList", "orderedList"}:
+            raise ValueError(f"numbering cannot be applied to {block.type}")
+        before = (block.attrs.get("numberingId"), block.attrs.get("numberingLevel"))
+        block.attrs["numberingId"] = numbering_id
+        block.attrs["numberingLevel"] = level
+        if before != (numbering_id, level):
             changed.append(block.id)
     return bool(changed), changed
 
@@ -462,6 +548,8 @@ def create_default_registry() -> DocumentCommandRegistry:
     registry.register("set_paragraph_format", _set_paragraph_format)
     registry.register("upsert_style", _upsert_style)
     registry.register("delete_style", _delete_style)
+    registry.register("upsert_numbering", _upsert_numbering)
+    registry.register("apply_numbering", _apply_numbering)
     registry.register("replace_text", _replace_text)
     registry.register("replace_blocks", _replace_blocks)
     registry.register("insert_blocks", _insert_blocks)

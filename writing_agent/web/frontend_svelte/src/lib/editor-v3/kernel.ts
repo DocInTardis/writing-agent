@@ -188,6 +188,26 @@ const StableNodeAttributes = Extension.create({
             }
           }
         }
+      },
+      {
+        types: ['bulletList', 'orderedList'],
+        attributes: {
+          numberingId: {
+            default: null,
+            parseHTML: (element) => element.getAttribute('data-numbering-id'),
+            renderHTML: (attributes) => attributes.numberingId ? { 'data-numbering-id': attributes.numberingId } : {}
+          },
+          numberingLevel: {
+            default: 0,
+            parseHTML: (element) => Number(element.getAttribute('data-numbering-level') || 0),
+            renderHTML: (attributes) => ({ 'data-numbering-level': String(Math.max(0, Math.min(8, Number(attributes.numberingLevel || 0)))) })
+          },
+          restartNumbering: {
+            default: false,
+            parseHTML: (element) => element.getAttribute('data-restart-numbering') === 'true',
+            renderHTML: (attributes) => attributes.restartNumbering ? { 'data-restart-numbering': 'true' } : {}
+          }
+        }
       }
     ]
   }
@@ -1124,7 +1144,45 @@ function cssForStyle(doc: DocumentV3, style: StyleDefinition): string {
 }
 
 export function styleSheetForDocument(doc: DocumentV3): string {
-  return doc.styles.map((style) => `[data-style-id="${style.id}"]{${cssForStyle(doc, style)}}`).join('\n')
+  const styles = doc.styles.map((style) => `[data-style-id="${style.id}"]{${cssForStyle(doc, style)}}`)
+  const numbering = (doc.numbering || []).flatMap((definition) => definition.levels.map((level) => {
+    const selector = `[data-numbering-id="${definition.id}"][data-numbering-level="${level.level}"]`
+    const listStyle = level.format === 'bullet'
+      ? 'none'
+      : ({ decimal: 'decimal', lowerLetter: 'lower-alpha', upperLetter: 'upper-alpha', lowerRoman: 'lower-roman', upperRoman: 'upper-roman' } as Record<string, string>)[level.format] || 'decimal'
+    const rules = `${selector}{list-style-type:${listStyle};padding-left:${Math.max(0, level.leftIndentEm)}em}`
+    const marker = level.format === 'bullet' ? `${selector}>li::marker{content:"${String(level.bulletChar || level.text || '•').replace(/"/g, '\\"')}  "}` : ''
+    return [rules, marker].filter(Boolean)
+  }))
+  const styleNumbering: string[] = []
+  for (const definition of doc.numbering || []) {
+    const counterBase = `wa-${String(definition.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`
+    const linked = doc.styles
+      .map((style) => ({ style, properties: resolvedStyleProperties(doc, style.id) }))
+      .filter((item) => item.properties.numberingId === definition.id)
+    if (!linked.length) continue
+    styleNumbering.push(`.ProseMirror{counter-reset:${definition.levels.map((level) => `${counterBase}-${level.level}`).join(' ')}}`)
+    for (const { style, properties } of linked) {
+      const levelIndex = Math.max(0, Math.min(8, Number(properties.numberingLevel || 0)))
+      const level = definition.levels.find((candidate) => candidate.level === levelIndex) || definition.levels[0]
+      if (!level) continue
+      const selector = `[data-style-id="${style.id}"]`
+      const deeper = definition.levels.filter((candidate) => candidate.level > levelIndex).map((candidate) => `${counterBase}-${candidate.level}`).join(' ')
+      styleNumbering.push(`${selector}{counter-increment:${counterBase}-${levelIndex}${deeper ? `;counter-reset:${deeper}` : ''}}`)
+      if (level.format === 'bullet') {
+        const bullet = String(level.bulletChar || level.text || '•').replace(/(["\\])/g, '\\$1')
+        styleNumbering.push(`${selector}::before{content:"${bullet} ";display:inline-block;margin-right:.35em;text-indent:0}`)
+        continue
+      }
+      const counterFormat = ({ decimal: 'decimal', lowerLetter: 'lower-alpha', upperLetter: 'upper-alpha', lowerRoman: 'lower-roman', upperRoman: 'upper-roman' } as Record<string, string>)[level.format] || 'decimal'
+      const prefix = definition.levels
+        .filter((candidate) => candidate.level <= levelIndex)
+        .map((candidate) => `counter(${counterBase}-${candidate.level},${candidate.level === levelIndex ? counterFormat : 'decimal'})`)
+        .join(' "." ')
+      styleNumbering.push(`${selector}::before{content:${prefix} ". ";display:inline-block;margin-right:.35em;text-indent:0}`)
+    }
+  }
+  return [...styles, ...numbering, ...styleNumbering].join('\n')
 }
 
 export function createEditorKernel(options: {

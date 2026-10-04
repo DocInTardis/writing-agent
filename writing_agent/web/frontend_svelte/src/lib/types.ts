@@ -92,6 +92,7 @@ export type EditorCommand =
   | 'track-changes'
   | 'review-revisions'
   | 'markdown-import'
+  | 'word-import'
   | 'markdown-export'
   | 'view-shortcuts'
   | 'style-manager'

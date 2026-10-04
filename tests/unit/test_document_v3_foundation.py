@@ -158,6 +158,50 @@ def test_word_style_properties_round_trip_through_the_canonical_model() -> None:
     assert properties.tab_stops == [{"positionEm": 4, "alignment": "left"}]
 
 
+def test_ai_can_define_and_apply_multilevel_numbering() -> None:
+    registry = create_default_registry()
+    document = migrate_doc_ir(_legacy_doc())
+    created = registry.execute(
+        document,
+        DocumentCommand(
+            type="upsert_numbering",
+            target=CommandTarget(kind="document"),
+            params={
+                "numbering": {
+                    "id": "thesis-outline",
+                    "name": "论文标题编号",
+                    "levels": [
+                        {"level": 0, "format": "decimal", "text": "%1", "startAt": 1, "leftIndentEm": 0, "hangingIndentEm": 0},
+                        {"level": 1, "format": "decimal", "text": "%1.%2", "startAt": 1, "leftIndentEm": 2, "hangingIndentEm": 0},
+                    ],
+                }
+            },
+            source="ai",
+        ),
+    )
+    assert created.ok and created.document is not None
+    applied = registry.execute(
+        created.document,
+        DocumentCommand(
+            type="apply_numbering",
+            target=CommandTarget(kind="nodes", node_ids=["paragraph-1"]),
+            params={"numbering_id": "thesis-outline", "level": 1},
+            source="ai",
+        ),
+    )
+    assert applied.ok and applied.document is not None
+    block = applied.document.sections[0].content[1]
+    assert block.attrs["numberingId"] == "thesis-outline"
+    assert block.attrs["numberingLevel"] == 1
+
+
+def test_default_document_has_editable_bullet_number_and_outline_definitions() -> None:
+    document = migrate_doc_ir(None)
+    definitions = {item["id"]: item for item in document.numbering}
+    assert {"bullet-default", "decimal-default", "outline-headings"} <= definitions.keys()
+    assert len(definitions["outline-headings"]["levels"]) == 9
+
+
 def test_plain_text_bridge_preserves_structured_tables_for_export() -> None:
     document = migrate_doc_ir(_legacy_doc())
     document.sections[0].content.append(

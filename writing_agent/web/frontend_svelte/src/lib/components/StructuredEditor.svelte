@@ -2,10 +2,11 @@
   import { get } from 'svelte/store'
   import { onDestroy, onMount, untrack } from 'svelte'
   import type { Editor, JSONContent } from '@tiptap/core'
-  import { NodeSelection } from '@tiptap/pm/state'
+  import { NodeSelection, TextSelection } from '@tiptap/pm/state'
   import { CellSelection } from '@tiptap/pm/tables'
 
   import {
+    docId,
     docIr,
     docIrDirty,
     documentV3,
@@ -24,7 +25,7 @@
     styleSheetForDocument,
     tiptapToDocumentV3
   } from '../editor-v3/kernel'
-  import { DEFAULT_STYLES, cloneJson, isDocumentV3, migrateLegacyDocIr, refreshDocumentFields, resolvedStyleProperties, type DocumentV3, type StyleDefinition, type StyleProperties } from '../editor-v3/model'
+  import { DEFAULT_NUMBERING, DEFAULT_STYLES, cloneJson, isDocumentV3, migrateLegacyDocIr, refreshDocumentFields, resolvedStyleProperties, type DocumentV3, type StyleDefinition, type StyleProperties } from '../editor-v3/model'
   import { documentV3ToMarkdown, replaceDocumentContentFromMarkdown } from '../editor-v3/markdown'
   import { addDocumentComment, buildRevision, resolveDocumentComment, settleRevision, type DocumentRevision } from '../editor-v3/revisions'
   import { paginateDocumentV3 } from '../engine/documentEngine'
@@ -106,6 +107,7 @@
   let proofPanelVisible = $state(false)
   let proofIssues = $state<Array<{ id: string; message: string; excerpt: string; from: number; to: number }>>([])
   let markdownInput: HTMLInputElement
+  let wordInput: HTMLInputElement
   let imageInput: HTMLInputElement
   let markdownExportVisible = $state(false)
   let markdownExportText = $state('')
@@ -127,7 +129,7 @@
   let managedBackgroundColor = $state('')
   let managedLetterSpacingPt: number | '' = $state('')
   let managedTextTransform: '' | 'none' | 'uppercase' | 'lowercase' | 'capitalize' = $state('')
-  let managedAlignment = $state<'left' | 'center' | 'right' | 'justify'>('left')
+  let managedAlignment = $state<'' | 'left' | 'center' | 'right' | 'justify'>('')
   let managedLineSpacing: number | '' = $state('')
   let managedFirstLineIndentEm: number | '' = $state('')
   let managedLeftIndentEm: number | '' = $state('')
@@ -143,6 +145,8 @@
   let managedBorderStyle: '' | 'none' | 'solid' | 'dashed' | 'double' = $state('')
   let managedShadingColor = $state('')
   let managedTabStops = $state('')
+  let managedNumberingId = $state('')
+  let managedNumberingLevel: number | '' = $state('')
   let creatingStyle = $state(false)
   let styleManagerNotice = $state('')
   let styleRevision = $state(0)
@@ -504,7 +508,7 @@
     managedBackgroundColor = properties.backgroundColor || ''
     managedLetterSpacingPt = properties.letterSpacingPt ?? ''
     managedTextTransform = properties.textTransform || ''
-    managedAlignment = properties.alignment || 'left'
+    managedAlignment = properties.alignment || ''
     managedLineSpacing = properties.lineSpacing ?? ''
     managedFirstLineIndentEm = properties.firstLineIndentEm ?? ''
     managedLeftIndentEm = properties.leftIndentEm ?? ''
@@ -520,6 +524,8 @@
     managedBorderStyle = properties.borderStyle || ''
     managedShadingColor = properties.shadingColor || ''
     managedTabStops = (properties.tabStops || []).map((tab) => `${tab.positionEm}:${tab.alignment}`).join(', ')
+    managedNumberingId = properties.numberingId || ''
+    managedNumberingLevel = properties.numberingLevel ?? ''
     creatingStyle = false
     styleManagerNotice = ''
   }
@@ -543,7 +549,7 @@
     const letterSpacing = Number.parseFloat(String(textAttrs.letterSpacing || ''))
     managedLetterSpacingPt = Number.isFinite(letterSpacing) ? letterSpacing * 0.75 : ''
     managedTextTransform = (textAttrs.textTransform || '') as typeof managedTextTransform
-    managedAlignment = (paragraphAttrs.textAlign || 'left') as typeof managedAlignment
+    managedAlignment = (paragraphAttrs.textAlign || '') as typeof managedAlignment
     managedLineSpacing = paragraphAttrs.lineSpacing ?? ''
     managedFirstLineIndentEm = paragraphAttrs.firstLineIndentEm ?? ''
     managedLeftIndentEm = paragraphAttrs.leftIndentEm ?? ''
@@ -559,6 +565,8 @@
     managedBorderStyle = paragraphAttrs.borderStyle || ''
     managedShadingColor = paragraphAttrs.shadingColor || ''
     managedTabStops = ''
+    managedNumberingId = ''
+    managedNumberingLevel = ''
     creatingStyle = true
     styleManagerNotice = '正在基于当前段落创建样式。'
   }
@@ -615,7 +623,7 @@
       backgroundColor: managedBackgroundColor || undefined,
       letterSpacingPt: numberProperty(managedLetterSpacingPt),
       textTransform: managedTextTransform || undefined,
-      alignment: managedAlignment,
+      alignment: managedAlignment || undefined,
       lineSpacing: numberProperty(managedLineSpacing),
       firstLineIndentEm: numberProperty(managedFirstLineIndentEm),
       leftIndentEm: numberProperty(managedLeftIndentEm),
@@ -630,20 +638,25 @@
       borderWidthPt: numberProperty(managedBorderWidthPt),
       borderStyle: managedBorderStyle || undefined,
       shadingColor: managedShadingColor || undefined,
-      tabStops: parseTabStops(managedTabStops)
+      tabStops: parseTabStops(managedTabStops),
+      numberingId: managedNumberingId || undefined,
+      numberingLevel: managedNumberingId ? numberProperty(managedNumberingLevel) ?? 0 : undefined
     }
     const ranges: Array<[keyof StyleProperties, number, number, string]> = [
       ['fontSizePt', 6, 96, '字号'], ['letterSpacingPt', -5, 30, '字间距'],
       ['lineSpacing', 0.8, 4, '行距'], ['firstLineIndentEm', -10, 20, '首行缩进'],
       ['leftIndentEm', -10, 40, '左缩进'], ['rightIndentEm', -10, 40, '右缩进'],
       ['spaceBeforePt', 0, 144, '段前'], ['spaceAfterPt', 0, 144, '段后'],
-      ['outlineLevel', 0, 9, '大纲级别'], ['borderWidthPt', 0, 12, '边框宽度']
+      ['outlineLevel', 0, 9, '大纲级别'], ['borderWidthPt', 0, 12, '边框宽度'],
+      ['numberingLevel', 0, 8, '编号级别']
     ]
     for (const [key, min, max, label] of ranges) {
       const value = properties[key]
       if (typeof value === 'number' && (value < min || value > max)) throw new Error(`${label}必须在 ${min}–${max} 之间。`)
     }
     if (properties.outlineLevel !== undefined && !Number.isInteger(properties.outlineLevel)) throw new Error('大纲级别必须是整数。')
+    if (properties.numberingLevel !== undefined && !Number.isInteger(properties.numberingLevel)) throw new Error('编号级别必须是整数。')
+    if (properties.numberingId && !activeDocument?.numbering.some((definition) => definition.id === properties.numberingId)) throw new Error('选择的编号定义不存在。')
     for (const [value, label] of [[properties.color, '文字颜色'], [properties.backgroundColor, '文字底色'], [properties.borderColor, '边框颜色'], [properties.shadingColor, '段落底纹']] as const) {
       if (value && !/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`${label}必须使用 #RRGGBB 格式。`)
     }
@@ -747,7 +760,7 @@
     managedBackgroundColor = properties.backgroundColor || ''
     managedLetterSpacingPt = properties.letterSpacingPt ?? ''
     managedTextTransform = properties.textTransform || ''
-    managedAlignment = properties.alignment || 'left'
+    managedAlignment = properties.alignment || ''
     managedLineSpacing = properties.lineSpacing ?? ''
     managedFirstLineIndentEm = properties.firstLineIndentEm ?? ''
     managedLeftIndentEm = properties.leftIndentEm ?? ''
@@ -763,6 +776,8 @@
     managedBorderStyle = properties.borderStyle || ''
     managedShadingColor = properties.shadingColor || ''
     managedTabStops = (properties.tabStops || []).map((tab) => `${tab.positionEm}:${tab.alignment}`).join(', ')
+    managedNumberingId = properties.numberingId || ''
+    managedNumberingLevel = properties.numberingLevel ?? ''
     styleManagerNotice = `正在复制“${source.name}”。`
   }
 
@@ -811,7 +826,14 @@
       saveManagedStyle()
       if (creatingStyle) return
     }
-    executeDocumentCommand(editor, createUserCommand('apply_style', { styleId: managedStyleId }))
+    const properties = activeDocument ? resolvedStyleProperties(activeDocument, managedStyleId) : {}
+    const numbering = activeDocument?.numbering.find((definition) => definition.id === properties.numberingId)
+    executeDocumentCommand(editor, createUserCommand('apply_style', {
+      styleId: managedStyleId,
+      numberingId: numbering?.id || '',
+      numberingLevel: properties.numberingLevel ?? 0,
+      numberingFormat: numbering?.levels[properties.numberingLevel ?? 0]?.format || ''
+    }))
     emitSelection()
   }
 
@@ -853,6 +875,28 @@
       markdownNotice = `已导入 ${file.name}：页面设置和样式库继续由 Document V3 管理。`
     } catch (error) {
       markdownNotice = `Markdown 导入失败：${error instanceof Error ? error.message : String(error)}`
+    }
+  }
+
+  async function importWordFile(event: Event) {
+    const input = event.currentTarget as HTMLInputElement
+    const file = input.files?.[0]
+    input.value = ''
+    const currentDocId = get(docId)
+    if (!file || !currentDocId) return
+    markdownNotice = '正在读取 Word 文档结构…'
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const response = await fetch(`/api/doc/${encodeURIComponent(currentDocId)}/import`, { method: 'POST', body })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !isDocumentV3(result.document_v3)) throw new Error(String(result.detail || 'Word 导入失败'))
+      const next = cloneJson(result.document_v3 as DocumentV3)
+      loadDocument(next)
+      const imported = result.imported || {}
+      markdownNotice = `已导入 Word：${Number(imported.paragraphs || 0)} 段、${Number(imported.tables || 0)} 个表格、${Number(imported.styles || 0)} 个样式。`
+    } catch (error) {
+      markdownNotice = error instanceof Error ? error.message : String(error)
     }
   }
 
@@ -966,6 +1010,44 @@
   }
 
   function handleShellKeyDown(event: KeyboardEvent) {
+    if (!editor) return
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'Space') {
+      event.preventDefault()
+      const current = selectedBlocks(editor)[0]
+      if (current && selectBlock(editor, current.id)) {
+        blockSelectionAnchorId = current.id
+        blockSelectionActive = true
+        emitSelection(true)
+      }
+      return
+    }
+    if (blockSelectionActive && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault()
+      const ids: string[] = []
+      editor.state.doc.forEach((node) => {
+        const id = String(node.attrs?.nodeId || '')
+        if (id) ids.push(id)
+      })
+      const edgeId = event.key === 'ArrowUp' ? selectedBlockIds[0] : selectedBlockIds[selectedBlockIds.length - 1]
+      const currentIndex = ids.indexOf(edgeId)
+      const targetIndex = Math.max(0, Math.min(ids.length - 1, currentIndex + (event.key === 'ArrowUp' ? -1 : 1)))
+      const targetId = ids[targetIndex]
+      if (targetId && selectBlock(editor, targetId, event.shiftKey ? blockSelectionAnchorId : '')) {
+        if (!event.shiftKey) blockSelectionAnchorId = targetId
+        blockSelectionActive = true
+        emitSelection(true)
+      }
+      return
+    }
+    if (blockSelectionActive && ['Escape', 'Enter', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      event.preventDefault()
+      const target = selectedBlockIds.length ? editor.state.doc.resolve(editor.state.selection.from) : null
+      const position = target ? TextSelection.near(target, event.key === 'ArrowLeft' ? -1 : 1) : editor.state.selection
+      if (position instanceof TextSelection) editor.view.dispatch(editor.state.tr.setSelection(position).scrollIntoView())
+      blockSelectionActive = false
+      emitSelection()
+      return
+    }
     if (!slashMenuVisible) return
     const items = filteredSlashCommands()
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -1047,6 +1129,7 @@
     if (selectBlock(editor, activeBlockId, extend ? blockSelectionAnchorId : '')) {
       if (!extend) blockSelectionAnchorId = activeBlockId
       blockSelectionActive = true
+      emitSelection(true)
       positionBlockHandleById(activeBlockId)
     }
   }
@@ -1203,26 +1286,91 @@
     const cellAttrs = editor.isActive('tableHeader')
       ? editor.getAttributes('tableHeader')
       : editor.getAttributes('tableCell')
-    const textBlocks: Array<Record<string, unknown>> = []
-    editor.state.doc.nodesBetween(selection.from, selection.to || selection.from, (node) => {
-      if (node.isTextblock) textBlocks.push(node.attrs as Record<string, unknown>)
+    const textBlocks: Array<{ attrs: Record<string, unknown>; from: number; to: number }> = []
+    const seenBlocks = new Set<string>()
+    editor.state.doc.nodesBetween(selection.from, selection.to || selection.from, (node, position) => {
+      if (!node.isTextblock) return
+      const key = String(node.attrs.nodeId || position)
+      if (seenBlocks.has(key)) return
+      seenBlocks.add(key)
+      textBlocks.push({ attrs: node.attrs as Record<string, unknown>, from: position + 1, to: position + node.nodeSize - 1 })
     })
-    if (!textBlocks.length && selection.$from.parent.isTextblock) textBlocks.push(selection.$from.parent.attrs as Record<string, unknown>)
-    const mixedFields = ['styleId', 'textAlign', 'lineSpacing', 'firstLineIndentEm', 'leftIndentEm', 'rightIndentEm', 'spaceBeforePt', 'spaceAfterPt']
-      .filter((key) => new Set(textBlocks.map((attrs) => JSON.stringify(attrs[key] ?? null))).size > 1)
+    if (!textBlocks.length && selection.$from.parent.isTextblock) {
+      const start = selection.$from.start()
+      textBlocks.push({ attrs: selection.$from.parent.attrs as Record<string, unknown>, from: start, to: start + selection.$from.parent.content.size })
+    }
+    const unique = (values: unknown[]) => new Set(values.map((value) => JSON.stringify(value ?? null)))
+    const paragraphValue = (block: { attrs: Record<string, unknown> }, key: string) => {
+      const styleId = String(block.attrs.styleId || 'normal')
+      const computed = activeDocument ? resolvedStyleProperties(activeDocument, styleId) : {}
+      if (key === 'styleId') return styleId
+      if (key === 'alignment') return block.attrs.textAlign ?? computed.alignment ?? 'left'
+      return block.attrs[key] ?? computed[key as keyof StyleProperties] ?? null
+    }
+    const paragraphFields = ['styleId', 'alignment', 'lineSpacing', 'firstLineIndentEm', 'leftIndentEm', 'rightIndentEm', 'spaceBeforePt', 'spaceAfterPt', 'keepWithNext', 'keepLinesTogether', 'pageBreakBefore', 'tabStops']
+    const mixedFields = paragraphFields.filter((key) => unique(textBlocks.map((block) => paragraphValue(block, key))).size > 1)
+    const inlineValues: Record<string, unknown[]> = {
+      bold: [], italic: [], underline: [], strike: [], subscript: [], superscript: [],
+      fontFamily: [], fontSize: [], letterSpacing: [], textTransform: [], color: [], backgroundColor: []
+    }
+    for (const block of textBlocks) {
+      const style = activeDocument ? resolvedStyleProperties(activeDocument, String(block.attrs.styleId || 'normal')) : {}
+      const from = selection.empty ? selection.from : Math.max(selection.from, block.from)
+      const to = selection.empty ? selection.from : Math.min(selection.to, block.to)
+      let foundText = false
+      editor.state.doc.nodesBetween(from, Math.max(from, to), (node) => {
+        if (!node.isText) return
+        foundText = true
+        const mark = (name: string) => node.marks.find((candidate) => candidate.type.name === name)
+        const textStyleMark = mark('textStyle')
+        inlineValues.bold.push(Boolean(mark('bold')) || Boolean(style.bold))
+        inlineValues.italic.push(Boolean(mark('italic')) || Boolean(style.italic))
+        inlineValues.underline.push(Boolean(mark('underline')) || Boolean(style.underline))
+        inlineValues.strike.push(Boolean(mark('strike')))
+        inlineValues.subscript.push(Boolean(mark('subscript')))
+        inlineValues.superscript.push(Boolean(mark('superscript')))
+        inlineValues.fontFamily.push(textStyleMark?.attrs.fontFamily || style.fontFamily || '')
+        inlineValues.fontSize.push(textStyleMark?.attrs.fontSize || (style.fontSizePt ? `${style.fontSizePt}pt` : ''))
+        inlineValues.letterSpacing.push(textStyleMark?.attrs.letterSpacing || (style.letterSpacingPt !== undefined ? `${style.letterSpacingPt}pt` : ''))
+        inlineValues.textTransform.push(textStyleMark?.attrs.textTransform || style.textTransform || 'none')
+        inlineValues.color.push(textStyleMark?.attrs.color || style.color || '')
+        inlineValues.backgroundColor.push(mark('highlight')?.attrs.color || style.backgroundColor || '')
+      })
+      if (!foundText) {
+        const stored = editor.state.storedMarks || selection.$from.marks()
+        const mark = (name: string) => stored.find((candidate) => candidate.type.name === name)
+        const textStyleMark = mark('textStyle')
+        inlineValues.bold.push(Boolean(mark('bold')) || Boolean(style.bold))
+        inlineValues.italic.push(Boolean(mark('italic')) || Boolean(style.italic))
+        inlineValues.underline.push(Boolean(mark('underline')) || Boolean(style.underline))
+        inlineValues.strike.push(Boolean(mark('strike')))
+        inlineValues.subscript.push(Boolean(mark('subscript')))
+        inlineValues.superscript.push(Boolean(mark('superscript')))
+        inlineValues.fontFamily.push(textStyleMark?.attrs.fontFamily || style.fontFamily || '')
+        inlineValues.fontSize.push(textStyleMark?.attrs.fontSize || (style.fontSizePt ? `${style.fontSizePt}pt` : ''))
+        inlineValues.letterSpacing.push(textStyleMark?.attrs.letterSpacing || (style.letterSpacingPt !== undefined ? `${style.letterSpacingPt}pt` : ''))
+        inlineValues.textTransform.push(textStyleMark?.attrs.textTransform || style.textTransform || 'none')
+        inlineValues.color.push(textStyleMark?.attrs.color || style.color || '')
+        inlineValues.backgroundColor.push(mark('highlight')?.attrs.color || style.backgroundColor || '')
+      }
+    }
+    for (const [key, values] of Object.entries(inlineValues)) if (unique(values).size > 1) mixedFields.push(key)
     const headingAttrs = editor.getAttributes('heading')
     const paragraphAttrs = editor.getAttributes('paragraph')
     const blockAttrs = editor.isActive('heading') ? headingAttrs : paragraphAttrs
-    const styleId = String(blockAttrs.styleId || 'normal')
+    const styleId = String(paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'styleId') || 'normal')
     const computedStyle = activeDocument ? resolvedStyleProperties(activeDocument, styleId) : {}
     const textStyle = editor.getAttributes('textStyle')
+    const firstInline = (key: string, fallback: unknown) => mixedFields.includes(key) ? fallback : (inlineValues[key]?.[0] ?? fallback)
     ontoolbarstate?.({
       focused: editor.isFocused,
       readonly: !editor.isEditable,
-      bold: editor.isActive('bold') || Boolean(computedStyle.bold),
-      italic: editor.isActive('italic') || Boolean(computedStyle.italic),
-      underline: editor.isActive('underline') || Boolean(computedStyle.underline),
-      strike: editor.isActive('strike'),
+      bold: Boolean(firstInline('bold', false)),
+      italic: Boolean(firstInline('italic', false)),
+      underline: Boolean(firstInline('underline', false)),
+      strike: Boolean(firstInline('strike', false)),
+      subscript: Boolean(firstInline('subscript', false)),
+      superscript: Boolean(firstInline('superscript', false)),
       hasSelection: !selection.empty,
       canUndo: editor.can().undo(),
       canRedo: editor.can().redo(),
@@ -1241,44 +1389,48 @@
       blockType: editor.isActive('heading') ? 'heading' : 'paragraph',
       headingLevel: headingAttrs.level || null,
       styleId,
-      fontFamily: textStyle.fontFamily || computedStyle.fontFamily || '',
-      fontSize: textStyle.fontSize || (computedStyle.fontSizePt ? `${computedStyle.fontSizePt}pt` : ''),
-      alignment: blockAttrs.textAlign || computedStyle.alignment || 'left',
-      lineSpacing: blockAttrs.lineSpacing ?? computedStyle.lineSpacing ?? null,
-      letterSpacing: textStyle.letterSpacing || (computedStyle.letterSpacingPt !== undefined ? `${computedStyle.letterSpacingPt}pt` : ''),
-      textTransform: textStyle.textTransform || computedStyle.textTransform || 'none',
-      firstLineIndentEm: blockAttrs.firstLineIndentEm ?? computedStyle.firstLineIndentEm ?? null,
-      leftIndentEm: blockAttrs.leftIndentEm ?? computedStyle.leftIndentEm ?? null,
-      rightIndentEm: blockAttrs.rightIndentEm ?? computedStyle.rightIndentEm ?? null,
-      keepWithNext: Boolean(blockAttrs.keepWithNext ?? computedStyle.keepWithNext),
-      keepLinesTogether: Boolean(blockAttrs.keepLinesTogether ?? computedStyle.keepLinesTogether),
-      pageBreakBefore: Boolean(blockAttrs.pageBreakBefore ?? computedStyle.pageBreakBefore),
-      tabStops: blockAttrs.tabStops ?? computedStyle.tabStops ?? [],
-      spaceBeforePt: blockAttrs.spaceBeforePt ?? computedStyle.spaceBeforePt ?? null,
-      spaceAfterPt: blockAttrs.spaceAfterPt ?? computedStyle.spaceAfterPt ?? null,
+      fontFamily: String(firstInline('fontFamily', textStyle.fontFamily || computedStyle.fontFamily || '')),
+      fontSize: String(firstInline('fontSize', textStyle.fontSize || (computedStyle.fontSizePt ? `${computedStyle.fontSizePt}pt` : ''))),
+      color: String(firstInline('color', '')),
+      backgroundColor: String(firstInline('backgroundColor', '')),
+      alignment: paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'alignment'),
+      lineSpacing: paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'lineSpacing'),
+      letterSpacing: String(firstInline('letterSpacing', textStyle.letterSpacing || (computedStyle.letterSpacingPt !== undefined ? `${computedStyle.letterSpacingPt}pt` : ''))),
+      textTransform: String(firstInline('textTransform', textStyle.textTransform || computedStyle.textTransform || 'none')),
+      firstLineIndentEm: paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'firstLineIndentEm'),
+      leftIndentEm: paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'leftIndentEm'),
+      rightIndentEm: paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'rightIndentEm'),
+      keepWithNext: Boolean(paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'keepWithNext')),
+      keepLinesTogether: Boolean(paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'keepLinesTogether')),
+      pageBreakBefore: Boolean(paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'pageBreakBefore')),
+      tabStops: paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'tabStops') || [],
+      spaceBeforePt: paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'spaceBeforePt'),
+      spaceAfterPt: paragraphValue(textBlocks[0] || { attrs: blockAttrs }, 'spaceAfterPt'),
       styles: visibleStyles().map((style) => ({ id: style.id, name: style.name })),
       mixedFields
     })
   }
 
-  function emitSelection() {
+  function emitSelection(forceBlockSelection = false) {
     if (!editor) return
     const { from, to, empty } = editor.state.selection
     const blocks = selectedBlocks(editor)
-    // A caret is an editing position, not a selection. Only expose blocks to
-    // contextual actions after the user has made a real text/node selection.
-    const exposedBlocks = empty ? [] : blocks
+    if (forceBlockSelection || editor.state.selection instanceof NodeSelection) blockSelectionActive = true
+    else if (!empty) blockSelectionActive = false
+    else blockSelectionActive = false
+    // Text and block selection are separate contexts. A normal text range may
+    // cross several blocks but must not summon block actions.
+    const exposedBlocks = blockSelectionActive ? blocks : []
     const blockIds = exposedBlocks.map((block) => block.id)
     selectedBlockIds = blockIds
     selectedBlocksCollapsed = exposedBlocks.length > 0 && exposedBlocks.every((block) => block.collapsed)
-    if (editor.state.selection instanceof NodeSelection) blockSelectionActive = true
-    else if (editor.state.selection.empty) blockSelectionActive = false
     if (blocks.length === 1) positionBlockHandleById(blocks[0].id)
     const text = empty ? '' : editor.state.doc.textBetween(from, to, '\n')
     selectionToolbarVisible = !empty
+      && !blockSelectionActive
       && !(editor.state.selection instanceof NodeSelection)
       && !(editor.state.selection instanceof CellSelection)
-    const contextKind = editor.state.selection instanceof NodeSelection ? 'block' : selectionToolbarVisible ? 'text' : 'editor'
+    const contextKind = blockSelectionActive ? 'block' : selectionToolbarVisible ? 'text' : 'editor'
     window.dispatchEvent(new CustomEvent('wa-editor-context', { detail: { kind: contextKind } }))
     if (selectionToolbarVisible && shell) {
       const start = editor.view.coordsAtPos(from)
@@ -1354,6 +1506,10 @@
     }
     if (command === 'markdown-import') {
       markdownInput?.click()
+      return
+    }
+    if (command === 'word-import') {
+      wordInput?.click()
       return
     }
     if (command === 'markdown-export') {
@@ -1495,7 +1651,15 @@
     if (command === 'section-break-continuous') params = { breakType: 'continuous' }
     if (command.startsWith('style:')) {
       type = 'apply_style'
-      params = { styleId: command.slice(6) }
+      const styleId = command.slice(6)
+      const properties = activeDocument ? resolvedStyleProperties(activeDocument, styleId) : {}
+      const numbering = activeDocument?.numbering.find((definition) => definition.id === properties.numberingId)
+      params = {
+        styleId,
+        numberingId: numbering?.id || '',
+        numberingLevel: properties.numberingLevel ?? 0,
+        numberingFormat: numbering?.levels[properties.numberingLevel ?? 0]?.format || ''
+      }
     } else if (command.startsWith('font:')) {
       type = 'set_font_family'
       params = { fontFamily: command.slice(5) }
@@ -1604,6 +1768,8 @@
       type = 'set_paragraph_format'
       params = { shadingColor: command.slice(14) }
     }
+    if (command === 'list-bullet') params = { numberingId: 'bullet-default', numberingLevel: 0 }
+    if (command === 'list-number') params = { numberingId: 'decimal-default', numberingLevel: 0 }
     if (!type) return
     executeDocumentCommand(editor, createUserCommand(type, params))
     emitToolbarState()
@@ -1633,6 +1799,7 @@
   function loadDocument(next: DocumentV3) {
     if (!editor) return
     activeDocument = next
+    if (!activeDocument.numbering?.length) activeDocument.numbering = cloneJson(DEFAULT_NUMBERING)
     styleRevision += 1
     documentV3.set(next)
     styleElement && (styleElement.textContent = styleSheetForDocument(next))
@@ -1645,6 +1812,7 @@
   onMount(() => {
     const stored = get(documentV3)
     activeDocument = stored && isDocumentV3(stored) ? cloneJson(stored) : migrateLegacyDocIr(get(docIr))
+    if (!activeDocument.numbering?.length) activeDocument.numbering = cloneJson(DEFAULT_NUMBERING)
     documentV3.set(activeDocument)
     mountedLegacyRef = get(docIr)
     styleElement = document.createElement('style')
@@ -1656,7 +1824,7 @@
       document: activeDocument,
       editable: !lockEditing,
       onUpdate: updateDocument,
-      onSelectionUpdate: emitSelection,
+      onSelectionUpdate: () => emitSelection(),
       onSlashQuery: handleSlashQuery,
       onShortcutCommand: (type, params = {}) => {
         if (!editor) return false
@@ -1747,6 +1915,7 @@
   oncompositionend={() => { composingText = false; if (paginationPendingAfterComposition) { paginationPendingAfterComposition = false; schedulePagination() } }}
 >
   <input class="hidden-file-input" bind:this={markdownInput} type="file" accept=".md,.markdown,text/markdown,text/plain" onchange={importMarkdownFile} />
+  <input class="hidden-file-input" bind:this={wordInput} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onchange={importWordFile} />
   <input class="hidden-file-input" bind:this={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" onchange={importImageFile} />
   {#if blockHandleVisible}
     <button
@@ -1870,7 +2039,7 @@
         <label>文字底色<input bind:value={managedBackgroundColor} placeholder="#ffffff；留空继承" /></label>
         <label>字间距 pt<input type="number" min="-5" max="30" step="0.1" bind:value={managedLetterSpacingPt} /></label>
         <label>大小写<select bind:value={managedTextTransform}><option value="">继承</option><option value="none">无转换</option><option value="uppercase">大写</option><option value="lowercase">小写</option><option value="capitalize">首字母大写</option></select></label>
-        <label>对齐<select bind:value={managedAlignment}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option><option value="justify">两端对齐</option></select></label>
+        <label>对齐<select bind:value={managedAlignment}><option value="">继承</option><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option><option value="justify">两端对齐</option></select></label>
         <label>行距<input type="number" min="0.8" max="4" step="0.05" bind:value={managedLineSpacing} /></label>
         <label>首行缩进 em<input type="number" min="-10" max="20" step="0.5" bind:value={managedFirstLineIndentEm} /></label>
         <label>左缩进 em<input type="number" min="-10" max="40" step="0.5" bind:value={managedLeftIndentEm} /></label>
@@ -1882,6 +2051,8 @@
         <label>边框颜色<input bind:value={managedBorderColor} placeholder="#000000；留空继承" /></label>
         <label>边框宽度 pt<input type="number" min="0" max="12" step="0.25" bind:value={managedBorderWidthPt} /></label>
         <label>段落底纹<input bind:value={managedShadingColor} placeholder="#ffffff；留空继承" /></label>
+        <label>项目符号/编号<select bind:value={managedNumberingId}><option value="">无或继承</option>{#each activeDocument?.numbering || [] as definition (definition.id)}<option value={definition.id}>{definition.name}</option>{/each}</select></label>
+        <label>编号级别<select bind:value={managedNumberingLevel} disabled={!managedNumberingId}>{#each Array.from({ length: 9 }, (_, index) => index) as level}<option value={level}>级别 {level + 1}</option>{/each}</select></label>
       </div>
       <div class="style-grid style-toggles">
         <label>加粗<select bind:value={managedBold}><option value="inherit">继承</option><option value="on">开启</option><option value="off">关闭</option></select></label>

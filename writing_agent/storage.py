@@ -80,6 +80,8 @@ class DocSession:
     template_source_name: str = ""
     template_source_path: str = ""
     template_source_type: str = ""
+    import_source_name: str = ""
+    import_source_fingerprint: str = ""
     formatting: dict = field(default_factory=dict)
     generation_prefs: dict = field(default_factory=dict)
     uploads: dict[str, str] = field(default_factory=dict)
@@ -359,6 +361,8 @@ def _restore_session(raw: dict, session_id: str) -> DocSession:
     session.template_source_name = str(raw.get("template_source_name") or "")
     session.template_source_path = str(raw.get("template_source_path") or "")
     session.template_source_type = str(raw.get("template_source_type") or "")
+    session.import_source_name = str(raw.get("import_source_name") or "")
+    session.import_source_fingerprint = str(raw.get("import_source_fingerprint") or "")
     session.formatting = dict(raw.get("formatting") or {})
     session.generation_prefs = dict(raw.get("generation_prefs") or {})
     session.uploads = {str(key): str(value) for key, value in dict(raw.get("uploads") or {}).items()}
@@ -414,6 +418,39 @@ class InMemoryStore:
         if self._persistence_dir is None:
             raise RuntimeError("persistence is not enabled")
         return self._persistence_dir / f"{session_id}.json"
+
+    def _source_document_path(self, session_id: str) -> Path:
+        if self._persistence_dir is None:
+            raise RuntimeError("persistence is not enabled")
+        return self._persistence_dir / f"{session_id}.source.docx"
+
+    def save_source_document(self, session_id: str, payload: bytes) -> Path | None:
+        """Persist one canonical imported DOCX beside its session.
+
+        Keeping the source as a separate file avoids duplicating megabytes of
+        binary data in every JSON save while still allowing lossless export.
+        """
+        if self._persistence_dir is None:
+            return None
+        path = self._source_document_path(session_id)
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=path.parent, prefix=path.name + ".", suffix=".tmp", delete=False
+            ) as stream:
+                temp_path = Path(stream.name)
+                stream.write(payload)
+            self._replace_session_file(temp_path, path)
+            return path
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+
+    def source_document_path(self, session_id: str) -> Path | None:
+        if self._persistence_dir is None:
+            return None
+        path = self._source_document_path(session_id)
+        return path if path.is_file() else None
 
     def _evict_if_needed(self) -> None:
         """Evict least-recently-used sessions when the in-memory limit is exceeded."""
@@ -568,6 +605,10 @@ class InMemoryStore:
             if deleted and self._persistence_dir is not None:
                 try:
                     self._session_path(session_id).unlink()
+                except FileNotFoundError:
+                    pass
+                try:
+                    self._source_document_path(session_id).unlink()
                 except FileNotFoundError:
                     pass
             if deleted:

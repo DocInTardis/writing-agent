@@ -9,6 +9,9 @@
     bold: boolean
     italic: boolean
     underline: boolean
+    strike?: boolean
+    subscript?: boolean
+    superscript?: boolean
     readonly: boolean
     focused: boolean
     canUndo: boolean
@@ -28,6 +31,8 @@
     styleId?: string
     fontFamily?: string
     fontSize?: string
+    color?: string
+    backgroundColor?: string
     alignment?: string
     lineSpacing?: number | null
     letterSpacing?: string
@@ -114,6 +119,10 @@
     const parsed = Number.parseFloat(String(value || ''))
     if (!Number.isFinite(parsed)) return 12
     return String(value).trim().toLowerCase().endsWith('px') ? Math.round(parsed * 0.75 * 2) / 2 : parsed
+  }
+
+  function isMixed(field: string): boolean {
+    return Boolean(editorToolbarState.mixedFields?.includes(field))
   }
 </script>
 
@@ -208,14 +217,15 @@
       </div>
       <div class="ribbon-group wide" aria-label="字体与样式">
         <div class="ribbon-row">
-          <select aria-label="段落样式" value={`style:${editorToolbarState.styleId || 'normal'}`} onchange={(event) => command(event.currentTarget.value)}>
-            {#if editorToolbarState.mixedFields?.includes('styleId')}<option value="" disabled>混合样式</option>{/if}
+          <select aria-label="段落样式" value={isMixed('styleId') ? '' : `style:${editorToolbarState.styleId || 'normal'}`} onchange={(event) => command(event.currentTarget.value)}>
+            {#if isMixed('styleId')}<option value="" disabled>混合样式</option>{/if}
             {#each editorToolbarState.styles || [] as style (style.id)}
               <option value={`style:${style.id}`}>{style.name}</option>
             {/each}
           </select>
           <button class="tool-btn" title="管理文档样式" onclick={() => command('style-manager')}>样式…</button>
-          <select aria-label="字体" value={editorToolbarState.fontFamily || 'Microsoft YaHei'} onchange={(event) => command(`font:${event.currentTarget.value}`)}>
+          <select aria-label="字体" value={isMixed('fontFamily') ? '' : editorToolbarState.fontFamily || 'Microsoft YaHei'} onchange={(event) => command(`font:${event.currentTarget.value}`)}>
+            {#if isMixed('fontFamily')}<option value="" disabled>混合字体</option>{/if}
             <option value="Microsoft YaHei">微软雅黑</option>
             <option value="SimSun">宋体</option>
             <option value="SimHei">黑体</option>
@@ -231,17 +241,17 @@
             min="1"
             max="400"
             step="0.5"
-            value={fontSizeNumber(editorToolbarState.fontSize)}
+            value={isMixed('fontSize') ? '' : fontSizeNumber(editorToolbarState.fontSize)}
             onchange={(event) => command(`size:${event.currentTarget.value}pt`)}
           />
         </div>
         <div class="ribbon-row">
-          <button class:active={editorToolbarState.bold} class="tool-btn glyph" title="加粗 Ctrl+B" onclick={() => command('bold')}><strong>B</strong></button>
-          <button class:active={editorToolbarState.italic} class="tool-btn glyph" title="斜体 Ctrl+I" onclick={() => command('italic')}><em>I</em></button>
-          <button class:active={editorToolbarState.underline} class="tool-btn glyph underline" title="下划线 Ctrl+U" onclick={() => command('underline')}>U</button>
-        <button class="tool-btn glyph strike" title="删除线" onclick={() => command('strikethrough')}>ab</button>
-        <button class="tool-btn glyph" title="上标" onclick={() => command('superscript')}>x²</button>
-        <button class="tool-btn glyph" title="下标" onclick={() => command('subscript')}>x₂</button>
+          <button class:active={editorToolbarState.bold} class:mixed={isMixed('bold')} aria-pressed={isMixed('bold') ? 'mixed' : editorToolbarState.bold} class="tool-btn glyph" title="加粗 Ctrl+B" onclick={() => command('bold')}><strong>B</strong></button>
+          <button class:active={editorToolbarState.italic} class:mixed={isMixed('italic')} aria-pressed={isMixed('italic') ? 'mixed' : editorToolbarState.italic} class="tool-btn glyph" title="斜体 Ctrl+I" onclick={() => command('italic')}><em>I</em></button>
+          <button class:active={editorToolbarState.underline} class:mixed={isMixed('underline')} aria-pressed={isMixed('underline') ? 'mixed' : editorToolbarState.underline} class="tool-btn glyph underline" title="下划线 Ctrl+U" onclick={() => command('underline')}>U</button>
+        <button class:active={editorToolbarState.strike} class:mixed={isMixed('strike')} class="tool-btn glyph strike" title="删除线" onclick={() => command('strikethrough')}>ab</button>
+        <button class:active={editorToolbarState.superscript} class:mixed={isMixed('superscript')} class="tool-btn glyph" title="上标" onclick={() => command('superscript')}>x²</button>
+        <button class:active={editorToolbarState.subscript} class:mixed={isMixed('subscript')} class="tool-btn glyph" title="下标" onclick={() => command('subscript')}>x₂</button>
           <button class="tool-btn color-tool" title="文字颜色" onclick={() => command('color:#c00000')}>A<span class="color-line red"></span></button>
           <button class="tool-btn color-tool" title="突出显示" onclick={() => command('bgcolor:#fff2cc')}>A<span class="color-line yellow"></span></button>
           <button class="tool-btn" title="清除格式" onclick={() => command('clear-format')}><Icon name="clear" size={15} /></button>
@@ -252,10 +262,10 @@
         <div class="ribbon-row">
           <button class="tool-btn" title="项目符号" onclick={() => command('list-bullet')}><Icon name="listBullet" size={15} /></button>
           <button class="tool-btn" title="编号" onclick={() => command('list-number')}><Icon name="listNumber" size={15} /></button>
-          <button class="tool-btn align-glyph" title="左对齐" onclick={() => command('align-left')}>≡</button>
-          <button class="tool-btn align-glyph center" title="居中" onclick={() => command('align-center')}>≡</button>
-          <button class="tool-btn align-glyph right" title="右对齐" onclick={() => command('align-right')}>≡</button>
-          <button class="tool-btn align-glyph justify" title="两端对齐" onclick={() => command('align-justify')}>≡</button>
+          <button class:active={!isMixed('alignment') && editorToolbarState.alignment === 'left'} class:mixed={isMixed('alignment')} class="tool-btn align-glyph" title="左对齐" onclick={() => command('align-left')}>≡</button>
+          <button class:active={!isMixed('alignment') && editorToolbarState.alignment === 'center'} class:mixed={isMixed('alignment')} class="tool-btn align-glyph center" title="居中" onclick={() => command('align-center')}>≡</button>
+          <button class:active={!isMixed('alignment') && editorToolbarState.alignment === 'right'} class:mixed={isMixed('alignment')} class="tool-btn align-glyph right" title="右对齐" onclick={() => command('align-right')}>≡</button>
+          <button class:active={!isMixed('alignment') && editorToolbarState.alignment === 'justify'} class:mixed={isMixed('alignment')} class="tool-btn align-glyph justify" title="两端对齐" onclick={() => command('align-justify')}>≡</button>
           <button class="tool-btn" title="减少缩进" onclick={() => command('outdent')}>←</button>
           <button class="tool-btn" title="增加缩进" onclick={() => command('indent')}>→</button>
           <input
@@ -266,7 +276,7 @@
             min="0.5"
             max="10"
             step="0.05"
-            value={Number(editorToolbarState.lineSpacing || 1.5)}
+            value={isMixed('lineSpacing') ? '' : Number(editorToolbarState.lineSpacing || 1.5)}
             onchange={(event) => command(`line-height:${event.currentTarget.value}`)}
           />
           <button class:active={showAdvancedToolbar} class="tool-btn" title="更多段落与字符格式" onclick={() => (showAdvancedToolbar = !showAdvancedToolbar)}>⋯</button>
@@ -320,6 +330,7 @@
       {/if}
     {:else if activeTab === 'insert'}
       <div class="ribbon-group action-group">
+        <button class="ribbon-action" onclick={() => command('word-import')}><span>W↓</span>导入 Word</button>
         <button class="ribbon-action" onclick={() => command('markdown-import')}><span>MD↓</span>导入 Markdown</button>
         <button class="ribbon-action" onclick={() => command('markdown-export')}><span>MD↑</span>导出 Markdown</button>
         <button class="ribbon-action" onclick={() => command('table')}><span>▦</span>表格</button>
@@ -517,4 +528,19 @@
   }
   .advanced-format label.check-format { display: flex; align-items: center; gap: 5px; }
   .advanced-format label.check-format input { width: auto; height: auto; }
+  .tool-btn.mixed {
+    position: relative;
+    background: #eef3f9;
+    color: #44546a;
+  }
+  .tool-btn.mixed::after {
+    content: '';
+    position: absolute;
+    right: 5px;
+    bottom: 3px;
+    left: 5px;
+    height: 2px;
+    border-radius: 1px;
+    background: #6b7c93;
+  }
 </style>

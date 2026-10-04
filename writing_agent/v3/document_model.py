@@ -51,6 +51,8 @@ class StyleProperties(BaseModel):
     border_style: Literal["none", "solid", "dashed", "double"] | None = None
     shading_color: str | None = None
     tab_stops: list[dict[str, Any]] | None = None
+    numbering_id: str | None = None
+    numbering_level: int | None = None
 
 
 class StyleDefinition(BaseModel):
@@ -211,6 +213,20 @@ def default_styles() -> list[StyleDefinition]:
                 outline_level=0,
             ),
         ),
+        StyleDefinition(
+            id="subtitle",
+            name="副标题",
+            based_on="normal",
+            next_style="normal",
+            properties=StyleProperties(
+                font_family="SimHei",
+                font_size_pt=16,
+                color="#4b5563",
+                alignment="center",
+                first_line_indent_em=0,
+                space_after_pt=14,
+            ),
+        ),
     ]
     for level in range(1, 7):
         styles.append(
@@ -230,7 +246,86 @@ def default_styles() -> list[StyleDefinition]:
                 ),
             )
         )
+    styles.extend(
+        [
+            StyleDefinition(
+                id="quote",
+                name="引用",
+                based_on="normal",
+                next_style="normal",
+                properties=StyleProperties(left_indent_em=2, right_indent_em=2, first_line_indent_em=0, italic=True),
+            ),
+            StyleDefinition(
+                id="caption",
+                name="题注",
+                based_on="normal",
+                next_style="normal",
+                properties=StyleProperties(font_size_pt=10.5, alignment="center", first_line_indent_em=0, keep_with_next=True),
+            ),
+            StyleDefinition(
+                id="code",
+                name="代码",
+                based_on="normal",
+                next_style="normal",
+                properties=StyleProperties(
+                    font_family="Consolas",
+                    font_size_pt=10.5,
+                    line_spacing=1.2,
+                    first_line_indent_em=0,
+                    left_indent_em=0.5,
+                    right_indent_em=0.5,
+                    space_before_pt=6,
+                    space_after_pt=6,
+                    shading_color="#f5f7fa",
+                ),
+            ),
+        ]
+    )
     return styles
+
+
+def default_numbering() -> list[dict[str, Any]]:
+    bullet_chars = ("•", "◦", "▪")
+    bullet_levels = [
+        {
+            "level": level,
+            "format": "bullet",
+            "text": bullet_chars[level % 3],
+            "bulletChar": bullet_chars[level % 3],
+            "startAt": 1,
+            "leftIndentEm": 2 + level * 2,
+            "hangingIndentEm": 1,
+        }
+        for level in range(9)
+    ]
+    decimal_formats = ("decimal", "lowerLetter", "lowerRoman")
+    decimal_levels = [
+        {
+            "level": level,
+            "format": decimal_formats[level % 3],
+            "text": f"%{level + 1}.",
+            "startAt": 1,
+            "leftIndentEm": 2 + level * 2,
+            "hangingIndentEm": 1,
+        }
+        for level in range(9)
+    ]
+    outline_levels = [
+        {
+            "level": level,
+            "format": "decimal",
+            "text": ".".join(f"%{index + 1}" for index in range(level + 1)),
+            "startAt": 1,
+            "leftIndentEm": level * 2,
+            "hangingIndentEm": 0,
+        }
+        for level in range(9)
+    ]
+    return [
+        {"id": "bullet-default", "name": "标准项目符号", "levels": bullet_levels},
+        {"id": "decimal-default", "name": "标准编号", "levels": decimal_levels},
+        {"id": "outline-headings", "name": "标题多级编号", "levels": outline_levels},
+    ]
 
 
 def create_document(title: str = "未命名文档") -> DocumentV3:
@@ -238,6 +333,7 @@ def create_document(title: str = "未命名文档") -> DocumentV3:
     return DocumentV3(
         title=title,
         styles=default_styles(),
+        numbering=default_numbering(),
         sections=[SectionV3(content=[paragraph])],
     )
 
@@ -349,7 +445,7 @@ def validate_unique_ids(doc: DocumentV3) -> list[str]:
     return duplicates
 
 
-def to_plain_text(doc: DocumentV3) -> str:
+def to_plain_text(doc: DocumentV3, *, include_resource_data: bool = True) -> str:
     """Return semantic text without serializing page chrome or computed fields."""
 
     lines: list[str] = []
@@ -420,7 +516,11 @@ def to_plain_text(doc: DocumentV3) -> str:
             if block.type == "figure":
                 payload = block.attrs.get("figure") if isinstance(block.attrs, dict) else None
                 if isinstance(payload, dict):
-                    lines.append(f"[[FIGURE:{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}]]")
+                    serialized = deepcopy(payload)
+                    if not include_resource_data and str(serialized.get("src") or "").startswith("data:"):
+                        serialized.pop("src", None)
+                        serialized["embedded"] = True
+                    lines.append(f"[[FIGURE:{json.dumps(serialized, ensure_ascii=False, separators=(',', ':'))}]]")
                 continue
             if block.type == "equationBlock":
                 latex = str(block.attrs.get("latex") or block.attrs.get("source") or "").strip()

@@ -69,6 +69,25 @@ def test_style_manager_exposes_complete_inherited_paragraph_formatting() -> None
     assert "p.bold !== undefined" in kernel
 
 
+def test_styles_use_document_numbering_and_toolbar_reports_mixed_effective_values() -> None:
+    model = (FRONTEND / "editor-v3/model.ts").read_text(encoding="utf-8")
+    editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+    commands = (FRONTEND / "editor-v3/commands.ts").read_text(encoding="utf-8")
+    toolbar = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
+
+    assert "DEFAULT_NUMBERING" in model
+    assert "numberingId?: string" in model
+    assert "numberingLevel?: number" in model
+    assert "managedNumberingId" in editor
+    assert "resolvedStyleProperties(activeDocument" in editor
+    assert "inlineValues" in editor
+    assert "numberingFormat" in commands
+    assert "aria-pressed={isMixed('bold') ? 'mixed'" in toolbar
+    assert "混合字体" in toolbar
+    assert "counter-increment" in (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
+    assert "numberingId === definition.id" in (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
+
+
 def test_text_block_and_page_contexts_are_mutually_exclusive() -> None:
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
     page_setup = (FRONTEND / "workbench/PageSetupPanel.svelte").read_text(encoding="utf-8")
@@ -81,3 +100,7 @@ def test_text_block_and_page_contexts_are_mutually_exclusive() -> None:
     assert "kind: 'page'" in page_setup
     assert "kind !== 'page'" in page_setup
     assert "removeEventListener('wa-editor-context'" in page_setup
+    assert "forceBlockSelection" in editor
+    assert "event.code === 'Space'" in editor
+    assert "blockSelectionActive ? blocks : []" in editor
+    assert "&& !blockSelectionActive" in editor

@@ -36,6 +36,24 @@ export interface StyleProperties {
   borderStyle?: 'none' | 'solid' | 'dashed' | 'double'
   shadingColor?: string
   tabStops?: Array<{ positionEm: number; alignment: 'left' | 'center' | 'right' | 'decimal' }>
+  numberingId?: string
+  numberingLevel?: number
+}
+
+export interface NumberingLevelDefinition {
+  level: number
+  format: 'bullet' | 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman'
+  text: string
+  startAt: number
+  leftIndentEm: number
+  hangingIndentEm: number
+  bulletChar?: string
+}
+
+export interface NumberingDefinition {
+  id: string
+  name: string
+  levels: NumberingLevelDefinition[]
 }
 
 export interface StyleDefinition {
@@ -129,7 +147,7 @@ export interface DocumentV3 {
   title: string
   metadata: JsonObject
   styles: StyleDefinition[]
-  numbering: JsonObject[]
+  numbering: NumberingDefinition[]
   sections: SectionV3[]
   notes: JsonObject
   citations: JsonObject
@@ -280,6 +298,46 @@ export const DEFAULT_STYLES: StyleDefinition[] = [
   }
 ]
 
+export const DEFAULT_NUMBERING: NumberingDefinition[] = [
+  {
+    id: 'bullet-default',
+    name: '标准项目符号',
+    levels: Array.from({ length: 9 }, (_, level) => ({
+      level,
+      format: 'bullet' as const,
+      text: level % 3 === 0 ? '•' : level % 3 === 1 ? '◦' : '▪',
+      bulletChar: level % 3 === 0 ? '•' : level % 3 === 1 ? '◦' : '▪',
+      startAt: 1,
+      leftIndentEm: 2 + level * 2,
+      hangingIndentEm: 1
+    }))
+  },
+  {
+    id: 'decimal-default',
+    name: '标准编号',
+    levels: Array.from({ length: 9 }, (_, level) => ({
+      level,
+      format: level % 3 === 0 ? 'decimal' as const : level % 3 === 1 ? 'lowerLetter' as const : 'lowerRoman' as const,
+      text: `%${level + 1}.`,
+      startAt: 1,
+      leftIndentEm: 2 + level * 2,
+      hangingIndentEm: 1
+    }))
+  },
+  {
+    id: 'outline-headings',
+    name: '标题多级编号',
+    levels: Array.from({ length: 9 }, (_, level) => ({
+      level,
+      format: 'decimal' as const,
+      text: Array.from({ length: level + 1 }, (__, index) => `%${index + 1}`).join('.'),
+      startAt: 1,
+      leftIndentEm: level * 2,
+      hangingIndentEm: 0
+    }))
+  }
+]
+
 export function createDocumentV3(title = '未命名文档'): DocumentV3 {
   return {
     schemaVersion: 3,
@@ -287,7 +345,7 @@ export function createDocumentV3(title = '未命名文档'): DocumentV3 {
     title,
     metadata: {},
     styles: cloneJson(DEFAULT_STYLES),
-    numbering: [],
+    numbering: cloneJson(DEFAULT_NUMBERING),
     sections: [
       {
         id: makeId('section'),

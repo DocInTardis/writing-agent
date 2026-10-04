@@ -40,7 +40,7 @@ async def save_doc(doc_id: str, request: Request) -> dict:
 
             parsed_v3 = DocumentV3.model_validate(incoming_v3)
             session.document_v3 = parsed_v3.model_dump(mode="json", by_alias=True)
-            v3_text = to_plain_text(parsed_v3)
+            v3_text = to_plain_text(parsed_v3, include_resource_data=False)
             saved_from_v3 = True
         except Exception as exc:
             raise app_v2.HTTPException(status_code=422, detail=f"invalid document_v3: {exc}") from exc
@@ -97,9 +97,41 @@ async def import_doc(doc_id: str, file: UploadFile = File(...)) -> dict:
     if len(raw) > 50 * 1024 * 1024:
         raise app_v2.HTTPException(status_code=400, detail="file too large (max 50MB)")
 
+    suffix = app_v2.Path(file.filename).suffix.lower() or ".txt"
+    if suffix == ".docx":
+        try:
+            from writing_agent.v3.docx_import import document_v3_fingerprint, import_docx_bytes
+            from writing_agent.v3.document_model import to_plain_text
+
+            document = import_docx_bytes(raw, title=app_v2.Path(file.filename).stem)
+            text = to_plain_text(document, include_resource_data=False).strip()
+            if not text:
+                raise ValueError("empty document")
+            session.document_v3 = document.model_dump(mode="json", by_alias=True)
+            session.doc_text = text
+            session.doc_ir = {}
+            session.import_source_name = app_v2.Path(file.filename).name
+            session.import_source_fingerprint = document_v3_fingerprint(document)
+            app_v2.store.save_source_document(session.id, raw)
+            workspace_service.note_content_saved(session, source="docx_import", text=text)
+            app_v2.store.put(session)
+            return {
+                "ok": 1,
+                "text": text,
+                "document_v3": session.document_v3,
+                "imported": {
+                    "sections": len(document.sections),
+                    "styles": len(document.styles),
+                    "numbering": len(document.numbering),
+                    "tables": int(document.metadata.get("sourceTables") or 0),
+                    "paragraphs": int(document.metadata.get("sourceParagraphs") or 0),
+                },
+            }
+        except Exception as exc:
+            raise app_v2.HTTPException(status_code=422, detail=f"DOCX structure import failed: {exc}") from exc
+
     temp_dir = app_v2.DATA_DIR / "imports"
     temp_dir.mkdir(parents=True, exist_ok=True)
-    suffix = app_v2.Path(file.filename).suffix.lower() or ".txt"
     tmp_path = temp_dir / f"{doc_id}_{app_v2.uuid.uuid4().hex}{suffix}"
     tmp_path.write_bytes(raw)
     try:

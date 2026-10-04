@@ -97,3 +97,53 @@ def test_document_v3_custom_style_is_projected_into_word_docx() -> None:
     style_xml = exported.styles["论文正文"]._element.xml
     assert 'w:spacing w:val="10"' in style_xml
     assert 'w:color="123456"' in style_xml
+
+
+def test_document_v3_multilevel_numbering_is_projected_into_word_docx() -> None:
+    document = Document()
+    document.add_paragraph("一级条目")
+    document.add_paragraph("二级条目")
+    source = io.BytesIO()
+    document.save(source)
+    session = SimpleNamespace(
+        document_v3={
+            "styles": [
+                {"id": "normal", "name": "正文", "kind": "paragraph", "visible": True, "properties": {}},
+                {
+                    "id": "outline-item",
+                    "name": "大纲条目",
+                    "kind": "paragraph",
+                    "basedOn": "normal",
+                    "visible": True,
+                    "properties": {"numberingId": "thesis-outline", "numberingLevel": 1},
+                },
+            ],
+            "numbering": [
+                {
+                    "id": "thesis-outline",
+                    "name": "论文多级编号",
+                    "levels": [
+                        {"level": 0, "format": "decimal", "text": "%1", "startAt": 1, "leftIndentEm": 0, "hangingIndentEm": 0},
+                        {"level": 1, "format": "decimal", "text": "%1.%2", "startAt": 1, "leftIndentEm": 2, "hangingIndentEm": 0},
+                    ],
+                }
+            ],
+            "sections": [
+                {
+                    "content": [
+                        {"id": "p1", "type": "paragraph", "styleId": "outline-item", "content": [{"type": "text", "text": "一级条目"}]},
+                        {"id": "p2", "type": "paragraph", "styleId": "outline-item", "attrs": {"numberingId": "thesis-outline", "numberingLevel": 1}, "content": [{"type": "text", "text": "二级条目"}]},
+                    ]
+                }
+            ],
+        }
+    )
+
+    result = ExportService._apply_document_v3_styles(source.getvalue(), session)
+    exported = Document(io.BytesIO(result))
+    numbering_xml = exported.part.numbering_part.element.xml
+
+    assert 'w:multiLevelType w:val="multilevel"' in numbering_xml
+    assert 'w:lvlText w:val="%1.%2"' in numbering_xml
+    assert 'w:ilvl w:val="1"' in exported.styles["大纲条目"]._element.xml
+    assert 'w:ilvl w:val="1"' in exported.paragraphs[1]._p.xml

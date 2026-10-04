@@ -242,11 +242,25 @@ registerDocumentCommand('set_alignment', (editor, command) => {
 })
 registerDocumentCommand('apply_style', (editor, command) => {
   const styleId = String(command.params.styleId || 'normal')
-  if (styleId === 'normal') return editor.chain().focus().setParagraph().updateAttributes('paragraph', { styleId }).run()
   const match = /^heading-([1-6])$/.exec(styleId)
-  if (!match) return editor.chain().focus().setParagraph().updateAttributes('paragraph', { styleId }).run()
-  const level = Number(match[1]) as 1 | 2 | 3 | 4 | 5 | 6
-  return editor.chain().focus().setHeading({ level }).updateAttributes('heading', { styleId }).run()
+  const applied = match
+    ? editor.chain().focus().setHeading({ level: Number(match[1]) as 1 | 2 | 3 | 4 | 5 | 6 }).updateAttributes('heading', { styleId }).run()
+    : editor.chain().focus().setParagraph().updateAttributes('paragraph', { styleId }).run()
+  if (!applied) return false
+  const numberingId = String(command.params.numberingId || '')
+  const numberingFormat = String(command.params.numberingFormat || '')
+  if (!numberingId || match) return true
+  const listType = numberingFormat === 'bullet' ? 'bulletList' : 'orderedList'
+  if (!editor.isActive(listType)) {
+    const toggled = listType === 'bulletList'
+      ? editor.chain().focus().toggleBulletList().run()
+      : editor.chain().focus().toggleOrderedList().run()
+    if (!toggled) return false
+  }
+  return editor.chain().focus().updateAttributes(listType, {
+    numberingId,
+    numberingLevel: Math.max(0, Math.min(8, Number(command.params.numberingLevel || 0)))
+  }).run()
 })
 registerDocumentCommand('split_block_with_style', (editor, command) => {
   const styleId = String(command.params.styleId || 'normal')
@@ -286,8 +300,24 @@ registerDocumentCommand('set_paragraph_format', (editor, command) => {
   if (!Object.keys(attrs).length) return false
   return editor.chain().focus().updateAttributes('paragraph', attrs).updateAttributes('heading', attrs).run()
 })
-registerDocumentCommand('toggle_bullet_list', (editor) => editor.chain().focus().toggleBulletList().run())
-registerDocumentCommand('toggle_ordered_list', (editor) => editor.chain().focus().toggleOrderedList().run())
+registerDocumentCommand('toggle_bullet_list', (editor, command) => {
+  const wasActive = editor.isActive('bulletList')
+  const toggled = editor.chain().focus().toggleBulletList().run()
+  if (!toggled || wasActive) return toggled
+  return editor.chain().focus().updateAttributes('bulletList', {
+    numberingId: String(command.params.numberingId || 'bullet-default'),
+    numberingLevel: Math.max(0, Math.min(8, Number(command.params.numberingLevel || 0)))
+  }).run()
+})
+registerDocumentCommand('toggle_ordered_list', (editor, command) => {
+  const wasActive = editor.isActive('orderedList')
+  const toggled = editor.chain().focus().toggleOrderedList().run()
+  if (!toggled || wasActive) return toggled
+  return editor.chain().focus().updateAttributes('orderedList', {
+    numberingId: String(command.params.numberingId || 'decimal-default'),
+    numberingLevel: Math.max(0, Math.min(8, Number(command.params.numberingLevel || 0)))
+  }).run()
+})
 registerDocumentCommand('list_indent', (editor) => editor.chain().focus().sinkListItem('listItem').run())
 registerDocumentCommand('list_outdent', (editor) => editor.chain().focus().liftListItem('listItem').run())
 registerDocumentCommand('toggle_blockquote', (editor) => editor.chain().focus().toggleBlockquote().run())
