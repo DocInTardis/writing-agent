@@ -91,8 +91,10 @@ def test_commit_and_checkout_isolate_nested_document(monkeypatch):
     assert version.doc_ir["blocks"][0]["text"] == "original"
 
     request = _FakeRequest(json.dumps({"version_id": version.version_id}).encode())
-    asyncio.run(service.version_checkout(session.id, request))
+    checkout = asyncio.run(service.version_checkout(session.id, request))
     assert session.doc_ir == version.doc_ir
+    assert checkout["doc_ir"] == version.doc_ir
+    assert checkout["doc_ir"] is not version.doc_ir
     session.doc_ir["blocks"][0]["text"] = "edited after restore"
     assert version.doc_ir["blocks"][0]["text"] == "original"
 

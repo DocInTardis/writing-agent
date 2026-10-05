@@ -15,7 +15,7 @@
   .progress-container {
     width: 100%;
     height: 4px;
-    background: rgba(200, 180, 150, 0.2);
+    background: var(--wa-border, #dde2e8);
     border-radius: 2px;
     overflow: hidden;
     position: relative;
@@ -23,7 +23,7 @@
 
   .progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, #a5722a 0%, #8b7355 50%, #a5722a 100%);
+    background: var(--wa-accent, #2563eb);
     background-size: 200% 100%;
     transition: width 0.3s ease;
     border-radius: 2px;

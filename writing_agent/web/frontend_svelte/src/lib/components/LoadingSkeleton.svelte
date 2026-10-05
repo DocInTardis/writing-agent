@@ -31,9 +31,9 @@
   .skeleton-line {
     height: 16px;
     background: linear-gradient(90deg, 
-      rgba(200, 180, 150, 0.2) 0%, 
-      rgba(200, 180, 150, 0.3) 50%, 
-      rgba(200, 180, 150, 0.2) 100%
+      #e8ebef 0%,
+      #f3f5f7 50%,
+      #e8ebef 100%
     );
     background-size: 200% 100%;
     border-radius: 8px;

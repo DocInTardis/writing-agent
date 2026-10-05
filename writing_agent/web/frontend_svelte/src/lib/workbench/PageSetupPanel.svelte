@@ -285,17 +285,17 @@
 {/if}
 
 <style>
-  .page-setup-backdrop { position: fixed; inset: 0; z-index: 490; background: rgba(15,23,42,.24); }
-  .page-setup-panel { position: fixed; z-index: 491; top: 50%; left: 50%; width: min(560px, calc(100vw - 32px)); transform: translate(-50%,-50%); border: 1px solid #cfd5df; border-radius: 8px; background: #fff; color: #202124; box-shadow: 0 18px 50px rgba(15,23,42,.2); }
-  header, footer { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid #e3e6eb; }
+  .page-setup-backdrop { position: fixed; inset: 0; z-index: 490; background: rgba(21,31,46,.28); }
+  .page-setup-panel { position: fixed; z-index: 491; top: 50%; left: 50%; width: min(560px, calc(100vw - 32px)); transform: translate(-50%,-50%); border: 1px solid var(--wa-border); border-radius: var(--wa-radius-lg); background: var(--wa-surface); color: var(--wa-text); box-shadow: var(--wa-shadow-float); }
+  header, footer { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--wa-border); }
   header button { border: 0; background: transparent; font-size: 22px; cursor: pointer; }
-  footer { justify-content: flex-end; gap: 8px; border-top: 1px solid #e3e6eb; border-bottom: 0; }
+  footer { justify-content: flex-end; gap: 8px; border-top: 1px solid var(--wa-border); border-bottom: 0; }
   .page-setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px; }
-  label { display: grid; gap: 5px; font-size: 12px; color: #535b66; }
-  select, input { box-sizing: border-box; height: 32px; padding: 4px 8px; border: 1px solid #c9cfd8; border-radius: 4px; background: #fff; color: #202124; }
-  fieldset { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; padding: 10px; border: 1px solid #d7dce4; border-radius: 5px; }
+  label { display: grid; gap: 5px; font-size: 12px; color: var(--wa-text-secondary); }
+  select, input { height: 32px; padding: 4px 8px; border: 1px solid var(--wa-border-strong); border-radius: var(--wa-radius-sm); background: var(--wa-surface); color: var(--wa-text); }
+  fieldset { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; padding: 10px; border: 1px solid var(--wa-border); border-radius: var(--wa-radius); }
   fieldset.wide { grid-column: 1 / -1; grid-template-columns: auto 1fr; align-items: center; }
-  legend { padding: 0 5px; font-size: 12px; color: #535b66; }
+  legend { padding: 0 5px; font-size: 12px; color: var(--wa-text-secondary); }
   .check { display: flex; flex-direction: row; align-items: center; }
   .check input { width: 16px; height: 16px; }
   .text { width: 100%; }

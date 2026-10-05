@@ -164,7 +164,9 @@
   let figureAlignment = $state<'left' | 'center' | 'right'>('center')
   let figureWrap = $state<'inline' | 'square'>('inline')
   let figureCrop = $state<'none' | 'fill' | 'cover'>('none')
-  let figureSpecText = $state('')
+  let figureSourceSpec: Record<string, unknown> | null = $state.raw(null)
+  let figureEditInstruction = $state('')
+  let figureRegenerating = $state(false)
   let objectNotice = $state('')
   let reviewPanelVisible = $state(false)
   let trackChanges = $state(false)
@@ -288,37 +290,70 @@
     figureAlignment = (['left', 'center', 'right'].includes(String(payload?.alignment)) ? payload?.alignment : 'center') as typeof figureAlignment
     figureWrap = (['inline', 'square'].includes(String(payload?.wrap)) ? payload?.wrap : 'inline') as typeof figureWrap
     figureCrop = (['none', 'fill', 'cover'].includes(String(payload?.crop)) ? payload?.crop : 'none') as typeof figureCrop
-    figureSpecText = payload?.editableSource && payload.spec ? JSON.stringify(payload.spec, null, 2) : ''
+    figureSourceSpec = payload?.editableSource && payload.spec && typeof payload.spec === 'object'
+      ? cloneJson(payload.spec as Record<string, unknown>)
+      : null
+    figureEditInstruction = ''
     figureDialogVisible = true
     return true
   }
 
   async function applyFigureSettings() {
     if (!editor) return
-    let sourcePatch: Record<string, unknown> = {}
-    if (figureSpecText.trim()) {
-      try {
-        const spec = JSON.parse(figureSpecText) as Record<string, unknown>
-        const response = await fetch('/api/figure/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ spec }) })
-        if (!response.ok) throw new Error(await response.text())
-        const data = await response.json()
-        const svg = String(data.svg || '')
-        sourcePatch = { spec, svg, src: svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : '', editableSource: true }
-      } catch (error) {
-        objectNotice = `图形源数据无效：${error instanceof Error ? error.message : '未知错误'}`
-        return
-      }
-    }
     const result = executeDocumentCommand(editor, createUserCommand('update_figure', {
       caption: figureCaption,
       alt: figureAlt,
       widthPercent: figureWidthPercent,
       alignment: figureAlignment,
       wrap: figureWrap,
-      crop: figureCrop,
-      ...sourcePatch
+      crop: figureCrop
     }))
     if (result.ok) figureDialogVisible = false
+  }
+
+  async function regenerateFigureFromInstruction() {
+    if (!editor || !figureSourceSpec || figureRegenerating) return
+    const instruction = figureEditInstruction.trim()
+    const currentDocId = get(docId)
+    if (!instruction || !currentDocId) return
+    figureRegenerating = true
+    objectNotice = ''
+    try {
+      const kind = String(figureSourceSpec.type || 'flow')
+      const prompt = `修改现有图表：${instruction}\n当前图表结构：${JSON.stringify(figureSourceSpec).slice(0, 2400)}`
+      const response = await fetch(`/api/doc/${currentDocId}/diagram/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, kind })
+      })
+      if (!response.ok) throw new Error(await response.text())
+      const payload = await response.json()
+      const nextSpec = payload?.spec
+      if (!nextSpec || typeof nextSpec !== 'object') throw new Error('没有返回可编辑的图表结构')
+      const render = await fetch('/api/figure/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spec: nextSpec })
+      })
+      if (!render.ok) throw new Error(await render.text())
+      const rendered = await render.json()
+      const svg = String(rendered.svg || '')
+      if (!svg) throw new Error('图表渲染结果为空')
+      const result = executeDocumentCommand(editor, createUserCommand('update_figure', {
+        spec: nextSpec,
+        svg,
+        src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+        editableSource: true
+      }))
+      if (!result.ok) throw new Error('图表更新失败')
+      figureSourceSpec = cloneJson(nextSpec as Record<string, unknown>)
+      figureEditInstruction = ''
+      objectNotice = '图表已更新，可继续输入要求修改。'
+    } catch (error) {
+      objectNotice = `图表修改失败：${error instanceof Error ? error.message : '未知错误'}`
+    } finally {
+      figureRegenerating = false
+    }
   }
 
   function openReferenceDialog(kind: typeof referenceDialog) {
@@ -2115,7 +2150,11 @@
         <label>对齐<select bind:value={figureAlignment}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label>
         <label>环绕<select bind:value={figureWrap}><option value="inline">嵌入型</option><option value="square">四周型</option></select></label>
         <label>裁剪方式<select bind:value={figureCrop}><option value="none">完整显示</option><option value="fill">拉伸填充</option><option value="cover">裁剪填充</option></select></label>
-        {#if figureSpecText}<label>图形源数据<textarea bind:value={figureSpecText} rows="8" spellcheck="false"></textarea></label><p>修改 JSON 后应用，图形会重新渲染，仍保留可编辑源数据。</p>{/if}
+        {#if figureSourceSpec}
+          <label>修改图表内容<textarea bind:value={figureEditInstruction} rows="3" placeholder="例如：增加审核节点，并用虚线表示退回路径"></textarea></label>
+          <button type="button" class="secondary" disabled={figureRegenerating || !figureEditInstruction.trim()} onclick={regenerateFigureFromInstruction}>{figureRegenerating ? '正在修改…' : '按要求修改图表'}</button>
+          <p>图表源数据会随文档保存，无需手动编辑代码。</p>
+        {/if}
         <footer><button type="button" onclick={() => (figureDialogVisible = false)}>取消</button><button class="primary" type="submit">应用</button></footer>
       </form>
     </div>

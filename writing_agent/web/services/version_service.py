@@ -171,7 +171,13 @@ class VersionService:
         session.doc_ir = deepcopy(version.doc_ir) if version.doc_ir else {}
         session.current_version_id = version_id
         app_v2.store.put(session)
-        return {"ok": 1, "version_id": version_id, "message": version.message, "doc_text": version.doc_text}
+        return {
+            "ok": 1,
+            "version_id": version_id,
+            "message": version.message,
+            "doc_text": version.doc_text,
+            "doc_ir": deepcopy(version.doc_ir) if version.doc_ir else {},
+        }
 
     async def version_branch(self, doc_id: str, request: Request) -> dict:
         app_v2 = app_v2_module()

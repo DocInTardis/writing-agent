@@ -61,7 +61,7 @@ export type OriginalitySummary = {
 }
 
 export type WorkbenchSurface = 'chat' | 'library' | 'editor' | 'canvas'
-export type WorkspaceMode = 'editor' | 'library' | 'collab'
+export type WorkspaceMode = 'editor' | 'library'
 
 export type LibraryCard = {
   id: string

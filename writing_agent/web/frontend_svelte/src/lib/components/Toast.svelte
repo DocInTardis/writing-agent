@@ -20,21 +20,21 @@
 
   .toast {
     padding: 10px 14px;
-    border-radius: 10px;
+    border-radius: var(--wa-radius, 7px);
     color: #fff;
     font-size: 12px;
-    box-shadow: 0 16px 30px rgba(250, 249, 247, 0.18);
+    box-shadow: var(--wa-shadow-float, 0 18px 48px rgba(21,31,46,.16));
   }
 
   .toast.info {
-    background: #d97706;
+    background: #315d98;
   }
 
   .toast.ok {
-    background: #16a34a;
+    background: var(--wa-success, #177245);
   }
 
   .toast.bad {
-    background: #dc2626;
+    background: var(--wa-danger, #b42318);
   }
 </style>

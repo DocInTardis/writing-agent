@@ -165,8 +165,8 @@
   }
 </script>
 
-<button class="btn ghost icon-btn-text" onclick={handleOpen} title="模型配置">
-  <span style="font-size:12px">模型 · {activeLabel()}</span>
+<button class="btn ghost icon-btn-text" onclick={handleOpen} title={`模型配置：${activeLabel()}`}>
+  <span>模型</span>
 </button>
 
 <Modal {open} title="AI 模型配置" onClose={() => { open = false; editing = null; }}>
@@ -276,13 +276,13 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px;
-    border: 1px solid rgba(90, 70, 45, 0.12);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid var(--wa-border);
+    border-radius: var(--wa-radius);
+    background: var(--wa-surface);
   }
   .llm-item.active {
-    border-color: #4caf50;
-    background: rgba(76, 175, 80, 0.08);
+    border-color: #82ba9c;
+    background: var(--wa-success-soft);
   }
   .llm-info {
     display: grid;
@@ -290,7 +290,7 @@
   }
   .llm-meta {
     font-size: 11px;
-    color: #888;
+    color: var(--wa-text-muted);
   }
   .llm-actions {
     display: flex;
@@ -298,7 +298,7 @@
     align-items: center;
   }
   .badge.active {
-    background: #4caf50;
+    background: var(--wa-success);
     color: #fff;
     padding: 2px 8px;
     border-radius: 12px;
@@ -306,7 +306,7 @@
   }
   .llm-empty {
     text-align: center;
-    color: #999;
+    color: var(--wa-text-muted);
     font-size: 13px;
     padding: 20px;
   }
@@ -317,9 +317,9 @@
     gap: 12px;
     margin-bottom: 10px;
     padding: 10px 12px;
-    border-radius: 8px;
-    color: #991b1b;
-    background: #fef2f2;
+    border-radius: var(--wa-radius);
+    color: var(--wa-danger);
+    background: var(--wa-danger-soft);
   }
   .llm-footer {
     display: flex;
@@ -327,7 +327,7 @@
     justify-content: flex-end;
     margin-top: 12px;
     padding-top: 10px;
-    border-top: 1px solid rgba(90, 70, 45, 0.1);
+    border-top: 1px solid var(--wa-border);
   }
   .llm-form {
     display: grid;
@@ -349,13 +349,14 @@
   .llm-form input,
   .llm-form select {
     padding: 6px 8px;
-    border: 1px solid rgba(90, 70, 45, 0.18);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--wa-border-strong);
+    border-radius: var(--wa-radius);
+    background: var(--wa-surface);
+    color: var(--wa-text);
     font-size: 13px;
   }
   .llm-form small {
-    color: #888;
+    color: var(--wa-text-muted);
     font-size: 11px;
   }
   .btn.small {
@@ -364,7 +365,7 @@
     border-radius: 6px;
   }
   .btn.danger {
-    color: #c62828;
-    border-color: rgba(198, 40, 40, 0.25);
+    color: var(--wa-danger);
+    border-color: #efc3c3;
   }
 </style>

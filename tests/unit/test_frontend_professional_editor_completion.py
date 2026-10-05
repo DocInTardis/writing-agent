@@ -24,7 +24,9 @@ def test_academic_objects_remain_editable_structures() -> None:
         assert node in kernel
     for command in ("insert_endnote_reference", "insert_citation", "update_bibliography", "update_equation"):
         assert f"registerDocumentCommand('{command}'" in commands
-    assert "figureSpecText" in editor
+    assert "figureSourceSpec" in editor
+    assert "regenerateFigureFromInstruction" in editor
+    assert "修改 JSON" not in editor
     assert "editableSource" in editor
 
 

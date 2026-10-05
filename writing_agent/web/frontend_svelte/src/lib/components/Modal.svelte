@@ -21,32 +21,40 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(250, 249, 247, 0.4);
+    border: 0;
+    background: rgba(21, 31, 46, 0.28);
     z-index: 60;
   }
 
   .modal {
     position: fixed;
-    top: 10%;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     width: min(560px, 92vw);
-    background: rgba(255, 255, 255, 0.96);
-    border-radius: 16px;
-    box-shadow: 0 24px 70px rgba(250, 249, 247, 0.28);
+    max-height: min(760px, 88vh);
+    overflow: auto;
+    border: 1px solid var(--wa-border, #dde2e8);
+    background: var(--wa-surface, #fff);
+    color: var(--wa-text, #20242c);
+    border-radius: var(--wa-radius-lg, 10px);
+    box-shadow: var(--wa-shadow-float, 0 18px 48px rgba(21,31,46,.16));
     z-index: 61;
-    padding: 16px;
+    padding: 0;
   }
 
   .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    min-height: 52px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--wa-border, #dde2e8);
   }
 
   .modal-title {
     font-size: 16px;
     font-weight: 600;
   }
+  .modal-body { padding: 18px; }
 </style>

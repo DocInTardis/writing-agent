@@ -1,5 +1,6 @@
 ﻿<script lang="ts">
   import './AppWorkbench.css'
+  import './design-system.css'
   import { onMount, untrack } from 'svelte'
   import Editor from './lib/components/Editor.svelte'
   import DiagramCanvas from './lib/components/DiagramCanvas.svelte'
@@ -53,7 +54,7 @@
     normalizeScore,
     plagiarismRiskLabel
   } from './lib/workbench/quality'
-  import { buildVersionGroups, formatVersionTime } from './lib/workbench/versions'
+  import { buildVersionGroups } from './lib/workbench/versions'
   import {
     normalizeGraphMeta,
     normalizeOriginalitySummary,
@@ -177,7 +178,6 @@
   let hideLibraryInfo = $state(false)
   let infoDrawerOpen = $state(false)
   let showCitations = $state(false)
-  let showVersions = $state(false)
   let showFeedbackPanel = $state(false)
   let feedbackItems = $state<FeedbackItem[]>([])
   let satisfactionRating = $state(0)
@@ -203,12 +203,10 @@
   let versionList = $state<Array<any>>([])
   let versionGroups = $state<Array<any>>([])
   let versionDiff = $state('')
-  let versionDiffFrom = $state('')
-  let versionDiffTo = $state('')
-  let versionTree = $state('')
   let versionMessage = $state('')
   let versionError = $state('')
   let assistantOpen = $state(false)
+  let versionPanelOpen = $state(false)
   let showAdvancedToolbar = $state(false)
   let canvasOpen = $state(false)
   let selectedBlockId = $state('')
@@ -397,11 +395,7 @@
     if (mode === 'library') {
       void loadLibraryItems()
     }
-    if (mode === 'collab') {
-      setAssistantOpen(true)
-    } else {
-      setAssistantOpen(false)
-    }
+    setAssistantOpen(false)
     if (mode === 'editor') {
       canvasOpen = false
     }
@@ -427,7 +421,6 @@
   function switchSurface(tab: WorkbenchSurface) {
     surfaceTab = tab
     if (tab === 'chat') {
-      switchWorkspaceMode('collab')
       setAssistantOpen(true)
       return
     }
@@ -1460,7 +1453,6 @@
 
   function openAssistantForBlock(customInstruction?: string) {
     inlinePanelTab = 'assistant'
-    switchWorkspaceMode('collab')
     setAssistantOpen(true)
     const ids = selectedTargetIds()
     const base = selectedTargetText()
@@ -1594,7 +1586,6 @@
     const withCmd = event.ctrlKey || event.metaKey
     if (withCmd && key === 'k') {
       event.preventDefault()
-      switchWorkspaceMode('collab')
       toggleAssistantOpen()
       return
     }
@@ -2459,13 +2450,6 @@
     }
   }
 
-  async function openVersions() {
-    showVersions = true
-    versionDiff = ''
-    versionTree = ''
-    await loadVersionLog()
-  }
-
   async function commitVersion() {
     if (!$docId) return
     const msg = versionMessage.trim() || '定稿版本'
@@ -2486,6 +2470,7 @@
 
   async function checkoutVersion(vid: string) {
     if (!$docId || !vid) return
+    if (!confirm('恢复后，当前文档会切换到所选版本。现有版本记录仍会保留。是否继续？')) return
     try {
       const resp = await fetch(`/api/doc/${$docId}/version/checkout`, {
         method: 'POST',
@@ -2493,22 +2478,18 @@
         body: JSON.stringify({ version_id: vid })
       })
       if (!resp.ok) throw new Error(await resp.text())
-      const data = await resp.json()
-      const txt = String(data.doc_text || '')
-      applyFinalSnapshot(txt)
-      lastSavedText = txt
+      await resp.json()
+      await loadDoc()
       await loadVersionLog()
-      pushToast('已切换版本', 'ok')
+      pushToast('已恢复所选版本', 'ok')
     } catch (err) {
-      pushToast(`切换失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
+      pushToast(`恢复失败: ${err instanceof Error ? err.message : '未知错误'}`, 'bad')
     }
   }
 
   async function loadVersionDiff(fromId: string, toId: string) {
     if (!$docId || !fromId || !toId) return
     versionDiff = ''
-    versionDiffFrom = fromId
-    versionDiffTo = toId
     try {
       const resp = await fetch(`/api/doc/${$docId}/version/diff?from_version=${fromId}&to_version=${toId}`)
       if (!resp.ok) throw new Error(await resp.text())
@@ -2525,37 +2506,6 @@
     const current = versionList.find((v: any) => v.is_current)
     if (!current || current.version_id === targetId) return
     await loadVersionDiff(current.version_id, targetId)
-  }
-
-  async function loadVersionTree() {
-    if (!$docId) return
-    versionTree = ''
-    try {
-      const resp = await fetch(`/api/doc/${$docId}/version/tree`)
-      if (!resp.ok) throw new Error(await resp.text())
-      const data = await resp.json()
-      const nodes = Array.isArray(data.nodes) ? data.nodes : []
-      const edges = Array.isArray(data.edges) ? data.edges : []
-      const lines: string[] = []
-      lines.push('节点：')
-      for (const n of nodes) {
-        const id = String(n.id || '').slice(0, 7)
-        const msg = String(n.message || '')
-        const ts = formatVersionTime(Number(n.timestamp || 0))
-        const cur = n.is_current ? ' *当前*' : ''
-        lines.push(`- ${id} ${msg} ${ts}${cur}`)
-      }
-      lines.push('')
-      lines.push('边：')
-      for (const e of edges) {
-        const from = String(e.from || '').slice(0, 7)
-        const to = String(e.to || '').slice(0, 7)
-        lines.push(`- ${from} -> ${to}`)
-      }
-      versionTree = lines.join('\n')
-    } catch (err) {
-      versionTree = err instanceof Error ? err.message : '版本树加载失败'
-    }
   }
 
   async function preflightExport(format: 'docx' | 'pdf') {
@@ -3591,19 +3541,18 @@
     onExportDocx={exportDocx}
     onExportPdf={exportPdf}
     onToggleInfo={toggleInfoDrawer}
+    onOpenVersions={() => { versionPanelOpen = true; void loadVersionLog() }}
+    onOpenAssistant={() => setAssistantOpen(true)}
   />
 
   <div class={`workspace ${hideLibraryInfo ? 'hide-info' : ''} mode-${workspaceMode}`}>
     <LibraryRail
-      {workspaceMode}
       bind:librarySearch
       bind:selectedLibraryCardId
       cards={filteredLibraryCards}
       onUpload={triggerLibraryUpload}
       onOpenCard={openLibraryCard}
       onSwitchMode={switchWorkspaceMode}
-      onOpenCitations={() => (showCitations = true)}
-      onOpenAssistant={() => { switchWorkspaceMode('collab'); setAssistantOpen(true) }}
     />
 
     <section class="doc-area">
@@ -3624,7 +3573,6 @@
           onRestore={(id) => updateLibraryStatus(id, 'restore')}
           onDelete={deleteLibraryItem}
           onCopyExcerpt={copyLibraryExcerpt}
-          onBack={() => switchWorkspaceMode('editor')}
         />
       {:else}
       <EditorCommandBar
@@ -3660,39 +3608,45 @@
       />
 
       {#if showAiRatePanel || showPlagiarismPanel || showFeedbackPanel}
-      <QualityPanels
-        {qualityAdviceItems}
-        {qualityOverview}
-        {runQualityAdviceAction}
-        {showAiRatePanel}
-        bind:aiRateThreshold
-        {aiRateLoading}
-        {aiRateResult}
-        {runAiRateCheck}
-        {showPlagiarismPanel}
-        bind:plagiarismThreshold
-        bind:plagiarismReferenceDocIds
-        bind:plagiarismReferenceText
-        {plagiarismLoading}
-        {plagiarismLibraryLoading}
-        {plagiarismResults}
-        {plagiarismMaxScore}
-        {plagiarismFlaggedCount}
-        {plagiarismLatestReport}
-        {runPlagiarismCheck}
-        {runPlagiarismLibraryScan}
-        {downloadPlagiarismReport}
-        {plagiarismRiskLabel}
-        {showFeedbackPanel}
-        bind:satisfactionRating
-        bind:satisfactionStage
-        bind:satisfactionNote
-        {satisfactionSaving}
-        {lastLowFeedbackRecorded}
-        {feedbackItems}
-        {submitSatisfaction}
-        {formatFeedbackTime}
-      />
+      <div class="drawer-backdrop" role="presentation">
+        <button class="drawer-hit" aria-label="关闭检查面板" onclick={() => { showAiRatePanel = false; showPlagiarismPanel = false; showFeedbackPanel = false }}></button>
+        <div class="drawer-shell quality-drawer" role="dialog" aria-modal="true" aria-label="检查与反馈">
+          <button class="drawer-close" onclick={() => { showAiRatePanel = false; showPlagiarismPanel = false; showFeedbackPanel = false }}>关闭</button>
+          <QualityPanels
+            {qualityAdviceItems}
+            {qualityOverview}
+            {runQualityAdviceAction}
+            {showAiRatePanel}
+            bind:aiRateThreshold
+            {aiRateLoading}
+            {aiRateResult}
+            {runAiRateCheck}
+            {showPlagiarismPanel}
+            bind:plagiarismThreshold
+            bind:plagiarismReferenceDocIds
+            bind:plagiarismReferenceText
+            {plagiarismLoading}
+            {plagiarismLibraryLoading}
+            {plagiarismResults}
+            {plagiarismMaxScore}
+            {plagiarismFlaggedCount}
+            {plagiarismLatestReport}
+            {runPlagiarismCheck}
+            {runPlagiarismLibraryScan}
+            {downloadPlagiarismReport}
+            {plagiarismRiskLabel}
+            {showFeedbackPanel}
+            bind:satisfactionRating
+            bind:satisfactionStage
+            bind:satisfactionNote
+            {satisfactionSaving}
+            {lastLowFeedbackRecorded}
+            {feedbackItems}
+            {submitSatisfaction}
+            {formatFeedbackTime}
+          />
+        </div>
+      </div>
       {/if}
 
       <div class="doc-stage">
@@ -3715,18 +3669,27 @@
 
     </section>
 
-    <VersionPanel
-      {versionLoading}
-      {versionError}
-      {versionGroups}
-      bind:versionMessage
-      {versionDiff}
-      onRefresh={loadVersionLog}
-      onCommit={commitVersion}
-      onCheckout={checkoutVersion}
-      onCompare={compareWithCurrent}
-    />
   </div>
+
+  {#if versionPanelOpen}
+    <div class="drawer-backdrop" role="presentation">
+      <button class="drawer-hit" aria-label="关闭版本记录" onclick={() => (versionPanelOpen = false)}></button>
+      <div class="drawer-shell" role="dialog" aria-modal="true" aria-label="版本记录">
+        <button class="drawer-close" onclick={() => (versionPanelOpen = false)}>关闭</button>
+        <VersionPanel
+          {versionLoading}
+          {versionError}
+          {versionGroups}
+          bind:versionMessage
+          {versionDiff}
+          onRefresh={loadVersionLog}
+          onCommit={commitVersion}
+          onCheckout={checkoutVersion}
+          onCompare={compareWithCurrent}
+        />
+      </div>
+    </div>
+  {/if}
 
   {#if infoDrawerOpen}
     <InfoDrawer

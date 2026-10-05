@@ -49,3 +49,35 @@ def test_quality_and_version_panels_use_product_language() -> None:
     assert "版本记录" in versions
     assert "自动保存" in versions
     assert ">恢复</button>" in versions
+
+
+def test_peripheral_surfaces_share_one_design_system_and_do_not_switch_to_a_fake_assistant_workspace() -> None:
+    app = _read("AppWorkbench.svelte")
+    tokens = _read("design-system.css")
+    legacy_styles = _read("AppWorkbench.css")
+    topbar = _read("lib/workbench/WorkbenchTopbar.svelte")
+    types = _read("lib/workbench/types.ts")
+
+    assert "import './design-system.css'" in app
+    for token in ("--wa-surface", "--wa-border", "--wa-text", "--wa-accent", "--wa-radius"):
+        assert token in tokens
+    assert "versionPanelOpen" in app
+    assert "quality-drawer" in app
+    assert "onOpenAssistant" in topbar
+    assert "onSwitchMode('collab')" not in topbar
+    assert "collab" not in types
+    assert "FilmLab-style dark skin overrides" not in legacy_styles
+    assert "Focus-first simplification" not in legacy_styles
+    assert "background: none," not in legacy_styles
+
+
+def test_version_restore_reloads_the_structured_document_and_diagrams_use_language_edits() -> None:
+    app = _read("AppWorkbench.svelte")
+    editor = _read("lib/components/StructuredEditor.svelte")
+
+    assert "await loadDoc()" in app
+    assert "恢复后，当前文档会切换到所选版本" in app
+    assert "figureEditInstruction" in editor
+    assert "按要求修改图表" in editor
+    assert "图表源数据会随文档保存，无需手动编辑代码" in editor
+    assert "figureSpecText" not in editor

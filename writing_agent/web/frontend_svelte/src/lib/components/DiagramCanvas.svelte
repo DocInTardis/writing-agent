@@ -19,6 +19,7 @@
 
   const kindOptions: Array<{ value: Kind; label: string }> = [
     { value: 'flow', label: '流程图' },
+    { value: 'architecture', label: '架构图' },
     { value: 'er', label: 'ER 图' },
     { value: 'sequence', label: '时序图' },
     { value: 'state', label: '状态图' },
@@ -358,16 +359,12 @@
           <div class="panel-title">{panelTitle(panelMode)}</div>
 
           {#if panelMode === 'studio'}
-            <div class="kind-grid">
-              {#each kindOptions as item}
-                <button
-                  class={`kind-chip ${kind === item.value ? 'active' : ''}`}
-                  onclick={() => (kind = item.value)}
-                >
-                  {item.label}
-                </button>
-              {/each}
-            </div>
+            <label class="kind-select">
+              <span>图表类型</span>
+              <select bind:value={kind}>
+                {#each kindOptions as item}<option value={item.value}>{item.label}</option>{/each}
+              </select>
+            </label>
 
             <div class="template-list">
               {#each quickTemplates[kind] as t}
@@ -460,7 +457,7 @@
   .canvas-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(250, 249, 247, 0.52);
+    background: rgba(21, 31, 46, 0.28);
     z-index: 24;
     display: grid;
     place-items: center;
@@ -470,10 +467,11 @@
   .canvas-shell {
     width: min(1480px, calc(100vw - 32px));
     height: min(92vh, 980px);
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.985);
-    border: 1px solid rgba(231, 229, 228, 1);
-    box-shadow: 0 30px 80px rgba(250, 249, 247, 0.45);
+    border-radius: var(--wa-radius-lg);
+    background: var(--wa-surface);
+    color: var(--wa-text);
+    border: 1px solid var(--wa-border);
+    box-shadow: var(--wa-shadow-float);
     display: grid;
     grid-template-rows: auto 1fr;
     overflow: hidden;
@@ -484,8 +482,8 @@
     justify-content: space-between;
     gap: 12px;
     padding: 14px 16px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.22);
-    background: linear-gradient(90deg, rgba(37, 99, 235, 0.1), rgba(14, 165, 233, 0.08));
+    border-bottom: 1px solid var(--wa-border);
+    background: var(--wa-surface);
   }
 
   .title-wrap h3 {
@@ -496,7 +494,7 @@
   .title-wrap p {
     margin: 0;
     font-size: 12px;
-    color: #57534e;
+    color: var(--wa-text-muted);
   }
 
   .top-actions {
@@ -509,7 +507,8 @@
 
   .close-btn {
     border: none;
-    background: rgba(250, 249, 247, 0.08);
+    background: transparent;
+    color: var(--wa-text-secondary);
     width: 32px;
     height: 32px;
     border-radius: 10px;
@@ -525,7 +524,7 @@
   }
 
   .canvas-sidebar {
-    border-right: 1px solid rgba(231, 229, 228, 1);
+    border-right: 1px solid var(--wa-border);
     padding: 12px;
     display: grid;
     gap: 10px;
@@ -536,31 +535,21 @@
   .panel-title {
     font-size: 13px;
     font-weight: 700;
-    color: #1c1917;
+    color: var(--wa-text);
   }
 
-  .kind-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-  }
+  .kind-select { display: grid; gap: 5px; color: var(--wa-text-secondary); font-size: 12px; }
+  .kind-select select { width: 100%; height: 34px; padding: 0 9px; border: 1px solid var(--wa-border-strong); border-radius: var(--wa-radius); background: var(--wa-surface); color: var(--wa-text); }
 
-  .kind-chip,
   .template-chip,
   .history-item {
-    border: 1px solid rgba(231, 229, 228, 1);
-    border-radius: 10px;
-    background: #fff;
+    border: 1px solid var(--wa-border);
+    border-radius: var(--wa-radius);
+    background: var(--wa-surface);
+    color: var(--wa-text-secondary);
     cursor: pointer;
     font-size: 12px;
     padding: 7px 9px;
-  }
-
-  .kind-chip.active {
-    border-color: rgba(37, 99, 235, 0.5);
-    background: rgba(37, 99, 235, 0.12);
-    color: #1e3a8a;
-    font-weight: 600;
   }
 
   .template-list {
@@ -570,17 +559,18 @@
 
   .template-chip {
     text-align: left;
-    background: rgba(248, 250, 252, 0.95);
+    background: var(--wa-surface-subtle);
   }
 
   .prompt-box {
-    border: 1px solid rgba(148, 163, 184, 0.32);
-    border-radius: 12px;
+    border: 1px solid var(--wa-border-strong);
+    border-radius: var(--wa-radius);
     padding: 10px 12px;
     font-size: 13px;
     line-height: 1.5;
     resize: vertical;
-    background: #fff;
+    background: var(--wa-surface);
+    color: var(--wa-text);
   }
 
   .prompt-box.mini {
@@ -610,11 +600,11 @@
   }
 
   .history-item > div:nth-child(2) {
-    color: #57534e;
+    color: var(--wa-text-secondary);
   }
 
   .history-item > div:nth-child(3) {
-    color: #78716c;
+    color: var(--wa-text-muted);
     font-size: 11px;
   }
 
@@ -625,7 +615,7 @@
     display: grid;
     grid-template-rows: auto 1fr;
     gap: 10px;
-    background: #ffffff;
+    background: var(--wa-surface);
   }
 
   .stage-toolbar {
@@ -633,10 +623,10 @@
     justify-content: space-between;
     gap: 10px;
     flex-wrap: wrap;
-    border: 1px solid rgba(231, 229, 228, 1);
-    border-radius: 12px;
+    border: 1px solid var(--wa-border);
+    border-radius: var(--wa-radius);
     padding: 8px 10px;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--wa-surface);
   }
 
   .zoom-group,
@@ -649,10 +639,10 @@
 
   .preview-wrap {
     min-height: 0;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 16px;
+    border: 1px solid var(--wa-border);
+    border-radius: var(--wa-radius-lg);
     background:
-      linear-gradient(0deg, rgba(248, 250, 252, 0.72), rgba(248, 250, 252, 0.72)),
+      linear-gradient(0deg, rgba(248, 250, 252, 0.82), rgba(248, 250, 252, 0.82)),
       repeating-linear-gradient(90deg, rgba(148, 163, 184, 0.08) 0, rgba(148, 163, 184, 0.08) 1px, transparent 1px, transparent 24px),
       repeating-linear-gradient(0deg, rgba(148, 163, 184, 0.08) 0, rgba(148, 163, 184, 0.08) 1px, transparent 1px, transparent 24px);
     overflow: auto;
@@ -680,7 +670,7 @@
     display: grid;
     place-content: center;
     text-align: center;
-    color: #78716c;
+    color: var(--wa-text-muted);
     gap: 8px;
   }
 
@@ -697,20 +687,20 @@
   .btn {
     border: none;
     padding: 8px 12px;
-    border-radius: 10px;
+    border-radius: var(--wa-radius);
     cursor: pointer;
     font-size: 12px;
   }
 
   .btn.primary {
-    background: linear-gradient(135deg, #2563eb, #0ea5e9);
+    background: var(--wa-accent);
     color: #fff;
   }
 
   .btn.ghost {
-    background: #f5f5f4;
-    color: #292524;
-    border: 1px solid #e7e5e4;
+    background: var(--wa-surface);
+    color: var(--wa-text-secondary);
+    border: 1px solid var(--wa-border);
   }
 
   .btn:disabled {
@@ -719,7 +709,7 @@
   }
 
   .error {
-    color: #dc2626;
+    color: var(--wa-danger);
     font-size: 12px;
     background: rgba(254, 242, 242, 0.9);
     border: 1px solid rgba(220, 38, 38, 0.35);
@@ -729,7 +719,7 @@
 
   .empty {
     font-size: 12px;
-    color: #78716c;
+    color: var(--wa-text-muted);
     padding: 10px;
     border: 1px dashed rgba(231, 229, 228, 1);
     border-radius: 10px;
@@ -763,8 +753,5 @@
       border-bottom: 1px solid rgba(231, 229, 228, 1);
     }
 
-    .kind-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
 </style>

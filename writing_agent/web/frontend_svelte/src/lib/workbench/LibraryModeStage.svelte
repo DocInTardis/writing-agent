@@ -18,8 +18,7 @@
     onTrash,
     onRestore,
     onDelete,
-    onCopyExcerpt,
-    onBack
+    onCopyExcerpt
   }: {
     libraryViewMode: 'grid' | 'list'
     statusFilter: 'active' | 'pending' | 'approved' | 'trashed'
@@ -36,7 +35,6 @@
     onRestore: (id: string) => void | Promise<void>
     onDelete: (id: string) => void | Promise<void>
     onCopyExcerpt: () => void | Promise<void>
-    onBack: () => void
   } = $props()
 
   let selected = $derived(cards.find((card) => card.id === selectedId) || null)
@@ -49,7 +47,6 @@
       <p>只有“已用于 AI”的资料会参与检索。上传不会改动当前正文。</p>
     </div>
     <div class="head-actions">
-      <button class="quiet" onclick={onBack}>返回文档</button>
       <button class="primary" onclick={onUpload}><Icon name="upload" size={14} />添加资料</button>
     </div>
   </header>

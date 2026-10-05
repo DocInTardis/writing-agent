@@ -200,12 +200,13 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
     assert(await evaluate(`document.body.innerText.includes('已用于 AI')`), 'material AI opt-in status was not rendered')
-    await evaluate(`document.querySelector('.primary-nav button')?.click()`)
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === '文档')?.click()`)
     const documentDeadline = Date.now() + 10_000
     while (Date.now() < documentDeadline) {
       if (await evaluate("Boolean(document.querySelector('.structured-editor .ProseMirror'))")) break
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
+    assert(await evaluate("Boolean(document.querySelector('.structured-editor .ProseMirror'))"), 'editor did not remount after leaving the library')
     await evaluate("document.querySelector('.structured-editor .ProseMirror').focus()")
 
     async function key(key, code = key, modifiers = 0) {

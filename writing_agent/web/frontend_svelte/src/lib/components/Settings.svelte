@@ -94,7 +94,7 @@
   }
 </script>
 
-<button class="btn ghost" onclick={handleOpen}>设置</button>
+<button class="btn ghost" onclick={handleOpen}>偏好</button>
 
 <Modal {open} title="写作偏好" onClose={() => (open = false)}>
   {#if loading}
@@ -136,5 +136,21 @@
 </Modal>
 
 <style>
-  .loading { padding: 30px; color: #7a8493; text-align: center; }.settings-grid { display: grid; gap: 13px; }.settings-grid > label, .target-row label { display: grid; gap: 5px; color: #596579; font-size: 12px; }.settings-grid input, .settings-grid select, .settings-grid textarea { box-sizing: border-box; width: 100%; min-height: 34px; padding: 7px 9px; border: 1px solid #d7dce4; border-radius: 6px; background: #fff; color: #273142; font: inherit; outline: none; }.settings-grid input:focus, .settings-grid select:focus, .settings-grid textarea:focus { border-color: #7ba8df; }.target-row { display: grid; grid-template-columns: 1fr 100px; gap: 10px; }.check { display: flex !important; align-items: center; gap: 8px !important; }.check input { width: 15px; min-height: 15px; }.citation-row { display: flex; min-height: 34px; align-items: center; justify-content: space-between; }.count { display: flex; align-items: center; gap: 5px; color: #697386; font-size: 12px; }.count input { width: 64px; }.shortcut-settings { margin-top: 16px; color: #596579; font-size: 12px; }.shortcut-settings summary { cursor: pointer; }.shortcut-settings dl { display: grid; grid-template-columns: 1.4fr 1fr; gap: 6px 12px; }.shortcut-settings dt { font-family: ui-monospace, Consolas, monospace; }.shortcut-settings dd { margin: 0; }.settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .loading { padding: 30px; color: var(--wa-text-muted); text-align: center; }
+  .settings-grid { display: grid; gap: 13px; }
+  .settings-grid > label, .target-row label { display: grid; gap: 5px; color: var(--wa-text-secondary); font-size: 12px; }
+  .settings-grid input, .settings-grid select, .settings-grid textarea { width: 100%; min-height: 34px; padding: 7px 9px; border: 1px solid var(--wa-border-strong); border-radius: var(--wa-radius); background: var(--wa-surface); color: var(--wa-text); outline: none; }
+  .settings-grid input:focus, .settings-grid select:focus, .settings-grid textarea:focus { border-color: var(--wa-accent); }
+  .target-row { display: grid; grid-template-columns: 1fr 100px; gap: 10px; }
+  .check { display: flex !important; align-items: center; gap: 8px !important; }
+  .check input { width: 15px; min-height: 15px; }
+  .citation-row { display: flex; min-height: 34px; align-items: center; justify-content: space-between; }
+  .count { display: flex; align-items: center; gap: 5px; color: var(--wa-text-muted); font-size: 12px; }
+  .count input { width: 64px; }
+  .shortcut-settings { margin-top: 16px; padding: 10px; border: 1px solid var(--wa-border); border-radius: var(--wa-radius); background: var(--wa-surface-subtle); color: var(--wa-text-secondary); font-size: 12px; }
+  .shortcut-settings summary { cursor: pointer; }
+  .shortcut-settings dl { display: grid; grid-template-columns: 1.4fr 1fr; gap: 6px 12px; }
+  .shortcut-settings dt { font-family: ui-monospace, Consolas, monospace; }
+  .shortcut-settings dd { margin: 0; }
+  .settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 </style>

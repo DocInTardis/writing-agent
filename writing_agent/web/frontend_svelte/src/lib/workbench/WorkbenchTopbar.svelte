@@ -11,7 +11,9 @@
     onSave,
     onExportDocx,
     onExportPdf,
-    onToggleInfo
+    onToggleInfo,
+    onOpenVersions,
+    onOpenAssistant
   }: {
     workspaceMode: WorkspaceMode
     topStatusLine: string
@@ -20,6 +22,8 @@
     onExportDocx: () => void
     onExportPdf: () => void
     onToggleInfo: () => void
+    onOpenVersions: () => void
+    onOpenAssistant: () => void
   } = $props()
 </script>
 
@@ -41,7 +45,7 @@
       <button class={`menu-item ${workspaceMode === 'library' ? 'active' : ''}`} onclick={() => onSwitchMode('library')}>
         <span>资料</span>
       </button>
-      <button class={`menu-item ${workspaceMode === 'collab' ? 'active' : ''}`} onclick={() => onSwitchMode('collab')}>
+      <button class="menu-item" onclick={onOpenAssistant}>
         <span>助手</span>
       </button>
     </nav>
@@ -59,8 +63,11 @@
       <Icon name="pdf" className="ui-icon" />
       <span>PDF</span>
     </button>
-    <button class="btn ghost topbar-more" onclick={onToggleInfo} title="文档信息" aria-label="文档信息">···</button>
+    <button class="btn ghost icon-btn-text" onclick={onOpenVersions} title="版本记录">
+      <span>版本</span>
+    </button>
     <LLMConfig />
     <Settings />
+    <button class="btn ghost topbar-more" onclick={onToggleInfo} title="文档信息" aria-label="文档信息">···</button>
   </div>
 </header>

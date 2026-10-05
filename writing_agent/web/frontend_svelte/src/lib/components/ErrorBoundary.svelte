@@ -23,18 +23,9 @@
 
 {#if hasError}
   <div class="error-boundary">
-    <div class="error-icon">⚠️</div>
-    <h2>抱歉，出现了一些问题</h2>
-    <p class="error-message">{errorMessage}</p>
-    <div class="error-suggestion">
-      建议：
-      <ul>
-        <li>刷新页面重试</li>
-        <li>检查网络连接</li>
-        <li>清除浏览器缓存</li>
-        <li>如问题持续，请联系技术支持</li>
-      </ul>
-    </div>
+    <h2>这个面板暂时无法显示</h2>
+    <p>正文和已经保存的内容不会因此丢失。</p>
+    <details><summary>错误详情</summary><p class="error-message">{errorMessage}</p></details>
     <button class="btn-retry" onclick={() => window.location.reload()}>
       重新加载
     </button>
@@ -52,65 +43,38 @@
     min-height: 400px;
     padding: 40px;
     text-align: center;
-    background: rgba(255, 243, 224, 0.6);
-    border-radius: 16px;
-    border: 2px solid rgba(200, 100, 100, 0.3);
-  }
-
-  .error-icon {
-    font-size: 64px;
-    margin-bottom: 20px;
-    animation: shake 0.5s ease;
-  }
-
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-10px); }
-    75% { transform: translateX(10px); }
+    background: var(--wa-surface-subtle, #f7f8fa);
+    border-radius: var(--wa-radius-lg, 10px);
+    border: 1px solid var(--wa-border, #dde2e8);
   }
 
   h2 {
-    color: #8b4513;
+    color: var(--wa-text, #20242c);
     margin: 0 0 16px;
     font-size: 24px;
   }
 
   .error-message {
-    color: #d32f2f;
-    font-size: 14px;
-    font-family: 'Courier New', monospace;
-    background: rgba(211, 47, 47, 0.1);
+    color: var(--wa-danger, #b42318);
+    font-size: 12px;
+    font-family: ui-monospace, Consolas, monospace;
+    background: var(--wa-danger-soft, #fff1f0);
     padding: 12px 20px;
     border-radius: 8px;
     margin: 16px 0;
     max-width: 600px;
   }
 
-  .error-suggestion {
-    text-align: left;
-    max-width: 500px;
-    color: #6b5d45;
-    line-height: 1.6;
-  }
-
-  .error-suggestion ul {
-    margin-top: 8px;
-  }
+  details { max-width: 600px; color: var(--wa-text-muted, #76808f); }
 
   .btn-retry {
     margin-top: 24px;
     padding: 12px 32px;
-    background: linear-gradient(135deg, #8b7355 0%, #6b5d45 100%);
+    background: var(--wa-accent, #2563eb);
     color: #fff;
     border: none;
-    border-radius: 12px;
-    font-size: 16px;
+    border-radius: var(--wa-radius, 7px);
+    font-size: 13px;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-
-  .btn-retry:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(139, 115, 85, 0.3);
   }
 </style>
