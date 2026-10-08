@@ -37,6 +37,7 @@
     onblockedit,
     onblockselect,
     onblockai,
+    ontextai,
     onblockdrag,
     ontoolbarstate
   }: {
@@ -46,6 +47,7 @@
     onblockedit?: (payload: any) => void
     onblockselect?: (payload: any) => void
     onblockai?: () => void
+    ontextai?: (payload: { text: string; from: number; to: number }) => void
     onblockdrag?: (active: boolean) => void
     ontoolbarstate?: (state: any) => void
   } = $props()
@@ -100,6 +102,8 @@
   let replaceText = $state('')
   let findStatus = $state('')
   let outlineVisible = $state(false)
+  let outlineTab: 'headings' | 'search' = $state('headings')
+  let outlineQuery = $state('')
   let zoomPercent = $state(100)
   let selectionToolbarVisible = $state(false)
   let selectionToolbarTop = $state(0)
@@ -510,6 +514,39 @@
       if (node.type.name === 'heading') headings.push({ id: String(node.attrs.nodeId || position), text: node.textContent || '未命名标题', level: Number(node.attrs.level || 1), position })
     })
     return headings
+  }
+
+  function navigationSearchResults() {
+    if (!editor) return []
+    const query = outlineQuery.trim().toLocaleLowerCase()
+    if (!query) return []
+    const results: Array<{ position: number; excerpt: string }> = []
+    editor.state.doc.descendants((node, position) => {
+      if (results.length >= 100 || !node.isTextblock) return
+      const text = node.textContent
+      const comparable = text.toLocaleLowerCase()
+      let searchFrom = 0
+      while (results.length < 100) {
+        const matchAt = comparable.indexOf(query, searchFrom)
+        if (matchAt < 0) break
+        const start = Math.max(0, matchAt - 24)
+        const end = Math.min(text.length, matchAt + query.length + 42)
+        results.push({
+          position: position + matchAt,
+          excerpt: `${start > 0 ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}`
+        })
+        searchFrom = matchAt + Math.max(1, query.length)
+      }
+    })
+    return results
+  }
+
+  function requestAiForTextSelection() {
+    if (!editor || editor.state.selection.empty) return
+    const { from, to } = editor.state.selection
+    const text = editor.state.doc.textBetween(from, to, '\n', '\n').trim()
+    if (!text) return
+    ontextai?.({ text, from, to })
   }
 
   function jumpToOutline(position: number) {
@@ -1472,13 +1509,14 @@
       const end = editor.view.coordsAtPos(to)
       const shellRect = shell.getBoundingClientRect()
       selectionToolbarTop = Math.max(4, Math.min(start.top, end.top) - shellRect.top - 38)
-      selectionToolbarLeft = Math.max(4, Math.min((start.left + end.right) / 2 - shellRect.left - 92, shellRect.width - 190))
+      selectionToolbarLeft = Math.max(4, Math.min((start.left + end.right) / 2 - shellRect.left - 112, shellRect.width - 230))
     }
     onblockselect?.({
       blockId: blockIds[0] || '',
       blockIds,
       blocks: exposedBlocks.map((block) => ({ ...block, kind: 'block' })),
       text,
+      selection: selectionToolbarVisible ? { kind: 'text', from, to } : null,
       rect: null,
       style: {}
     })
@@ -1985,6 +2023,7 @@
       <button title="下划线" onmousedown={(event) => event.preventDefault()} onclick={() => runLegacyCommand('underline')}><u>U</u></button>
       <button title="突出显示" onmousedown={(event) => event.preventDefault()} onclick={() => runLegacyCommand('bgcolor:#fff2cc')}>▨</button>
       <button title="清除格式" onmousedown={(event) => event.preventDefault()} onclick={() => runLegacyCommand('clear-format')}>Tx</button>
+      <button class="selection-ai" title="让 AI 修改所选文字" onmousedown={(event) => event.preventDefault()} onclick={requestAiForTextSelection}>AI</button>
     </div>
   {/if}
   {#if findPanelVisible}
@@ -1997,10 +2036,25 @@
   {/if}
   {#if outlineVisible}
     <aside class="outline-panel" aria-label="文档导航大纲">
-      <strong>导航</strong>
-      {#each outlineHeadings() as heading (heading.id)}
-        <button style:padding-left={`${8 + (heading.level - 1) * 12}px`} onclick={() => jumpToOutline(heading.position)}>{heading.text}</button>
-      {:else}<small>应用标题样式后将在这里显示。</small>{/each}
+      <header><strong>导航</strong><button aria-label="关闭导航" onclick={() => (outlineVisible = false)}>×</button></header>
+      <div class="outline-tabs" role="tablist" aria-label="导航方式">
+        <button class:active={outlineTab === 'headings'} role="tab" aria-selected={outlineTab === 'headings'} onclick={() => (outlineTab = 'headings')}>标题 {outlineHeadings().length}</button>
+        <button class:active={outlineTab === 'search'} role="tab" aria-selected={outlineTab === 'search'} onclick={() => (outlineTab = 'search')}>搜索</button>
+      </div>
+      {#if outlineTab === 'headings'}
+        <div class="outline-results">
+          {#each outlineHeadings() as heading (heading.id)}
+            <button style:padding-left={`${8 + (heading.level - 1) * 12}px`} onclick={() => jumpToOutline(heading.position)}>{heading.text}</button>
+          {:else}<small>应用标题样式后将在这里形成文档大纲。</small>{/each}
+        </div>
+      {:else}
+        <input class="outline-search" aria-label="搜索文档" placeholder="搜索当前文档" bind:value={outlineQuery} />
+        <div class="outline-results search-results">
+          {#each navigationSearchResults() as result, index (`${result.position}-${index}`)}
+            <button onclick={() => jumpToOutline(result.position)}>{result.excerpt}</button>
+          {:else}<small>{outlineQuery.trim() ? '没有找到匹配内容。' : '输入文字即可定位正文内容。'}</small>{/each}
+        </div>
+      {/if}
     </aside>
   {/if}
   {#if proofPanelVisible}
@@ -2217,6 +2271,16 @@
     border-radius: 3px;
     box-shadow: 0 8px 28px rgba(38, 50, 66, 0.12);
   }
+  .structured-editor-shell:not(.paper) {
+    width: min(100%, 1100px);
+    min-height: calc(100vh - 220px);
+    padding: 52px clamp(40px, 8vw, 96px) 96px;
+    border: 1px solid #dfe3e8;
+    border-radius: 3px;
+  }
+  .structured-editor-shell:not(.paper) :global(.wa-page-boundary),
+  .structured-editor-shell:not(.paper) :global(.wa-page-end),
+  .structured-editor-shell:not(.paper) :global(.wa-first-page-header) { display: none; }
   .structured-editor :global(.tiptap) {
     min-height: 24cm;
     outline: none;
@@ -2307,6 +2371,8 @@
   }
   .selection-toolbar button { min-width: 30px; height: 28px; border: 0; border-radius: 3px; background: transparent; color: #263244; cursor: pointer; }
   .selection-toolbar button:hover { background: #edf3fb; }
+  .selection-toolbar .selection-ai { min-width: 36px; margin-left: 2px; background: #eaf2ff; color: #1d5fbf; font-weight: 700; }
+  .selection-toolbar .selection-ai:hover { background: #dceaff; }
   .find-panel {
     position: absolute;
     z-index: 10;
@@ -2334,14 +2400,24 @@
     width: 210px;
     max-height: 70vh;
     gap: 2px;
-    overflow: auto;
+    overflow: hidden;
     padding: 10px;
     border: 1px solid #d5dce7;
     border-radius: 6px;
     background: #fff;
     box-shadow: 0 5px 18px rgba(38, 50, 66, .12);
   }
+  .outline-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .outline-panel header button { padding: 0 4px; color: #667085; font-size: 18px; }
+  .outline-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid #e4e7ec; }
+  .outline-tabs button { text-align: center; }
+  .outline-tabs button.active { background: #eaf2ff; color: #1d5fbf; font-weight: 600; }
+  .outline-search { box-sizing: border-box; width: 100%; height: 30px; margin: 4px 0; padding: 0 8px; border: 1px solid #cfd6e2; border-radius: 4px; outline: none; }
+  .outline-search:focus { border-color: #6b9ddd; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
+  .outline-results { display: grid; max-height: calc(70vh - 92px); gap: 2px; overflow: auto; }
+  .outline-results small { padding: 10px 6px; color: #7a8494; line-height: 1.5; }
   .outline-panel button { overflow: hidden; padding-block: 6px; border: 0; border-radius: 3px; background: transparent; color: #344054; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .outline-results.search-results button { white-space: normal; line-height: 1.45; }
   .outline-panel button:hover { background: #edf3fb; }
   .proof-panel {
     position: absolute;

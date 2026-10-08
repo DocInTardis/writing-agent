@@ -207,6 +207,12 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
     assert(await evaluate("Boolean(document.querySelector('.structured-editor .ProseMirror'))"), 'editor did not remount after leaving the library')
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === '视图')?.click()`)
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.includes('连续视图'))?.click()`)
+    assert(await evaluate("!document.querySelector('.structured-editor-shell')?.classList.contains('paper')"), 'continuous view did not remove page chrome')
+    assert(await evaluate("localStorage.getItem('wa_editor_view_mode') === 'continuous'"), 'continuous view preference was not persisted')
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.includes('页面视图'))?.click()`)
+    assert(await evaluate("Boolean(document.querySelector('.structured-editor-shell.paper'))"), 'page view was not restored')
     await evaluate("document.querySelector('.structured-editor .ProseMirror').focus()")
 
     async function key(key, code = key, modifiers = 0) {
@@ -276,6 +282,17 @@ async function main() {
     await key('End')
     await key('Home')
 
+    // The navigation pane combines Word-style headings with in-document search.
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === '视图')?.click()`)
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.includes('导航窗格'))?.click()`)
+    await evaluate(`[...document.querySelectorAll('.outline-tabs button')].find((button) => button.textContent?.trim() === '搜索')?.click()`)
+    await evaluate(`(() => { const input = document.querySelector('.outline-search'); input.value = '第二段正文'; input.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+    assert(await evaluate(`document.querySelector('.outline-results')?.innerText.includes('第二段正文')`), 'navigation search did not locate document text')
+    await evaluate(`document.querySelector('.outline-results button')?.click()`)
+    state = await snapshot()
+    assert(state.focusBlock === state.ids[1], 'navigation search did not move the caret to the matching paragraph')
+    await evaluate(`document.querySelector('.outline-panel header button')?.click()`)
+
     // Drag from the first paragraph into the second using trusted pointer input.
     const drag = await evaluate(`(() => {
       const blocks = [...document.querySelectorAll('.structured-editor .ProseMirror > [data-node-id]')]
@@ -332,6 +349,11 @@ async function main() {
     })()`)
     assert(state.selectedText.length > 3, `mouse drag did not create a text selection: ${JSON.stringify({ drag, dragDebug, state })}`)
     assert(state.anchorBlock !== state.focusBlock, 'mouse drag selection did not cross paragraph blocks')
+    assert(await evaluate(`Boolean([...document.querySelectorAll('.selection-toolbar button')].find((button) => button.textContent?.trim() === 'AI'))`), 'text selection did not expose the AI edit action')
+    await evaluate(`[...document.querySelectorAll('.selection-toolbar button')].find((button) => button.textContent?.trim() === 'AI')?.click()`)
+    assert(await evaluate(`Boolean(document.querySelector('.assistant-sheet'))`), 'selection AI action did not open the assistant')
+    assert(await evaluate(`document.querySelector('.assistant-sheet textarea')?.value.includes('只修改当前选中的文字')`), 'selection AI action lost its scoped instruction')
+    await evaluate(`[...document.querySelectorAll('.assistant-sheet button')].find((button) => button.textContent?.trim() === '关闭')?.click()`)
 
     // A browser-native triple click selects the paragraph, not the whole editor.
     const triple = await evaluate(`(() => {
@@ -352,7 +374,9 @@ async function main() {
     console.log('  IME composition and commit: pass')
     console.log('  paragraph split and soft break: pass')
     console.log('  keyboard cross-block navigation: pass')
+    console.log('  heading and document-search navigation: pass')
     console.log('  cross-paragraph pointer selection: pass')
+    console.log('  page/continuous view and selection-scoped AI handoff: pass')
     console.log('  native triple-click paragraph selection: pass')
     if (sidecar.exitCode && sidecarError) throw new Error(sidecarError)
   } finally {

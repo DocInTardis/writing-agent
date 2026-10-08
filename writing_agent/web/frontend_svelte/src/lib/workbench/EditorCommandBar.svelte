@@ -61,6 +61,8 @@
     generating,
     instruction,
     resumeState,
+    viewMode,
+    onViewModeChange,
     onRunEditorCommand,
     onOpenCanvas,
     onOpenCitations,
@@ -81,6 +83,8 @@
     generating: boolean
     instruction: string
     resumeState: ResumeState | null
+    viewMode: 'pages' | 'continuous'
+    onViewModeChange: (mode: 'pages' | 'continuous') => void
     onRunEditorCommand: (cmd: EditorCommand) => void
     onOpenCanvas: () => void
     onOpenCitations: () => void
@@ -375,6 +379,8 @@
       </div>
     {:else if activeTab === 'view'}
       <div class="ribbon-group action-group">
+        <button class:active={viewMode === 'pages'} class="ribbon-action" onclick={() => onViewModeChange('pages')}><span>▤</span>页面视图</button>
+        <button class:active={viewMode === 'continuous'} class="ribbon-action" onclick={() => onViewModeChange('continuous')}><span>≡</span>连续视图</button>
         <button class="ribbon-action" onclick={() => command('view-outline')}><span>☰</span>导航窗格</button>
         <button class="ribbon-action" onclick={() => command('zoom-out')}><span>−</span>缩小</button>
         <button class="ribbon-action" onclick={() => command('zoom-100')}><span>100%</span>实际大小</button>

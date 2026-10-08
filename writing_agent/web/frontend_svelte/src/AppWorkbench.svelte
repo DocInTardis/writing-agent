@@ -208,6 +208,7 @@
   let assistantOpen = $state(false)
   let versionPanelOpen = $state(false)
   let showAdvancedToolbar = $state(false)
+  let editorViewMode: 'pages' | 'continuous' = $state('pages')
   let canvasOpen = $state(false)
   let selectedBlockId = $state('')
   let selectedBlockIds = $state<string[]>([])
@@ -220,6 +221,7 @@
     sectionTitle?: string
   }>>([])
   let selectedBlockText = $state('')
+  let activeTextSelection: { text: string; from: number; to: number } | null = $state.raw(null)
   let blockStyleFontSize = $state('')
   let blockStyleLineHeight = $state('')
   let blockStyleFontFamily = $state('')
@@ -1119,6 +1121,13 @@
 
   function handleBlockSelect(event: any) {
     const detail = eventPayload(event)
+    const textSelection = detail.selection?.kind === 'text' && String(detail.text || '').trim()
+      ? {
+          text: String(detail.text || '').trim(),
+          from: Number(detail.selection.from || 0),
+          to: Number(detail.selection.to || 0)
+        }
+      : null
     const incomingIds = Array.isArray(detail.blockIds)
       ? detail.blockIds.map((v: unknown) => String(v || '').trim()).filter(Boolean)
       : []
@@ -1161,6 +1170,7 @@
       selectedBlocks.length > 1
         ? selectedBlocks.map((b, idx) => `[块${idx + 1}] ${b.text}`.trim()).join('\n\n')
         : String(detail.text || '')
+    activeTextSelection = nextIds.length ? null : textSelection
     const style = detail.style && typeof detail.style === 'object' ? detail.style : {}
     blockStyleFontFamily = String((style as any).fontFamily || '')
     blockStyleFontSize = String((style as any).fontSize || '')
@@ -1410,8 +1420,10 @@
 
   function buildSelectedRevisionPayload(baseText: string) {
     const selectedIds = selectedTargetIds()
-    if (!selectedIds.length) return null
-    const selected = sanitizeAiInputText(selectedTargetPlainText(), { trim: true, maxChars: 16000 })
+    const selected = sanitizeAiInputText(
+      activeTextSelection?.text || (selectedIds.length ? selectedTargetPlainText() : ''),
+      { trim: true, maxChars: 16000 }
+    )
     if (!selected) return null
     const src = sanitizeAiDocumentText(baseText)
     if (!src) return sanitizeAiSelectionPayload({ text: selected })
@@ -1433,6 +1445,20 @@
       })
     }
     return sanitizeAiSelectionPayload({ text: compact || selected })
+  }
+
+  function handleTextSelectionAi(payload: { text: string; from: number; to: number }) {
+    const text = String(payload.text || '').trim()
+    if (!text) return
+    activeTextSelection = { text, from: Number(payload.from || 0), to: Number(payload.to || 0) }
+    instruction.set('请只修改当前选中的文字，保留事实和术语。')
+    setAssistantOpen(true)
+    pushToast(`已将所选 ${text.length} 字作为 AI 修改范围`, 'info')
+  }
+
+  function setEditorViewMode(mode: 'pages' | 'continuous') {
+    editorViewMode = mode
+    localStorage.setItem('wa_editor_view_mode', mode)
   }
 
   function summarizeRevisionStatus(meta: Record<string, unknown>) {
@@ -2877,9 +2903,10 @@
     runEditorCommand('commit')
     const latestText = sanitizeAiDocumentText($sourceText || '')
     const hasExistingText = hasMeaningfulDocContent(latestText)
+    const hasScopedSelection = Boolean(activeTextSelection?.text || selectedTargetIds().length)
     const inferredMode = inferComposeMode(inst)
     let composeMode: 'auto' | 'continue' | 'overwrite' = opts?.forcedComposeMode || inferredMode || 'auto'
-    if (!opts?.forcedComposeMode && !inferredMode && hasExistingText) {
+    if (!opts?.forcedComposeMode && !inferredMode && hasExistingText && !hasScopedSelection) {
       if (opts?.fromQueue) {
         composeMode = 'continue'
       } else {
@@ -3261,6 +3288,7 @@
         void savePartialDraft()
       }
       generating.set(false)
+      if (sawFinal) activeTextSelection = null
       isLoading.set(false)
       streamingLive = false
       resetStreamingSections()
@@ -3472,6 +3500,7 @@
     const savedDarkMode = localStorage.getItem('darkMode') === 'true'
     darkMode.set(savedDarkMode)
     if (savedDarkMode) document.body.classList.add('dark')
+    editorViewMode = localStorage.getItem('wa_editor_view_mode') === 'continuous' ? 'continuous' : 'pages'
     const storedIdle = localStorage.getItem('wa_idle_base_ms')
     if (storedIdle) {
       const n = Number(storedIdle)
@@ -3586,6 +3615,8 @@
         generating={$generating}
         instruction={$instruction}
         {resumeState}
+        viewMode={editorViewMode}
+        onViewModeChange={setEditorViewMode}
         onRunEditorCommand={runEditorCommand}
         onOpenCanvas={() => (canvasOpen = true)}
         onOpenCitations={() => (showCitations = true)}
@@ -3655,11 +3686,12 @@
         {:else}
           <Editor
             showToolbar={false}
-            paper={true}
+            paper={editorViewMode === 'pages'}
             lockEditing={typingActive || streamTypingActive}
             onblockedit={handleBlockEdit}
             onblockselect={handleBlockSelect}
             onblockai={handleBlockAi}
+            ontextai={handleTextSelectionAi}
             onblockdrag={handleBlockDrag}
             ontoolbarstate={handleToolbarState}
           />

@@ -46,3 +46,16 @@ def test_rust_layout_baseline_covers_long_documents() -> None:
     source = (ROOT / "engine/engine/src/bin/layout_baseline.rs").read_text(encoding="utf-8")
     assert "[20usize, 100, 300]" in source
     assert "incrementalMs" in source
+
+
+def test_editor_combines_word_navigation_pageless_view_and_selection_scoped_ai() -> None:
+    app = (FRONTEND.parent / "AppWorkbench.svelte").read_text(encoding="utf-8")
+    editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+    ribbon = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
+
+    assert "wa_editor_view_mode" in app
+    assert "页面视图" in ribbon and "连续视图" in ribbon
+    assert "navigationSearchResults" in editor
+    assert "标题 {outlineHeadings().length}" in editor
+    assert "ontextai" in editor
+    assert "只修改当前选中的文字" in app
