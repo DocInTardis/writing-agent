@@ -16,6 +16,7 @@
   import { createNodeCommand, createShortcutCommand, createUserCommand, executeDocumentCommand, type DocumentCommand } from '../editor-v3/commands'
   import {
     createEditorKernel,
+    applyFocusBlock,
     applyPaginationLayout,
     documentV3ToTiptap,
     documentV3ToText,
@@ -33,6 +34,8 @@
 
   let {
     paper = true,
+    focusMode = false,
+    typewriterMode = false,
     lockEditing = false,
     onblockedit,
     onblockselect,
@@ -43,6 +46,8 @@
   }: {
     showToolbar?: boolean
     paper?: boolean
+    focusMode?: boolean
+    typewriterMode?: boolean
     lockEditing?: boolean
     onblockedit?: (payload: any) => void
     onblockselect?: (payload: any) => void
@@ -548,6 +553,28 @@
     if (!text) return
     ontextai?.({ text, from, to })
   }
+
+  function syncFocusBlock(blockId = '') {
+    if (!editor) return
+    const fallbackId = editor ? selectedBlocks(editor)[0]?.id || activeBlockId : activeBlockId
+    const targetId = blockId || fallbackId
+    applyFocusBlock(editor, focusMode ? targetId || null : null)
+  }
+
+  function keepCaretInWritingPosition() {
+    if (!typewriterMode || composingText || !editor?.isFocused || !editor.state.selection.empty) return
+    const { top, bottom } = editor.view.coordsAtPos(editor.state.selection.from)
+    const caretCenter = (top + bottom) / 2
+    const preferred = window.innerHeight * 0.46
+    const delta = caretCenter - preferred
+    if (Math.abs(delta) < 36) return
+    window.scrollBy({ top: delta, behavior: 'auto' })
+  }
+
+  $effect(() => {
+    focusMode
+    queueMicrotask(() => syncFocusBlock())
+  })
 
   function jumpToOutline(position: number) {
     editor?.chain().focus().setTextSelection(position + 1).scrollIntoView().run()
@@ -1487,6 +1514,7 @@
     if (!editor) return
     const { from, to, empty } = editor.state.selection
     const blocks = selectedBlocks(editor)
+    syncFocusBlock(blocks[0]?.id || '')
     if (forceBlockSelection || editor.state.selection instanceof NodeSelection) blockSelectionActive = true
     else if (!empty) blockSelectionActive = false
     else blockSelectionActive = false
@@ -1520,6 +1548,7 @@
       rect: null,
       style: {}
     })
+    requestAnimationFrame(keepCaretInWritingPosition)
     emitToolbarState()
   }
 
@@ -1971,6 +2000,8 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions: wrapper delegates input to the ProseMirror application below -->
 <div
   class:paper
+  class:focus-mode={focusMode}
+  class:typewriter-mode={typewriterMode}
   class="structured-editor-shell"
   role="application"
   tabindex="-1"
@@ -2281,6 +2312,12 @@
   .structured-editor-shell:not(.paper) :global(.wa-page-boundary),
   .structured-editor-shell:not(.paper) :global(.wa-page-end),
   .structured-editor-shell:not(.paper) :global(.wa-first-page-header) { display: none; }
+  .structured-editor-shell.focus-mode :global(.ProseMirror > [data-node-id]) {
+    opacity: .24;
+    transition: opacity 120ms ease;
+  }
+  .structured-editor-shell.focus-mode :global(.ProseMirror > [data-node-id].wa-focus-active),
+  .structured-editor-shell.focus-mode :global(.ProseMirror > [data-node-id].ProseMirror-selectednode) { opacity: 1; }
   .structured-editor :global(.tiptap) {
     min-height: 24cm;
     outline: none;

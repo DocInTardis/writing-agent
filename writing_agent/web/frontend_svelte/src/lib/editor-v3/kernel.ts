@@ -16,6 +16,7 @@ import { cloneJson, resolvedStyleProperties, type DocumentV3, type InlineNode, t
 import type { DocumentLayout, LayoutPage } from '../engine/documentEngine'
 
 const paginationPluginKey = new PluginKey<DecorationSet>('rustPagination')
+const focusBlockPluginKey = new PluginKey<DecorationSet>('focusBlock')
 
 function makePageRegionInteractive(element: HTMLElement, page: LayoutPage, region: 'header' | 'footer') {
   element.dataset.pageRegion = region
@@ -120,6 +121,44 @@ const RustPagination = Extension.create({
     })]
   }
 })
+
+const FocusBlockDecoration = Extension.create({
+  name: 'focusBlockDecoration',
+  addProseMirrorPlugins() {
+    return [new Plugin<DecorationSet>({
+      key: focusBlockPluginKey,
+      state: {
+        init: () => DecorationSet.empty,
+        apply(transaction, previous, _oldState, newState) {
+          const blockId = transaction.getMeta(focusBlockPluginKey) as string | null | undefined
+          if (blockId === undefined) {
+            return transaction.docChanged ? previous.map(transaction.mapping, transaction.doc) : previous
+          }
+          if (!blockId) return DecorationSet.empty
+          let decoration: Decoration | null = null
+          newState.doc.forEach((node, position) => {
+            if (!decoration && String(node.attrs?.nodeId || '') === blockId) {
+              decoration = Decoration.node(position, position + node.nodeSize, {
+                class: 'wa-focus-active',
+                'data-focus-active': 'true'
+              })
+            }
+          })
+          return decoration ? DecorationSet.create(newState.doc, [decoration]) : DecorationSet.empty
+        }
+      },
+      props: {
+        decorations(state) {
+          return focusBlockPluginKey.getState(state) || DecorationSet.empty
+        }
+      }
+    })]
+  }
+})
+
+export function applyFocusBlock(editor: Editor, blockId: string | null) {
+  editor.view.dispatch(editor.state.tr.setMeta(focusBlockPluginKey, blockId))
+}
 
 export function applyPaginationLayout(editor: Editor, layout: DocumentLayout | null) {
   editor.view.dispatch(editor.state.tr.setMeta(paginationPluginKey, layout))
@@ -1227,6 +1266,7 @@ export function createEditorKernel(options: {
       ReliableClipboard,
       ReliableBlockKeyboard.configure({ onCommand: options.onShortcutCommand }),
       RustPagination,
+      FocusBlockDecoration,
       FigureNode,
       Table.configure({ resizable: true, View: DocumentTableView }),
       SizedTableRow,

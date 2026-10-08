@@ -4,6 +4,8 @@
   let {
     showToolbar = true,
     paper = true,
+    focusMode = false,
+    typewriterMode = false,
     lockEditing = false,
     onblockedit,
     onblockselect,
@@ -14,6 +16,8 @@
   }: {
     showToolbar?: boolean
     paper?: boolean
+    focusMode?: boolean
+    typewriterMode?: boolean
     lockEditing?: boolean
     onblockedit?: (payload: any) => void
     onblockselect?: (payload: any) => void
@@ -28,6 +32,8 @@
 <StructuredEditor
   {showToolbar}
   {paper}
+  {focusMode}
+  {typewriterMode}
   {lockEditing}
   {onblockedit}
   {onblockselect}

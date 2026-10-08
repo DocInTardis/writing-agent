@@ -209,6 +209,8 @@
   let versionPanelOpen = $state(false)
   let showAdvancedToolbar = $state(false)
   let editorViewMode: 'pages' | 'continuous' = $state('pages')
+  let focusWritingMode = $state(false)
+  let typewriterMode = $state(false)
   let canvasOpen = $state(false)
   let selectedBlockId = $state('')
   let selectedBlockIds = $state<string[]>([])
@@ -1461,6 +1463,18 @@
     localStorage.setItem('wa_editor_view_mode', mode)
   }
 
+  function setFocusWritingMode(enabled: boolean) {
+    focusWritingMode = enabled
+    localStorage.setItem('wa_focus_writing_mode', String(enabled))
+    pushToast(enabled ? '已开启专注当前段，按 F8 可退出' : '已退出专注模式', 'info')
+  }
+
+  function setTypewriterMode(enabled: boolean) {
+    typewriterMode = enabled
+    localStorage.setItem('wa_typewriter_mode', String(enabled))
+    pushToast(enabled ? '已开启打字机滚动，按 F9 可退出' : '已关闭打字机滚动', 'info')
+  }
+
   function summarizeRevisionStatus(meta: Record<string, unknown>) {
     const ok = meta.ok === true
     const code = String(meta.error_code || '').trim() || (ok ? 'OK' : 'UNKNOWN')
@@ -1645,6 +1659,18 @@
   }
 
   function handleGlobalKeydownCapture(event: KeyboardEvent) {
+    if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && !event.isComposing) {
+      if (event.key === 'F8') {
+        event.preventDefault()
+        setFocusWritingMode(!focusWritingMode)
+        return
+      }
+      if (event.key === 'F9') {
+        event.preventDefault()
+        setTypewriterMode(!typewriterMode)
+        return
+      }
+    }
     if (event.key === 'Escape' && assistantOpen) {
       event.preventDefault()
       setAssistantOpen(false)
@@ -3501,6 +3527,8 @@
     darkMode.set(savedDarkMode)
     if (savedDarkMode) document.body.classList.add('dark')
     editorViewMode = localStorage.getItem('wa_editor_view_mode') === 'continuous' ? 'continuous' : 'pages'
+    focusWritingMode = localStorage.getItem('wa_focus_writing_mode') === 'true'
+    typewriterMode = localStorage.getItem('wa_typewriter_mode') === 'true'
     const storedIdle = localStorage.getItem('wa_idle_base_ms')
     if (storedIdle) {
       const n = Number(storedIdle)
@@ -3617,6 +3645,10 @@
         {resumeState}
         viewMode={editorViewMode}
         onViewModeChange={setEditorViewMode}
+        focusMode={focusWritingMode}
+        onFocusModeChange={setFocusWritingMode}
+        {typewriterMode}
+        onTypewriterModeChange={setTypewriterMode}
         onRunEditorCommand={runEditorCommand}
         onOpenCanvas={() => (canvasOpen = true)}
         onOpenCitations={() => (showCitations = true)}
@@ -3687,6 +3719,8 @@
           <Editor
             showToolbar={false}
             paper={editorViewMode === 'pages'}
+            focusMode={focusWritingMode}
+            {typewriterMode}
             lockEditing={typingActive || streamTypingActive}
             onblockedit={handleBlockEdit}
             onblockselect={handleBlockSelect}

@@ -51,6 +51,7 @@ def test_rust_layout_baseline_covers_long_documents() -> None:
 def test_editor_combines_word_navigation_pageless_view_and_selection_scoped_ai() -> None:
     app = (FRONTEND.parent / "AppWorkbench.svelte").read_text(encoding="utf-8")
     editor = (FRONTEND / "components/StructuredEditor.svelte").read_text(encoding="utf-8")
+    kernel = (FRONTEND / "editor-v3/kernel.ts").read_text(encoding="utf-8")
     ribbon = (FRONTEND / "workbench/EditorCommandBar.svelte").read_text(encoding="utf-8")
 
     assert "wa_editor_view_mode" in app
@@ -59,3 +60,8 @@ def test_editor_combines_word_navigation_pageless_view_and_selection_scoped_ai()
     assert "标题 {outlineHeadings().length}" in editor
     assert "ontextai" in editor
     assert "只修改当前选中的文字" in app
+    assert "wa_focus_writing_mode" in app and "wa_typewriter_mode" in app
+    assert "专注当前段" in ribbon and "打字机滚动" in ribbon
+    assert "wa-focus-active" in editor
+    assert "data-focus-active" in kernel and "FocusBlockDecoration" in kernel
+    assert "keepCaretInWritingPosition" in editor

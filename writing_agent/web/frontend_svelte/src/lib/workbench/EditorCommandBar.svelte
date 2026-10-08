@@ -63,6 +63,10 @@
     resumeState,
     viewMode,
     onViewModeChange,
+    focusMode,
+    onFocusModeChange,
+    typewriterMode,
+    onTypewriterModeChange,
     onRunEditorCommand,
     onOpenCanvas,
     onOpenCitations,
@@ -85,6 +89,10 @@
     resumeState: ResumeState | null
     viewMode: 'pages' | 'continuous'
     onViewModeChange: (mode: 'pages' | 'continuous') => void
+    focusMode: boolean
+    onFocusModeChange: (enabled: boolean) => void
+    typewriterMode: boolean
+    onTypewriterModeChange: (enabled: boolean) => void
     onRunEditorCommand: (cmd: EditorCommand) => void
     onOpenCanvas: () => void
     onOpenCitations: () => void
@@ -381,6 +389,8 @@
       <div class="ribbon-group action-group">
         <button class:active={viewMode === 'pages'} class="ribbon-action" onclick={() => onViewModeChange('pages')}><span>▤</span>页面视图</button>
         <button class:active={viewMode === 'continuous'} class="ribbon-action" onclick={() => onViewModeChange('continuous')}><span>≡</span>连续视图</button>
+        <button class:active={focusMode} class="ribbon-action" onclick={() => onFocusModeChange(!focusMode)} title="仅突出当前段落（F8）"><span>◎</span>专注当前段</button>
+        <button class:active={typewriterMode} class="ribbon-action" onclick={() => onTypewriterModeChange(!typewriterMode)} title="让光标保持在视窗中部（F9）"><span>↕</span>打字机滚动</button>
         <button class="ribbon-action" onclick={() => command('view-outline')}><span>☰</span>导航窗格</button>
         <button class="ribbon-action" onclick={() => command('zoom-out')}><span>−</span>缩小</button>
         <button class="ribbon-action" onclick={() => command('zoom-100')}><span>100%</span>实际大小</button>

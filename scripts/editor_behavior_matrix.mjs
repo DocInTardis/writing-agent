@@ -219,7 +219,7 @@ async function main() {
       const virtualKeys = {
         Enter: 13, Backspace: 8, Delete: 46,
         ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
-        Home: 36, End: 35,
+        Home: 36, End: 35, F8: 119, F9: 120,
       }
       const virtualKey = virtualKeys[key] || (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0)
       const common = {
@@ -281,6 +281,19 @@ async function main() {
     assert(state.focusBlock === state.ids[1], `ArrowUp did not cross into the preceding paragraph: ${JSON.stringify(state)}`)
     await key('End')
     await key('Home')
+
+    await key('F8', 'F8')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert(await evaluate(`document.querySelector('.structured-editor-shell')?.classList.contains('focus-mode')`), 'F8 did not enable focus mode')
+    const focusDebug = await evaluate(`(() => ({ active: [...document.querySelectorAll('.ProseMirror > [data-focus-active="true"]')].map((node) => node.dataset.nodeId), blocks: [...document.querySelectorAll('.ProseMirror > [data-node-id]')].map((node) => node.dataset.nodeId), selected: getSelection()?.toString() || '' }))()`)
+    assert(focusDebug.active.length === 1, `focus mode did not identify exactly one active block: ${JSON.stringify(focusDebug)}`)
+    assert(await evaluate(`localStorage.getItem('wa_focus_writing_mode') === 'true'`), 'focus mode preference was not persisted')
+    await key('F8', 'F8')
+    assert(await evaluate(`!document.querySelector('.structured-editor-shell')?.classList.contains('focus-mode')`), 'F8 did not disable focus mode')
+    await key('F9', 'F9')
+    assert(await evaluate(`document.querySelector('.structured-editor-shell')?.classList.contains('typewriter-mode')`), 'F9 did not enable typewriter mode')
+    assert(await evaluate(`localStorage.getItem('wa_typewriter_mode') === 'true'`), 'typewriter preference was not persisted')
+    await key('F9', 'F9')
 
     // The navigation pane combines Word-style headings with in-document search.
     await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === '视图')?.click()`)
@@ -374,6 +387,7 @@ async function main() {
     console.log('  IME composition and commit: pass')
     console.log('  paragraph split and soft break: pass')
     console.log('  keyboard cross-block navigation: pass')
+    console.log('  focus mode and typewriter preference: pass')
     console.log('  heading and document-search navigation: pass')
     console.log('  cross-paragraph pointer selection: pass')
     console.log('  page/continuous view and selection-scoped AI handoff: pass')
