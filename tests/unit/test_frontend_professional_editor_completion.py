@@ -57,7 +57,7 @@ def test_editor_combines_word_navigation_pageless_view_and_selection_scoped_ai()
     assert "wa_editor_view_mode" in app
     assert "页面视图" in ribbon and "连续视图" in ribbon
     assert "navigationSearchResults" in editor
-    assert "标题 {outlineHeadings().length}" in editor
+    assert "标题 {outlineHeadings(outlineRevision).length}" in editor
     assert "ontextai" in editor
     assert "只修改当前选中的文字" in app
     assert "wa_focus_writing_mode" in app and "wa_typewriter_mode" in app
@@ -65,3 +65,6 @@ def test_editor_combines_word_navigation_pageless_view_and_selection_scoped_ai()
     assert "wa-focus-active" in editor
     assert "data-focus-active" in kernel and "FocusBlockDecoration" in kernel
     assert "keepCaretInWritingPosition" in editor
+    assert "moveOutlineSection" in editor and "outlineSectionNodeIds" in editor
+    assert "changeOutlineLevel" in editor and "调整文档结构" in editor
+    assert "selectionCharacterCount" in editor and "当前选区不含空白字符的数量" in editor

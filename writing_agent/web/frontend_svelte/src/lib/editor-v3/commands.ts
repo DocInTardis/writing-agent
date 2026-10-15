@@ -729,8 +729,8 @@ registerDocumentCommand('move_blocks', (editor, command) => {
   const to = selected[selected.length - 1].position + selected[selected.length - 1].node.nodeSize
   const content = Fragment.fromArray(selected.map(({ node }) => node))
   let insertAt = target.position + (placement === 'after' ? target.node.nodeSize : 0)
-  if (insertAt > to) insertAt -= to - from
   if (insertAt >= from && insertAt <= to) return false
+  if (insertAt > to) insertAt -= to - from
   const transaction = editor.state.tr.delete(from, to).insert(insertAt, content)
   selectInsertedRange(transaction, insertAt, insertAt + content.size)
   editor.view.dispatch(transaction.scrollIntoView())

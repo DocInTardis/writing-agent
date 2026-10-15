@@ -109,10 +109,14 @@
   let outlineVisible = $state(false)
   let outlineTab: 'headings' | 'search' = $state('headings')
   let outlineQuery = $state('')
+  let activeOutlineId = $state('')
+  let collapsedOutlineIds = $state<string[]>([])
+  let outlineRevision = $state(0)
   let zoomPercent = $state(100)
   let selectionToolbarVisible = $state(false)
   let selectionToolbarTop = $state(0)
   let selectionToolbarLeft = $state(0)
+  let selectionCharacterCount = $state(0)
   let proofPanelVisible = $state(false)
   let proofIssues = $state<Array<{ id: string; message: string; excerpt: string; from: number; to: number }>>([])
   let markdownInput: HTMLInputElement
@@ -512,13 +516,118 @@
     findStatus = `已替换 ${matches.length} 处`
   }
 
-  function outlineHeadings() {
-    if (!editor) return [] as Array<{ id: string; text: string; level: number; position: number }>
-    const headings: Array<{ id: string; text: string; level: number; position: number }> = []
-    editor.state.doc.descendants((node, position) => {
-      if (node.type.name === 'heading') headings.push({ id: String(node.attrs.nodeId || position), text: node.textContent || '未命名标题', level: Number(node.attrs.level || 1), position })
+  type OutlineHeading = { id: string; text: string; level: number; position: number; hasChildren: boolean }
+
+  function outlineHeadings(_revision = outlineRevision): OutlineHeading[] {
+    void _revision
+    if (!editor) return []
+    const headings: OutlineHeading[] = []
+    editor.state.doc.forEach((node, position) => {
+      if (node.type.name === 'heading') headings.push({
+        id: String(node.attrs.nodeId || position),
+        text: node.textContent || '未命名标题',
+        level: Math.max(1, Math.min(6, Number(node.attrs.level || 1))),
+        position,
+        hasChildren: false
+      })
     })
+    for (let index = 0; index < headings.length - 1; index += 1) {
+      headings[index].hasChildren = headings[index + 1].level > headings[index].level
+    }
     return headings
+  }
+
+  function visibleOutlineHeadings(collapsedIds: string[], revision: number): OutlineHeading[] {
+    void revision
+    const visible: OutlineHeading[] = []
+    let hiddenBelowLevel: number | null = null
+    for (const heading of outlineHeadings()) {
+      if (hiddenBelowLevel !== null && heading.level > hiddenBelowLevel) continue
+      if (hiddenBelowLevel !== null && heading.level <= hiddenBelowLevel) hiddenBelowLevel = null
+      visible.push(heading)
+      if (heading.hasChildren && collapsedIds.includes(heading.id)) hiddenBelowLevel = heading.level
+    }
+    return visible
+  }
+
+  function toggleOutlineCollapse(headingId: string) {
+    if (!headingId) return
+    collapsedOutlineIds = collapsedOutlineIds.includes(headingId)
+      ? collapsedOutlineIds.filter((id) => id !== headingId)
+      : [...collapsedOutlineIds, headingId]
+  }
+
+  function jumpToOutlineId(headingId: string) {
+    const heading = outlineHeadings().find((candidate) => candidate.id === headingId)
+    if (heading) jumpToOutline(heading.position)
+  }
+
+  function handleOutlineResultClick(event: MouseEvent) {
+    const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-outline-action]')
+    const headingId = button?.closest<HTMLElement>('.outline-row')?.dataset.outlineId || ''
+    if (!button || !headingId) return
+    if (button.dataset.outlineAction === 'collapse') toggleOutlineCollapse(headingId)
+    else if (button.dataset.outlineAction === 'jump') jumpToOutlineId(headingId)
+  }
+
+  function outlineSectionNodeIds(headingId: string): string[] {
+    if (!editor) return []
+    const headings = outlineHeadings()
+    const index = headings.findIndex((heading) => heading.id === headingId)
+    if (index < 0) return []
+    const heading = headings[index]
+    const nextBoundary = headings.slice(index + 1).find((candidate) => candidate.level <= heading.level)
+    const end = nextBoundary?.position ?? editor.state.doc.content.size
+    const ids: string[] = []
+    editor.state.doc.forEach((node, position) => {
+      if (position < heading.position || position >= end) return
+      const id = String(node.attrs?.nodeId || '')
+      if (id) ids.push(id)
+    })
+    return ids
+  }
+
+  function outlineSibling(headingId: string, direction: -1 | 1): OutlineHeading | null {
+    const headings = outlineHeadings()
+    const index = headings.findIndex((heading) => heading.id === headingId)
+    if (index < 0) return null
+    const current = headings[index]
+    for (let next = index + direction; next >= 0 && next < headings.length; next += direction) {
+      if (headings[next].level < current.level) return null
+      if (headings[next].level === current.level) return headings[next]
+    }
+    return null
+  }
+
+  function moveOutlineSection(direction: -1 | 1) {
+    if (!editor || !activeOutlineId) return
+    const sibling = outlineSibling(activeOutlineId, direction)
+    const movingIds = outlineSectionNodeIds(activeOutlineId)
+    if (!sibling || !movingIds.length) return
+    let targetId = sibling.id
+    let placement: 'before' | 'after' = 'before'
+    if (direction > 0) {
+      const siblingIds = outlineSectionNodeIds(sibling.id)
+      targetId = siblingIds[siblingIds.length - 1] || sibling.id
+      placement = 'after'
+    }
+    const result = executeDocumentCommand(editor, createNodeCommand('move_blocks', movingIds, { targetId, placement }))
+    if (result.ok) activeOutlineId = movingIds[0]
+  }
+
+  function changeOutlineLevel(delta: -1 | 1) {
+    if (!editor || !activeOutlineId) return
+    const heading = outlineHeadings().find((candidate) => candidate.id === activeOutlineId)
+    if (!heading) return
+    const nextLevel = heading.level + delta
+    if (nextLevel < 1 || nextLevel > 6) return
+    const result = executeDocumentCommand(editor, createNodeCommand('apply_style', [heading.id], { styleId: `heading-${nextLevel}` }))
+    if (result.ok) activeOutlineId = heading.id
+  }
+
+  function syncActiveOutline(position: number) {
+    const headings = outlineHeadings()
+    activeOutlineId = [...headings].reverse().find((heading) => heading.position <= position)?.id || ''
   }
 
   function navigationSearchResults() {
@@ -1514,6 +1623,7 @@
     if (!editor) return
     const { from, to, empty } = editor.state.selection
     const blocks = selectedBlocks(editor)
+    syncActiveOutline(from)
     syncFocusBlock(blocks[0]?.id || '')
     if (forceBlockSelection || editor.state.selection instanceof NodeSelection) blockSelectionActive = true
     else if (!empty) blockSelectionActive = false
@@ -1526,6 +1636,7 @@
     selectedBlocksCollapsed = exposedBlocks.length > 0 && exposedBlocks.every((block) => block.collapsed)
     if (blocks.length === 1) positionBlockHandleById(blocks[0].id)
     const text = empty ? '' : editor.state.doc.textBetween(from, to, '\n')
+    selectionCharacterCount = empty ? 0 : Array.from(text.replace(/\s+/gu, '')).length
     selectionToolbarVisible = !empty
       && !blockSelectionActive
       && !(editor.state.selection instanceof NodeSelection)
@@ -1537,7 +1648,7 @@
       const end = editor.view.coordsAtPos(to)
       const shellRect = shell.getBoundingClientRect()
       selectionToolbarTop = Math.max(4, Math.min(start.top, end.top) - shellRect.top - 38)
-      selectionToolbarLeft = Math.max(4, Math.min((start.left + end.right) / 2 - shellRect.left - 112, shellRect.width - 230))
+      selectionToolbarLeft = Math.max(4, Math.min((start.left + end.right) / 2 - shellRect.left - 138, shellRect.width - 284))
     }
     onblockselect?.({
       blockId: blockIds[0] || '',
@@ -1556,6 +1667,7 @@
     if (!activeDocument) return
     const before = activeDocument
     activeDocument = refreshDocumentFields(tiptapToDocumentV3(activeDocument, json))
+    outlineRevision += 1
     if (trackChanges && !suppressRevisionCapture) queueTrackedRevision(before)
     if (editor) {
       const currentBlocks = selectedBlocks(editor)
@@ -2055,6 +2167,7 @@
       <button title="突出显示" onmousedown={(event) => event.preventDefault()} onclick={() => runLegacyCommand('bgcolor:#fff2cc')}>▨</button>
       <button title="清除格式" onmousedown={(event) => event.preventDefault()} onclick={() => runLegacyCommand('clear-format')}>Tx</button>
       <button class="selection-ai" title="让 AI 修改所选文字" onmousedown={(event) => event.preventDefault()} onclick={requestAiForTextSelection}>AI</button>
+      <output class="selection-count" title="当前选区不含空白字符的数量">{selectionCharacterCount} 字</output>
     </div>
   {/if}
   {#if findPanelVisible}
@@ -2069,13 +2182,25 @@
     <aside class="outline-panel" aria-label="文档导航大纲">
       <header><strong>导航</strong><button aria-label="关闭导航" onclick={() => (outlineVisible = false)}>×</button></header>
       <div class="outline-tabs" role="tablist" aria-label="导航方式">
-        <button class:active={outlineTab === 'headings'} role="tab" aria-selected={outlineTab === 'headings'} onclick={() => (outlineTab = 'headings')}>标题 {outlineHeadings().length}</button>
+        <button class:active={outlineTab === 'headings'} role="tab" aria-selected={outlineTab === 'headings'} onclick={() => (outlineTab = 'headings')}>标题 {outlineHeadings(outlineRevision).length}</button>
         <button class:active={outlineTab === 'search'} role="tab" aria-selected={outlineTab === 'search'} onclick={() => (outlineTab = 'search')}>搜索</button>
       </div>
       {#if outlineTab === 'headings'}
-        <div class="outline-results">
-          {#each outlineHeadings() as heading (heading.id)}
-            <button style:padding-left={`${8 + (heading.level - 1) * 12}px`} onclick={() => jumpToOutline(heading.position)}>{heading.text}</button>
+        <div class="outline-actions" role="toolbar" aria-label="调整文档结构">
+          <button disabled={!outlineSibling(activeOutlineId, -1)} title="将当前章节整体上移" onclick={() => moveOutlineSection(-1)}>↑ 上移</button>
+          <button disabled={!outlineSibling(activeOutlineId, 1)} title="将当前章节整体下移" onclick={() => moveOutlineSection(1)}>↓ 下移</button>
+          <button disabled={(outlineHeadings(outlineRevision).find((heading) => heading.id === activeOutlineId)?.level || 1) <= 1} title="提升标题级别" onclick={() => changeOutlineLevel(-1)}>← 提升</button>
+          <button disabled={(outlineHeadings(outlineRevision).find((heading) => heading.id === activeOutlineId)?.level || 6) >= 6} title="降低标题级别" onclick={() => changeOutlineLevel(1)}>→ 降低</button>
+        </div>
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions: child buttons remain keyboard accessible; this container only delegates their click events -->
+        <div class="outline-results" role="list" aria-label="文档标题" onclick={handleOutlineResultClick}>
+          {#each visibleOutlineHeadings(collapsedOutlineIds, outlineRevision) as heading (heading.id)}
+            <div class:active={heading.id === activeOutlineId} class="outline-row" role="listitem" data-outline-id={heading.id} style:padding-left={`${4 + (heading.level - 1) * 12}px`}>
+              {#if heading.hasChildren}
+                <button class="outline-disclosure" data-outline-action="collapse" aria-label={collapsedOutlineIds.includes(heading.id) ? `展开 ${heading.text}` : `折叠 ${heading.text}`}>{collapsedOutlineIds.includes(heading.id) ? '›' : '⌄'}</button>
+              {:else}<span class="outline-disclosure-spacer"></span>{/if}
+              <button class="outline-heading" data-outline-action="jump" aria-current={heading.id === activeOutlineId ? 'location' : undefined}>{heading.text}</button>
+            </div>
           {:else}<small>应用标题样式后将在这里形成文档大纲。</small>{/each}
         </div>
       {:else}
@@ -2410,6 +2535,7 @@
   .selection-toolbar button:hover { background: #edf3fb; }
   .selection-toolbar .selection-ai { min-width: 36px; margin-left: 2px; background: #eaf2ff; color: #1d5fbf; font-weight: 700; }
   .selection-toolbar .selection-ai:hover { background: #dceaff; }
+  .selection-count { display: inline-flex; min-width: 42px; align-items: center; justify-content: center; padding: 0 5px; border-left: 1px solid #e2e7ef; color: #667085; font-size: 11px; white-space: nowrap; }
   .find-panel {
     position: absolute;
     z-index: 10;
@@ -2451,9 +2577,19 @@
   .outline-tabs button.active { background: #eaf2ff; color: #1d5fbf; font-weight: 600; }
   .outline-search { box-sizing: border-box; width: 100%; height: 30px; margin: 4px 0; padding: 0 8px; border: 1px solid #cfd6e2; border-radius: 4px; outline: none; }
   .outline-search:focus { border-color: #6b9ddd; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
-  .outline-results { display: grid; max-height: calc(70vh - 92px); gap: 2px; overflow: auto; }
+  .outline-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 4px 0; border-bottom: 1px solid #e4e7ec; }
+  .outline-actions button { padding: 5px 4px; text-align: center; font-size: 11px; }
+  .outline-actions button:disabled { color: #a9b1bd; cursor: default; }
+  .outline-actions button:disabled:hover { background: transparent; }
+  .outline-results { display: grid; max-height: calc(70vh - 146px); gap: 2px; overflow: auto; }
   .outline-results small { padding: 10px 6px; color: #7a8494; line-height: 1.5; }
   .outline-panel button { overflow: hidden; padding-block: 6px; border: 0; border-radius: 3px; background: transparent; color: #344054; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .outline-row { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; border-radius: 3px; }
+  .outline-row.active { background: #eaf2ff; }
+  .outline-row .outline-disclosure { width: 20px; padding: 4px 0; color: #667085; text-align: center; }
+  .outline-disclosure-spacer { width: 20px; }
+  .outline-row .outline-heading { min-width: 0; padding: 6px 4px; }
+  .outline-row.active .outline-heading { color: #1d5fbf; font-weight: 600; }
   .outline-results.search-results button { white-space: normal; line-height: 1.45; }
   .outline-panel button:hover { background: #edf3fb; }
   .proof-panel {

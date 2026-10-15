@@ -362,6 +362,7 @@ async function main() {
     })()`)
     assert(state.selectedText.length > 3, `mouse drag did not create a text selection: ${JSON.stringify({ drag, dragDebug, state })}`)
     assert(state.anchorBlock !== state.focusBlock, 'mouse drag selection did not cross paragraph blocks')
+    assert(await evaluate(`Number.parseInt(document.querySelector('.selection-count')?.textContent || '0', 10) > 3`), 'text selection did not expose a live character count')
     assert(await evaluate(`Boolean([...document.querySelectorAll('.selection-toolbar button')].find((button) => button.textContent?.trim() === 'AI'))`), 'text selection did not expose the AI edit action')
     await evaluate(`[...document.querySelectorAll('.selection-toolbar button')].find((button) => button.textContent?.trim() === 'AI')?.click()`)
     assert(await evaluate(`Boolean(document.querySelector('.assistant-sheet'))`), 'selection AI action did not open the assistant')
@@ -382,6 +383,45 @@ async function main() {
     assert(state.selectedText.includes('第三段用于鼠标选择测试'), `triple click selected unexpected text: ${state.selectedText}`)
     assert(!state.selectedText.includes('第二段正文'), 'triple click leaked into the preceding paragraph')
 
+    // Turn the three paragraphs into a small hierarchy, then reorganize a
+    // complete section through the navigation pane. This exercises the same
+    // move_blocks/apply_style commands used by block editing and AI actions.
+    for (const [index, level] of [[0, 1], [1, 2], [2, 1]]) {
+      const point = await evaluate(`(() => {
+        const block = document.querySelectorAll('.structured-editor .ProseMirror > [data-node-id]')[${index}]
+        const rect = block.getBoundingClientRect()
+        return { x: rect.left + 24, y: rect.top + rect.height / 2 }
+      })()`)
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', buttons: 1, clickCount: 1, ...point })
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', buttons: 0, clickCount: 1, ...point })
+      await key(String(level), `Digit${level}`, 3)
+    }
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === '视图')?.click()`)
+    await evaluate(`[...document.querySelectorAll('button')].find((button) => button.textContent?.includes('导航窗格'))?.click()`)
+    await evaluate(`[...document.querySelectorAll('.outline-tabs button')].find((button) => button.textContent?.startsWith('标题'))?.click()`)
+    const outlineDebug = await evaluate(`(() => ({ rows: document.querySelectorAll('.outline-heading').length, tags: [...document.querySelectorAll('.structured-editor .ProseMirror > [data-node-id]')].map((node) => ({ tag: node.tagName, style: node.dataset.styleId, text: node.innerText })), panel: document.querySelector('.outline-panel')?.innerText || '' }))()`)
+    assert(outlineDebug.rows === 3, `outline did not expose the heading hierarchy: ${JSON.stringify(outlineDebug)}`)
+    await evaluate(`document.querySelectorAll('.outline-heading')[0]?.click()`)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const outlineActionDebug = await evaluate(`(() => ({ active: document.querySelector('.outline-row.active .outline-heading')?.textContent || '', actions: [...document.querySelectorAll('.outline-actions button')].map((button) => ({ text: button.textContent, disabled: button.disabled })) }))()`)
+    assert(outlineActionDebug.active.includes('中文组合') && outlineActionDebug.actions.some((item) => item.text.includes('下移') && !item.disabled), `outline did not activate the selected heading: ${JSON.stringify(outlineActionDebug)}`)
+    await evaluate(`[...document.querySelectorAll('.outline-actions button')].find((button) => button.textContent?.includes('下移'))?.click()`)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    state = await snapshot()
+    const meaningfulOutlineTexts = state.texts.filter((text) => text.trim())
+    assert(meaningfulOutlineTexts[0].includes('第三段用于鼠标选择测试'), `outline section move lost document structure: ${JSON.stringify(state.texts)}`)
+    assert(meaningfulOutlineTexts[1] === '中文组合' && meaningfulOutlineTexts[2].includes('第二段正文'), `outline section move did not keep child blocks with their heading: ${JSON.stringify(state.texts)}`)
+    await evaluate(`[...document.querySelectorAll('.outline-actions button')].find((button) => button.textContent?.includes('降低'))?.click()`)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert(await evaluate(`document.querySelectorAll('.structured-editor .ProseMirror > h2').length === 2`), 'outline level change did not reuse the heading style command')
+    const disclosurePoint = await evaluate(`(() => { const rect = document.querySelector('.outline-disclosure').getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } })()`)
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', buttons: 1, clickCount: 1, ...disclosurePoint })
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', buttons: 0, clickCount: 1, ...disclosurePoint })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const collapseDebug = await evaluate(`(() => ({ rows: [...document.querySelectorAll('.outline-row')].map((row) => ({ id: row.dataset.outlineId, text: row.querySelector('.outline-heading')?.textContent })), disclosures: [...document.querySelectorAll('.outline-disclosure')].map((button) => ({ text: button.textContent, label: button.getAttribute('aria-label'), id: button.closest('.outline-row')?.dataset.outlineId })) }))()`)
+    assert(collapseDebug.rows.length === 1, `outline collapse did not hide descendant headings: ${JSON.stringify(collapseDebug)}`)
+    await evaluate(`document.querySelector('.outline-panel header button')?.click()`)
+
     console.log('PASS editor behavior matrix')
     console.log('  persisted material list/preview/AI opt-in: pass')
     console.log('  IME composition and commit: pass')
@@ -389,7 +429,9 @@ async function main() {
     console.log('  keyboard cross-block navigation: pass')
     console.log('  focus mode and typewriter preference: pass')
     console.log('  heading and document-search navigation: pass')
+    console.log('  outline section move/level/collapse: pass')
     console.log('  cross-paragraph pointer selection: pass')
+    console.log('  live selection character count: pass')
     console.log('  page/continuous view and selection-scoped AI handoff: pass')
     console.log('  native triple-click paragraph selection: pass')
     if (sidecar.exitCode && sidecarError) throw new Error(sidecarError)
